@@ -247,6 +247,15 @@ def connect(database_name: str) -> psycopg.Connection[dict[str, Any]]:
 def database_env(database_name: str, endpoint: str) -> dict[str, str]:
     config = database_config()
     env = os.environ.copy()
+    for name in (
+        "DISK_S3_ACCESS_KEY",
+        "DISK_S3_SECRET_KEY",
+        "DISK_S3_SESSION_TOKEN",
+        "DISK_S3_MIGRATION_ACCESS_KEY",
+        "DISK_S3_MIGRATION_SECRET_KEY",
+        "DISK_S3_MIGRATION_SESSION_TOKEN",
+    ):
+        env.pop(name, None)
     env.update(
         {
             "PGHOST": str(config["host"]),
@@ -256,8 +265,8 @@ def database_env(database_name: str, endpoint: str) -> dict[str, str]:
             "PGPASSWORD": str(config["password"]),
             "DISK_S3_ENDPOINT": endpoint,
             "DISK_S3_REGION": "us-east-1",
-            "DISK_S3_ACCESS_KEY": "fixture-access-key",
-            "DISK_S3_SECRET_KEY": "fixture-secret-key",
+            "DISK_S3_MIGRATION_ACCESS_KEY": "fixture-migration-access-key",
+            "DISK_S3_MIGRATION_SECRET_KEY": "fixture-migration-secret-key",
             "DISK_S3_FORCE_PATH_STYLE": "true",
             "DISK_S3_VERIFY_SSL": "false",
         }
@@ -274,6 +283,10 @@ def read_only_manifest_env(env: dict[str, str]) -> dict[str, str]:
     for name in (
         "DISK_S3_ACCESS_KEY",
         "DISK_S3_SECRET_KEY",
+        "DISK_S3_SESSION_TOKEN",
+        "DISK_S3_MIGRATION_ACCESS_KEY",
+        "DISK_S3_MIGRATION_SECRET_KEY",
+        "DISK_S3_MIGRATION_SESSION_TOKEN",
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
         "AWS_SESSION_TOKEN",
@@ -796,6 +809,60 @@ def main() -> int:
                 str(checkpoint_path),
             ]
 
+            requests_before_credential_failures = server_state.request_count()
+            application_credential_env = env.copy()
+            application_credential_env.update(
+                {
+                    "DISK_S3_ACCESS_KEY": "forbidden-application-access-key",
+                    "DISK_S3_SECRET_KEY": "forbidden-application-secret-key",
+                }
+            )
+            application_credentials = run_command(
+                copy_args, application_credential_env, check=False
+            )
+            require(
+                application_credentials.returncode != 0
+                and "application S3 credential variables"
+                in application_credentials.stderr,
+                "copy rejects injected application S3 credentials",
+            )
+
+            partial_migration_env = env.copy()
+            partial_migration_env.pop("DISK_S3_MIGRATION_SECRET_KEY")
+            partial_migration_credentials = run_command(
+                copy_args, partial_migration_env, check=False
+            )
+            require(
+                partial_migration_credentials.returncode != 0
+                and "must be set together" in partial_migration_credentials.stderr,
+                "copy rejects a partial migration S3 key pair",
+            )
+
+            session_only_env = env.copy()
+            session_only_env.pop("DISK_S3_MIGRATION_ACCESS_KEY")
+            session_only_env.pop("DISK_S3_MIGRATION_SECRET_KEY")
+            session_only_env["DISK_S3_MIGRATION_SESSION_TOKEN"] = (
+                "forbidden-orphan-session-token"
+            )
+            session_only_credentials = run_command(
+                copy_args, session_only_env, check=False
+            )
+            require(
+                session_only_credentials.returncode != 0
+                and "requires an explicit migration access key pair"
+                in session_only_credentials.stderr,
+                "copy rejects a migration session token without its key pair",
+            )
+            require(
+                server_state.request_count() == requests_before_credential_failures,
+                "credential isolation failures occur before the first S3 request",
+            )
+            require(
+                not checkpoint_path.exists()
+                and current_locators(database_name) == source_locators,
+                "credential isolation failures leave checkpoint and database unchanged",
+            )
+
             second = records[1]
             original_second = second["source_path"].read_bytes()
             second["source_path"].write_bytes(
@@ -1213,8 +1280,11 @@ def main() -> int:
                 database_name,
                 object_prefix,
                 str(temp_root),
-                "fixture-access-key",
-                "fixture-secret-key",
+                "fixture-migration-access-key",
+                "fixture-migration-secret-key",
+                "forbidden-application-access-key",
+                "forbidden-application-secret-key",
+                "forbidden-orphan-session-token",
             ):
                 require(
                     sensitive not in serialized,
@@ -1250,6 +1320,15 @@ def main() -> int:
                     "conflicting_target_preserved": True,
                     "target_corruption_rejected_before_cutover": True,
                 },
+                "credential_isolation": {
+                    "migration_variables_used": True,
+                    "application_variables_rejected": True,
+                    "partial_key_pair_rejected": True,
+                    "orphan_session_token_rejected": True,
+                    "s3_requests_before_rejection": 0,
+                    "checkpoint_created": False,
+                    "database_unchanged": True,
+                },
                 "checkpoint": {
                     "mode": "0600",
                     "bound_to_manifest_and_destination": True,
@@ -1275,8 +1354,11 @@ def main() -> int:
                 database_name,
                 object_prefix,
                 str(temp_root),
-                "fixture-access-key",
-                "fixture-secret-key",
+                "fixture-migration-access-key",
+                "fixture-migration-secret-key",
+                "forbidden-application-access-key",
+                "forbidden-application-secret-key",
+                "forbidden-orphan-session-token",
             ):
                 require(
                     sensitive not in copy_serialized,
@@ -1328,8 +1410,11 @@ def main() -> int:
                 database_name,
                 object_prefix,
                 str(temp_root),
-                "fixture-access-key",
-                "fixture-secret-key",
+                "fixture-migration-access-key",
+                "fixture-migration-secret-key",
+                "forbidden-application-access-key",
+                "forbidden-application-secret-key",
+                "forbidden-orphan-session-token",
             ):
                 require(
                     sensitive not in cutover_serialized,

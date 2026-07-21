@@ -110,7 +110,11 @@ Before copying any legacy local final Blob to object storage, the migration tool
 - **THEN** the command SHALL fail without changing PostgreSQL or any source Blob and SHALL leave neither a final partial manifest nor a temporary manifest artifact
 
 ### Requirement: Resumable and verified final Blob copy
-The final Blob copy command SHALL default to a non-writing dry run and SHALL verify each local source and each existing or newly uploaded target by size, MD5, and SHA-256. Execution SHALL commit a durable, exclusively locked per-object checkpoint only after a complete target GET passes, and SHALL bind that checkpoint to the exact manifest SHA-256, bucket, and object prefix. A positive transfer-rate setting SHALL apply one aggregate byte budget to S3 upload callbacks and complete target GET verification; zero SHALL disable the limit and a negative setting SHALL be rejected.
+The final Blob copy command SHALL default to a non-writing dry run and SHALL verify each local source and each existing or newly uploaded target by size, MD5, and SHA-256. Copy and cutover SHALL use migration-specific S3 credential variables or a distinct migration workload identity and SHALL reject application S3 credential variables. The migration identity SHALL be limited to read, write, and multipart operations under the final-object namespace, without staging, delete, object-version purge, or bucket-administration permission. Manifest and rollback SHALL require no S3 access. Execution SHALL commit a durable, exclusively locked per-object checkpoint only after a complete target GET passes, and SHALL bind that checkpoint to the exact manifest SHA-256, bucket, and object prefix. A positive transfer-rate setting SHALL apply one aggregate byte budget to S3 upload callbacks and complete target GET verification; zero SHALL disable the limit and a negative setting SHALL be rejected.
+
+#### Scenario: Application credentials are injected into the migration job
+- **WHEN** copy or cutover receives application S3 credential variables instead of an isolated migration identity
+- **THEN** the command SHALL fail before any S3 request, checkpoint mutation, or database path change
 
 #### Scenario: A bounded rate-limited copy batch runs
 - **WHEN** an operator executes a one-object batch with a positive transfer budget against an absent target
@@ -228,15 +232,19 @@ Deployment documentation SHALL define log rotation, health checks, service/datab
 - **THEN** a coordinated database and final-object recovery set SHALL be restored into isolated empty resources and SHALL pass schema, quota, reference-count, object-integrity, paginated reconciliation, failure-blocking, and repaired-rescan checks before traffic is allowed
 
 ### Requirement: Least-privilege object-storage provisioning
-Distributed deployment artifacts SHALL provision distinct staging and final key namespaces, a lifecycle policy that cannot expire final objects, and an application identity limited to required data-plane operations in those namespaces. The repository MinIO sample bucket SHALL have versioning enabled and verified by the provisioning identity before application access is admitted; this SHALL NOT grant the application identity bucket-versioning administration or object-version purge permissions. Object-store root or administrative credentials SHALL be confined to provisioning and SHALL NOT be injected into API or Worker processes. Application S3 dependency failures and reconciliation findings SHALL be monitored, while provider-native availability, capacity, replication, healing, encryption, transport security, and lifecycle monitoring remain required for the target object store.
+Distributed deployment artifacts SHALL provision distinct staging and final key namespaces, a lifecycle policy that cannot expire final objects, and an application identity limited to required data-plane operations in those namespaces. A separate revocable migration identity SHALL be limited to read, write, and multipart operations in the final namespace and SHALL NOT receive staging, delete, object-version purge, or bucket-administration permission. The repository MinIO sample bucket SHALL have versioning enabled and verified by the provisioning identity before application access is admitted; this SHALL NOT grant either data-plane identity bucket-versioning administration or object-version purge permissions. Object-store root or administrative credentials SHALL be confined to provisioning and SHALL NOT be injected into API or Worker processes. API and Worker processes SHALL receive only application credentials, while migration jobs SHALL receive only migration credentials; the migration identity SHALL be revoked after the approved migration window. Application S3 dependency failures and reconciliation findings SHALL be monitored, while provider-native availability, capacity, replication, healing, encryption, transport security, and lifecycle monitoring remain required for the target object store.
 
 #### Scenario: MinIO sample is provisioned
-- **WHEN** the repository MinIO initializer runs with separate root and application credentials
-- **THEN** it SHALL create the bucket, idempotently enable and verify bucket versioning, import and verify lifecycle rules, idempotently provision and bind the application policy, and leave API and Worker processes configured only with the application credentials
+- **WHEN** the repository MinIO initializer runs with separate root, application, and migration credentials
+- **THEN** it SHALL create the bucket, idempotently enable and verify bucket versioning, import and verify lifecycle rules, idempotently provision and bind both scoped policies, and leave API and Worker processes configured only with the application credentials
 
 #### Scenario: Application S3 credentials are exercised
 - **WHEN** the application identity accesses the sample bucket
 - **THEN** required list, object, copy-compatible, delete, and multipart operations under `objects/*` and `staging/*` SHALL succeed while access outside those namespaces, bucket-versioning administration, object-version purge, and other bucket administration SHALL be denied
+
+#### Scenario: Migration S3 credentials are exercised and revoked
+- **WHEN** the migration identity accesses the sample bucket and the approved migration window ends
+- **THEN** final-object read, write, and multipart operations SHALL succeed before revocation while staging access, deletion, listing, bucket administration, and application credential reuse are denied, and all access with that identity SHALL fail after revocation
 
 ### Requirement: Transitional upload release
 The compatibility release immediately after the expand migration SHALL default newly created upload sessions to local staging while retaining support for both persisted local and S3 staging descriptors. Existing tasks SHALL always select storage from their persisted backend and prefix rather than the process's current default. The final distributed S3 configuration SHALL NOT be enabled during this compatibility step.

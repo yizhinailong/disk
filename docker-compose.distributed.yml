@@ -144,10 +144,13 @@ services:
       DISK_S3_BUCKET: disk
       DISK_S3_ACCESS_KEY: ${DISK_S3_ACCESS_KEY:?set DISK_S3_ACCESS_KEY}
       DISK_S3_SECRET_KEY: ${DISK_S3_SECRET_KEY:?set DISK_S3_SECRET_KEY}
+      DISK_S3_MIGRATION_ACCESS_KEY: ${DISK_S3_MIGRATION_ACCESS_KEY:?set DISK_S3_MIGRATION_ACCESS_KEY}
+      DISK_S3_MIGRATION_SECRET_KEY: ${DISK_S3_MIGRATION_SECRET_KEY:?set DISK_S3_MIGRATION_SECRET_KEY}
     entrypoint: ["/bin/sh", "/config/provision.sh"]
     volumes:
       - ./deploy/minio/lifecycle.json:/config/lifecycle.json:ro
       - ./deploy/minio/app-policy.json:/config/app-policy.json:ro
+      - ./deploy/minio/migration-policy.json:/config/migration-policy.json:ro
       - ./deploy/minio/provision.sh:/config/provision.sh:ro
     networks:
       - disk-backend

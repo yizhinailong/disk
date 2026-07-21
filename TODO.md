@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Phase 6 MinIO bucket 版本与权限门禁）：`cmake --preset linux-debug-clang`、完整构建、固定版 MinIO 聚焦 CTest 1/1 和 PgBouncer 聚焦 CTest 1/1 均通过；完整 CTest 共 1392 项，1386 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 481.00 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮 Phase 6 MinIO 应用/迁移身份隔离门禁）：`cmake --preset linux-debug-clang`、完整构建、固定版 MinIO 聚焦 CTest 1/1 和 PgBouncer 聚焦 CTest 1/1 均通过；完整 CTest 共 1392 项，1387 通过、5 项按环境门控跳过（`promtool`、2 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 485.58 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -366,7 +366,7 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 
 - [x] 仓库 MinIO 样例初始化会幂等开启并回读 `Enabled` bucket 版本控制，且应用凭据显式拒绝版本级删除；该仓库门禁不代表下述生产整项完成。
 - [ ] 生产 bucket 开启必要的版本、加密、TLS、最小权限和生命周期规则。
-- [ ] API/Worker 凭据仅允许所需前缀和操作，迁移工具使用独立临时权限。
+- [x] API/Worker 凭据仅允许所需前缀和操作，迁移工具使用独立临时权限。
 - [x] 配置连接池、请求超时、重试预算和每实例并发上限。
 - [ ] 评估 MinIO 自建部署的磁盘冗余、节点故障域和备份；不能用单节点 MinIO 宣称存储高可用。
 
@@ -448,6 +448,14 @@ Python 语法检查、CMake 配置和完整构建通过；PgBouncer/拓扑聚焦
 `deploy/minio/provision.sh` 现在建 bucket 后、发放应用账号前幂等执行 `mc version enable`，并解析 `mc --json version info` 要求精确的 `Enabled` 状态。固定 MinIO `RELEASE.2025-04-22T22-12-26Z` 实测发现，仅仅不授予 `DeleteObjectVersion` 仍会让带 `VersionId` 的删除借用已允许的 `DeleteObject` 成功；因此应用 policy 对 `objects/*`/`staging/*` 增加精确的显式 `Deny s3:DeleteObjectVersion`，同时保留应用正常读写、复制、multipart 和普通删除能力。
 
 `S3ProvisioningIntegration` 在 SHA-256 已复核的固定 MinIO/mc 二进制上 1/1 通过（2.02 秒），11 项检查覆盖二次幂等初始化、版本状态/lifecycle 回读、stale multipart 清理、受限数据面、越权管理/版本删除拒绝、删除标记/历史版本保留和初始化身份最终清理。`0600` 原子证据 `.sisyphus/evidence/s3-provisioning-summary.json` 的 SHA-256 为 `5a5bfdd48eb448d460391cd8183798f92a7e277ee4681de6654a41c2c52cada0`。完整 CTest 共 1392 项，1386 通过、6 项预期环境门控跳过、0 失败，总耗时 481.00 秒；OpenSpec 严格校验 24/24 通过。该单节点 HTTP 样例不替代目标 bucket 的加密、TLS、非当前版本保留、备份/恢复、故障域与高可用验收，所以 11.4 生产整项仍保持未勾选。
+
+### 11.14 Phase 6 MinIO 应用/迁移身份隔离门禁记录（2026-07-21）
+
+对象存储身份现拆为 provisioning root、API/Worker 应用账号和可撤销的 final Blob 迁移账号。应用 policy 只覆盖 `objects/*`/`staging/*` 必要数据面并显式拒绝版本级删除；`deploy/minio/migration-policy.json` 只允许 `objects/*` 的读、写和 multipart，显式拒绝普通/版本删除且没有 staging、bucket 列举或管理权限。初始化脚本要求三组 access key 和 secret 两两不同，Compose 业务容器只接收应用凭据；迁移窗口关闭后由 `deploy/minio/revoke-migration-access.sh` 删除迁移用户，撤销任务拒绝接收应用凭据。
+
+`scripts/migrate-final-blobs.py` 的 copy/cutover 只读取 `DISK_S3_MIGRATION_*` 或独立工作负载身份，并在首个 S3 请求前拒绝应用变量、残缺迁移 key 对和孤立 session token。`FinalBlobMigrationIntegration` 1/1 通过（11.47 秒），证明三种误配均为 0 个 S3 请求、无 checkpoint 且数据库不变；`S3LifecycleConfigIntegration` 1/1 通过（0.09 秒）。固定 MinIO/mc 的 `S3ProvisioningIntegration` 1/1 通过（2.58 秒），15 项检查证明应用能力不回退、迁移 final-only 读写/multipart、删除/越界/管理拒绝、撤销前应用凭据隔离和撤销后原迁移凭据失效。
+
+`0600` MinIO 证据 `.sisyphus/evidence/s3-provisioning-summary.json` 的 SHA-256 为 `77de989d8d5e96c97d01360dbd1a408ad0b2a465baf9d4f60bd845e7016269e9`；去敏 copy 证据 `.sisyphus/evidence/final-blob-copy-summary.json` 的 SHA-256 为 `5657a11fc799eda67bf5125fa84620c495e7d76ffcbbb2f7d5b93343914a86e5`。完整 CTest 共 1392 项，1387 通过、5 项预期环境门控跳过、0 失败，总耗时 485.58 秒；OpenSpec 严格校验 24/24 通过。本记录只关闭 11.4 的身份/权限隔离子项，不替代目标 bucket 的加密、TLS、版本保留、备份/恢复、故障域或高可用验收，其余两项继续保持未勾选。
 
 ## 12. Phase 7：可观测性与运维工具
 

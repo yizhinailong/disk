@@ -29,7 +29,9 @@ from botocore.exceptions import ClientError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROVISION_SCRIPT = REPO_ROOT / "deploy" / "minio" / "provision.sh"
+REVOKE_SCRIPT = REPO_ROOT / "deploy" / "minio" / "revoke-migration-access.sh"
 POLICY_PATH = REPO_ROOT / "deploy" / "minio" / "app-policy.json"
+MIGRATION_POLICY_PATH = REPO_ROOT / "deploy" / "minio" / "migration-policy.json"
 LIFECYCLE_PATH = REPO_ROOT / "deploy" / "minio" / "lifecycle.json"
 EVIDENCE_PATH = REPO_ROOT / ".sisyphus" / "evidence" / "s3-provisioning-summary.json"
 BUCKET = "disk"
@@ -113,6 +115,25 @@ def run_provision(environment: dict[str, str]) -> None:
         )
 
 
+def run_revoke(
+    environment: dict[str, str], *, check: bool = True
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["/bin/sh", str(REVOKE_SCRIPT)],
+        cwd=REPO_ROOT,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if check and result.returncode != 0:
+        raise AssertionError(
+            f"MinIO migration revocation failed with {result.returncode}:\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+    return result
+
+
 def s3_client(endpoint: str, access_key: str, secret_key: str) -> Any:
     return boto3.client(
         "s3",
@@ -168,6 +189,8 @@ def main() -> int:
     root_secret_key = f"RootSecret-{uuid.uuid4().hex}"
     app_access_key = f"app{run_id}"
     app_secret_key = f"AppSecret-{uuid.uuid4().hex}"
+    migration_access_key = f"migration{run_id}"
+    migration_secret_key = f"MigrationSecret-{uuid.uuid4().hex}"
     checks: list[str] = []
     evidence: dict[str, Any] = {
         "schema_version": 1,
@@ -176,6 +199,7 @@ def main() -> int:
         "minio_version": binary_version(minio_binary),
         "mc_version": binary_version(mc_binary),
         "policy_sha256": sha256(POLICY_PATH),
+        "migration_policy_sha256": sha256(MIGRATION_POLICY_PATH),
         "lifecycle_sha256": sha256(LIFECYCLE_PATH),
         "checks": checks,
         "passed": False,
@@ -230,10 +254,13 @@ def main() -> int:
                     "DISK_S3_BUCKET": BUCKET,
                     "DISK_S3_ACCESS_KEY": app_access_key,
                     "DISK_S3_SECRET_KEY": app_secret_key,
+                    "DISK_S3_MIGRATION_ACCESS_KEY": migration_access_key,
+                    "DISK_S3_MIGRATION_SECRET_KEY": migration_secret_key,
                     "DISK_MC_BIN": str(mc_binary),
                     "MC_CONFIG_DIR": str(root / "mc"),
                     "DISK_S3_LIFECYCLE_FILE": str(LIFECYCLE_PATH),
                     "DISK_S3_POLICY_FILE": str(POLICY_PATH),
+                    "DISK_S3_MIGRATION_POLICY_FILE": str(MIGRATION_POLICY_PATH),
                 }
             )
             run_provision(provision_environment)
@@ -267,6 +294,9 @@ def main() -> int:
 
             root_client = s3_client(endpoint, root_access_key, root_secret_key)
             app_client = s3_client(endpoint, app_access_key, app_secret_key)
+            migration_client = s3_client(
+                endpoint, migration_access_key, migration_secret_key
+            )
             versioning = root_client.get_bucket_versioning(Bucket=BUCKET)
             require(
                 versioning.get("Status") == "Enabled",
@@ -388,10 +418,169 @@ def main() -> int:
             )
             checks.append("out_of_scope_and_admin_denied")
 
+            migration_key = f"objects/migration/{run_id}/final.bin"
+            migration_payload = b"disk-final-blob-migration-payload\n"
+            migrated = migration_client.put_object(
+                Bucket=BUCKET, Key=migration_key, Body=migration_payload
+            )
+            migration_version_id = str(migrated.get("VersionId", ""))
+            require(
+                migration_version_id,
+                "migration identity versioned PUT did not return a version ID",
+            )
+            migrated_head = migration_client.head_object(
+                Bucket=BUCKET, Key=migration_key
+            )
+            require(
+                int(migrated_head["ContentLength"]) == len(migration_payload),
+                "migration identity HEAD size mismatch",
+            )
+            migrated_body = migration_client.get_object(
+                Bucket=BUCKET, Key=migration_key
+            )["Body"].read()
+            require(
+                migrated_body == migration_payload,
+                "migration identity GET payload mismatch",
+            )
+
+            migration_multipart_key = (
+                f"objects/migration/{run_id}/multipart-complete.bin"
+            )
+            migration_upload = migration_client.create_multipart_upload(
+                Bucket=BUCKET, Key=migration_multipart_key
+            )
+            migration_part = migration_client.upload_part(
+                Bucket=BUCKET,
+                Key=migration_multipart_key,
+                UploadId=migration_upload["UploadId"],
+                PartNumber=1,
+                Body=b"migration-multipart-payload",
+            )
+            listed_parts = migration_client.list_parts(
+                Bucket=BUCKET,
+                Key=migration_multipart_key,
+                UploadId=migration_upload["UploadId"],
+            )
+            require(
+                len(listed_parts.get("Parts", [])) == 1,
+                "migration identity cannot list its multipart parts",
+            )
+            migration_client.complete_multipart_upload(
+                Bucket=BUCKET,
+                Key=migration_multipart_key,
+                UploadId=migration_upload["UploadId"],
+                MultipartUpload={
+                    "Parts": [{"ETag": migration_part["ETag"], "PartNumber": 1}]
+                },
+            )
+            migration_abort_key = f"objects/migration/{run_id}/multipart-abort.bin"
+            migration_abort = migration_client.create_multipart_upload(
+                Bucket=BUCKET, Key=migration_abort_key
+            )
+            migration_client.abort_multipart_upload(
+                Bucket=BUCKET,
+                Key=migration_abort_key,
+                UploadId=migration_abort["UploadId"],
+            )
+            checks.append("migration_final_data_plane_allowed")
+
+            require_access_denied(
+                "migration staging read",
+                lambda: migration_client.get_object(Bucket=BUCKET, Key=staging_key),
+            )
+            require_access_denied(
+                "migration staging write",
+                lambda: migration_client.put_object(
+                    Bucket=BUCKET,
+                    Key=f"staging/migration/{run_id}.bin",
+                    Body=b"forbidden",
+                ),
+            )
+            require_access_denied(
+                "migration final listing",
+                lambda: migration_client.list_objects_v2(
+                    Bucket=BUCKET, Prefix=f"objects/migration/{run_id}/"
+                ),
+            )
+            require_access_denied(
+                "migration final deletion",
+                lambda: migration_client.delete_object(
+                    Bucket=BUCKET, Key=migration_key
+                ),
+            )
+            require_access_denied(
+                "migration version deletion",
+                lambda: migration_client.delete_object(
+                    Bucket=BUCKET,
+                    Key=migration_key,
+                    VersionId=migration_version_id,
+                ),
+            )
+            require_access_denied(
+                "migration bucket location",
+                lambda: migration_client.get_bucket_location(Bucket=BUCKET),
+            )
+            require_access_denied(
+                "migration versioning read",
+                lambda: migration_client.get_bucket_versioning(Bucket=BUCKET),
+            )
+            require_access_denied(
+                "migration lifecycle administration",
+                lambda: migration_client.put_bucket_lifecycle_configuration(
+                    Bucket=BUCKET, LifecycleConfiguration={"Rules": []}
+                ),
+            )
+            checks.append("migration_scope_delete_and_admin_denied")
+
+            revoke_environment = os.environ.copy()
+            for name in (
+                "DISK_S3_ACCESS_KEY",
+                "DISK_S3_SECRET_KEY",
+                "DISK_S3_SESSION_TOKEN",
+                "DISK_S3_MIGRATION_SECRET_KEY",
+            ):
+                revoke_environment.pop(name, None)
+            revoke_environment.update(
+                {
+                    "MINIO_ROOT_USER": root_access_key,
+                    "MINIO_ROOT_PASSWORD": root_secret_key,
+                    "DISK_S3_ENDPOINT": endpoint,
+                    "DISK_S3_MIGRATION_ACCESS_KEY": migration_access_key,
+                    "DISK_MC_BIN": str(mc_binary),
+                    "MC_CONFIG_DIR": str(root / "revoke-mc"),
+                }
+            )
+            rejected_revoke_environment = revoke_environment.copy()
+            rejected_revoke_environment.update(
+                {
+                    "DISK_S3_ACCESS_KEY": app_access_key,
+                    "DISK_S3_SECRET_KEY": app_secret_key,
+                }
+            )
+            rejected_revoke = run_revoke(
+                rejected_revoke_environment, check=False
+            )
+            require(
+                rejected_revoke.returncode != 0,
+                "migration revocation accepts application credentials",
+            )
+            migration_client.head_object(Bucket=BUCKET, Key=migration_key)
+            checks.append("revocation_rejects_application_credentials")
+
+            run_revoke(revoke_environment)
+            require_access_denied(
+                "revoked migration identity",
+                lambda: migration_client.head_object(Bucket=BUCKET, Key=migration_key),
+            )
+            checks.append("migration_identity_revoked")
+
             for key in (staging_key, final_key, multipart_key):
                 app_client.delete_object(Bucket=BUCKET, Key=key)
             remaining = []
-            for prefix in ("staging/", "objects/"):
+            for prefix in (
+                f"staging/integration/{run_id}/",
+                f"objects/integration/{run_id}/",
+            ):
                 remaining.extend(
                     item["Key"]
                     for item in app_client.list_objects_v2(
@@ -420,6 +609,7 @@ def main() -> int:
             for prefix in (
                 f"staging/integration/{run_id}/",
                 f"objects/integration/{run_id}/",
+                f"objects/migration/{run_id}/",
             ):
                 object_versions = root_client.list_object_versions(
                     Bucket=BUCKET, Prefix=prefix
@@ -445,7 +635,7 @@ def main() -> int:
         evidence["passed"] = True
         write_evidence(evidence)
         print(
-            "PASS: MinIO versioning, lifecycle, and least-privilege policy are enforced"
+            "PASS: MinIO application and migration identities are isolated and revocable"
         )
         return 0
     except Exception as error:  # noqa: BLE001 - persist a credential-free failure summary

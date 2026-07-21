@@ -40,6 +40,11 @@ DEFAULT_MULTIPART_CHUNK_BYTES = 64 * 1024 * 1024
 MAX_MULTIPART_PARTS = 10_000
 MAX_STORAGE_PATH_LENGTH = 512
 MIGRATION_LOCK_NAME = "disk-final-blob-migration"
+APPLICATION_S3_CREDENTIAL_ENV = (
+    "DISK_S3_ACCESS_KEY",
+    "DISK_S3_SECRET_KEY",
+    "DISK_S3_SESSION_TOKEN",
+)
 
 
 class MigrationError(RuntimeError):
@@ -672,11 +677,28 @@ def env_bool(name: str, default: bool) -> bool:
 
 
 def s3_client(args: argparse.Namespace) -> Any:
-    access_key = os.environ.get("DISK_S3_ACCESS_KEY")
-    secret_key = os.environ.get("DISK_S3_SECRET_KEY")
-    if bool(access_key) != bool(secret_key):
+    injected_application_credentials = [
+        name for name in APPLICATION_S3_CREDENTIAL_ENV if name in os.environ
+    ]
+    if injected_application_credentials:
         raise MigrationError(
-            "DISK_S3_ACCESS_KEY and DISK_S3_SECRET_KEY must be set together"
+            "application S3 credential variables must not be passed to the migration tool"
+        )
+
+    access_key = os.environ.get("DISK_S3_MIGRATION_ACCESS_KEY")
+    secret_key = os.environ.get("DISK_S3_MIGRATION_SECRET_KEY")
+    session_token = os.environ.get("DISK_S3_MIGRATION_SESSION_TOKEN")
+    access_key_is_set = access_key is not None
+    secret_key_is_set = secret_key is not None
+    if access_key_is_set != secret_key_is_set:
+        raise MigrationError(
+            "DISK_S3_MIGRATION_ACCESS_KEY and DISK_S3_MIGRATION_SECRET_KEY must be set together"
+        )
+    if access_key_is_set and (not access_key or not secret_key):
+        raise MigrationError("migration S3 credential variables must not be empty")
+    if session_token is not None and not access_key_is_set:
+        raise MigrationError(
+            "DISK_S3_MIGRATION_SESSION_TOKEN requires an explicit migration access key pair"
         )
     kwargs: dict[str, Any] = {
         "region_name": args.region,
@@ -692,7 +714,6 @@ def s3_client(args: argparse.Namespace) -> Any:
     if access_key and secret_key:
         kwargs["aws_access_key_id"] = access_key
         kwargs["aws_secret_access_key"] = secret_key
-        session_token = os.environ.get("DISK_S3_SESSION_TOKEN")
         if session_token:
             kwargs["aws_session_token"] = session_token
     try:

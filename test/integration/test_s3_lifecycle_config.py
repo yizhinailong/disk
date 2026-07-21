@@ -20,7 +20,9 @@ CONFIG_PATH = REPO_ROOT / "config.json"
 LIFECYCLE_PATH = REPO_ROOT / "deploy" / "minio" / "lifecycle.json"
 AWS_LIFECYCLE_PATH = REPO_ROOT / "deploy" / "s3" / "lifecycle.json"
 POLICY_PATH = REPO_ROOT / "deploy" / "minio" / "app-policy.json"
+MIGRATION_POLICY_PATH = REPO_ROOT / "deploy" / "minio" / "migration-policy.json"
 PROVISION_PATH = REPO_ROOT / "deploy" / "minio" / "provision.sh"
+REVOKE_PATH = REPO_ROOT / "deploy" / "minio" / "revoke-migration-access.sh"
 S3_COMPOSE_PATH = REPO_ROOT / "docker-compose.s3.yml"
 DISTRIBUTED_COMPOSE_PATH = REPO_ROOT / "docker-compose.distributed.yml"
 ALERTS_PATH = REPO_ROOT / "deploy" / "prometheus" / "disk-alerts.yml"
@@ -133,20 +135,53 @@ def main() -> int:
             "arn:aws:s3:::disk/staging/*",
         ],
     }
+
+    migration_policy = load_json(MIGRATION_POLICY_PATH)
+    assert migration_policy.get("Version") == "2012-10-17"
+    migration_statements = migration_policy.get("Statement")
+    assert isinstance(migration_statements, list)
+    migration_statements_by_id = {
+        statement["Sid"]: statement for statement in migration_statements
+    }
+    assert migration_statements_by_id == {
+        "MigrationFinalObjects": {
+            "Sid": "MigrationFinalObjects",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:AbortMultipartUpload",
+                "s3:ListMultipartUploadParts",
+            ],
+            "Resource": ["arn:aws:s3:::disk/objects/*"],
+        },
+        "DenyMigrationObjectDeletion": {
+            "Sid": "DenyMigrationObjectDeletion",
+            "Effect": "Deny",
+            "Action": ["s3:DeleteObject", "s3:DeleteObjectVersion"],
+            "Resource": ["arn:aws:s3:::disk/objects/*"],
+        },
+    }
     assert all(
         action != "s3:*" and not action.startswith("iam:")
-        for statement in statements
+        for statement in [*statements, *migration_statements]
         for action in statement["Action"]
     )
     assert all(
         resource not in {"*", "arn:aws:s3:::*"}
-        for statement in statements
+        for statement in [*statements, *migration_statements]
+        for resource in statement["Resource"]
+    )
+    assert all(
+        "staging" not in resource
+        for statement in migration_statements
         for resource in statement["Resource"]
     )
 
     expected_volumes = {
         "./deploy/minio/lifecycle.json:/config/lifecycle.json:ro",
         "./deploy/minio/app-policy.json:/config/app-policy.json:ro",
+        "./deploy/minio/migration-policy.json:/config/migration-policy.json:ro",
         "./deploy/minio/provision.sh:/config/provision.sh:ro",
     }
     for compose_path in (S3_COMPOSE_PATH, DISTRIBUTED_COMPOSE_PATH):
@@ -162,16 +197,24 @@ def main() -> int:
             "DISK_S3_BUCKET",
             "DISK_S3_ACCESS_KEY",
             "DISK_S3_SECRET_KEY",
+            "DISK_S3_MIGRATION_ACCESS_KEY",
+            "DISK_S3_MIGRATION_SECRET_KEY",
         }
         assert init_environment["DISK_S3_BUCKET"] == "disk"
-        assert (
-            init_environment["MINIO_ROOT_USER"]
-            != init_environment["DISK_S3_ACCESS_KEY"]
-        )
-        assert (
-            init_environment["MINIO_ROOT_PASSWORD"]
-            != init_environment["DISK_S3_SECRET_KEY"]
-        )
+        assert len(
+            {
+                init_environment["MINIO_ROOT_USER"],
+                init_environment["DISK_S3_ACCESS_KEY"],
+                init_environment["DISK_S3_MIGRATION_ACCESS_KEY"],
+            }
+        ) == 3
+        assert len(
+            {
+                init_environment["MINIO_ROOT_PASSWORD"],
+                init_environment["DISK_S3_SECRET_KEY"],
+                init_environment["DISK_S3_MIGRATION_SECRET_KEY"],
+            }
+        ) == 3
         minio_environment = compose["services"]["minio"]["environment"]
         assert minio_environment["MINIO_API_STALE_UPLOADS_EXPIRY"] == "168h"
         assert minio_environment["MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL"] == "6h"
@@ -190,6 +233,9 @@ def main() -> int:
         )
         assert "DISK_MINIO_ROOT_USER" not in environment
         assert "DISK_MINIO_ROOT_PASSWORD" not in environment
+        assert "DISK_S3_MIGRATION_ACCESS_KEY" not in environment
+        assert "DISK_S3_MIGRATION_SECRET_KEY" not in environment
+        assert "DISK_S3_MIGRATION_SESSION_TOKEN" not in environment
 
     provision = PROVISION_PATH.read_text(encoding="utf-8")
     for command in (
@@ -206,6 +252,19 @@ def main() -> int:
     assert '\"versioning\":{\"status\":\"Enabled\"' in provision
     assert '"${MINIO_ROOT_USER}" = "${DISK_S3_ACCESS_KEY}"' in provision
     assert '"${MINIO_ROOT_PASSWORD}" = "${DISK_S3_SECRET_KEY}"' in provision
+    assert '"${MINIO_ROOT_USER}" = "${DISK_S3_MIGRATION_ACCESS_KEY}"' in provision
+    assert '"${DISK_S3_ACCESS_KEY}" = "${DISK_S3_MIGRATION_ACCESS_KEY}"' in provision
+    assert '"${MINIO_ROOT_PASSWORD}" = "${DISK_S3_MIGRATION_SECRET_KEY}"' in provision
+    assert '"${DISK_S3_SECRET_KEY}" = "${DISK_S3_MIGRATION_SECRET_KEY}"' in provision
+    assert "run_mc admin policy create local disk-migration" in provision
+    assert "run_mc admin policy attach local disk-migration" in provision
+
+    revoke = REVOKE_PATH.read_text(encoding="utf-8")
+    assert REVOKE_PATH.stat().st_mode & 0o111
+    assert "run_mc admin user remove" in revoke
+    assert "DISK_S3_MIGRATION_ACCESS_KEY" in revoke
+    assert "DISK_S3_ACCESS_KEY+x" in revoke
+    assert "DISK_S3_SECRET_KEY+x" in revoke
 
     environment_example = ENV_EXAMPLE_PATH.read_text(encoding="utf-8")
     for name in (
@@ -213,6 +272,8 @@ def main() -> int:
         "DISK_MINIO_ROOT_PASSWORD",
         "DISK_S3_ACCESS_KEY",
         "DISK_S3_SECRET_KEY",
+        "DISK_S3_MIGRATION_ACCESS_KEY",
+        "DISK_S3_MIGRATION_SECRET_KEY",
     ):
         assert f"{name}=" in environment_example
 
@@ -230,7 +291,9 @@ def main() -> int:
         in alerts["DiskReconciliationFindings"]
     )
 
-    print("S3 lifecycle, least-privilege policy, and monitoring configuration: PASS")
+    print(
+        "S3 lifecycle, isolated identities, least-privilege policies, and monitoring: PASS"
+    )
     return 0
 
 
