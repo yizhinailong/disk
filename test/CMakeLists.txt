@@ -633,6 +633,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME PostgresFailoverSemanticsIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_postgres_failover_semantics.py"
+)
+set_tests_properties(
+    PostgresFailoverSemanticsIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;deployment;process-death"
+    RUN_SERIAL TRUE
+    TIMEOUT 240
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME DistributedCapacityBudgetContract
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_capacity_budget.py"
 )

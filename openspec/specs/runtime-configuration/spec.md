@@ -27,6 +27,11 @@ The system SHALL use configured PostgreSQL connection settings for persistent me
 - **WHEN** an operation requires persistent metadata
 - **THEN** the system SHALL use the configured PostgreSQL client for that metadata access
 
+#### Scenario: Stable PostgreSQL writer endpoint fails over
+- **WHEN** established database connections time out while a fenced primary is replaced by a fully replayed, promoted standby behind the configured stable writer endpoint
+- **THEN** database operations SHALL return controlled failures during the interruption, liveness SHALL remain available, and readiness SHALL identify the database dependency as unavailable
+- **AND** the existing API processes SHALL reconnect without restart, retain pre-failover committed state, and perform post-promotion writes through the same endpoint without routing business reads to an unpromoted standby
+
 ### Requirement: Redis Connectivity Configuration
 The system SHALL use configured Redis connection settings for token, cache, rate-limit, and temporary state behavior, and rate-limit filters SHALL use a consistent fail-open policy when Redis limiter state is unavailable.
 

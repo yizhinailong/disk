@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Phase 6 Redis 稳定写端点故障切换）：`cmake --preset linux-debug-clang`、完整构建和认证/Redis 聚焦 CTest 3/3 均通过；完整 CTest 共 1386 项，1380 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 468.43 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮 Phase 6 PostgreSQL 稳定写端点故障切换）：`cmake --preset linux-debug-clang`、完整构建和 PostgreSQL/认证/Redis/拓扑聚焦 CTest 5/5 均通过；完整 CTest 共 1387 项，1381 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 478.86 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -348,7 +348,7 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 
 ### 11.2 PostgreSQL
 
-- [ ] 采用主库写入端点和经过演练的故障切换方案；第一期不做业务分片。
+- [x] 采用主库写入端点和经过演练的故障切换方案；第一期不做业务分片。
 - [x] 本地双 API/双 Worker 固定 PostgreSQL 32、Redis 16 条应用连接预算并保留运维余量；扩容公式已写入部署指南。
 - [ ] 区分事务池模式限制，确认 Drogon ORM、prepared statement 和 advisory lock 兼容性。
 - [x] Compose PostgreSQL 显式设置 statement、lock、idle transaction 超时，避免故障任务长期占用资源。
@@ -405,6 +405,16 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 提升后 refresh/撤销值保持不变且 `PTTL` 为正并严格递减；冷撤销路径继续以 `401 + 40111` 拒绝旧 access token，A/B 并发轮换 refresh 仍只有一个 CAS 赢家，旧 token 重放失败；从新主游标 `0` 重启 `SCAN` 精确得到 16 个夹具键。`0600` 原子证据 `.sisyphus/evidence/redis-failover-semantics-summary.json` 的 SHA-256 为 `555fbac3d2964980bad2ed4ec55045135034ee36c2feb2f61b5ec2085b1dabe7`；它不含 token、密码、JTI、Redis key 名或值，也不连接、停止或清空共享 Redis 服务。
 
 认证/Redis 聚焦 CTest 3/3 通过；完整 CTest 共 1386 项，1380 通过、6 项既有环境门控跳过、0 失败，总耗时 468.43 秒；OpenSpec 严格校验 24/24 通过。本记录关闭 11.3 的连接重建、命令超时、Lua/CAS、SCAN 与 TTL 本机语义门禁，但同主机手工提升不替代目标私网 HA 端点、Sentinel/托管控制面、认证/TLS、独立故障域和 RTO/RPO 演练，因此 11.3 的私网 HA 项与 11.6 的完整故障切换验收继续保持未勾选。
+
+### 11.9 Phase 6 PostgreSQL 稳定写端点故障切换验收记录（2026-07-21）
+
+设计合同固定 API、Worker 和 migration Job 只连接单一私网 PostgreSQL 主库写端点；第一期不做业务分片，也不让上传状态、授权、配额、租约或任务认领读取异步副本。切换必须先停止新写入或进入受控故障窗口，隔离旧主并确认候选已重放要求保留的 WAL，再提升候选、切换稳定端点并关闭旧连接；提交结果未知的非幂等写不得由代理或应用自动重放。
+
+`test_postgres_failover_semantics.py` 使用两个独立数据目录建立真实 PostgreSQL 物理流复制，并让两个真实 API 经测试专属 TCP 稳定端点连接旧主。热备确认只读且追平真实注册数据后，夹具暂停既有连接；两个 profile 读取和一次资料写入均在 1.019 至 1.020 秒内返回 `500 + 10006`，同时 liveness 200、readiness 503 且只把 database 标为 unhealthy。夹具随后 `SIGKILL` 旧主、提升热备并切换端点，原双 API PID 不变并在 1.030 秒内恢复 ready。
+
+提升后 PostgreSQL system identifier 保持不变、timeline 前进，切换前用户与昵称基线无损，超时写未在新主重放；API B 的提升后资料更新可由 API A 立即读到。`0600` 原子证据 `.sisyphus/evidence/postgres-failover-semantics-summary.json` 的 SHA-256 为 `048157ff16d30013ee476f902ad6bdd7ccc96059b0f81a1f4707150ebfbe0e53`，且不含密码、令牌、连接串或业务标识。
+
+PostgreSQL/认证/Redis/拓扑聚焦 CTest 5/5 通过（48.17 秒）；完整 CTest 共 1387 项，1381 通过、6 项既有环境门控跳过、0 失败，总耗时 478.86 秒；OpenSpec 严格校验 24/24 通过。本记录关闭 11.2 的稳定主库写端点、本地物理副本提升和第一期不分片语义门禁，但同主机手工提升不替代目标托管/Patroni/HAProxy 控制面、TLS、独立故障域、备份/PITR 或经批准的 RTO/RPO 演练，因此事务池兼容、备份恢复、只读副本评估及 11.6 的完整故障切换验收继续保持未勾选。
 
 ## 12. Phase 7：可观测性与运维工具
 

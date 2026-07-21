@@ -47,7 +47,7 @@ API_B = "auth-cluster-b"
 
 
 class CuttableTcpProxy:
-    """Forward Redis traffic and cut only the connections owned by this test."""
+    """Forward TCP traffic and control only connections owned by this test."""
 
     def __init__(self, target_host: str, target_port: int) -> None:
         self._target = (target_host, target_port)
@@ -65,7 +65,7 @@ class CuttableTcpProxy:
         self._relay_threads: list[threading.Thread] = []
         self._accept_thread = threading.Thread(
             target=self._accept_connections,
-            name="auth-cluster-redis-proxy",
+            name="switchable-tcp-proxy",
             daemon=True,
         )
 
@@ -161,7 +161,7 @@ class CuttableTcpProxy:
                 relay_thread = threading.Thread(
                     target=self._relay,
                     args=(source, destination),
-                    name="auth-cluster-redis-relay",
+                    name="switchable-tcp-relay",
                     daemon=True,
                 )
                 self._relay_threads.append(relay_thread)

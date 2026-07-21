@@ -523,6 +523,7 @@ class ManagedServer:
         readiness_path: str,
         role: str = "api",
         environment_overrides: dict[str, str] | None = None,
+        environment_removals: tuple[str, ...] = (),
     ) -> None:
         self.name = name
         self.base_url = f"http://127.0.0.1:{port}"
@@ -548,6 +549,8 @@ class ManagedServer:
             )
             if environment_overrides is not None:
                 environment.update(environment_overrides)
+            for variable_name in environment_removals:
+                environment.pop(variable_name, None)
             self.process = subprocess.Popen(
                 [str(binary)],
                 cwd=run_directory,

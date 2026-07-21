@@ -275,6 +275,7 @@ def main() -> int:
         "test_auth_cluster_consistency.py",
         "test_redis_session_persistence.py",
         "test_redis_failover_semantics.py",
+        "test_postgres_failover_semantics.py",
         "目标 S3/MinIO 环境门控",
         "目标双 API 环境门控",
     ):
@@ -299,6 +300,7 @@ def main() -> int:
         "test/integration/test_auth_cluster_consistency.py",
         "test/integration/test_redis_session_persistence.py",
         "test/integration/test_redis_failover_semantics.py",
+        "test/integration/test_postgres_failover_semantics.py",
     ):
         require((root / relative_path).is_file(), f"documented test entry is missing: {relative_path}")
 
@@ -318,6 +320,11 @@ def main() -> int:
         and "test_redis_failover_semantics.py" in test_cmake,
         "Redis failover semantics test is not registered in CTest",
     )
+    require(
+        "NAME PostgresFailoverSemanticsIntegration" in test_cmake
+        and "test_postgres_failover_semantics.py" in test_cmake,
+        "PostgreSQL failover semantics test is not registered in CTest",
+    )
 
     todo = (root / "TODO.md").read_text(encoding="utf-8")
     latest_verification = re.search(
@@ -328,7 +335,7 @@ def main() -> int:
     require(latest_verification is not None, "TODO latest verification summary is missing or malformed")
     total, passed_count, skipped_count = map(int, latest_verification.groups())
     require(
-        (total, passed_count, skipped_count) == (1386, 1380, 6),
+        (total, passed_count, skipped_count) == (1387, 1381, 6),
         "TODO latest CTest inventory drifted without an explicit contract update",
     )
     require(total == passed_count + skipped_count, "TODO latest CTest totals do not reconcile")
