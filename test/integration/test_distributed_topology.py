@@ -26,6 +26,28 @@ def compact_expression(rule: dict[str, object]) -> str:
 
 def main() -> int:
     root = Path(__file__).resolve().parents[2]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    require(
+        "`storage_backend=local` 与 `upload_staging_backend=local`" in readme,
+        "README local quick start must keep final and staging storage local",
+    )
+    require(
+        "`storage_backend=s3` 与 `upload_staging_backend=s3`" in readme,
+        "README distributed target must use shared S3 final and staging storage",
+    )
+    require(
+        "上传分片和组装文件仍使用本机" not in readme,
+        "README regressed to the obsolete node-local staging topology",
+    )
+    require(
+        "docker-compose.distributed.yml" in readme,
+        "README must link the authoritative distributed Compose fixture",
+    )
+    require(
+        "DISK_SECURE_MODE=true" in readme,
+        "README production guidance must retain the secure-mode gate",
+    )
+
     compose = yaml.safe_load((root / "docker-compose.distributed.yml").read_text(encoding="utf-8"))
     services = compose["services"]
     expected_services = {

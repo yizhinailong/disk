@@ -860,6 +860,12 @@ Python 语法检查和 OpenSpec 严格校验 24/24 通过。完整 CTest 首轮�
 
 clang-format、后端完整构建和聚焦 CTest 4/4 通过；完整 CTest 保持 1381 项，其中 1375 项通过、6 项按环境门控跳过、0 失败，总耗时 430.44 秒；OpenSpec 严格校验 24/24 通过。本轮只完成 Phase 10 第 821 项中的错误码表子项，尚未重新审计全部架构图、部署样例和运维手册，因此第 821 项保持未勾选；目标环境多实例和压力门禁也未执行，第 822 项保持未勾选。
 
+### 15.6 README 分布式部署样例同步记录（2026-07-21）
+
+根 README 原本仍声称最终 blob 切换到 S3 后，上传分片和组装文件固定使用 API 节点本机 `temp_upload_path`，且快速开始缺少 `upload_staging_backend`、上传创建回滚开关和进程角色，容易把旧的节点亲和拓扑当作当前分布式方案。现在 README 明确区分 `all + local/local` 单进程开发与 `api/worker + s3/s3` 分布式目标，补齐本地多实例 Compose 入口、生产 `DISK_SECURE_MODE=true`/TLS/私网边界、当前项目结构、持久 Worker 清理和分片组装限流说明；本地 HTTP MinIO Compose 被明确限定为本地或隔离预发布验收，不作为可直接上线的生产配置。
+
+现有 `DistributedTopologyContract` 新增 README 回归断言，要求保留 local/local 与 s3/s3 两套语义、权威 `docker-compose.distributed.yml` 入口和生产安全门禁，并拒绝旧的本机暂存断言。脚本直接执行与聚焦 CTest 均为 1/1 通过；完整 CTest 共 1381 项，其中 1375 项通过、6 项按环境门控跳过、0 失败，总耗时 428.96 秒；OpenSpec 严格校验 24/24 通过。本轮只完成 Phase 10 第 821 项中的 README 与部署样例入口子项，架构图、运维手册和全局测试数量仍待逐项审计，因此第 821 项保持未勾选；未执行目标环境多实例和压力门禁，第 822 项也保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

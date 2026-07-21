@@ -81,12 +81,12 @@
 - **批量恢复**：支持恢复多个条目；遇到命名冲突时自动生成新名称，原目录不存在时回退到根目录。
 - **批量彻底删除**：永久删除回收站条目，减少引用计数并释放用户配额。
 - **清空回收站**：一次性删除当前用户全部回收站内容，返回删除数量和释放空间。
-- **自动清理**：定时清理过期回收站项和过期上传任务，引用计数归零后删除物理文件。
+- **自动清理**：持久 Worker 任务清理过期回收站、上传暂存和零引用 blob，支持租约接管与幂等重试。
 
 ### 💾 存储与后端能力
 
 - **内容寻址存储**：最终 blob 按内容哈希组织路径或对象 key，方便去重与校验。
-- **存储抽象层**：`UploadStagingStorage` 管理本地临时分片与组装文件，`BlobStore` 管理最终 blob；运行时可选择本地文件系统或 S3/MinIO 兼容对象存储作为最终 blob 后端。
+- **存储抽象层**：`UploadStagingStorage` 和 `BlobStore` 分别管理上传暂存与最终 blob，两层均可选择本地文件系统或 S3/MinIO 兼容对象存储；上传任务持久化暂存后端与前缀，分布式实例无需节点亲和。
 - **引用计数**：同一内容可被多个用户文件记录引用，复制和彻底删除会维护 `ref_count`。
 - **PostgreSQL 数据持久化**：用户、文件、内容、上传任务、分享、回收站和操作日志存储在 PostgreSQL。
 - **Redis 缓存与状态管理**：用于刷新令牌、黑名单、登录失败计数、分享访问和限流状态。
@@ -171,14 +171,17 @@ psql -U postgres -d disk -f sql/init.sql
 
 ### 4. 配置应用
 
-编辑 `config.json` 中的数据库、Redis 和存储路径。核心配置示例：
+编辑 `config.json` 中的数据库、Redis 和存储路径。以下是单进程本地开发的核心配置示例：
 
 ```json
 {
   "listeners": [{ "address": "127.0.0.1", "port": 8080 }],
   "custom_config": {
     "disk": {
+      "process_role": "all",
       "storage_backend": "local",
+      "upload_staging_backend": "local",
+      "upload_task_creation_enabled": true,
       "storage_base_path": "build/uploaded",
       "temp_upload_path": "build/temp_uploads",
       "chunk_size": 5242880,
@@ -186,7 +189,7 @@ psql -U postgres -d disk -f sql/init.sql
       "upload_task_expiry_seconds": 86400,
       "upload_rate_limit_per_minute": 240,
       "assembly_max_concurrent": 4,
-      "assemble_buffer_size_bytes": 262144,
+      "assemble_buffer_size_bytes": 1048576,
       "s3": {
         "bucket": "disk",
         "region": "us-east-1",
@@ -194,21 +197,26 @@ psql -U postgres -d disk -f sql/init.sql
         "use_ssl": false,
         "force_path_style": true,
         "verify_ssl": false,
-        "object_prefix": "objects"
+        "object_prefix": "objects",
+        "staging_prefix": "staging",
+        "max_connections": 16,
+        "io_threads": 4
       }
     }
   }
 }
 ```
 
-`storage_backend=local` 时最终 blob 写入 `storage_base_path`；设置为 `s3` 时，最终 blob 写入 S3/MinIO，上传分片和组装文件仍使用本机 `temp_upload_path`。S3 凭据通过 `DISK_S3_ACCESS_KEY`、`DISK_S3_SECRET_KEY` 和可选的 `DISK_S3_SESSION_TOKEN` 注入，不写入 `config.json`。
+本地单进程开发使用 `storage_backend=local` 与 `upload_staging_backend=local`：最终 blob 写入 `storage_base_path`，上传暂存写入 `temp_upload_path`。`storage_backend` 控制最终 blob，`upload_staging_backend` 控制新建上传任务的暂存位置；任务创建后会固化暂存后端与对象前缀。
+
+最终分布式目标使用 `storage_backend=s3` 与 `upload_staging_backend=s3`，由独立 `api`/`worker` 进程共享 PostgreSQL、Redis 和 S3/MinIO，不依赖 API 节点本地目录。S3 凭据通过 `DISK_S3_ACCESS_KEY`、`DISK_S3_SECRET_KEY` 和可选的 `DISK_S3_SESSION_TOKEN` 注入，不写入 `config.json`。
 
 ### 5. 配置环境变量
 
 ```bash
 export JWT_SECRET="your-super-secret-jwt-key-change-in-production"
 export VCPKG_ROOT=/path/to/vcpkg
-# 仅 storage_backend=s3 时需要
+# 任一存储层使用 s3 时需要
 export DISK_S3_ACCESS_KEY="your-access-key"
 export DISK_S3_SECRET_KEY="your-secret-key"
 ```
@@ -236,6 +244,18 @@ cmake --build --preset windows-debug-clang-cl
 ```
 
 默认监听地址为 `http://127.0.0.1:8080`。
+
+### 8. 验证分布式拓扑
+
+仓库内置两 API、两 Worker、PostgreSQL、Redis、MinIO 和无粘性负载均衡的本地验收拓扑：
+
+```bash
+cp deploy/distributed.env.example .env
+# 修改 .env 中所有 replace-* 占位值
+docker compose -f docker-compose.distributed.yml up --build
+```
+
+该 Compose 使用 HTTP MinIO 和 `DISK_SECURE_MODE=false`，只用于本地或隔离的预发布验收，不是可直接上线的生产配置。生产部署应以 `deploy/config.distributed.json` 为拓扑基线，注入不同的 `DISK_PROCESS_ROLE` 与 `DISK_INSTANCE_ID`，强制设置 `DISK_STORAGE_BACKEND=s3`、`DISK_UPLOAD_STAGING_BACKEND=s3` 和 `DISK_SECURE_MODE=true`，启用 S3 TLS 与证书校验，并将 PostgreSQL、Redis 与对象存储限制在私有网络。环境变量清单见 `deploy/distributed.env.example`，完整步骤与回滚要求见 [部署运维指南](docs/design/05-部署运维指南.md)。
 
 ## API 总览
 
@@ -352,10 +372,15 @@ disk/
 │   ├── dtos/           # DTO 校验测试
 │   ├── filters/        # 过滤器测试
 │   ├── storage/        # 存储与合并测试
-│   └── integration/    # 需要运行服务的集成测试
-├── docs/design/        # 中文设计文档
-├── sql/init.sql        # PostgreSQL 初始化脚本
+│   └── integration/    # 后端合同、端到端与故障恢复测试
+├── clients/desktop/    # 独立 Qt/QML 桌面客户端
+├── deploy/             # 分布式配置、代理、监控与演练资产
+├── docs/design/        # 中文后端设计文档
+├── sql/
+│   ├── init.sql        # PostgreSQL 初始化脚本
+│   └── migrations/     # 分布式重构迁移脚本
 ├── config.json         # Drogon 运行配置
+├── docker-compose.distributed.yml  # 本地多实例验收拓扑
 ├── CMakePresets.json   # Linux/Windows 构建预设
 └── vcpkg.json          # C++ 依赖清单
 ```
@@ -385,8 +410,8 @@ ctest --preset linux-debug-clang -R UploadFlow -V
 - **文件服务**：上传一致性、完成上传并发保护、复制/删除原子性、批量操作、搜索、下载流程。
 - **分享服务**：创建、查询、更新、取消、访问、浏览、下载与批量处理。
 - **回收站与清理**：列表、恢复、彻底删除、清空、过期清理。
-- **过滤器与存储**：JWT、分享令牌、上传限流、分片合并工作池。
-- **集成测试**：认证生命周期、上传下载、目录生命周期、文件元数据、文件变更、分享管理、回收站生命周期、系统信息和健康检查。
+- **过滤器与存储**：JWT、分享令牌、上传限流、分片组装限流、本地与 S3 后端。
+- **集成测试**：认证生命周期、上传下载、目录生命周期、文件元数据、分享与回收站、分布式拓扑、故障恢复和数据一致性。
 
 ## 开发指南
 
