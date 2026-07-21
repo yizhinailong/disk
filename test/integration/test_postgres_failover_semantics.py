@@ -80,10 +80,18 @@ def wait_for(
 class PostgresNode:
     """Own one isolated PostgreSQL server process and data directory."""
 
-    def __init__(self, name: str, root: Path, port: int) -> None:
+    def __init__(
+        self,
+        name: str,
+        root: Path,
+        port: int,
+        *,
+        server_settings: tuple[str, ...] = (),
+    ) -> None:
         self.name = name
         self.root = root
         self.port = port
+        self.server_settings = server_settings
         self.initdb_binary = resolve_executable(("initdb",))
         self.postgres_binary = resolve_executable(("postgres",))
         self.pg_basebackup_binary = resolve_executable(("pg_basebackup",))
@@ -160,37 +168,40 @@ class PostgresNode:
         require(self.process is None, f"{self.name} PostgreSQL is already running")
         require(self.root.is_dir(), f"{self.name} PostgreSQL directory is missing")
         self.log_handle = self.log_path.open("ab")
+        command = [
+            str(self.postgres_binary),
+            "-D",
+            str(self.root),
+            "-p",
+            str(self.port),
+            "-c",
+            "listen_addresses=127.0.0.1",
+            "-c",
+            "unix_socket_directories=",
+            "-c",
+            "max_connections=50",
+            "-c",
+            "wal_level=replica",
+            "-c",
+            "max_wal_senders=5",
+            "-c",
+            "max_replication_slots=5",
+            "-c",
+            "hot_standby=on",
+            "-c",
+            "fsync=on",
+            "-c",
+            "synchronous_commit=on",
+            "-c",
+            "full_page_writes=on",
+            "-c",
+            "log_min_messages=warning",
+        ]
+        for setting in self.server_settings:
+            command.extend(("-c", setting))
         try:
             self.process = subprocess.Popen(
-                [
-                    str(self.postgres_binary),
-                    "-D",
-                    str(self.root),
-                    "-p",
-                    str(self.port),
-                    "-c",
-                    "listen_addresses=127.0.0.1",
-                    "-c",
-                    "unix_socket_directories=",
-                    "-c",
-                    "max_connections=50",
-                    "-c",
-                    "wal_level=replica",
-                    "-c",
-                    "max_wal_senders=5",
-                    "-c",
-                    "max_replication_slots=5",
-                    "-c",
-                    "hot_standby=on",
-                    "-c",
-                    "fsync=on",
-                    "-c",
-                    "synchronous_commit=on",
-                    "-c",
-                    "full_page_writes=on",
-                    "-c",
-                    "log_min_messages=warning",
-                ],
+                command,
                 cwd=self.root,
                 stdout=self.log_handle,
                 stderr=subprocess.STDOUT,

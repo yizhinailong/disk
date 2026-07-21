@@ -203,6 +203,11 @@ Deployment documentation SHALL define log rotation, health checks, service/datab
 - **WHEN** a production deployment is prepared
 - **THEN** database and file backups SHALL have documented commands, retention expectations, and restore steps
 
+#### Scenario: PostgreSQL point-in-time recovery is accepted
+- **WHEN** a release claims a PostgreSQL recovery-point objective backed by physical backups and continuous WAL archiving
+- **THEN** a manifest-verified, unmodified base backup SHALL be copied into a fresh isolated data directory and recovered through one explicit time, LSN, transaction, or named target without modifying the source cluster
+- **AND** acceptance SHALL prove the expected committed state on both sides of the target, unchanged system identity, a new promoted timeline, continuous required WAL, a matching recoverable final-object snapshot, full reconciliation, and measured RPO/RTO evidence before traffic is allowed
+
 #### Scenario: Isolated restore drill completed
 - **WHEN** backup readiness is accepted for a release
 - **THEN** a coordinated database and final-object recovery set SHALL be restored into isolated empty resources and SHALL pass schema, quota, reference-count, object-integrity, paginated reconciliation, failure-blocking, and repaired-rescan checks before traffic is allowed

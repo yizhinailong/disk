@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Phase 6 PostgreSQL 稳定写端点故障切换）：`cmake --preset linux-debug-clang`、完整构建和 PostgreSQL/认证/Redis/拓扑聚焦 CTest 5/5 均通过；完整 CTest 共 1387 项，1381 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 478.86 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮 Phase 6 PostgreSQL 物理备份与时间点恢复）：`cmake --preset linux-debug-clang`、完整构建和 PostgreSQL 恢复/拓扑聚焦 CTest 4/4 均通过；完整 CTest 共 1388 项，1382 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 479.82 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -352,7 +352,7 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 - [x] 本地双 API/双 Worker 固定 PostgreSQL 32、Redis 16 条应用连接预算并保留运维余量；扩容公式已写入部署指南。
 - [ ] 区分事务池模式限制，确认 Drogon ORM、prepared statement 和 advisory lock 兼容性。
 - [x] Compose PostgreSQL 显式设置 statement、lock、idle transaction 超时，避免故障任务长期占用资源。
-- [ ] 建立备份、时间点恢复和恢复演练流程。
+- [x] 建立备份、时间点恢复和恢复演练流程。
 - [ ] 只在可证明安全的只读查询上评估读副本；上传状态与权限判断不得读延迟副本。
 
 ### 11.3 Redis
@@ -414,7 +414,17 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 
 提升后 PostgreSQL system identifier 保持不变、timeline 前进，切换前用户与昵称基线无损，超时写未在新主重放；API B 的提升后资料更新可由 API A 立即读到。`0600` 原子证据 `.sisyphus/evidence/postgres-failover-semantics-summary.json` 的 SHA-256 为 `048157ff16d30013ee476f902ad6bdd7ccc96059b0f81a1f4707150ebfbe0e53`，且不含密码、令牌、连接串或业务标识。
 
-PostgreSQL/认证/Redis/拓扑聚焦 CTest 5/5 通过（48.17 秒）；完整 CTest 共 1387 项，1381 通过、6 项既有环境门控跳过、0 失败，总耗时 478.86 秒；OpenSpec 严格校验 24/24 通过。本记录关闭 11.2 的稳定主库写端点、本地物理副本提升和第一期不分片语义门禁，但同主机手工提升不替代目标托管/Patroni/HAProxy 控制面、TLS、独立故障域、备份/PITR 或经批准的 RTO/RPO 演练，因此事务池兼容、备份恢复、只读副本评估及 11.6 的完整故障切换验收继续保持未勾选。
+PostgreSQL/认证/Redis/拓扑聚焦 CTest 5/5 通过（48.17 秒）；完整 CTest 共 1387 项，1381 通过、6 项既有环境门控跳过、0 失败，总耗时 478.86 秒；OpenSpec 严格校验 24/24 通过。本记录关闭 11.2 的稳定主库写端点、本地物理副本提升和第一期不分片语义门禁，但同主机手工提升不替代目标托管/Patroni/HAProxy 控制面、TLS、独立故障域、备份/PITR 或经批准的 RTO/RPO 演练；备份/PITR 由 11.10 独立验收，事务池兼容、只读副本评估及 11.6 的完整故障切换验收继续保持未勾选。
+
+### 11.10 Phase 6 PostgreSQL 物理备份与时间点恢复验收记录（2026-07-21）
+
+备份合同现区分每日 custom-format 逻辑 dump、带 SHA-256 manifest 的物理基础备份、连续 WAL 归档和目标时刻可恢复的 final Blob 快照。声明 PITR 时必须保留覆盖最老有效基础备份到批准恢复窗口的完整 WAL 链；恢复只能复制未修改基础备份到新的隔离数据目录，使用 `recovery.signal`、受控 `restore_command` 和唯一的时间/LSN/XID/name 目标。数据库到达目标并提升新 timeline 后，仍须配对对象快照并通过 schema、配额、ref_count、对象完整性和四范围分页对账才能切流。
+
+`test_postgres_pitr_recovery.py` 在测试专属 PostgreSQL 18 源库开启连续 WAL 归档，加载真实 schema 与基线用户后创建 `pg_basebackup --wal-method=stream --manifest-checksums=SHA256`，原备份两次通过 `pg_verifybackup --exit-on-error`，而只修改 `PG_VERSION` 的独立副本被拒绝。夹具在基础备份后依次提交目标前和目标后业务行，确认包含目标后事务的 WAL 已归档并且 archiver 无失败，再停止源库；恢复只操作基础备份副本，不连接、不停止也不修改共享数据库。
+
+隔离恢复以 inclusive LSN `0/3000750` 为目标，在 replay LSN `0/3000810` 完成并从 timeline 1 提升到 2；恢复库保留 schema、基线行和目标前行，排除位于 `0/30009D8` 的目标后行。4 个归档文件覆盖所需恢复范围，物理备份 manifest 的 WAL range 为 1，本机恢复耗时 0.109 秒。`0600` 原子证据 `.sisyphus/evidence/postgres-pitr-recovery-summary.json` 的 SHA-256 为 `a9eb1507e6901138222e7a2be9d2cc59200a391cae2c509f5ad1873fd3d0edf9`，不含密码、令牌、用户名、邮箱或连接串。
+
+逻辑恢复/对象对账、物理 PITR、稳定端点晋升和拓扑合同聚焦 CTest 4/4 通过（20.24 秒）；完整 CTest 共 1388 项，1382 通过、6 项既有环境门控跳过、0 失败，总耗时 479.82 秒；OpenSpec 严格校验 24/24 通过。本记录结合既有 `BackupRestoreReconciliationIntegration` 关闭 11.2 的仓库级备份、时间点恢复与恢复演练流程，但本机 `cp` 归档不替代托管/pgBackRest/WAL-G、异地加密不可变存储、真实对象时间点快照或经批准的生产 RPO/RTO，因此 11.6 的完整依赖故障切换验收继续保持未勾选。
 
 ## 12. Phase 7：可观测性与运维工具
 

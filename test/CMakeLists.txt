@@ -479,6 +479,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME PostgresPitrRecoveryIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_postgres_pitr_recovery.py"
+)
+set_tests_properties(
+    PostgresPitrRecoveryIntegration
+    PROPERTIES
+    LABELS "backend-integration;database-migration;backup-restore;deployment"
+    RUN_SERIAL TRUE
+    TIMEOUT 240
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME UploadStateMachineIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_state_machine.py"
 )
