@@ -49,11 +49,23 @@ The system test plan SHALL define functional test cases for authentication, user
 - **THEN** it SHALL specify the operation, setup or steps, expected result, and priority
 
 ### Requirement: Security validation
-The validation documentation SHALL include security checks for authentication, authorization, input validation, file safety, TLS/transport behavior, and rate limiting.
+The validation documentation SHALL include security checks for authentication, authorization, input validation, file safety, S3 object-key boundaries, S3 endpoint parsing, credential-safe evidence, TLS/transport behavior, replay, and rate limiting.
 
 #### Scenario: Authorization security tested
 - **WHEN** tests attempt cross-user file, folder, or share access
 - **THEN** the expected result SHALL be rejection rather than unauthorized access
+
+#### Scenario: Cross-user upload lifecycle is tested
+- **WHEN** a second authenticated user attempts chunk, completion, cancellation, and replay operations with another user's `upload_id`
+- **THEN** evidence SHALL show a uniform not-found response and no task, lease, chunk, staging, file, or quota mutation
+
+#### Scenario: S3 input boundaries are tested
+- **WHEN** tests inject traversal or delimiter forms into object locators and non-origin URL components into S3 endpoint configuration
+- **THEN** unsafe values SHALL be rejected before storage calls or S3 client initialization, and cleanup SHALL remain inside the exact upload-session prefix
+
+#### Scenario: Credential-safe evidence is tested
+- **WHEN** structured and plain-text fixtures containing nested tokens, authentication headers, passwords, environment credentials, and JWT-shaped values are saved through the shared evidence helper
+- **THEN** saved evidence SHALL redact replayable credentials while retaining non-secret diagnostic identifiers
 
 #### Scenario: Rate limit tested
 - **WHEN** requests exceed documented login, API, or share-access limits
@@ -102,6 +114,10 @@ Validation activities SHALL produce or reference evidence sufficient to reproduc
 #### Scenario: Validation evidence captured
 - **WHEN** a validation command is run as part of a documented plan
 - **THEN** the evidence SHALL include the command, timestamp or context, exit result, and relevant output or report summary
+
+#### Scenario: Evidence contains runtime data
+- **WHEN** a validation helper persists API responses, headers, configuration fragments, or diagnostic text
+- **THEN** it SHALL use the shared redacting evidence path and SHALL NOT persist replayable credentials; raw-byte evidence SHALL be limited to synthetic test fixtures
 
 #### Scenario: Defect severity assigned
 - **WHEN** validation finds a failure

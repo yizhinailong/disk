@@ -233,6 +233,21 @@ The backend SHALL expose upload lifecycle behavior through an explicit domain bo
 - **WHEN** final blob promotion succeeds but later database finalization fails
 - **THEN** the upload lifecycle SHALL retain the content-addressed final candidate for idempotent retry or reconciliation, SHALL report/log the orphan-risk condition, and SHALL NOT blindly delete the candidate
 
+### Requirement: Upload Session Ownership
+The backend SHALL authorize every upload chunk, completion, cancellation, and replay by the pair of authenticated user identity and `upload_id` before any storage or database side effect. An upload identifier SHALL be an opaque locator, not a bearer credential, and cache state SHALL NOT grant ownership.
+
+#### Scenario: Another user submits an upload identifier
+- **WHEN** an authenticated user submits a chunk, completion, cancellation, or replay request for an upload owned by another user
+- **THEN** the system SHALL return the same not-found contract used for an absent session and SHALL NOT write staging objects, chunk rows, files, leases, task state, or quota
+
+#### Scenario: Owner replays a terminal request
+- **WHEN** the original authenticated owner repeats a completed completion or cancelled cancellation request with the same `upload_id`
+- **THEN** the documented idempotent result SHALL remain available without duplicating storage, metadata, cleanup, or quota effects
+
+#### Scenario: Identity changes during replay
+- **WHEN** a different authenticated user replays an otherwise idempotent upload request
+- **THEN** the system SHALL reject it as not found and SHALL NOT reveal whether the owner previously completed or cancelled the upload
+
 ### Requirement: Lost Completion Response Recovery
 When final object promotion and the upload finalization transaction are durable but the HTTP success response is not delivered, the system SHALL recover through an idempotent replay of `POST /api/file/upload/complete` with the same authenticated user and `upload_id`. The replay SHALL return the file referenced by `completed_file_id` without waiting for a lease, recreating the final object, adding a finalize attempt, duplicating file/content/cleanup rows, or settling quota again. Operators SHALL NOT repair this condition by deleting S3 objects or directly updating upload state.
 

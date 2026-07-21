@@ -8,9 +8,11 @@
  */
 #include "ConfigMgr.hpp"
 
+#include <charconv>
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -118,6 +120,142 @@ namespace disk::utils {
                    (right.size() < left.size() && left.starts_with(right) && left[right.size()] == '/');
         }
 
+        auto IsAsciiAlphaNumeric(char character) -> bool {
+            return (character >= 'A' && character <= 'Z') ||
+                   (character >= 'a' && character <= 'z') ||
+                   (character >= '0' && character <= '9');
+        }
+
+        auto IsValidPort(std::string_view value) -> bool {
+            if (value.empty()) {
+                return false;
+            }
+
+            uint32_t port = 0;
+            const auto result = std::from_chars(value.data(), value.data() + value.size(), port);
+            return result.ec == std::errc{} && result.ptr == value.data() + value.size() &&
+                   port >= 1 && port <= 65535;
+        }
+
+        auto IsValidIpv4Address(std::string_view address) -> bool {
+            size_t segment_start = 0;
+            size_t segment_count = 0;
+            for (size_t index = 0; index <= address.size(); ++index) {
+                if (index < address.size() && address[index] != '.') {
+                    continue;
+                }
+
+                const auto segment = address.substr(segment_start, index - segment_start);
+                if (segment.empty() || segment.size() > 3) {
+                    return false;
+                }
+                uint32_t octet = 0;
+                const auto result = std::from_chars(
+                    segment.data(),
+                    segment.data() + segment.size(),
+                    octet
+                );
+                if (result.ec != std::errc{} || result.ptr != segment.data() + segment.size() ||
+                    octet > 255) {
+                    return false;
+                }
+
+                ++segment_count;
+                segment_start = index + 1;
+            }
+            return segment_count == 4;
+        }
+
+        auto CountIpv6Units(std::string_view side, bool allow_ipv4_tail) -> std::optional<size_t> {
+            if (side.empty()) {
+                return 0;
+            }
+
+            size_t units = 0;
+            size_t segment_start = 0;
+            for (size_t index = 0; index <= side.size(); ++index) {
+                if (index < side.size() && side[index] != ':') {
+                    continue;
+                }
+
+                const auto segment = side.substr(segment_start, index - segment_start);
+                if (segment.empty()) {
+                    return std::nullopt;
+                }
+
+                if (segment.find('.') != std::string_view::npos) {
+                    if (!allow_ipv4_tail || index != side.size() || !IsValidIpv4Address(segment)) {
+                        return std::nullopt;
+                    }
+                    units += 2;
+                } else {
+                    if (segment.size() > 4) {
+                        return std::nullopt;
+                    }
+                    for (const auto character : segment) {
+                        const auto is_hex_digit =
+                            (character >= '0' && character <= '9') ||
+                            (character >= 'A' && character <= 'F') ||
+                            (character >= 'a' && character <= 'f');
+                        if (!is_hex_digit) {
+                            return std::nullopt;
+                        }
+                    }
+                    ++units;
+                }
+                segment_start = index + 1;
+            }
+            return units;
+        }
+
+        auto IsValidIpv6Address(std::string_view address) -> bool {
+            const auto compression = address.find("::");
+            if (compression == std::string_view::npos) {
+                const auto units = CountIpv6Units(address, true);
+                return units.has_value() && units.value() == 8;
+            }
+            if (address.find("::", compression + 2) != std::string_view::npos) {
+                return false;
+            }
+
+            const auto left_units = CountIpv6Units(address.substr(0, compression), false);
+            const auto right_units = CountIpv6Units(address.substr(compression + 2), true);
+            return left_units.has_value() && right_units.has_value() &&
+                   left_units.value() + right_units.value() < 8;
+        }
+
+        auto IsValidDnsOrIpv4Host(std::string_view host) -> bool {
+            constexpr size_t MAX_DNS_HOST_LENGTH = 253;
+            if (host.empty() || host.size() > MAX_DNS_HOST_LENGTH) {
+                return false;
+            }
+
+            const auto numeric_address = host.find_first_not_of("0123456789.") == std::string_view::npos;
+            if (numeric_address) {
+                return IsValidIpv4Address(host);
+            }
+
+            size_t label_start = 0;
+            for (size_t index = 0; index <= host.size(); ++index) {
+                if (index < host.size() && host[index] != '.') {
+                    continue;
+                }
+
+                const auto label = host.substr(label_start, index - label_start);
+                if (label.empty() || label.size() > 63 ||
+                    !IsAsciiAlphaNumeric(label.front()) || !IsAsciiAlphaNumeric(label.back())) {
+                    return false;
+                }
+                for (const auto character : label) {
+                    if (!IsAsciiAlphaNumeric(character) && character != '-') {
+                        return false;
+                    }
+                }
+                label_start = index + 1;
+            }
+            return true;
+        }
+
         auto ValidateS3Endpoint(const S3StorageConfig& config) -> void {
             if (config.endpoint.empty()) {
                 return;
@@ -131,11 +269,50 @@ namespace disk::utils {
                 );
             }
 
-            const auto authority_start = expected_scheme.size();
-            const auto authority_end = config.endpoint.find('/', authority_start);
-            const auto authority = std::string_view(config.endpoint).substr(authority_start, authority_end == std::string::npos ? std::string::npos : authority_end - authority_start);
-            if (authority.empty() || authority.find('@') != std::string_view::npos ||
-                config.endpoint.find_first_of("?#\r\n\t ") != std::string::npos) {
+            const auto endpoint = std::string_view(config.endpoint);
+            const auto authority = endpoint.substr(expected_scheme.size());
+            if (authority.empty()) {
+                throw std::runtime_error("Invalid S3 endpoint");
+            }
+
+            for (const auto character : authority) {
+                const auto byte = static_cast<unsigned char>(character);
+                if (byte <= 0x20 || byte == 0x7f || character == '/' || character == '?' ||
+                    character == '#' || character == '\\' || character == '@' || character == '%') {
+                    throw std::runtime_error("Invalid S3 endpoint");
+                }
+            }
+
+            if (authority.front() == '[') {
+                const auto closing_bracket = authority.find(']');
+                if (closing_bracket == std::string_view::npos || closing_bracket == 1 ||
+                    authority.find(']', closing_bracket + 1) != std::string_view::npos ||
+                    !IsValidIpv6Address(authority.substr(1, closing_bracket - 1))) {
+                    throw std::runtime_error("Invalid S3 endpoint");
+                }
+
+                const auto suffix = authority.substr(closing_bracket + 1);
+                if (!suffix.empty() &&
+                    (suffix.front() != ':' || !IsValidPort(suffix.substr(1)))) {
+                    throw std::runtime_error("Invalid S3 endpoint");
+                }
+                return;
+            }
+
+            if (authority.find_first_of("[]") != std::string_view::npos) {
+                throw std::runtime_error("Invalid S3 endpoint");
+            }
+
+            auto host = authority;
+            const auto port_separator = authority.rfind(':');
+            if (port_separator != std::string_view::npos) {
+                if (authority.find(':') != port_separator ||
+                    !IsValidPort(authority.substr(port_separator + 1))) {
+                    throw std::runtime_error("Invalid S3 endpoint");
+                }
+                host = authority.substr(0, port_separator);
+            }
+            if (!IsValidDnsOrIpv4Host(host)) {
                 throw std::runtime_error("Invalid S3 endpoint");
             }
         }

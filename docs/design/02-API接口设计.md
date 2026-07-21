@@ -732,6 +732,14 @@ Authorization: Bearer <access_token>
 
 ## 4. 文件接口
 
+上传生命周期的 init、chunk、complete、cancel 四个路由均要求 owner JWT，并各自只经过一次路由级
+上传限流。init 创建的 `upload_id` 不构成授权凭据；后续操作必须在任何对象存储读写、组装、租约、
+状态或配额变更之前，以当前认证用户和 `upload_id` 联合查询任务。缓存命中也必须验证 `user_id`，
+不得绕过数据库所有权边界。不存在、已过期或属于其他用户的会话统一返回
+`400 + 50008 UploadTaskNotFound`，不得泄漏会话是否存在，也不得产生 staging、分片、文件、租约或
+配额副作用。同用户的完成/取消重放遵循各接口幂等语义；更换身份后即使持有相同 `upload_id`，也不
+继承任何重放权限。
+
 ### 4.1 初始化上传
 
 **POST** `/api/file/upload/init`

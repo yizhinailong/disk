@@ -34,7 +34,6 @@ from lib_py import (
     log_pass,
     print_summary,
     save_evidence,
-    save_raw_evidence,
     ensure_server,
     do_login,
     json_field,
@@ -249,7 +248,7 @@ Interpretation:
             f"Share-browse endpoint: HTTP {resp.status_code} (publicly accessible — exemption active)"
         )
 
-    save_raw_evidence(evidence_path, evidence_content)
+    save_evidence(evidence_path, evidence_content)
     log_info(f"Evidence saved to {evidence_path}")
 
 

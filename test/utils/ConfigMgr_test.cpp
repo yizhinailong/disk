@@ -951,4 +951,71 @@ namespace {
         RestoreAssemblyDefaults();
     }
 
+    TEST_F(ConfigMgrJwtTest, LoadConfigAcceptsS3EndpointOrigins) {
+        const auto expect_valid = [](const std::string& endpoint, bool use_ssl) {
+            Json::Value cfg;
+            auto& disk = cfg["custom_config"]["disk"];
+            disk["storage_backend"] = "s3";
+            disk["s3"]["bucket"] = "disk-test";
+            disk["s3"]["endpoint"] = endpoint;
+            disk["s3"]["use_ssl"] = use_ssl;
+            drogon::app().loadConfigJson(cfg);
+
+            ASSERT_NO_THROW({ ConfigMgr::GetInstance()->LoadConfig(); });
+            EXPECT_EQ(ConfigMgr::GetInstance()->GetS3StorageConfig().endpoint, endpoint);
+        };
+
+        expect_valid("https://minio.internal:9000", true);
+        expect_valid("http://127.0.0.1:9000", false);
+        expect_valid("https://[2001:db8::10]:443", true);
+        expect_valid("https://[::ffff:192.0.2.10]", true);
+
+        RestoreAssemblyDefaults();
+    }
+
+    TEST_F(ConfigMgrJwtTest, LoadConfigRejectsNonOriginS3EndpointsWithoutEchoingThem) {
+        const std::vector<std::pair<std::string, bool>> invalid_endpoints{
+            {           "https://minio.internal/",  true },
+            {       "https://minio.internal/path",  true },
+            {       "https://user@minio.internal",  true },
+            {    "https://minio.internal?query=1",  true },
+            {   "https://minio.internal#fragment",  true },
+            {      "https://minio.internal\\path",  true },
+            {     "https://minio.internal%2fpath",  true },
+            {      "https://minio.internal space",  true },
+            {    "https://minio.internal\nheader",  true },
+            {          "https://minio.internal:0",  true },
+            {      "https://minio.internal:65536",  true },
+            { "https://minio.internal:not-a-port",  true },
+            {                     "https://:9000",  true },
+            {           "https://minio..internal",  true },
+            {           "https://-minio.internal",  true },
+            {             "https://[2001:db8::10",  true },
+            {              "https://2001:db8::10",  true },
+            {           "https://[2001::db8::10]",  true },
+            {               "https://[::::]:9000",  true },
+            {             "http://minio.internal",  true },
+            {            "https://minio.internal", false },
+        };
+
+        for (const auto& [endpoint, use_ssl] : invalid_endpoints) {
+            Json::Value cfg;
+            auto& disk = cfg["custom_config"]["disk"];
+            disk["storage_backend"] = "s3";
+            disk["s3"]["bucket"] = "disk-test";
+            disk["s3"]["endpoint"] = endpoint;
+            disk["s3"]["use_ssl"] = use_ssl;
+            drogon::app().loadConfigJson(cfg);
+
+            try {
+                ConfigMgr::GetInstance()->LoadConfig();
+                FAIL() << "Expected endpoint to be rejected";
+            } catch (const std::runtime_error& error) {
+                EXPECT_EQ(std::string(error.what()).find(endpoint), std::string::npos);
+            }
+        }
+
+        RestoreAssemblyDefaults();
+    }
+
 } // namespace

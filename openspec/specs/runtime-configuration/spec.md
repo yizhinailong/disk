@@ -45,6 +45,21 @@ The system SHALL initialize file storage from configured storage paths and uploa
 - **WHEN** the backend starts successfully
 - **THEN** the system SHALL initialize the active file storage implementation using configured storage and temporary upload paths
 
+### Requirement: S3 Endpoint Origin Validation
+The system SHALL treat a custom S3 endpoint as trusted startup-only configuration and SHALL accept only an absolute HTTP or HTTPS origin whose scheme matches `s3.use_ssl`. The endpoint SHALL NOT be selectable or overridden by an API request.
+
+#### Scenario: Valid custom endpoint is configured
+- **WHEN** configuration contains a DNS name, IPv4 address, or bracketed IPv6 address with an optional port in the range `1..65535` and no other URL component
+- **THEN** startup SHALL pass the validated origin to the S3 client
+
+#### Scenario: Endpoint contains an unsafe or ambiguous component
+- **WHEN** a custom endpoint contains a path, trailing slash, userinfo, query, fragment, backslash, percent encoding, whitespace, control character, malformed host, or invalid port
+- **THEN** startup SHALL fail before S3 client initialization without echoing the endpoint value in diagnostics
+
+#### Scenario: Private S3 endpoint is deployed
+- **WHEN** operators configure an approved private MinIO or S3-compatible origin
+- **THEN** the application SHALL allow the origin and deployment controls SHALL restrict DNS and network egress to approved storage services
+
 ### Requirement: Upload Task Creation Configuration
 The system SHALL expose `upload_task_creation_enabled` as a strict startup boolean, defaulting to enabled, with `DISK_UPLOAD_TASK_CREATION_ENABLED` as its environment override. The effective value SHALL remain fixed for the process lifetime and SHALL control only whether upload initialization may persist a new task; it SHALL NOT select a staging backend or reinterpret existing task descriptors.
 

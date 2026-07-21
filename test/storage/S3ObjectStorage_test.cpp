@@ -479,24 +479,36 @@ TEST_F(S3ObjectStorageTest, S3SessionValidationRejectsUnsafeOrMismatchedPrefixes
     ASSERT_TRUE(valid_result.has_value()) << valid_result.error().message;
 
     const std::vector<disk::storage::UploadStagingSession> invalid_sessions{
-        { .upload_id = "upload-123",
+        {    .upload_id = "upload-123",
          .backend = disk::storage::UploadStagingBackend::S3,
          .prefix = "staging/../upload-123"   },
-        { .upload_id = "upload-123",
+        {    .upload_id = "upload-123",
          .backend = disk::storage::UploadStagingBackend::S3,
          .prefix = "staging/another-upload"  },
-        { .upload_id = "upload-123",
+        {    .upload_id = "upload-123",
          .backend = disk::storage::UploadStagingBackend::S3,
          .prefix = "other-staging/upload-123" },
-        { .upload_id = "upload-123",
+        {    .upload_id = "upload-123",
          .backend = disk::storage::UploadStagingBackend::S3,
          .prefix = "staging\\upload-123"     },
+        {    .upload_id = "upload/123",
+         .backend = disk::storage::UploadStagingBackend::S3,
+         .prefix = "staging/upload/123"      },
+        {  .upload_id = "upload%2f123",
+         .backend = disk::storage::UploadStagingBackend::S3,
+         .prefix = "staging/upload%2f123"    },
+        { .upload_id = "upload\r\n123",
+         .backend = disk::storage::UploadStagingBackend::S3,
+         .prefix = "staging/upload\r\n123"   },
     };
     for (const auto& session : invalid_sessions) {
         auto result = drogon::sync_wait(storage->EnsureUploadSession(session));
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
     }
+    EXPECT_EQ(client->put_calls, 0);
+    EXPECT_EQ(client->list_calls, 0);
+    EXPECT_EQ(client->delete_batch_calls, 0);
 }
 
 TEST_F(S3ObjectStorageTest, InventoriesUseConfiguredPrefixesAndContinuationTokens) {

@@ -247,6 +247,18 @@ set_tests_properties(
 )
 
 add_test(
+    NAME EvidenceRedactionHarness
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_evidence_redaction.py"
+)
+set_tests_properties(
+    EvidenceRedactionHarness
+    PROPERTIES
+    LABELS backend-harness
+    TIMEOUT 30
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME V003MigrationIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_v003_migration.py"
 )
@@ -650,6 +662,7 @@ add_disk_server_integration_test(ShareTokenSecurityIntegration test_share_token_
 add_disk_server_integration_test(SystemInfoIntegration test_system_info.py 120)
 add_disk_server_integration_test(TrashLifecycleIntegration test_trash_lifecycle.py 120)
 add_disk_server_integration_test(UploadFlowIntegration test_upload_flow.py 120)
+add_disk_server_integration_test(UploadAuthorizationIntegration test_upload_authorization.py 120)
 add_disk_server_integration_test(UserProfileUpdateIntegration test_user_profile_update.py 120)
 add_disk_server_integration_test(FileDeleteRegressionIntegration test_file_delete_regression.py 120)
 add_disk_server_integration_test(BrowseBurstRegressionIntegration test_browse_burst_regression.py 120)

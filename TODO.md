@@ -373,7 +373,7 @@ API Instance A  API Instance B ... N
 ### 12.1 日志与追踪
 
 - [ ] 所有结构化日志包含 `request_id`、`instance_id`；上传相关日志增加 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。
-- [ ] 禁止记录 JWT、share token、密码、S3 凭据和文件正文。
+- [x] 禁止记录 JWT、share token、密码、S3 凭据和文件正文。
 - [ ] 为 init/chunk/complete/download/cleanup 建立跨 API、DB、Worker、S3 的追踪关联。
 - [ ] 明确日志采样策略，避免大批量分片上传产生不可控日志量。
 
@@ -820,7 +820,7 @@ SHA-256 分别为 `8380abf9d97188bfda1451cf2179f70fecdd62194549c5e24a85b46bd5461
 - [x] 删除已被 Worker 替代的 API 集群级定时任务注册。
 - [ ] 更新所有架构图、部署样例、运维手册、错误码表和测试数量。
 - [ ] 运行 clang-format、完整构建、完整测试、多实例测试和压力测试。
-- [ ] 完成安全审查：S3 key 注入、SSRF/endpoint 配置、凭据泄漏、跨用户 upload ID、重放与限流。
+- [x] 完成安全审查：S3 key 注入、SSRF/endpoint 配置、凭据泄漏、跨用户 upload ID、重放与限流。
 - [ ] 完成数据一致性审计：用户配额、文件数、内容 ref_count、DB/对象存在性、staging/multipart 孤儿。
 - [x] 记录最终容量建议、已知限制和下一次扩容触发条件。
 
@@ -829,6 +829,16 @@ SHA-256 分别为 `8380abf9d97188bfda1451cf2179f70fecdd62194549c5e24a85b46bd5461
 旧 `AssemblyWorkerPool` 及其 `m_active_upload_ids`、`IsUploadActive`、带 `upload_id` 的获取/释放接口已删除，替换为无任务标识的 `AssemblyConcurrencyLimiter`。Local/S3 组装准入只在本机容量耗尽时返回稳定的 `429 + 10005`；同一上传的有效租约冲突继续由 `UploadTaskRepository::ClaimFinalizeLease` 在组装前返回 `409 + 10004`。重复 DTO/模拟单飞测试已删除，限流器测试直接覆盖真实实现的 RAII、移动、容量恢复和并发上限；真实 PostgreSQL 完成集成中 6 个并发请求得到 1 个成功与 5 个租约冲突。
 
 聚焦存储/状态机 CTest 79/79 通过，完成租约与组装背压集成 2/2 通过；完整构建成功，完整 CTest 共 1377 项：1371 通过、6 项既有环境门控跳过、0 失败，总耗时 425.36 秒；OpenSpec 严格校验 24/24 通过。环境门控的 S3/分布式拓扑测试仍不计作目标环境多实例验收，不据此勾选 Phase 9 或最终 Definition of Done。
+
+### 15.2 分布式存储安全审查记录（2026-07-21）
+
+S3 对象键边界已覆盖会话标识、staging 前缀、assembled key 和 final key：所有派生键在发起 S3 调用前完成校验，拒绝斜杠、反斜杠、编码分隔符、控制字符和路径穿越输入；清理只删除精确会话前缀，不影响相邻会话。S3 endpoint 仅接受启动时受信配置中的纯 origin，要求 `http://`/`https://` 与 TLS 开关严格一致，支持 DNS、IPv4、方括号 IPv6 和合法端口，拒绝用户信息、路径、查询、片段、百分号编码、反斜杠及控制字符，错误信息不回显原始 endpoint。
+
+凭据审计确认生产路径不记录原始 JWT、share token、密码、S3 access/secret key 或文件正文；共享集成测试证据写入器现会递归脱敏结构化字段，并清理纯文本中的认证头、JWT、AWS access key、URL 密码和敏感环境变量。认证生命周期测试不再输出密码，普通 HTTP 证据不再绕过脱敏入口；仅显式用于合成脱敏回归的 raw evidence 接口保留原样写入能力。
+
+上传授权以 `(upload_id, user_id)` 为数据库查询边界，并在分片落盘、组装、取消和清理副作用之前失败。真实双用户 HTTP 集成覆盖未缓存及 5 秒上传任务缓存命中后的 chunk/complete/cancel 共 7 次越权尝试，均返回统一 `400 + 50008`，数据库任务、租约、分片、文件、内容、任务队列和本地对象均保持不变；所有者取消只释放一次配额，随后重复取消仍不泄露任务存在性。既有刷新令牌轮换、完成幂等和精确路由限流测试继续覆盖重放与 `429` 合同；Redis 限流当前仍采用可用性优先的 fail-open，生产需通过 Redis 高可用、告警和边缘限流降低依赖故障窗口风险。
+
+安全聚焦 CTest 63/63 通过；完整构建成功，完整 CTest 共 1381 项：1375 通过、6 项环境门控跳过、0 失败，总耗时 427.07 秒；OpenSpec 严格校验 24/24 通过。允许私网 endpoint 是部署能力而非动态请求能力，目标环境仍须用 MinIO IAM 最小权限、TLS、DNS 固定和出站网络策略约束 SSRF 影响面，并完成环境门控的真实 S3/多实例测试；这些残余验收不据此勾选 Phase 9 或最终 Definition of Done。
 
 ## 16. 最终 Definition of Done
 

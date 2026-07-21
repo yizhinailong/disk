@@ -13,6 +13,7 @@ from .common import (
     log_section,
     save_evidence,
     save_raw_evidence,
+    redact_sensitive_data,
     print_summary,
     tests_passed,
     tests_failed,

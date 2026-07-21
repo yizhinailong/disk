@@ -207,7 +207,6 @@ def main():
     log_section("Test User Credentials")
     log_info(f"Username: {TEST_USERNAME}")
     log_info(f"Email: {TEST_EMAIL}")
-    log_info(f"Password: {TEST_PASSWORD}")
     print()
 
     test_register_new_user()
