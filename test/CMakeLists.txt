@@ -365,6 +365,18 @@ set_tests_properties(
 )
 
 add_test(
+    NAME StagingRolloutPlanContract
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_staging_rollout_plan.py"
+)
+set_tests_properties(
+    StagingRolloutPlanContract
+    PROPERTIES
+    LABELS "backend-integration;deployment;distributed;rolling-upgrade"
+    TIMEOUT 30
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME UploadRollbackGateIntegration
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_upload_rollback_gate.py"
 )

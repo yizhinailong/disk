@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "rollout": "s3_staging_upload_init",
+  "traffic_scope": "upload_init_only",
+  "stage_order_percent": [
+    10,
+    25,
+    50,
+    100
+  ],
+  "change_id_environment": "DISK_CHANGE_ID",
+  "owner_environment": {
+    "release_owner": "DISK_RELEASE_OWNER",
+    "rollback_owner": "DISK_ROLLBACK_OWNER",
+    "database_verifier": "DISK_DATABASE_VERIFIER",
+    "storage_verifier": "DISK_STORAGE_VERIFIER"
+  },
+  "rollout_adapter_environment": "DISK_STAGING_ROLLOUT_CLI",
+  "execute_approval_environment": "DISK_STAGING_ROLLOUT_APPROVED",
+  "validation_sql": "deploy/staging-rollout-validation.sql",
+  "safety": {
+    "rollback_target": "immediately_previous_passing_stage",
+    "preserve_persisted_descriptors": true,
+    "compatible_handlers_required": true,
+    "database_mutation_allowed": false,
+    "object_deletion_allowed": false,
+    "adapter_requires_expected_current_percent": true,
+    "transition_scope_limited_to_new_upload_initialization": true,
+    "target_change_requires_named_owners": true
+  },
+  "stop_conditions": [
+    {
+      "id": "controlled_upload_failed",
+      "predicate": "controlled_non_instant_upload_failures > 0"
+    },
+    {
+      "id": "http_5xx_rate_exceeded",
+      "predicate": "upload_http_sample_count >= 20 AND upload_http_5xx_ratio > 0.01"
+    },
+    {
+      "id": "complete_p99_exceeded",
+      "predicate": "upload_complete_p99_seconds > 1.0 for 10 consecutive minutes"
+    },
+    {
+      "id": "s3_transient_error_burst",
+      "predicate": "s3_transient_errors_5m >= 5"
+    },
+    {
+      "id": "s3_permanent_error",
+      "predicate": "s3_permanent_errors_5m > 0"
+    },
+    {
+      "id": "expired_lease_detected",
+      "predicate": "expired_upload_or_storage_job_leases > 0"
+    },
+    {
+      "id": "lease_takeover_detected",
+      "predicate": "lease_takeovers_10m > 0"
+    },
+    {
+      "id": "dead_letter_detected",
+      "predicate": "storage_dead_letter_jobs > 0"
+    },
+    {
+      "id": "metrics_snapshot_failed",
+      "predicate": "metrics_snapshot_success < 1"
+    },
+    {
+      "id": "unresolved_finding_detected",
+      "predicate": "unresolved_reconciliation_findings > 0"
+    },
+    {
+      "id": "persisted_descriptor_drift",
+      "predicate": "pre_stage_descriptor_sha256_changed"
+    },
+    {
+      "id": "controlled_backend_ratio_mismatch",
+      "predicate": "controlled_stage_s3_task_ratio != target_percent"
+    },
+    {
+      "id": "business_invariant_mismatch",
+      "predicate": "quota_file_content_or_ref_count_mismatch > 0"
+    },
+    {
+      "id": "compatible_handler_unavailable",
+      "predicate": "compatible_handler_or_required_local_volume_unavailable"
+    }
+  ],
+  "validation_query_ids": [
+    "preexisting_descriptors",
+    "stage_uploads",
+    "stage_backend_counts",
+    "stage_cleanup_jobs",
+    "cluster_blockers",
+    "stage_quota_and_content_references",
+    "unresolved_findings"
+  ],
+  "stages": [
+    {
+      "percent": 10,
+      "previous_percent": 0,
+      "minimum_observation_minutes": 30,
+      "minimum_non_instant_tasks": 20,
+      "owner_roles": [
+        "release_owner",
+        "rollback_owner",
+        "database_verifier",
+        "storage_verifier"
+      ],
+      "preview_command": "uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 0 --to 10",
+      "apply_command": "DISK_STAGING_ROLLOUT_APPROVED=true uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 0 --to 10 --execute",
+      "rollback_command": "DISK_STAGING_ROLLOUT_APPROVED=true uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 10 --to 0 --execute",
+      "validation_command": "psql \"$DISK_DATABASE_URL\" --csv -X -v ON_ERROR_STOP=1 -v stage_started_at=\"$STAGE_STARTED_AT\" -v stage_ended_at=\"$STAGE_ENDED_AT\" -f deploy/staging-rollout-validation.sql",
+      "stop_condition_ids": [
+        "controlled_upload_failed",
+        "http_5xx_rate_exceeded",
+        "complete_p99_exceeded",
+        "s3_transient_error_burst",
+        "s3_permanent_error",
+        "expired_lease_detected",
+        "lease_takeover_detected",
+        "dead_letter_detected",
+        "metrics_snapshot_failed",
+        "unresolved_finding_detected",
+        "persisted_descriptor_drift",
+        "controlled_backend_ratio_mismatch",
+        "business_invariant_mismatch",
+        "compatible_handler_unavailable"
+      ],
+      "validation_query_ids": [
+        "preexisting_descriptors",
+        "stage_uploads",
+        "stage_backend_counts",
+        "stage_cleanup_jobs",
+        "cluster_blockers",
+        "stage_quota_and_content_references",
+        "unresolved_findings"
+      ]
+    },
+    {
+      "percent": 25,
+      "previous_percent": 10,
+      "minimum_observation_minutes": 30,
+      "minimum_non_instant_tasks": 20,
+      "owner_roles": [
+        "release_owner",
+        "rollback_owner",
+        "database_verifier",
+        "storage_verifier"
+      ],
+      "preview_command": "uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 10 --to 25",
+      "apply_command": "DISK_STAGING_ROLLOUT_APPROVED=true uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 10 --to 25 --execute",
+      "rollback_command": "DISK_STAGING_ROLLOUT_APPROVED=true uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 25 --to 10 --execute",
+      "validation_command": "psql \"$DISK_DATABASE_URL\" --csv -X -v ON_ERROR_STOP=1 -v stage_started_at=\"$STAGE_STARTED_AT\" -v stage_ended_at=\"$STAGE_ENDED_AT\" -f deploy/staging-rollout-validation.sql",
+      "stop_condition_ids": [
+        "controlled_upload_failed",
+        "http_5xx_rate_exceeded",
+        "complete_p99_exceeded",
+        "s3_transient_error_burst",
+        "s3_permanent_error",
+        "expired_lease_detected",
+        "lease_takeover_detected",
+        "dead_letter_detected",
+        "metrics_snapshot_failed",
+        "unresolved_finding_detected",
+        "persisted_descriptor_drift",
+        "controlled_backend_ratio_mismatch",
+        "business_invariant_mismatch",
+        "compatible_handler_unavailable"
+      ],
+      "validation_query_ids": [
+        "preexisting_descriptors",
+        "stage_uploads",
+        "stage_backend_counts",
+        "stage_cleanup_jobs",
+        "cluster_blockers",
+        "stage_quota_and_content_references",
+        "unresolved_findings"
+      ]
+    },
+    {
+      "percent": 50,
+      "previous_percent": 25,
+      "minimum_observation_minutes": 60,
+      "minimum_non_instant_tasks": 20,
+      "owner_roles": [
+        "release_owner",
+        "rollback_owner",
+        "database_verifier",
+        "storage_verifier"
+      ],
+      "preview_command": "uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 25 --to 50",
+      "apply_command": "DISK_STAGING_ROLLOUT_APPROVED=true uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 25 --to 50 --execute",
+      "rollback_command": "DISK_STAGING_ROLLOUT_APPROVED=true uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 50 --to 25 --execute",
+      "validation_command": "psql \"$DISK_DATABASE_URL\" --csv -X -v ON_ERROR_STOP=1 -v stage_started_at=\"$STAGE_STARTED_AT\" -v stage_ended_at=\"$STAGE_ENDED_AT\" -f deploy/staging-rollout-validation.sql",
+      "stop_condition_ids": [
+        "controlled_upload_failed",
+        "http_5xx_rate_exceeded",
+        "complete_p99_exceeded",
+        "s3_transient_error_burst",
+        "s3_permanent_error",
+        "expired_lease_detected",
+        "lease_takeover_detected",
+        "dead_letter_detected",
+        "metrics_snapshot_failed",
+        "unresolved_finding_detected",
+        "persisted_descriptor_drift",
+        "controlled_backend_ratio_mismatch",
+        "business_invariant_mismatch",
+        "compatible_handler_unavailable"
+      ],
+      "validation_query_ids": [
+        "preexisting_descriptors",
+        "stage_uploads",
+        "stage_backend_counts",
+        "stage_cleanup_jobs",
+        "cluster_blockers",
+        "stage_quota_and_content_references",
+        "unresolved_findings"
+      ]
+    },
+    {
+      "percent": 100,
+      "previous_percent": 50,
+      "minimum_observation_minutes": 120,
+      "minimum_non_instant_tasks": 20,
+      "owner_roles": [
+        "release_owner",
+        "rollback_owner",
+        "database_verifier",
+        "storage_verifier"
+      ],
+      "preview_command": "uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 50 --to 100",
+      "apply_command": "DISK_STAGING_ROLLOUT_APPROVED=true uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 50 --to 100 --execute",
+      "rollback_command": "DISK_STAGING_ROLLOUT_APPROVED=true uv run scripts/staging-rollout.py transition --plan deploy/staging-rollout-plan.json --from 100 --to 50 --execute",
+      "validation_command": "psql \"$DISK_DATABASE_URL\" --csv -X -v ON_ERROR_STOP=1 -v stage_started_at=\"$STAGE_STARTED_AT\" -v stage_ended_at=\"$STAGE_ENDED_AT\" -f deploy/staging-rollout-validation.sql",
+      "stop_condition_ids": [
+        "controlled_upload_failed",
+        "http_5xx_rate_exceeded",
+        "complete_p99_exceeded",
+        "s3_transient_error_burst",
+        "s3_permanent_error",
+        "expired_lease_detected",
+        "lease_takeover_detected",
+        "dead_letter_detected",
+        "metrics_snapshot_failed",
+        "unresolved_finding_detected",
+        "persisted_descriptor_drift",
+        "controlled_backend_ratio_mismatch",
+        "business_invariant_mismatch",
+        "compatible_handler_unavailable"
+      ],
+      "validation_query_ids": [
+        "preexisting_descriptors",
+        "stage_uploads",
+        "stage_backend_counts",
+        "stage_cleanup_jobs",
+        "cluster_blockers",
+        "stage_quota_and_content_references",
+        "unresolved_findings"
+      ]
+    }
+  ]
+}

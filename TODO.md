@@ -783,7 +783,26 @@ attempts=1 清理 staging 并收敛到 0 个当前 staging 对象。夹具对业
 `3c26b4e145a97e74f920ad1970b7e93a8a6a544806aee23f5e81abc6aca468fa`）。该本机 Moto 隔离门禁不替代
 目标 MinIO/云 S3 和编排器演练；目标环境仍须保存自身的首次连接失败、重放响应、数据库
 只读快照、cleanup 终态及 final 版本快照。
-- [ ] 每个灰度阶段都有明确停止条件、回滚负责人、操作命令和数据校验查询。
+
+- [x] 每个灰度阶段都有明确停止条件、回滚负责人、操作命令和数据校验查询。
+
+2026-07-21 已在候选应用基线 `d24cd14` 上固化 S3 staging 逐阶段执行契约。
+`deploy/staging-rollout-plan.json` 固定 `0 -> 10% -> 25% -> 50% -> 100%` 相邻扩流和反向回退，
+四档最小观测窗口为 30/30/60/120 分钟且每档至少 20 个非秒传任务；每档完整绑定 14 条停止条件、
+`release_owner`/`rollback_owner`/`database_verifier`/`storage_verifier` 四类实际责任人、精确
+preview/apply/rollback 命令及 7 组数据查询。`scripts/staging-rollout.py` 在调用目标发布适配器前拒绝
+缺 25%/缺责任人/缺条件或查询、跳档、占位责任人、相对适配器、未批准执行和含写操作 SQL；适配器仅接收
+分离参数，不继承 PostgreSQL、Redis、S3 或 JWT 凭据，非零退出码原样传播。
+
+`deploy/staging-rollout-validation.sql` 已对本机当前 `disk` schema 在单个 `REPEATABLE READ READ ONLY`
+事务中执行成功。聚焦 CTest 4/4 通过（23.57 秒）；完整 CTest 共 1393 项：1387 通过、6 项环境门控
+跳过、0 失败，总耗时 420.91 秒；OpenSpec 严格校验 24/24 通过。`0600` 结构化证据为
+`.sisyphus/evidence/staging-rollout-plan-summary.json`（SHA-256
+`f5a66c63570abca2daa01232aebdaacf4d54108e87aee45026b20726711005ce`）；受评审计划和 SQL 的
+SHA-256 分别为 `8380abf9d97188bfda1451cf2179f70fecdd62194549c5e24a85b46bd546156d` 和
+`ad3750da8537ccfdbe1fe73584e2727d423cfcd15fe5a2efd75e2e8eae931b09`。fake 发布适配器和本机数据库
+只证明仓库合同；目标环境仍须填入真实值班人和变更单，由实际适配器校验当前档位，并完成全部观测窗口、
+真实数据快照及回退演练。
 
 ### 14.6 Phase 9 验收
 

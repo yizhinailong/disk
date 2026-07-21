@@ -345,6 +345,21 @@ After incompatible old application versions have exited and the Worker observati
 - **WHEN** an expansion stage breaches a stop condition or changes any descriptor captured before that stage
 - **THEN** operators SHALL stop expansion, route subsequent initialization requests back to the last passing cohort, and keep compatible local and S3 handlers available for every session already created
 
+### Requirement: Every staging rollout stage has an executable rollback contract
+The S3 staging rollout SHALL use the ordered percentages `10, 25, 50, 100` without skipping an intermediate stage. Before any stage changes traffic, a reviewed machine-readable plan SHALL bind that stage to its immediately preceding percentage, minimum observation window and non-instant upload sample, complete quantitative stop-condition set, release and rollback owner roles, exact preview/apply/rollback commands, and named read-only validation queries. A target change record SHALL supply actual named people for every required role and an approved rollout adapter; repository role names or placeholders SHALL NOT count as assigned owners. The adapter SHALL compare the declared current percentage with target deployment state and SHALL be limited to routing and process defaults for newly initialized uploads; it SHALL NOT mutate persisted tasks or inherit database/object-store credentials.
+
+#### Scenario: A stage is prepared
+- **WHEN** initialization traffic is about to move from the last passing percentage to the next reviewed percentage
+- **THEN** the operator SHALL validate the reviewed plan, record the change ID and named release, rollback, database-verification, and storage-verification owners, preview the exact adjacent transition, capture the pre-stage descriptor snapshot, and only then execute the approved rollout command
+
+#### Scenario: A stage is accepted
+- **WHEN** the minimum observation window and sample have completed without a stop condition
+- **THEN** all named validation queries SHALL run in a repeatable-read read-only transaction, the pre-stage descriptor digest SHALL remain unchanged, and the results and command output SHALL be retained before the next stage is attempted
+
+#### Scenario: A stage is stopped or rolled back
+- **WHEN** any quantitative stop condition fires, any owner or evidence is missing, a query cannot complete read-only, or a non-adjacent transition is requested
+- **THEN** expansion SHALL stop and the named rollback owner SHALL use the reviewed command to return new initialization traffic to the immediately preceding passing percentage without updating upload rows or deleting local or S3 objects
+
 #### Scenario: S3 staging activation fails its gate
 - **WHEN** a new task persists the wrong backend or prefix, an S3 task creates node-local staging data, required S3 operations fail, or an existing task descriptor changes
 - **THEN** the rollout SHALL stop and MAY restore local staging for subsequently created tasks, but SHALL keep a compatible release available to finish or explicitly cancel already-created S3 tasks
