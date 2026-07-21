@@ -4,7 +4,7 @@
 # dependencies = ["pyyaml"]
 # ///
 
-"""Static contract checks for the local distributed deployment topology."""
+"""Static contracts for the distributed topology and its entry documentation."""
 
 from __future__ import annotations
 
@@ -47,6 +47,59 @@ def main() -> int:
         "DISK_SECURE_MODE=true" in readme,
         "README production guidance must retain the secure-mode gate",
     )
+
+    system_overview = (root / "docs/design/00-系统概述.md").read_text(encoding="utf-8")
+    for marker in (
+        "StorageJobWorker",
+        "UploadStagingStorage",
+        "BlobStore",
+        "AssemblyConcurrencyLimiter",
+        "staging_cleanup",
+    ):
+        require(marker in system_overview, f"system overview is missing {marker}")
+    for obsolete in (
+        'subgraph Server["当前服务端层（单实例）"]',
+        'ScheduledTasks["定时任务"]',
+        'AssemblyPool["文件组装池"]',
+        'Staging[("本地上传暂存")]',
+        "participant FS as 文件系统",
+    ):
+        require(obsolete not in system_overview, f"system overview retains obsolete: {obsolete}")
+
+    feature_spec = (root / "docs/design/01-功能需求规格.md").read_text(encoding="utf-8")
+    for marker in (
+        "不同内容不得覆盖已有分片",
+        "staging_cleanup",
+        "blob_gc",
+        "Worker 异步清理暂存",
+    ):
+        require(marker in feature_spec, f"feature specification is missing {marker}")
+    for obsolete in (
+        "重复上传同一分片会覆盖",
+        "清理临时分片文件",
+        'D4["删除物理文件"]',
+        "后台定时任务（每日凌晨执行）",
+    ):
+        require(obsolete not in feature_spec, f"feature specification retains obsolete: {obsolete}")
+
+    decision_record = (root / "docs/backend-refactor-decisions.md").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "upload_staging_backend",
+        "Implemented S3-native staging responsibilities",
+        "retained for an idempotent retry or reconciliation",
+        "multipart_abort",
+        "blob_gc",
+    ):
+        require(marker in decision_record, f"backend decision record is missing {marker}")
+    for obsolete in (
+        "Possible future S3-native staging responsibilities",
+        "deliberately keeps upload chunks",
+        "best-effort compensation to delete",
+        "S3-native upload staging is not an active requirement",
+    ):
+        require(obsolete not in decision_record, f"backend decision record retains obsolete: {obsolete}")
 
     compose = yaml.safe_load((root / "docker-compose.distributed.yml").read_text(encoding="utf-8"))
     services = compose["services"]

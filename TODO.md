@@ -866,6 +866,12 @@ clang-format、后端完整构建和聚焦 CTest 4/4 通过；完整 CTest 保�
 
 现有 `DistributedTopologyContract` 新增 README 回归断言，要求保留 local/local 与 s3/s3 两套语义、权威 `docker-compose.distributed.yml` 入口和生产安全门禁，并拒绝旧的本机暂存断言。脚本直接执行与聚焦 CTest 均为 1/1 通过；完整 CTest 共 1381 项，其中 1375 项通过、6 项按环境门控跳过、0 失败，总耗时 428.96 秒；OpenSpec 严格校验 24/24 通过。本轮只完成 Phase 10 第 821 项中的 README 与部署样例入口子项，架构图、运维手册和全局测试数量仍待逐项审计，因此第 821 项保持未勾选；未执行目标环境多实例和压力门禁，第 822 项也保持未勾选。
 
+### 15.7 分布式架构与数据流文档同步记录（2026-07-21）
+
+`00-系统概述.md` 的总体架构原本仍把当前服务画成单实例进程内 `ScheduledTasks`、已删除的文件组装池和本地上传暂存，上传/下载时序也让 API 直接访问文件系统；`01-功能需求规格.md` 仍允许重复分片覆盖、完成请求同步删除分片、零引用时立即删除物理文件，并把回收站清理写成 API 每日定时器。现在总体图使用同一制品的 `api`/`worker`/`all` 角色、PostgreSQL 租约与持久任务、`UploadStagingStorage`/`BlobStore` 和仅限本机容量的 `AssemblyConcurrencyLimiter`；上传、下载、去重、回收站清理及单机/分布式部署图同步为不可变分片、内容寻址 Blob、事务内 `staging_cleanup`/`blob_gc` 入队和 Worker 租约接管。
+
+权威 `backend-refactor-decisions.md` 同步记录已经落地的独立 final/staging 后端、任务固化 backend/prefix、S3 multipart 组装、`multipart_abort` 和结果未知时保留已提升 final Blob 供幂等重试/对账，不再把 S3-native staging 列为未来需求或要求立即补偿删除。`DistributedTopologyContract` 对三份当前架构文档增加必需/禁用标记；Python 语法检查、脚本直接执行和聚焦 CTest 1/1 通过，完整 CTest 共 1381 项，其中 1375 项通过、6 项按环境门控跳过、0 失败，总耗时 428.18 秒，OpenSpec 严格校验 24/24 通过。当前环境没有 Mermaid CLI，未完成图表渲染验收；部署运维指南其余图表和全局测试数量仍待审计，因此 Phase 10 第 821 项保持未勾选，目标环境多实例与压力门禁也未执行，第 822 项保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
