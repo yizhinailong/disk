@@ -373,14 +373,17 @@ namespace disk::share {
         std::string share_id,
         std::string file_id
     ) -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "download");
 
-        Logger::Info() << "Received share download info request: " << request->getPeerAddr().toIpPort()
-                       << ", share_id=" << share_id << ", file_id=" << file_id;
+        Logger::Info(log_context)
+            << "Received share download info request: " << request->getPeerAddr().toIpPort()
+            << ", share_id=" << share_id << ", file_id=" << file_id;
 
         auto parse_result = DownloadShareRequest::FromPath(share_id, file_id);
         if (!parse_result) {
-            Logger::Warn() << "Share download info request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Share download info request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
@@ -388,18 +391,24 @@ namespace disk::share {
         const auto& share_code = request->attributes()->get<std::string>("share_code");
 
         if (share_id != share_code) {
-            Logger::Warn() << "Share token does not match requested share_id: token_share_code="
-                           << share_code << ", request_share_id=" << share_id;
+            Logger::Warn(log_context)
+                << "Share token does not match requested share_id: token_share_code="
+                << share_code << ", request_share_id=" << share_id;
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
             ));
         }
 
-        auto info_result = co_await m_share_service->GetDownloadInfo(*parse_result, internal_share_id);
+        auto info_result = co_await m_share_service->GetDownloadInfo(
+            *parse_result,
+            internal_share_id,
+            log_context
+        );
         if (!info_result) {
-            Logger::Error() << "Get share download info failed: " << info_result.error().message
-                            << " (share_id=" << share_id << ", file_id=" << file_id << ")";
+            Logger::Error(log_context)
+                << "Get share download info failed: " << info_result.error().message
+                << " (share_id=" << share_id << ", file_id=" << file_id << ")";
             co_return Response::Error(info_result.error());
         }
 
@@ -412,8 +421,9 @@ namespace disk::share {
         response.mime_type = info.mime_type;
         response.supports_range = info.supports_range;
 
-        Logger::Info() << "Share download info successful: share_id=" << share_id
-                       << ", file_id=" << file_id << ", size=" << info.file_size;
+        Logger::Info(log_context)
+            << "Share download info successful: share_id=" << share_id
+            << ", file_id=" << file_id << ", size=" << info.file_size;
         co_return Response::Success(response.ToJson());
     }
 
@@ -422,19 +432,23 @@ namespace disk::share {
         std::string share_id,
         std::string file_id
     ) -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "download");
 
-        Logger::Info() << "Received download share file request: " << request->getPeerAddr().toIpPort()
-                       << ", share_id=" << share_id << ", file_id=" << file_id;
+        Logger::Info(log_context)
+            << "Received download share file request: " << request->getPeerAddr().toIpPort()
+            << ", share_id=" << share_id << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数
         auto parse_result = DownloadShareRequest::FromPath(share_id, file_id);
         if (!parse_result) {
-            Logger::Warn() << "Download share file request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Download share file request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "Download share file parameter validation passed: share_id="
-                        << parse_result->share_id << ", file_id=" << parse_result->file_id;
+        Logger::Debug(log_context)
+            << "Download share file parameter validation passed: share_id="
+            << parse_result->share_id << ", file_id=" << parse_result->file_id;
 
         /// 2. 从请求属性获取 share_id（由 ShareAuthFilter 设置）
         const auto internal_share_id = request->attributes()->get<uint64_t>("share_id");
@@ -442,8 +456,9 @@ namespace disk::share {
 
         /// 3. 验证 share_id 匹配（防止令牌用于其他分享）
         if (share_id != share_code) {
-            Logger::Warn() << "Share token does not match requested share_id: token_share_code="
-                           << share_code << ", request_share_id=" << share_id;
+            Logger::Warn(log_context)
+                << "Share token does not match requested share_id: token_share_code="
+                << share_code << ", request_share_id=" << share_id;
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
@@ -452,11 +467,15 @@ namespace disk::share {
 
         /// 4. 获取下载文件信息
         const auto audit_context = BuildAuditContext(request);
-        auto info_result =
-            co_await m_share_service->GetDownloadInfo(*parse_result, internal_share_id);
+        auto info_result = co_await m_share_service->GetDownloadInfo(
+            *parse_result,
+            internal_share_id,
+            log_context
+        );
         if (!info_result) {
-            Logger::Error() << "Get download info failed: " << info_result.error().message
-                            << " (share_id=" << share_id << ", file_id=" << file_id << ")";
+            Logger::Error(log_context)
+                << "Get download info failed: " << info_result.error().message
+                << " (share_id=" << share_id << ", file_id=" << file_id << ")";
             auto error_response = Response::Error(info_result.error());
             co_await m_share_service->CompleteDownload(
                 *parse_result,
@@ -468,15 +487,19 @@ namespace disk::share {
                     .update_statistics = false,
                     .result = DownloadFailureResult(info_result.error().code),
                 },
-                audit_context
+                audit_context,
+                log_context
             );
             co_return error_response;
         }
 
         const auto& download_info = *info_result;
-        Logger::Info() << "Get download info successful: share_id=" << share_id << ", file_id=" << file_id
-                       << ", filename=" << download_info.filename << ", size=" << download_info.file_size
-                       << ", content_id=" << download_info.blob.content_id;
+        Logger::Info(log_context)
+            << "Get download info successful: share_id=" << share_id
+            << ", file_id=" << file_id
+            << ", filename=" << download_info.filename
+            << ", size=" << download_info.file_size
+            << ", content_id=" << download_info.blob.content_id;
 
         /// 5. 委托共享下载响应构造
         auto resp = co_await BuildDownloadResponse(
@@ -489,7 +512,8 @@ namespace disk::share {
                 .range_header = std::string(request->getHeader("Range")),
             },
             m_blob_store,
-            m_download_integrity_service
+            m_download_integrity_service,
+            log_context
         );
 
         /// 6. 统一更新下载统计并记录审计结果
@@ -497,7 +521,8 @@ namespace disk::share {
             *parse_result,
             internal_share_id,
             BuildDownloadOutcome(resp, download_info.file_size),
-            audit_context
+            audit_context,
+            log_context
         );
 
         co_return resp;

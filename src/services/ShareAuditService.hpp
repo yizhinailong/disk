@@ -17,6 +17,8 @@
 #include <drogon/utils/coroutine.h>
 #include <json/json.h>
 
+#include "utils/LogHelper.hpp"
+
 namespace disk::share {
 
     struct ShareAuditContext {
@@ -70,6 +72,7 @@ namespace disk::share {
         bool success{ false };
         std::string result;
         ShareAuditContext context;
+        disk::utils::LogContext log_context;
 
         [[nodiscard]]
         auto ToDetails() const -> Json::Value;
@@ -111,7 +114,8 @@ namespace disk::share {
             std::optional<uint64_t> share_id,
             const std::string& share_code,
             const Json::Value& details,
-            const ShareAuditContext& context
+            const ShareAuditContext& context,
+            disk::utils::LogContext log_context
         ) const -> drogon::Task<void>;
 
         drogon::orm::DbClientPtr m_db_client;

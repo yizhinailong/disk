@@ -20,6 +20,7 @@
 #include <drogon/utils/coroutine.h>
 
 #include "storage/IBlobStore.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::download {
     class IDownloadIntegrityService;
@@ -40,7 +41,8 @@ namespace disk::controllers {
     auto BuildDownloadResponse(
         const DownloadParams& params,
         disk::storage::IBlobStore* blob_store,
-        disk::download::IDownloadIntegrityService* integrity_service
+        disk::download::IDownloadIntegrityService* integrity_service,
+        disk::utils::LogContext log_context = {}
     ) -> drogon::Task<drogon::HttpResponsePtr>;
 
-} ///< namespace disk::controllers
+} // namespace disk::controllers

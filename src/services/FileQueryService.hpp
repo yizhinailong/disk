@@ -17,6 +17,7 @@
 #include "dtos/FileDto.hpp"
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::file {
 
@@ -81,7 +82,11 @@ namespace disk::file {
          * @return drogon::Task<Result<DownloadInfoResponse>> 成功返回下载信息，失败返回错误
          */
         [[nodiscard]]
-        auto GetDownloadInfo(uint64_t file_id, uint64_t user_id)
+        auto GetDownloadInfo(
+            uint64_t file_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<DownloadInfoResponse>>;
 
         /**
@@ -97,7 +102,11 @@ namespace disk::file {
          * @return drogon::Task<Result<DownloadInfo>> 成功返回下载数据，失败返回错误
          */
         [[nodiscard]]
-        auto GetDownloadData(uint64_t file_id, uint64_t user_id)
+        auto GetDownloadData(
+            uint64_t file_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<DownloadInfo>>;
 
         /**
@@ -107,7 +116,11 @@ namespace disk::file {
          * @param user_id 用户 ID
          * @return drogon::Task<void>
          */
-        auto UpdateDownloadMetadata(uint64_t file_id, uint64_t user_id) -> drogon::Task<void>;
+        auto UpdateDownloadMetadata(
+            uint64_t file_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<void>;
 
         /**
          * @brief 搜索文件和文件夹
@@ -128,8 +141,8 @@ namespace disk::file {
             -> drogon::Task<Result<SearchResponse>>;
 
     private:
-        drogon::orm::DbClientPtr m_db_client;                                     ///< 数据库客户端
-        std::shared_ptr<disk::services::RedisService> m_redis_service{disk::services::RedisService::GetInstance()}; ///< Redis 服务
+        drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
+        std::shared_ptr<disk::services::RedisService> m_redis_service{ disk::services::RedisService::GetInstance() }; ///< Redis 服务
     };
 
-} ///< namespace disk::file
+} // namespace disk::file

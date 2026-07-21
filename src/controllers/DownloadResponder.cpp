@@ -38,12 +38,13 @@ namespace disk::controllers {
             uint64_t delivered{ 0 };
             bool interruption_recorded{ false };
         };
-    }
+    } // namespace
 
     auto BuildDownloadResponse(
         const DownloadParams& params,
         disk::storage::IBlobStore* blob_store,
-        disk::download::IDownloadIntegrityService* integrity_service
+        disk::download::IDownloadIntegrityService* integrity_service,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<drogon::HttpResponsePtr> {
 
         const auto& file_size = params.file_size;
@@ -54,8 +55,9 @@ namespace disk::controllers {
 
         /// (a) 无效 Range → 416 JSON 响应
         if (range_request.has_range && !range_request.satisfiable) {
-            Logger::Warn() << "Range request not satisfiable: " << params.range_header
-                     << ", file_size=" << file_size;
+            Logger::Warn(log_context)
+                << "Range request not satisfiable: " << params.range_header
+                << ", file_size=" << file_size;
 
             auto resp = drogon::HttpResponse::newHttpResponse();
             resp->setStatusCode(drogon::HttpStatusCode::k416RequestedRangeNotSatisfiable);
@@ -83,13 +85,19 @@ namespace disk::controllers {
         uint64_t content_length = end - start + 1;
 
         if (blob_store == nullptr || integrity_service == nullptr) {
+            Logger::Error(log_context) << "Download dependencies are unavailable";
             co_return Response::Error(ErrorInfo(ErrorCode::FileReadError));
         }
 
-        auto preflight_result = co_await integrity_service->Preflight(params.blob, file_size);
+        auto preflight_result = co_await integrity_service->Preflight(
+            params.blob,
+            file_size,
+            log_context
+        );
         if (!preflight_result) {
-            Logger::Error() << "Download Blob preflight rejected content: content_id="
-                            << params.blob.content_id;
+            Logger::Error(log_context)
+                << "Download Blob preflight rejected content: content_id="
+                << params.blob.content_id;
             co_return Response::Error(preflight_result.error());
         }
 
@@ -109,13 +117,14 @@ namespace disk::controllers {
                         local_path->string(),
                         static_cast<size_t>(start),
                         static_cast<size_t>(content_length),
-                        true,  ///< setContentRange
+                        true, ///< setContentRange
                         params.filename,
                         drogon::CT_CUSTOM,
                         params.mime_type
                     );
-                    Logger::Info() << "Sending partial content via local file response: start=" << start
-                             << ", end=" << end << ", total=" << file_size;
+                    Logger::Info(log_context)
+                        << "Sending partial content via local file response: start=" << start
+                        << ", end=" << end << ", total=" << file_size;
                 } else {
                     /// 全文件下载 → Drogon 自动设置 200
                     resp = drogon::HttpResponse::newFileResponse(
@@ -124,13 +133,15 @@ namespace disk::controllers {
                         drogon::CT_CUSTOM,
                         params.mime_type
                     );
-                    Logger::Info() << "Sending full file via local file response: size=" << file_size;
+                    Logger::Info(log_context)
+                        << "Sending full file via local file response: size=" << file_size;
                 }
 
                 /// 补充 newFileResponse 未设置的响应头
                 resp->addHeader("Accept-Ranges", "bytes");
                 resp->addHeader(
-                    "Content-Disposition", "attachment; filename=\"" + params.filename + "\""
+                    "Content-Disposition",
+                    "attachment; filename=\"" + params.filename + "\""
                 );
                 if (!params.file_hash.empty()) {
                     resp->addHeader("ETag", "\"" + params.file_hash + "\"");
@@ -145,12 +156,15 @@ namespace disk::controllers {
         /// ================================================================
         auto open_result = co_await blob_store->OpenBlobRangeForRead(params.blob, start, content_length);
         if (!open_result) {
-            Logger::Error() << "Cannot open blob stream for download: content_id=" << params.blob.content_id;
+            Logger::Error(log_context)
+                << "Cannot open blob stream for download: content_id="
+                << params.blob.content_id;
             co_await integrity_service->RecordOpenFailure(
                 params.blob,
                 open_result.error().code,
                 start,
-                content_length
+                content_length,
+                log_context
             );
             co_return Response::Error(ErrorInfo(ErrorCode::FileReadError));
         }
@@ -165,7 +179,8 @@ namespace disk::controllers {
              integrity_service,
              blob = params.blob,
              start,
-             content_length](char* buffer, std::size_t suggested_length) -> std::size_t {
+             content_length,
+             log_context](char* buffer, std::size_t suggested_length) -> std::size_t {
                 if (!buffer) {
                     stream->Close();
                     return 0;
@@ -199,7 +214,8 @@ namespace disk::controllers {
                             blob,
                             start,
                             content_length,
-                            stream_state->delivered
+                            stream_state->delivered,
+                            log_context
                         );
                     }
                     stream_state->remaining = 0;
@@ -228,12 +244,13 @@ namespace disk::controllers {
                 "bytes " + std::to_string(start) + "-" + std::to_string(end) + "/" +
                     std::to_string(file_size)
             );
-            Logger::Info() << "Returning partial content: start=" << start << ", end=" << end
-                     << ", total=" << file_size;
+            Logger::Info(log_context)
+                << "Returning partial content: start=" << start << ", end=" << end
+                << ", total=" << file_size;
         } else {
             /// (c) 无 Range → 200 全文件
             resp->setStatusCode(drogon::HttpStatusCode::k200OK);
-            Logger::Info() << "Returning full file: size=" << file_size;
+            Logger::Info(log_context) << "Returning full file: size=" << file_size;
         }
 
         /// 设置公共响应头
@@ -249,4 +266,4 @@ namespace disk::controllers {
         co_return resp;
     }
 
-} ///< namespace disk::controllers
+} // namespace disk::controllers

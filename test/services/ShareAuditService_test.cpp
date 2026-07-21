@@ -83,6 +83,10 @@ namespace disk::share {
         }
 
         TEST(ShareAuditServiceTest, DownloadDetailsRecordSelectedResponseBytes) {
+            disk::utils::LogContext log_context;
+            log_context.request_id = "download-audit-request";
+            log_context.operation = "download";
+
             const auto details = ShareDownloadAuditEvent{
                 .share_id = 11,
                 .share_code = "audit001",
@@ -92,14 +96,20 @@ namespace disk::share {
                 .success = true,
                 .result = "partial_content",
                 .context = {},
+                .log_context = log_context,
             }
                                      .ToDetails();
+            const auto uncorrelated_details = ShareDownloadAuditEvent{}.ToDetails();
 
             EXPECT_EQ(details["file_id"].asUInt64(), 21U);
             EXPECT_EQ(details["bytes"].asUInt64(), 512U);
             EXPECT_EQ(details["http_status"].asInt(), 206);
             EXPECT_TRUE(details["success"].asBool());
             EXPECT_EQ(details["result"].asString(), "partial_content");
+            EXPECT_EQ(details["request_id"].asString(), "download-audit-request");
+            EXPECT_EQ(details["operation"].asString(), "download");
+            EXPECT_TRUE(uncorrelated_details["request_id"].isNull());
+            EXPECT_TRUE(uncorrelated_details["operation"].isNull());
             ExpectNoCredentialFields(details);
         }
 

@@ -72,6 +72,21 @@ The system SHALL derive durable Worker correlation only from claimed PostgreSQL 
 - **WHEN** the Worker persists a succeeded, retry, or dead-letter result, or can no longer confirm continued ownership
 - **THEN** the execution-completed event SHALL retain the persistent job ID and instance but SHALL use a null lease owner
 
+### Requirement: Typed Download Correlation
+The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.
+
+#### Scenario: Owner or visitor requests download metadata or content
+- **WHEN** an owner or visitor download route handles a request
+- **THEN** its domain events SHALL use the response request ID, actual handling instance, and fixed `download` operation, while upload ID, job ID, lease owner, and state version remain null
+
+#### Scenario: Download detects final Blob inconsistency
+- **WHEN** preflight, stream opening, or streaming detects a missing, mismatched, or interrupted final Blob
+- **THEN** responder and integrity events SHALL retain the request context, and the reconciliation finding details SHALL persist the same non-empty request ID and `download` operation
+
+#### Scenario: Visitor download writes its audit result
+- **WHEN** a visitor download records its final HTTP outcome
+- **THEN** the share-download audit details SHALL persist the same request ID and `download` operation without recording the share token or overloading upload or job identifiers
+
 ### Requirement: Bounded High-Volume Logging
 The system SHALL apply an outcome-based logging policy to upload-chunk traffic so that the normal production log level does not emit one success record per chunk while failures and low-cardinality metrics remain complete.
 

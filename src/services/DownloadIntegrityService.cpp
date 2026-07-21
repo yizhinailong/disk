@@ -35,7 +35,8 @@ namespace disk::download {
 
         auto RecordFindingBestEffort(
             const std::shared_ptr<disk::reconciliation::StorageReconciliationService>& service,
-            disk::reconciliation::ReconciliationFinding finding
+            disk::reconciliation::ReconciliationFinding finding,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<void> {
             if (service == nullptr) {
                 co_return;
@@ -46,9 +47,24 @@ namespace disk::download {
             try {
                 co_await service->RecordFinding(finding);
             } catch (...) {
-                Logger::Error() << "Download reconciliation finding write failed: finding_type="
-                                << finding_type << ", content_id=" << resource_id;
+                Logger::Error(log_context)
+                    << "Download reconciliation finding write failed: finding_type="
+                    << finding_type << ", content_id=" << resource_id;
             }
+        }
+
+        auto AddCorrelationDetails(
+            Json::Value& details,
+            const disk::utils::LogContext& log_context
+        ) -> void {
+            details["request_id"] =
+                log_context.request_id.has_value() && !log_context.request_id->empty() ?
+                    Json::Value(*log_context.request_id) :
+                    Json::Value(Json::nullValue);
+            details["operation"] =
+                log_context.operation.has_value() && !log_context.operation->empty() ?
+                    Json::Value(*log_context.operation) :
+                    Json::Value(Json::nullValue);
         }
 
         [[nodiscard]] auto FileReadFailure() -> Result<void> {
@@ -71,9 +87,11 @@ namespace disk::download {
 
     auto DownloadIntegrityService::Preflight(
         const disk::storage::BlobDescriptor& blob,
-        uint64_t expected_size
+        uint64_t expected_size,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<void>> {
         if (m_blob_store == nullptr) {
+            Logger::Error(log_context) << "Download BlobStore is unavailable";
             co_return FileReadFailure();
         }
 
@@ -84,13 +102,15 @@ namespace disk::download {
                     Json::Value details(Json::objectValue);
                     details["source"] = "download_preflight";
                     details["expected_size"] = Json::UInt64(expected_size);
+                    AddCorrelationDetails(details, log_context);
                     co_await RecordFindingBestEffort(
                         m_reconciliation_service,
                         MakeFinding(
                             disk::reconciliation::kMissingFinalBlobFindingType,
                             blob,
                             std::move(details)
-                        )
+                        ),
+                        log_context
                     );
                 }
                 co_return FileReadFailure();
@@ -101,18 +121,21 @@ namespace disk::download {
                 details["source"] = "download_preflight";
                 details["expected_size"] = Json::UInt64(expected_size);
                 details["observed_size"] = Json::UInt64(*observed_size);
+                AddCorrelationDetails(details, log_context);
                 co_await RecordFindingBestEffort(
                     m_reconciliation_service,
                     MakeFinding(
                         disk::reconciliation::kFinalBlobSizeMismatchFindingType,
                         blob,
                         std::move(details)
-                    )
+                    ),
+                    log_context
                 );
                 co_return FileReadFailure();
             }
         } catch (...) {
-            Logger::Error() << "Download Blob preflight failed: content_id=" << blob.content_id;
+            Logger::Error(log_context)
+                << "Download Blob preflight failed: content_id=" << blob.content_id;
             co_return FileReadFailure();
         }
 
@@ -123,19 +146,22 @@ namespace disk::download {
         const disk::storage::BlobDescriptor& blob,
         ErrorCode error_code,
         uint64_t range_start,
-        uint64_t expected_bytes
+        uint64_t expected_bytes,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<void> {
         Json::Value details(Json::objectValue);
         details["source"] = "download_open";
         details["range_start"] = Json::UInt64(range_start);
         details["expected_bytes"] = Json::UInt64(expected_bytes);
+        AddCorrelationDetails(details, log_context);
 
         const auto finding_type = error_code == ErrorCode::FileNotFound ?
                                       disk::reconciliation::kMissingFinalBlobFindingType :
                                       disk::reconciliation::kFinalBlobReadInterruptedFindingType;
         co_await RecordFindingBestEffort(
             m_reconciliation_service,
-            MakeFinding(finding_type, blob, std::move(details))
+            MakeFinding(finding_type, blob, std::move(details)),
+            log_context
         );
     }
 
@@ -143,7 +169,8 @@ namespace disk::download {
         const disk::storage::BlobDescriptor& blob,
         uint64_t range_start,
         uint64_t expected_bytes,
-        uint64_t delivered_bytes
+        uint64_t delivered_bytes,
+        disk::utils::LogContext log_context
     ) noexcept -> void {
         try {
             Json::Value details(Json::objectValue);
@@ -151,6 +178,7 @@ namespace disk::download {
             details["range_start"] = Json::UInt64(range_start);
             details["expected_bytes"] = Json::UInt64(expected_bytes);
             details["delivered_bytes"] = Json::UInt64(delivered_bytes);
+            AddCorrelationDetails(details, log_context);
 
             auto finding = MakeFinding(
                 disk::reconciliation::kFinalBlobReadInterruptedFindingType,
@@ -159,13 +187,19 @@ namespace disk::download {
             );
             const auto service = m_reconciliation_service;
             drogon::async_run(
-                [service, finding = std::move(finding)]() mutable -> drogon::Task<void> {
-                    co_await RecordFindingBestEffort(service, std::move(finding));
+                [service, finding = std::move(finding), log_context]() mutable
+                    -> drogon::Task<void> {
+                    co_await RecordFindingBestEffort(
+                        service,
+                        std::move(finding),
+                        std::move(log_context)
+                    );
                 }
             );
         } catch (...) {
-            Logger::Error() << "Download stream reconciliation scheduling failed: content_id="
-                            << blob.content_id;
+            Logger::Error(log_context)
+                << "Download stream reconciliation scheduling failed: content_id="
+                << blob.content_id;
         }
     }
 

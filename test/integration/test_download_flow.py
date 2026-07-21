@@ -27,6 +27,12 @@ import json
 import os
 import sys
 import tempfile
+import time
+from pathlib import Path
+
+EVIDENCE_ROOT = Path(os.environ.get("EVIDENCE_DIR", ".sisyphus/evidence"))
+SERVER_LOG_PATH = EVIDENCE_ROOT / "download-flow-server.log"
+os.environ["SERVER_LOG"] = str(SERVER_LOG_PATH)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
@@ -113,6 +119,78 @@ def reconciliation_finding(finding_type):
         "WHERE finding_type = %s AND resource_id = %s",
         (finding_type, str(file_content_id())),
     )
+
+
+def latest_share_download_audit():
+    return query_one(
+        "SELECT details FROM operation_logs "
+        "WHERE action = 'share_download' AND details->>'share_code' = %s "
+        "ORDER BY id DESC LIMIT 1",
+        (SHARE_ID,),
+    )
+
+
+def correlation_details(value):
+    if isinstance(value, str):
+        return json.loads(value)
+    return value if isinstance(value, dict) else {}
+
+
+def assert_correlation_details(label, value, request_id):
+    details = correlation_details(value)
+    ok = True
+    if details.get("request_id") == request_id:
+        log_pass(f"{label}: request_id persisted")
+    else:
+        log_fail(
+            f"{label}: expected request_id {request_id}, "
+            f"got {details.get('request_id')!r}"
+        )
+        ok = False
+    if details.get("operation") == "download":
+        log_pass(f"{label}: bounded download operation persisted")
+    else:
+        log_fail(
+            f"{label}: expected operation download, "
+            f"got {details.get('operation')!r}"
+        )
+        ok = False
+    return ok
+
+
+def wait_for_correlated_download_log(request_id, instance_id, message_marker):
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if SERVER_LOG_PATH.is_file():
+            for line in SERVER_LOG_PATH.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ).splitlines():
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (
+                    isinstance(record, dict)
+                    and record.get("schema_version") == 1
+                    and record.get("source") == "application"
+                    and record.get("request_id") == request_id
+                    and record.get("instance_id") == instance_id
+                    and record.get("operation") == "download"
+                    and record.get("upload_id") is None
+                    and record.get("job_id") is None
+                    and record.get("lease_owner") is None
+                    and record.get("state_version") is None
+                    and message_marker in str(record.get("message", ""))
+                ):
+                    return record
+        time.sleep(0.05)
+
+    log_fail(
+        f"download log preserves typed correlation for request_id={request_id}"
+    )
+    print_summary()
+    raise AssertionError("unreachable")
 
 
 def assert_unresolved_finding(label, finding_type):
@@ -644,11 +722,15 @@ def test_missing_final_blob_error_mapping_and_side_effects():
 
     os.replace(blob_path, backup_path)
     try:
+        owner_request_id = f"download-owner-missing-{os.getpid()}"
         file_before = file_download_metadata()
         private_resp = fetch(
             f"/api/file/download/{FILE_ID}",
             method="GET",
-            headers={"Authorization": f"Bearer {TOKEN}"},
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+                "X-Request-Id": owner_request_id,
+            },
         )
         file_after = file_download_metadata()
         save_evidence(f"{EVIDENCE_PREFIX}-file-missing-blob.json", private_resp.text)
@@ -656,15 +738,48 @@ def test_missing_final_blob_error_mapping_and_side_effects():
         ok = True
         assert_status("file-missing-blob", private_resp.status_code, 500) or (ok := False)
         assert_json_field("file-missing-blob", private_resp.text, "code", "50011") or (ok := False)
+        assert_header_contains(
+            "file-missing-blob",
+            private_resp.headers,
+            "X-Request-Id",
+            owner_request_id,
+        ) or (ok := False)
         assert_file_metadata_unchanged("file-missing-blob", file_before, file_after) or (ok := False)
         assert_unresolved_finding("file-missing-blob", "missing_final_blob") or (ok := False)
+        owner_instance_id = header_value(
+            private_resp.headers,
+            "X-Disk-Instance-Id",
+        )
+        if owner_instance_id:
+            wait_for_correlated_download_log(
+                owner_request_id,
+                owner_instance_id,
+                "Download Blob preflight rejected content",
+            )
+            log_pass("file-missing-blob: responder log preserves request/instance")
+        else:
+            log_fail("file-missing-blob: response lacks handling instance")
+            ok = False
+        owner_finding = reconciliation_finding("missing_final_blob")
+        if owner_finding is None:
+            ok = False
+        else:
+            assert_correlation_details(
+                "file-missing-blob finding",
+                owner_finding["details"],
+                owner_request_id,
+            ) or (ok := False)
 
+        share_request_id = f"download-share-missing-{os.getpid()}"
         share_file_before = file_download_metadata()
         share_before = share_download_count()
         share_resp = fetch(
             f"/api/share/download/{SHARE_ID}/{SHARE_FILE_ID}",
             method="GET",
-            headers={"X-Share-Token": SHARE_TOKEN},
+            headers={
+                "X-Share-Token": SHARE_TOKEN,
+                "X-Request-Id": share_request_id,
+            },
         )
         share_file_after = file_download_metadata()
         share_after = share_download_count()
@@ -672,9 +787,48 @@ def test_missing_final_blob_error_mapping_and_side_effects():
 
         assert_status("share-missing-blob", share_resp.status_code, 500) or (ok := False)
         assert_json_field("share-missing-blob", share_resp.text, "code", "50011") or (ok := False)
+        assert_header_contains(
+            "share-missing-blob",
+            share_resp.headers,
+            "X-Request-Id",
+            share_request_id,
+        ) or (ok := False)
         assert_file_metadata_unchanged("share-missing-blob", share_file_before, share_file_after) or (ok := False)
         assert_share_download_delta("share-missing-blob", share_before, share_after, 1) or (ok := False)
         assert_unresolved_finding("share-missing-blob", "missing_final_blob") or (ok := False)
+        share_instance_id = header_value(
+            share_resp.headers,
+            "X-Disk-Instance-Id",
+        )
+        if share_instance_id:
+            wait_for_correlated_download_log(
+                share_request_id,
+                share_instance_id,
+                "Download Blob preflight rejected content",
+            )
+            log_pass("share-missing-blob: responder log preserves request/instance")
+        else:
+            log_fail("share-missing-blob: response lacks handling instance")
+            ok = False
+        share_finding = reconciliation_finding("missing_final_blob")
+        if share_finding is None:
+            ok = False
+        else:
+            assert_correlation_details(
+                "share-missing-blob finding",
+                share_finding["details"],
+                share_request_id,
+            ) or (ok := False)
+        share_audit = latest_share_download_audit()
+        if share_audit is None:
+            log_fail("share-missing-blob: share_download audit row missing")
+            ok = False
+        else:
+            assert_correlation_details(
+                "share-missing-blob audit",
+                share_audit["details"],
+                share_request_id,
+            ) or (ok := False)
 
         if ok:
             log_pass("missing-blob: private/share 50011 and reconciliation contract preserved")
@@ -904,6 +1058,7 @@ def main():
     print("Download Flow Integration Tests")
     print("==========================================\n")
 
+    SERVER_LOG_PATH.unlink(missing_ok=True)
     ensure_server()
 
     global TOKEN

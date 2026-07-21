@@ -191,10 +191,16 @@ namespace disk::file {
 
     /// ==================== GetDownloadInfo ====================
 
-    auto FileQueryService::GetDownloadInfo(uint64_t file_id, uint64_t user_id)
+    auto FileQueryService::GetDownloadInfo(
+        uint64_t file_id,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<DownloadInfoResponse>> {
 
-        Logger::Debug() << "Starting get download info: file_id=" << file_id << ", user_id=" << user_id;
+        Logger::Debug(log_context)
+            << "Starting get download info: file_id=" << file_id
+            << ", user_id=" << user_id;
 
         /// 1. 查找文件并验证归属
         try {
@@ -206,7 +212,8 @@ namespace disk::file {
 
             /// 2. 获取文件内容信息
             if (!file.getContentId()) {
-                Logger::Error() << "File missing content_id: file_id=" << file_id;
+                Logger::Error(log_context)
+                    << "File missing content_id: file_id=" << file_id;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::FileReadError, "File content info missing")
                 );
@@ -227,22 +234,30 @@ namespace disk::file {
                                                                      file.getValueOfMimeType();
             response.supports_range = true;
 
-            Logger::Debug() << "Download info retrieved successfully: filename=" << response.filename
-                            << ", size=" << response.file_size;
+            Logger::Debug(log_context)
+                << "Download info retrieved successfully: filename=" << response.filename
+                << ", size=" << response.file_size;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "File not found or no permission: file_id=" << file_id;
+            Logger::Warn(log_context)
+                << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
 
     /// ==================== GetDownloadData ====================
 
-    auto FileQueryService::GetDownloadData(uint64_t file_id, uint64_t user_id)
+    auto FileQueryService::GetDownloadData(
+        uint64_t file_id,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<DownloadInfo>> {
 
-        Logger::Debug() << "Starting get download data: file_id=" << file_id << ", user_id=" << user_id;
+        Logger::Debug(log_context)
+            << "Starting get download data: file_id=" << file_id
+            << ", user_id=" << user_id;
 
         /// 1. 查找文件并验证归属
         try {
@@ -254,7 +269,8 @@ namespace disk::file {
 
             /// 2. 获取文件内容信息
             if (!file.getContentId()) {
-                Logger::Error() << "File missing content_id: file_id=" << file_id;
+                Logger::Error(log_context)
+                    << "File missing content_id: file_id=" << file_id;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::FileReadError, "File content info missing")
                 );
@@ -281,20 +297,25 @@ namespace disk::file {
             };
             info.supports_range = true;
 
-            Logger::Debug() << "Download data retrieved successfully: filename=" << info.filename
-                            << ", content_id=" << info.blob.content_id;
+            Logger::Debug(log_context)
+                << "Download data retrieved successfully: filename=" << info.filename
+                << ", content_id=" << info.blob.content_id;
             co_return info;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "File not found or no permission: file_id=" << file_id;
+            Logger::Warn(log_context)
+                << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
 
     /// ==================== UpdateDownloadMetadata ====================
 
-    auto FileQueryService::UpdateDownloadMetadata(uint64_t file_id, uint64_t user_id)
-        -> drogon::Task<void> {
+    auto FileQueryService::UpdateDownloadMetadata(
+        uint64_t file_id,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
                 "UPDATE files " "SET download_count = download_count + 1, last_accessed_at = NOW() " "WHERE id = $1 AND user_id = $2",
@@ -302,8 +323,9 @@ namespace disk::file {
                 user_id
             );
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to update file download metadata: " << e.base().what()
-                            << " (file_id=" << file_id << ", user_id=" << user_id << ")";
+            Logger::Error(log_context)
+                << "Failed to update file download metadata: " << e.base().what()
+                << " (file_id=" << file_id << ", user_id=" << user_id << ")";
         }
     }
 

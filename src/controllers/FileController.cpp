@@ -321,67 +321,88 @@ namespace disk::file {
 
     auto FileController::DownloadInfo(drogon::HttpRequestPtr request, std::string file_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "download");
 
-        Logger::Info() << "Received get download info request: " << request->getPeerAddr().toIpPort()
-                       << ", file_id=" << file_id;
+        Logger::Info(log_context)
+            << "Received get download info request: " << request->getPeerAddr().toIpPort()
+            << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数
         auto parse_result = disk::file::DownloadInfoRequest::FromPath(file_id);
         if (!parse_result) {
-            Logger::Warn() << "Get download info request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Get download info request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "Get download info parameters validated: file_id=" << parse_result->file_id;
+        Logger::Debug(log_context)
+            << "Get download info parameters validated: file_id=" << parse_result->file_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取下载信息
-        auto result = co_await m_query_service->GetDownloadInfo(parse_result->file_id, user_id);
+        auto result = co_await m_query_service->GetDownloadInfo(
+            parse_result->file_id,
+            user_id,
+            log_context
+        );
         if (!result) {
-            Logger::Error() << "Get download info failed: " << result.error().message
-                            << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+            Logger::Error(log_context)
+                << "Get download info failed: " << result.error().message
+                << " (user_id=" << user_id << ", file_id=" << file_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info() << "Get download info successful: filename=" << result->filename
-                       << ", size=" << result->file_size << " (user_id=" << user_id
-                       << ", file_id=" << file_id << ")";
+        Logger::Info(log_context)
+            << "Get download info successful: filename=" << result->filename
+            << ", size=" << result->file_size << " (user_id=" << user_id
+            << ", file_id=" << file_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::Download(drogon::HttpRequestPtr request, std::string file_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "download");
 
-        Logger::Info() << "Received download file request: " << request->getPeerAddr().toIpPort()
-                       << ", file_id=" << file_id;
+        Logger::Info(log_context)
+            << "Received download file request: " << request->getPeerAddr().toIpPort()
+            << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数
         auto parse_result = disk::file::DownloadRequest::FromPath(file_id);
         if (!parse_result) {
-            Logger::Warn() << "Download file request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Download file request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "Download file parameters validated: file_id=" << parse_result->file_id;
+        Logger::Debug(log_context)
+            << "Download file parameters validated: file_id=" << parse_result->file_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 获取下载文件信息
-        auto info_result = co_await m_query_service->GetDownloadData(parse_result->file_id, user_id);
+        auto info_result = co_await m_query_service->GetDownloadData(
+            parse_result->file_id,
+            user_id,
+            log_context
+        );
         if (!info_result) {
-            Logger::Error() << "Get download data failed: " << info_result.error().message
-                            << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+            Logger::Error(log_context)
+                << "Get download data failed: " << info_result.error().message
+                << " (user_id=" << user_id << ", file_id=" << file_id << ")";
             co_return Response::Error(info_result.error());
         }
 
         const auto& download_info = *info_result;
-        Logger::Info() << "Get download info successful: file_id=" << file_id
-                       << ", filename=" << download_info.filename << ", size=" << download_info.file_size
-                       << ", content_id=" << download_info.blob.content_id;
+        Logger::Info(log_context)
+            << "Get download info successful: file_id=" << file_id
+            << ", filename=" << download_info.filename
+            << ", size=" << download_info.file_size
+            << ", content_id=" << download_info.blob.content_id;
 
         /// 4. 委托下载响应构造
         auto resp = co_await BuildDownloadResponse(
@@ -394,12 +415,17 @@ namespace disk::file {
                 .range_header = std::string(request->getHeader("Range")),
             },
             m_blob_store,
-            m_download_integrity_service
+            m_download_integrity_service,
+            log_context
         );
 
         /// 5. 成功内容下载后更新文件级元数据
         if (IsSuccessfulContentDownload(resp)) {
-            co_await m_query_service->UpdateDownloadMetadata(parse_result->file_id, user_id);
+            co_await m_query_service->UpdateDownloadMetadata(
+                parse_result->file_id,
+                user_id,
+                log_context
+            );
         }
 
         co_return resp;

@@ -87,6 +87,14 @@ namespace disk::share {
         details["http_status"] = http_status;
         details["success"] = success;
         details["result"] = result;
+        details["request_id"] =
+            log_context.request_id.has_value() && !log_context.request_id->empty() ?
+                Json::Value(*log_context.request_id) :
+                Json::Value(Json::nullValue);
+        details["operation"] =
+            log_context.operation.has_value() && !log_context.operation->empty() ?
+                Json::Value(*log_context.operation) :
+                Json::Value(Json::nullValue);
         return details;
     }
 
@@ -111,7 +119,8 @@ namespace disk::share {
             event.share_id,
             event.share_code,
             event.ToDetails(),
-            event.context
+            event.context,
+            {}
         );
     }
 
@@ -123,7 +132,8 @@ namespace disk::share {
             event.share_id,
             event.share_code,
             event.ToDetails(),
-            event.context
+            event.context,
+            {}
         );
     }
 
@@ -136,7 +146,8 @@ namespace disk::share {
             event.share_id,
             event.share_code,
             event.ToDetails(),
-            event.context
+            event.context,
+            {}
         );
     }
 
@@ -148,7 +159,8 @@ namespace disk::share {
             event.share_id,
             event.share_code,
             event.ToDetails(),
-            event.context
+            event.context,
+            event.log_context
         );
     }
 
@@ -160,7 +172,8 @@ namespace disk::share {
             event.share_id,
             event.share_code,
             event.ToDetails(),
-            event.context
+            event.context,
+            {}
         );
     }
 
@@ -170,7 +183,8 @@ namespace disk::share {
         std::optional<uint64_t> share_id,
         const std::string& share_code,
         const Json::Value& details,
-        const ShareAuditContext& context
+        const ShareAuditContext& context,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<void> {
         try {
             auto binder = *m_db_client
@@ -194,16 +208,18 @@ namespace disk::share {
 
             co_await drogon::orm::internal::SqlAwaiter(std::move(binder));
         } catch (const drogon::orm::DrogonDbException& error) {
-            Logger::Error() << "Failed to record share audit event: action=" << action
-                            << ", share_id="
-                            << (share_id.has_value() ? std::to_string(*share_id) : "null")
-                            << ", share_code=" << share_code
-                            << ", error=" << error.base().what();
+            Logger::Error(log_context)
+                << "Failed to record share audit event: action=" << action
+                << ", share_id="
+                << (share_id.has_value() ? std::to_string(*share_id) : "null")
+                << ", share_code=" << share_code
+                << ", error=" << error.base().what();
         } catch (const std::exception& error) {
-            Logger::Error() << "Failed to record share audit event: action=" << action
-                            << ", share_id="
-                            << (share_id.has_value() ? std::to_string(*share_id) : "null")
-                            << ", share_code=" << share_code << ", error=" << error.what();
+            Logger::Error(log_context)
+                << "Failed to record share audit event: action=" << action
+                << ", share_id="
+                << (share_id.has_value() ? std::to_string(*share_id) : "null")
+                << ", share_code=" << share_code << ", error=" << error.what();
         }
     }
 

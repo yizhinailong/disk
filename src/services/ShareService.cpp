@@ -938,10 +938,15 @@ namespace disk::share {
         co_return response;
     }
 
-    auto ShareService::GetDownloadInfo(const DownloadShareRequest& request, uint64_t share_id)
+    auto ShareService::GetDownloadInfo(
+        const DownloadShareRequest& request,
+        uint64_t share_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<DownloadInfo>> {
-        Logger::Debug() << "Getting download info: share_id=" << request.share_id
-                        << ", file_id=" << request.file_id;
+        Logger::Debug(log_context)
+            << "Getting download info: share_id=" << request.share_id
+            << ", file_id=" << request.file_id;
 
         /// 单次 4 表 JOIN 查询：shares + share_files + files + file_contents
         try {
@@ -970,8 +975,9 @@ namespace disk::share {
             auto permission = row["permission"].as<std::string>();
 
             if (permission != "download") {
-                Logger::Warn() << "Insufficient share permissions: share_id=" << share_id
-                               << ", permission=" << permission;
+                Logger::Warn(log_context)
+                    << "Insufficient share permissions: share_id=" << share_id
+                    << ", permission=" << permission;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::ShareAccessDenied, "Share is view-only, download not allowed")
                 );
@@ -994,7 +1000,8 @@ namespace disk::share {
 
             co_return info;
         } catch (const DrogonDbException& e) {
-            Logger::Error() << "Failed to get download info: " << e.base().what();
+            Logger::Error(log_context)
+                << "Failed to get download info: " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get download info")
             );
@@ -1005,13 +1012,14 @@ namespace disk::share {
         const DownloadShareRequest& request,
         uint64_t share_id,
         const ShareDownloadOutcome& outcome,
-        const ShareAuditContext& audit_context
+        const ShareAuditContext& audit_context,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<void> {
         if (outcome.update_statistics) {
             if (outcome.success) {
-                co_await UpdateFileDownloadMetadata(request.file_id);
+                co_await UpdateFileDownloadMetadata(request.file_id, log_context);
             }
-            co_await IncrementDownloadCount(share_id);
+            co_await IncrementDownloadCount(share_id, log_context);
         }
         co_await m_audit_service.RecordDownload(ShareDownloadAuditEvent{
             .share_id = share_id,
@@ -1022,6 +1030,7 @@ namespace disk::share {
             .success = outcome.success,
             .result = outcome.result,
             .context = audit_context,
+            .log_context = log_context,
         });
     }
 
@@ -1726,26 +1735,34 @@ namespace disk::share {
         }
     }
 
-    auto ShareService::IncrementDownloadCount(uint64_t share_id) -> drogon::Task<void> {
+    auto ShareService::IncrementDownloadCount(
+        uint64_t share_id,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
                 "UPDATE shares SET download_count = download_count + 1 WHERE id = $1",
                 share_id
             );
         } catch (const DrogonDbException& e) {
-            Logger::Error() << "Failed to update download count: " << e.base().what();
+            Logger::Error(log_context)
+                << "Failed to update download count: " << e.base().what();
         }
     }
 
-    auto ShareService::UpdateFileDownloadMetadata(uint64_t file_id) -> drogon::Task<void> {
+    auto ShareService::UpdateFileDownloadMetadata(
+        uint64_t file_id,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<void> {
         try {
             co_await m_db_client->execSqlCoro(
                 "UPDATE files " "SET download_count = download_count + 1, last_accessed_at = NOW() " "WHERE id = $1",
                 file_id
             );
         } catch (const DrogonDbException& e) {
-            Logger::Error() << "Failed to update shared file download metadata: " << e.base().what()
-                            << " (file_id=" << file_id << ")";
+            Logger::Error(log_context)
+                << "Failed to update shared file download metadata: " << e.base().what()
+                << " (file_id=" << file_id << ")";
         }
     }
 

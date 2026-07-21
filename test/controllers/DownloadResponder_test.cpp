@@ -192,11 +192,13 @@ namespace {
     public:
         auto Preflight(
             const disk::storage::BlobDescriptor& blob,
-            uint64_t expected_size
+            uint64_t expected_size,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<Result<void>> override {
             ++preflight_count;
             last_content_id = blob.content_id;
             last_expected_bytes = expected_size;
+            preflight_log_context = std::move(log_context);
             co_return preflight_result;
         }
 
@@ -204,13 +206,15 @@ namespace {
             const disk::storage::BlobDescriptor& blob,
             ErrorCode error_code,
             uint64_t range_start,
-            uint64_t expected_bytes
+            uint64_t expected_bytes,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<void> override {
             ++open_failure_count;
             last_content_id = blob.content_id;
             last_error_code = error_code;
             last_range_start = range_start;
             last_expected_bytes = expected_bytes;
+            open_failure_log_context = std::move(log_context);
             co_return;
         }
 
@@ -218,13 +222,15 @@ namespace {
             const disk::storage::BlobDescriptor& blob,
             uint64_t range_start,
             uint64_t expected_bytes,
-            uint64_t delivered_bytes
+            uint64_t delivered_bytes,
+            disk::utils::LogContext log_context
         ) noexcept -> void override {
             ++stream_interruption_count;
             last_content_id = blob.content_id;
             last_range_start = range_start;
             last_expected_bytes = expected_bytes;
             last_delivered_bytes = delivered_bytes;
+            stream_interruption_log_context = std::move(log_context);
         }
 
         Result<void> preflight_result{};
@@ -236,6 +242,9 @@ namespace {
         uint64_t last_expected_bytes{ 0 };
         uint64_t last_delivered_bytes{ 0 };
         ErrorCode last_error_code{ ErrorCode::Success };
+        disk::utils::LogContext preflight_log_context;
+        disk::utils::LogContext open_failure_log_context;
+        disk::utils::LogContext stream_interruption_log_context;
     };
 
     /// ============================================================
@@ -537,11 +546,20 @@ TEST_F(DownloadResponderTest, LargeFileWithoutLocalPathFallsBackToStream) {
 TEST_F(DownloadResponderTest, PreflightFailureReturns500WithoutOpeningStorage) {
     auto content = MakeTestFile(300 * 1024);
     auto params = MakeDownloadParams(content);
+    const disk::utils::LogContext log_context{
+        .request_id = "download-preflight-request",
+        .operation = "download",
+    };
     m_integrity->preflight_result =
         std::unexpected(ErrorInfo(ErrorCode::FileReadError));
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
+        disk::controllers::BuildDownloadResponse(
+            params,
+            m_storage.get(),
+            m_integrity.get(),
+            log_context
+        )
     );
 
     ASSERT_NE(resp, nullptr);
@@ -551,15 +569,32 @@ TEST_F(DownloadResponderTest, PreflightFailureReturns500WithoutOpeningStorage) {
     EXPECT_EQ(m_storage->blob_exists_count, 0);
     EXPECT_EQ(m_storage->local_path_count, 0);
     EXPECT_EQ(m_storage->open_blob_count, 0);
+    EXPECT_EQ(
+        m_integrity->preflight_log_context.request_id,
+        log_context.request_id
+    );
+    EXPECT_EQ(
+        m_integrity->preflight_log_context.operation,
+        log_context.operation
+    );
 }
 
 TEST_F(DownloadResponderTest, OpenBlobFailureReturns500AndRecordsFinding) {
     auto content = MakeTestFile(1000);
     auto params = MakeDownloadParams(content);
+    const disk::utils::LogContext log_context{
+        .request_id = "download-open-request",
+        .operation = "download",
+    };
     m_storage->open_blob_should_fail = true;
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
+        disk::controllers::BuildDownloadResponse(
+            params,
+            m_storage.get(),
+            m_integrity.get(),
+            log_context
+        )
     );
 
     ASSERT_NE(resp, nullptr);
@@ -571,16 +606,33 @@ TEST_F(DownloadResponderTest, OpenBlobFailureReturns500AndRecordsFinding) {
     EXPECT_EQ(m_integrity->last_content_id, TEST_CONTENT_ID);
     EXPECT_EQ(m_integrity->last_range_start, 0U);
     EXPECT_EQ(m_integrity->last_expected_bytes, content.size());
+    EXPECT_EQ(
+        m_integrity->open_failure_log_context.request_id,
+        log_context.request_id
+    );
+    EXPECT_EQ(
+        m_integrity->open_failure_log_context.operation,
+        log_context.operation
+    );
 }
 
 TEST_F(DownloadResponderTest, StreamShortReadRecordsDeliveredBytesOnce) {
     auto content = MakeTestFile(100);
     auto params = MakeDownloadParams(content);
+    const disk::utils::LogContext log_context{
+        .request_id = "download-stream-request",
+        .operation = "download",
+    };
     params.file_size = 200;
     params.blob.size = 200;
 
     auto resp = drogon::sync_wait(
-        disk::controllers::BuildDownloadResponse(params, m_storage.get(), m_integrity.get())
+        disk::controllers::BuildDownloadResponse(
+            params,
+            m_storage.get(),
+            m_integrity.get(),
+            log_context
+        )
     );
 
     ASSERT_NE(resp, nullptr);
@@ -596,4 +648,12 @@ TEST_F(DownloadResponderTest, StreamShortReadRecordsDeliveredBytesOnce) {
     EXPECT_EQ(m_integrity->last_range_start, 0U);
     EXPECT_EQ(m_integrity->last_expected_bytes, 200U);
     EXPECT_EQ(m_integrity->last_delivered_bytes, content.size());
+    EXPECT_EQ(
+        m_integrity->stream_interruption_log_context.request_id,
+        log_context.request_id
+    );
+    EXPECT_EQ(
+        m_integrity->stream_interruption_log_context.operation,
+        log_context.operation
+    );
 }

@@ -46,6 +46,7 @@
 #include "services/ShareAuditService.hpp"
 #include "services/TokenService.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::share {
 
@@ -237,7 +238,11 @@ namespace disk::share {
          * @return drogon::Task<Result<DownloadInfo>> 成功返回下载信息，失败返回错误
          */
         [[nodiscard]]
-        auto GetDownloadInfo(const DownloadShareRequest& request, uint64_t share_id)
+        auto GetDownloadInfo(
+            const DownloadShareRequest& request,
+            uint64_t share_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<DownloadInfo>>;
 
         [[nodiscard]]
@@ -261,7 +266,8 @@ namespace disk::share {
             const DownloadShareRequest& request,
             uint64_t share_id,
             const ShareDownloadOutcome& outcome,
-            const ShareAuditContext& audit_context
+            const ShareAuditContext& audit_context,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<void>;
 
     private:
@@ -344,9 +350,15 @@ namespace disk::share {
          */
         auto IncrementViewCount(uint64_t share_id) -> drogon::Task<void>;
 
-        auto IncrementDownloadCount(uint64_t share_id) -> drogon::Task<void>;
+        auto IncrementDownloadCount(
+            uint64_t share_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<void>;
 
-        auto UpdateFileDownloadMetadata(uint64_t file_id) -> drogon::Task<void>;
+        auto UpdateFileDownloadMetadata(
+            uint64_t file_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<void>;
 
         /**
          * @brief 更新分享的 updated_at 时间戳

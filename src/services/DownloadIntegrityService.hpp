@@ -13,6 +13,7 @@
 
 #include "storage/BlobDescriptor.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::reconciliation {
     class StorageReconciliationService;
@@ -31,21 +32,24 @@ namespace disk::download {
         [[nodiscard]]
         virtual auto Preflight(
             const disk::storage::BlobDescriptor& blob,
-            uint64_t expected_size
+            uint64_t expected_size,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<void>> = 0;
 
         virtual auto RecordOpenFailure(
             const disk::storage::BlobDescriptor& blob,
             ErrorCode error_code,
             uint64_t range_start,
-            uint64_t expected_bytes
+            uint64_t expected_bytes,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<void> = 0;
 
         virtual auto RecordStreamInterruption(
             const disk::storage::BlobDescriptor& blob,
             uint64_t range_start,
             uint64_t expected_bytes,
-            uint64_t delivered_bytes
+            uint64_t delivered_bytes,
+            disk::utils::LogContext log_context = {}
         ) noexcept -> void = 0;
     };
 
@@ -59,21 +63,24 @@ namespace disk::download {
         [[nodiscard]]
         auto Preflight(
             const disk::storage::BlobDescriptor& blob,
-            uint64_t expected_size
+            uint64_t expected_size,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<Result<void>> override;
 
         auto RecordOpenFailure(
             const disk::storage::BlobDescriptor& blob,
             ErrorCode error_code,
             uint64_t range_start,
-            uint64_t expected_bytes
+            uint64_t expected_bytes,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<void> override;
 
         auto RecordStreamInterruption(
             const disk::storage::BlobDescriptor& blob,
             uint64_t range_start,
             uint64_t expected_bytes,
-            uint64_t delivered_bytes
+            uint64_t delivered_bytes,
+            disk::utils::LogContext log_context
         ) noexcept -> void override;
 
     private:
