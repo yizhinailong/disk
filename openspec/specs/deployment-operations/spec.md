@@ -57,15 +57,27 @@ The distributed deployment profile SHALL fix conservative per-process starting v
 - **THEN** the repository gate SHALL reject the existing capacity plan and a representative capacity test SHALL be completed before the measured boundary or production recommendation is changed
 
 ### Requirement: Incremental database migration procedure
-Deployment documentation SHALL define safe forward migration, reconciliation checks, rollback scripts, stop conditions, and backup restoration for documented database migrations.
+Deployment documentation SHALL define a manifest-ordered, checksum-verified forward migration procedure for documented database migrations. A single migration Job SHALL run the repository migration entry point before application rollout; API and Worker startup SHALL validate schema compatibility without executing DDL. Each manifest entry SHALL acquire the migration lock, apply in one transaction, and record its version and checksum. A failed or partially completed run SHALL preserve every committed expand migration and SHALL be safe to resume after correction.
 
 #### Scenario: Migration starts
 - **WHEN** an operator starts a database migration
-- **THEN** the procedure SHALL require a completed backup before forward SQL is applied
+- **THEN** the procedure SHALL require an identified V002-compatible baseline, a completed backup and isolated restore rehearsal, reviewed manifest checksums, and passing upgrade compatibility gates before forward SQL is applied by one migration Job
+
+#### Scenario: Two migration Jobs overlap
+- **WHEN** two migration Jobs accidentally evaluate the same unapplied manifest entry
+- **THEN** the transactional advisory lock and migration ledger SHALL prevent duplicate schema effects and both Jobs SHALL reject any checksum drift
 
 #### Scenario: Reconciliation fails
-- **WHEN** post-change reconciliation SQL reports missing data, inconsistent reference counts, or unexpected values
-- **THEN** the procedure SHALL require rollback or backup restoration before continuing the application release
+- **WHEN** migration-ledger, schema, data, health, or object reconciliation reports a mismatch
+- **THEN** the release SHALL stop, every committed expand object and ledger row SHALL remain intact, and operators SHALL correct forward and resume rather than run destructive rollback SQL
+
+#### Scenario: Application validation fails after migration
+- **WHEN** a candidate application fails health or functional validation after the expand migration commits
+- **THEN** application processes, configuration, or traffic SHALL roll back only to a release proven compatible with the expanded schema, while the schema action remains `preserve_expand`
+
+#### Scenario: Backup restoration is required
+- **WHEN** corruption or loss requires disaster recovery rather than ordinary application rollback
+- **THEN** the backup SHALL first restore into an empty isolated database and pass migration-ledger, schema, data, and object reconciliation before a separately approved traffic switch
 
 ### Requirement: Read-only final Blob migration manifest
 Before copying any legacy local final Blob to object storage, the migration tool SHALL create a complete content-ID-ordered inventory from one PostgreSQL repeatable-read, read-only snapshot. Each record SHALL preserve the database locator and SHALL include the normalized local-root-relative source path, size, MD5, SHA-256, and canonical target key. Manifest generation SHALL require neither S3 access nor S3 credentials and SHALL NOT modify PostgreSQL, source Blobs, object storage, or a migration checkpoint.
@@ -449,8 +461,8 @@ Emergency application rollback SHALL preserve every applied expand migration and
 - **THEN** the result SHALL authorize only a new reviewed contract change with its own DDL, restore rehearsal, owners, evidence, and approval; it SHALL NOT authorize reuse of a historical rollback SQL file
 
 ### Requirement: Upgrade and rollback operations
-Deployment documentation SHALL define upgrade preparation, backup, test-environment verification, build/deploy steps, database migration application, health validation, and rollback to a previous application/database state.
+Deployment documentation SHALL define upgrade preparation, backup and isolated restore rehearsal, test-environment verification, build/deploy steps, database migration application, health validation, application/configuration/traffic rollback with expand preservation, and disaster recovery as a separate procedure.
 
 #### Scenario: Upgrade fails validation
 - **WHEN** a new deployment fails health or functional validation after upgrade
-- **THEN** the operator SHALL have documented rollback steps for service stop, previous binary/config restoration, database restore if needed, and service restart
+- **THEN** the operator SHALL have documented rollback steps for traffic isolation, service stop, restoration of a schema-compatible binary and configuration, service restart, and validation without reversing committed expand migrations

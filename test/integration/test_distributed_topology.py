@@ -123,6 +123,18 @@ def main() -> int:
         "deploy/nginx/includes/proxy-server.inc",
         "deploy/nginx/disk-tls.conf.example",
         "deploy/nginx/upstreams/production.example.inc",
+        "sql/migrations/manifest.tsv",
+        "V003_distributed_upload_forward.sql",
+        "V004_storage_reconciliation_forward.sql",
+        "schema_migrations(version, checksum, applied_at)",
+        "scripts/migrate-db.sh",
+        "单实例 migration Job",
+        "FullSchemaUpgradeIntegration",
+        "ExpandMixedVersionIntegration",
+        "schema_action=preserve_expand",
+        'client["客户端"] --> ingress["Nginx<br/>公网 TLS 终止 + least_conn"]',
+        'api_a["API A<br/>私网 HTTP 8080"]',
+        'worker_a["Worker A<br/>持久任务租约"]',
         "DISK_CONFIG_FILE=/etc/disk/config.distributed.json",
         "DATABASE_PASSWORD=your_db_password",
         "DATABASE_POOL_SIZE=8",
@@ -176,8 +188,19 @@ def main() -> int:
         "location /api/file/download/",
         '"port": 443,\n      "https": true',
         "sudo systemctl restart nginx",
+        "V001_forward.sql",
+        "本次数据库迁移 V001",
+        "BIGINT UNSIGNED",
+        "DATETIME",
+        "users.storage_reserved` 存在非零值（预期应为 0）",
+        "upload_task_chunks` 表包含数据（预期应为空表）",
+        'exe["bin/disk"]',
     ):
         require(obsolete not in operations_guide, f"operations guide retains obsolete: {obsolete}")
+    require(
+        operations_guide.count("```mermaid") == 2,
+        "operations guide Mermaid inventory drifted",
+    )
 
     systemd_guide = operations_guide.split("### 5.1 Systemd 服务配置", 1)[1].split(
         "### 5.3 Windows 服务配置", 1

@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Nginx/TLS 入口同步）：Python 语法检查、两个部署合同脚本、`cmake --preset linux-debug-clang`、完整构建和聚焦 CTest 2/2 均通过；完整 CTest 共 1381 项，1375 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 427.50 秒；仓库内真实进程的随机路由、Worker/API 调度所有权切换及逐级副本容量门禁已运行通过，OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链和双 API 随机路由门禁。
+> 最近验证（2026-07-21，本轮迁移运维与 Mermaid 收尾）：Python 语法检查、分布式文档合同、V003/V004 schema 对账 SQL、Mermaid CLI 11.16.0 实际渲染 14/14 张活跃图表、`cmake --preset linux-debug-clang`、完整构建和迁移聚焦 CTest 5/5 均通过；完整 CTest 共 1381 项，1375 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 427.74 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -818,7 +818,7 @@ SHA-256 分别为 `8380abf9d97188bfda1451cf2179f70fecdd62194549c5e24a85b46bd5461
 - [x] 删除被数据库租约替代的跨请求 `AssemblyWorkerPool` 单飞职责；仅保留仍有明确局部价值的并发控制。
 - [ ] 删除过渡 feature flag、旧 schema 字段、旧配置和旧迁移分支。
 - [x] 删除已被 Worker 替代的 API 集群级定时任务注册。
-- [ ] 更新所有架构图、部署样例、运维手册、错误码表和测试数量。
+- [x] 更新所有架构图、部署样例、运维手册、错误码表和测试数量。
 - [ ] 运行 clang-format、完整构建、完整测试、多实例测试和压力测试。
 - [x] 完成安全审查：S3 key 注入、SSRF/endpoint 配置、凭据泄漏、跨用户 upload ID、重放与限流。
 - [x] 完成数据一致性审计：用户配额、文件数、内容 ref_count、DB/对象存在性、staging/multipart 孤儿。
@@ -893,6 +893,14 @@ Python 语法检查、合同脚本直接执行和聚焦 CTest 1/1 通过；`syst
 仓库新增 `deploy/nginx/includes/upstream.inc` 和 `proxy-server.inc`，将 `least_conn`、可切换 API 池、请求头、`20m` 分片请求上限、3/330 秒超时、流式请求/响应、公网 `/metrics` 拒绝和不含 `non_idempotent` 的重试策略收敛为一份共享合同。Compose 明文入口与新增的 `deploy/nginx/disk-tls.conf.example` 均只选择监听器并加载该合同；`deploy/nginx/upstreams/production.example.inc` 给出两台私网 API 基线，生产 TLS 站点不再复制代理指令或下载特例。`ApiPoolRolloutContract` 同时锁定共享 include、只读 Compose 挂载、TLS/双栈监听、证书路径、308 跳转和生产 upstream；`DistributedTopologyContract` 跨文件验证无 cookie/ip-hash、必需转发头、关闭请求缓冲及运维指南禁用旧配置。
 
 Python 语法检查、两个合同脚本直接执行、聚焦 CTest 2/2、CMake 配置与完整构建均通过；完整 CTest 共 1381 项，其中 1375 项通过、6 项按环境门控跳过、0 失败，总耗时 427.50 秒；OpenSpec 严格校验 24/24 通过。当前主机没有 Nginx、Docker 或其他容器运行时，因此只完成仓库级静态合同，目标环境仍须执行真实 `nginx -t`、证书续期 dry-run、HTTPS readiness、`/metrics` 拒绝和双 API 随机路由。本轮完成 Phase 10 第 821 项中的 Nginx/HTTPS 运维子项；运维指南其余图表的全量审计和 Mermaid 渲染仍未完成，第 821 项保持未勾选，目标 MinIO/云 S3、多实例与压力门禁未执行，第 822 项也保持未勾选。
+
+### 15.11 迁移运维与图表收尾记录（2026-07-21）
+
+`05-部署运维指南.md` 3.4.1–3.4.6 原本仍描述仓库中不存在的 `V001_forward.sql`、MySQL 风格 `BIGINT UNSIGNED`/`DATETIME` 类型和“活跃预留/分片必须全部为零”假设。现已按真实 `sql/migrations/manifest.tsv` 收敛为 V002 兼容基线上的 V003/V004 顺序迁移：单实例 migration Job 调用 `scripts/migrate-db.sh`，每版本在单事务中取 advisory lock、验证 SHA-256 并记入 `schema_migrations`；某一版本失败时保留已提交 manifest 前缀并可幂等续跑。运维 SQL 显式核对两张新表、18 个命名约束、6 个关键索引和 S3 暂存定位，且保留 V002 旧进程 expand 后 local 任务 `staging_prefix IS NULL` 回退 `temp_path` 的兼容语义。
+
+迁移流程图现在明确备份/空隔离恢复演练、manifest/checksum、Worker/API 顺序、旧连接回收、四域对账与 `schema_action=preserve_expand`；生产目录图现在展示 Nginx TLS/`least_conn`、双 API、双 Worker、各节点互不共享的本机临时目录/日志，以及共享 PostgreSQL、Redis 和 S3 final/staging。`DistributedTopologyContract` 固定了迁移入口、回滚边界、新图关键节点、两张运维 Mermaid 清单，并禁止 V001/MySQL 旧文本和单进程目录图回归。
+
+Python 语法检查、合同脚本直接执行、V003/V004 对账 SQL 四项计数 0/0/0/0 和聚焦 CTest 5/5 均通过；使用 Mermaid CLI 11.16.0 与 Chromium 148 对 `docs/design/` 五份活跃文档中的 14/14 张图完成实际 SVG 渲染，全部非空。CMake 配置和完整构建通过；完整 CTest 共 1381 项，1375 通过、6 项环境门控跳过、0 失败，总耗时 427.74 秒；OpenSpec 严格校验 24/24 通过。至此 Phase 10 第 821 项所列的架构图、部署样例、运维手册、错误码表和测试数量全部完成；目标 MinIO/云 S3、真实 Nginx/多实例与压力门禁未执行，第 822 项仍保持未勾选。
 
 ## 16. 最终 Definition of Done
 
