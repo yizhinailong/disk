@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Worker 多实例唯一执行与故障接管）：`cmake --preset linux-debug-clang`、完整构建和 Worker 队列/进程死亡/排空接管/拓扑契约聚焦 CTest 4/4 均通过；完整 CTest 共 1383 项，1377 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 427.86 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮 Phase 5 跨实例令牌一致性）：`cmake --preset linux-debug-clang`、完整构建和令牌/过滤器/双 API Redis 故障聚焦 CTest 115/115 均通过；完整 CTest 共 1384 项，1378 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 456.94 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -318,14 +318,24 @@ API Instance A  API Instance B ... N
 - [x] 按 D-09 明确 access token 和 share token 的最大撤销传播延迟：Redis 撤销写入成功后，其他实例的下一次校验立即生效。
 - [x] 移除跨实例不可靠的 access/share token negative cache，进程内只正缓存已撤销结果。
 - [x] 不保留有界负缓存；API、ADR 和测试合同统一为零负缓存窗口。
-- [ ] 登出、刷新令牌 CAS、分享取消在两个实例间进行交叉验证。
-- [ ] Redis 故障策略已写入安全设计并实现：撤销校验 fail closed，缓存/限流按合同降级；待双实例故障注入验收。
+- [x] 登出、刷新令牌 CAS、分享取消在两个实例间进行交叉验证。
+- [x] Redis 故障策略已写入安全设计并实现：撤销校验 fail closed，缓存/限流按合同降级，并完成双实例故障注入验收。
 
 ### 10.3 Phase 5 验收
 
-- [ ] 在实例 A 登录/登出/取消分享后，实例 B 的行为符合已批准的一致性窗口。
-- [ ] 本地缓存清空、实例重启或缓存内容不同不会改变最终业务结果。
-- [ ] Redis 故障和恢复期间没有绕过认证、重复 refresh 或永久脏缓存。
+- [x] 在实例 A 登录/登出/取消分享后，实例 B 的行为符合已批准的一致性窗口。
+- [x] 本地缓存清空、实例重启或缓存内容不同不会改变最终业务结果。
+- [x] Redis 故障和恢复期间没有绕过认证、重复 refresh 或永久脏缓存。
+
+### 10.4 Phase 5 跨实例令牌一致性验收记录（2026-07-21）
+
+`test_auth_cluster_consistency.py` 使用唯一临时 PostgreSQL 启动两个真实 API，并让两实例经本测试独占的可切断 TCP 代理访问同一 Redis；它不停止或清空共享 Redis 服务。A 注册/登录后，B 可立即使用 owner token；同一 refresh token 并发提交到 A/B 时，Redis CAS 在故障前和恢复后都只选出一个赢家，失败方和旧 token 重放均被拒绝。
+
+A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 立即以 `40111` 拒绝旧 access token。随后真实终止并重新启动 B，清空全部进程内正撤销缓存，重启后的 B 仍从共享 Redis 与 PostgreSQL 得到相同拒绝结果，同时未取消分享的 token 保持可用。
+
+故障阶段代理主动切断两个 API 的既有 Redis 连接：两实例 liveness 保持 200、readiness 精确因 Redis 返回 503，owner/share token 校验和并发 refresh 均返回 `70002`，且 refresh 赢家为零。代理恢复后原 API 进程无需重启即可重新 ready，live owner/share token 恢复正常；故障前的 refresh token 仍只成功轮换一次，既有撤销状态也未丢失。证据文件以 `0600` 原子发布且不含任何可重放 token 或密码。
+
+聚焦 CTest 115/115 通过；完整 CTest 共 1384 项，1378 通过、6 项按既有环境门控跳过、0 失败，总耗时 456.94 秒；OpenSpec 严格校验 24/24 通过。本记录关闭 Phase 5 的本机双 API 认证一致性验收，但不替代 Phase 6 目标 Redis HA 端点故障切换、Phase 9 预发布灰度及最终 DoD 的真实拓扑演练。
 
 ## 11. Phase 6：部署、高可用与容量治理
 

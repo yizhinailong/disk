@@ -122,6 +122,10 @@ The system SHALL allow visitors with valid share tokens and download permission 
 - **WHEN** an owner cancels a share without enumerating or blacklisting each issued token
 - **THEN** every existing token SHALL become unusable through the live share-status check
 
+#### Scenario: Cancellation propagates across API instances
+- **WHEN** an owner cancels a share through API instance A and an existing share token is next used through API instance B
+- **THEN** instance B SHALL reject the token from the shared live share state, including after B restarts and clears all process-local token cache state
+
 #### Scenario: Visitor download uses owner token instead of share token
 - **WHEN** a visitor shared-file download request provides an owner bearer token but no valid share token
 - **THEN** the system SHALL reject the request as outside the visitor share access domain

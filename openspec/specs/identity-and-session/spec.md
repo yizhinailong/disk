@@ -65,12 +65,36 @@ The system SHALL support refresh-token-based access token renewal and SHALL prev
 - **WHEN** a client presents an invalid, expired, revoked, or already-used refresh token
 - **THEN** the system SHALL reject the refresh request
 
+#### Scenario: Refresh races across API instances
+- **WHEN** the same valid refresh token is submitted concurrently to two API instances sharing Redis
+- **THEN** exactly one request SHALL atomically rotate the stored token, while the other request and every replay of the old token SHALL be rejected
+
+#### Scenario: Redis is unavailable during refresh
+- **WHEN** two API instances attempt to refresh the same valid token while their Redis connection is unavailable
+- **THEN** neither request SHALL produce an authoritative rotation and both SHALL return the Redis operation failure
+- **AND** after Redis recovers, the original token SHALL still rotate exactly once and then reject replay
+
 ### Requirement: Logout Revocation
 The system SHALL revoke tokens during logout so that logged-out credentials cannot continue to authorize protected APIs.
 
 #### Scenario: Logout succeeds
 - **WHEN** an authenticated user logs out
 - **THEN** the system SHALL invalidate the relevant token state and return success
+
+#### Scenario: Logout propagates across API instances
+- **WHEN** API instance A successfully logs out an access token and the next protected request reaches API instance B
+- **THEN** instance B SHALL immediately reject the token, including after B restarts and loses all process-local revocation cache state
+
+### Requirement: Revocation checks fail closed during Redis faults
+Access-token and share-token revocation checks SHALL treat an unavailable shared Redis service as an authentication dependency failure, not as evidence that a token is live. Rate-limit accounting MAY retain its separately documented fail-open policy.
+
+#### Scenario: Redis revocation lookup is unavailable
+- **WHEN** a live access token or structurally valid share token reaches either of two API instances while Redis revocation lookup is unavailable
+- **THEN** each instance SHALL return the Redis operation failure and SHALL NOT enter the protected business operation
+
+#### Scenario: Redis revocation lookup recovers
+- **WHEN** Redis connectivity returns after a temporary fault
+- **THEN** the original API processes SHALL resume token validation without restart, preserve persisted revocations, and SHALL NOT retain a permanent negative or failure cache
 
 ### Requirement: Account Protection
 The system SHALL enforce account status and rate-limit protections for authentication-sensitive flows.
