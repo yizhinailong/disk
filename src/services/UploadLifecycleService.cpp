@@ -298,7 +298,8 @@ namespace disk::upload {
             const drogon::orm::DbClientPtr& client,
             uint64_t folder_id,
             const std::string& filename,
-            uint64_t user_id
+            uint64_t user_id,
+            const disk::utils::LogContext& log_context
         ) -> drogon::Task<bool> {
             try {
                 auto result = co_await client->execSqlCoro(
@@ -313,7 +314,7 @@ namespace disk::upload {
                 }
                 co_return false;
             } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Error() << "Failed to check filename: " << e.base().what();
+                Logger::Error(log_context) << "Failed to check filename: " << e.base().what();
                 co_return false;
             }
         }
@@ -430,17 +431,23 @@ namespace disk::upload {
         return FinalizeStorageDecision{ .type = FinalizeStorageDecisionType::PromoteAsNewContent };
     }
 
-    auto UploadLifecycleService::InitializeUpload(InitUploadCommand command) const
+    auto UploadLifecycleService::InitializeUpload(
+        InitUploadCommand command,
+        disk::utils::LogContext log_context
+    ) const
         -> drogon::Task<Result<InitUploadOutcome>> {
+        log_context.operation = "upload_init";
 
-        Logger::Debug() << "Starting initialize upload lifecycle: filename=\"" << command.filename
-                        << "\", file_size=" << command.file_size << ", file_hash=" << command.file_hash
-                        << ", parent_id=" << command.parent_id << ", user_id=" << command.user_id;
+        Logger::Debug(log_context)
+            << "Starting initialize upload lifecycle: filename=\"" << command.filename
+            << "\", file_size=" << command.file_size << ", file_hash=" << command.file_hash
+            << ", parent_id=" << command.parent_id << ", user_id=" << command.user_id;
 
         if (command.file_size > command.max_file_size) {
-            Logger::Warn() << "Upload file exceeds max size: filename=\"" << command.filename
-                           << "\", file_size=" << command.file_size
-                           << ", max_file_size=" << command.max_file_size << ", user_id=" << command.user_id;
+            Logger::Warn(log_context)
+                << "Upload file exceeds max size: filename=\"" << command.filename
+                << "\", file_size=" << command.file_size
+                << ", max_file_size=" << command.max_file_size << ", user_id=" << command.user_id;
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "File size exceeds maximum allowed size")
             );
@@ -457,15 +464,16 @@ namespace disk::upload {
 
         const auto& row = combined[0];
         if (command.parent_id != 0 && row["folder_path"].isNull()) {
-            Logger::Warn() << "Folder not found: parent_id=" << command.parent_id;
+            Logger::Warn(log_context) << "Folder not found: parent_id=" << command.parent_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
         }
 
         auto filename_count = row["filename_count"].as<int64_t>();
         if (filename_count > 0) {
-            Logger::Warn() << "File with same name already exists during upload init: "
-                           << command.filename << ", parent_id=" << command.parent_id
-                           << ", user_id=" << command.user_id;
+            Logger::Warn(log_context)
+                << "File with same name already exists during upload init: "
+                << command.filename << ", parent_id=" << command.parent_id
+                << ", user_id=" << command.user_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
@@ -484,8 +492,9 @@ namespace disk::upload {
         if (init_decision.type == InitDecisionType::InstantUpload) {
             auto content_id = existing_content->id;
             const auto& content_mime_type = existing_content->mime_type;
-            Logger::Debug() << "Instant upload check successful: file_hash=" << command.file_hash
-                            << ", content_id=" << content_id;
+            Logger::Debug(log_context)
+                << "Instant upload check successful: file_hash=" << command.file_hash
+                << ", content_id=" << content_id;
 
             drogon_model::disk::Files file;
             disk::file::TransactionRunner transaction_runner(
@@ -498,9 +507,11 @@ namespace disk::upload {
                             transaction,
                             command.parent_id,
                             command.filename,
-                            command.user_id
+                            command.user_id,
+                            log_context
                         )) {
-                        Logger::Warn() << "File with same name already exists: " << command.filename;
+                        Logger::Warn(log_context)
+                            << "File with same name already exists: " << command.filename;
                         co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
                     }
 
@@ -519,8 +530,8 @@ namespace disk::upload {
                         content_id
                     );
                     if (!increment_result) {
-                        Logger::Warn() << "File content not found for instant upload: content_id="
-                                       << content_id;
+                        Logger::Warn(log_context)
+                            << "File content not found for instant upload: content_id=" << content_id;
                         co_return std::unexpected(increment_result.error());
                     }
 
@@ -564,8 +575,8 @@ namespace disk::upload {
                 }
             );
             if (!tx_result) {
-                Logger::Error() << "Instant upload create file record failed: "
-                                << tx_result.error().message;
+                Logger::Error(log_context)
+                    << "Instant upload create file record failed: " << tx_result.error().message;
                 co_return std::unexpected(tx_result.error());
             }
 
@@ -574,7 +585,8 @@ namespace disk::upload {
             outcome.file = ToLifecycleFileItem(file, command.file_hash);
             outcome.invalidation.file_list_folder_ids.push_back(command.parent_id);
 
-            Logger::Debug() << "Instant upload completed: file_id=" << file.getValueOfId();
+            Logger::Debug(log_context)
+                << "Instant upload completed: file_id=" << file.getValueOfId();
             co_return outcome;
         }
 
@@ -586,19 +598,25 @@ namespace disk::upload {
             if (existing_task.has_value()) {
                 const auto& task = existing_task.value();
                 const auto& task_id = task.getValueOfId();
+                log_context.upload_id = task_id;
 
-                auto expire_result = co_await ExpireInProgressUpload(task_id);
+                auto expire_result = co_await ExpireInProgressUpload(task_id, log_context);
                 if (!expire_result) {
-                    Logger::Error() << "Failed to inspect existing upload expiry during init: upload_id="
-                                    << task_id << ", error=" << expire_result.error().message;
+                    Logger::Error(log_context)
+                        << "Failed to inspect existing upload expiry during init: upload_id="
+                        << task_id << ", error=" << expire_result.error().message;
                     co_return std::unexpected(expire_result.error());
                 }
 
                 if (*expire_result) {
-                    Logger::Info() << "Expired upload task found, expiring through lifecycle: upload_id=" << task_id;
+                    Logger::Info(log_context)
+                        << "Expired upload task found, expiring through lifecycle: upload_id="
+                        << task_id;
                     pending_invalidation.upload_task_ids.push_back(task_id);
+                    log_context.upload_id.reset();
                 } else {
-                    Logger::Debug() << "Resume upload check successful: upload_id=" << task_id;
+                    Logger::Debug(log_context)
+                        << "Resume upload check successful: upload_id=" << task_id;
                     auto uploaded_chunks = co_await upload_task_repository.ListUploadedChunkIndices(task_id);
 
                     InitUploadOutcome outcome;
@@ -615,7 +633,9 @@ namespace disk::upload {
         }
 
         if (!command.upload_task_creation_enabled) {
-            Logger::Warn() << "New upload task creation is disabled: user_id=" << command.user_id;
+            log_context.upload_id.reset();
+            Logger::Warn(log_context)
+                << "New upload task creation is disabled: user_id=" << command.user_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskCreationDisabled));
         }
 
@@ -626,12 +646,13 @@ namespace disk::upload {
             command.file_size
         );
         if (!quota_result) {
-            Logger::Warn() << "Storage quota reservation failed: user_id=" << command.user_id;
+            Logger::Warn(log_context)
+                << "Storage quota reservation failed: user_id=" << command.user_id;
             co_return std::unexpected(quota_result.error());
         }
 
         if (command.chunk_size == 0) {
-            Logger::Error() << "Invalid upload chunk size configured: 0";
+            Logger::Error(log_context) << "Invalid upload chunk size configured: 0";
             co_await quota_service.ReleaseReservedStorage(m_db_client, command.user_id, command.file_size);
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Invalid upload chunk size configuration")
@@ -640,10 +661,11 @@ namespace disk::upload {
 
         const auto total_chunks_u64 = ((command.file_size - 1) / command.chunk_size) + 1;
         if (total_chunks_u64 > std::numeric_limits<uint32_t>::max()) {
-            Logger::Warn() << "Upload requires too many chunks: filename=\"" << command.filename
-                           << "\", file_size=" << command.file_size
-                           << ", chunk_size=" << command.chunk_size
-                           << ", total_chunks=" << total_chunks_u64;
+            Logger::Warn(log_context)
+                << "Upload requires too many chunks: filename=\"" << command.filename
+                << "\", file_size=" << command.file_size
+                << ", chunk_size=" << command.chunk_size
+                << ", total_chunks=" << total_chunks_u64;
             co_await quota_service.ReleaseReservedStorage(m_db_client, command.user_id, command.file_size);
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "File requires too many chunks")
@@ -651,6 +673,7 @@ namespace disk::upload {
         }
         auto total_chunks = static_cast<uint32_t>(total_chunks_u64);
         auto upload_id = drogon::utils::getUuid();
+        log_context.upload_id = upload_id;
         const auto config = disk::utils::ConfigMgr::GetInstance();
         const auto staging_backend = config->GetUploadStagingBackend() == disk::utils::StorageBackend::S3 ? disk::storage::UploadStagingBackend::S3 : disk::storage::UploadStagingBackend::Local;
         const auto staging_prefix = staging_backend == disk::storage::UploadStagingBackend::S3 ? config->GetS3StorageConfig().staging_prefix + "/" + upload_id : upload_id;
@@ -681,16 +704,18 @@ namespace disk::upload {
                 static_cast<uint32_t>(command.expiry_seconds)
             );
 
-            Logger::Debug() << "Upload task created successfully: upload_id=" << task.getValueOfId()
-                            << ", total_chunks=" << total_chunks;
+            Logger::Debug(log_context)
+                << "Upload task created successfully: upload_id=" << task.getValueOfId()
+                << ", total_chunks=" << total_chunks;
 
             if (m_upload_staging_storage != nullptr) {
                 auto ensure_result = co_await m_upload_staging_storage->EnsureUploadSession(
                     staging_session
                 );
                 if (!ensure_result) {
-                    Logger::Warn() << "Failed to ensure upload temp directory: upload_id="
-                                   << task.getValueOfId();
+                    Logger::Warn(log_context)
+                        << "Failed to ensure upload temp directory: upload_id="
+                        << task.getValueOfId();
                 }
             }
 
@@ -706,7 +731,7 @@ namespace disk::upload {
             co_return outcome;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to create upload task: " << e.base().what();
+            Logger::Error(log_context) << "Failed to create upload task: " << e.base().what();
             create_task_failed = true;
         }
 
@@ -1392,8 +1417,12 @@ namespace disk::upload {
         co_return {};
     }
 
-    auto UploadLifecycleService::ExpireInProgressUpload(const std::string& upload_id) const
+    auto UploadLifecycleService::ExpireInProgressUpload(
+        const std::string& upload_id,
+        disk::utils::LogContext log_context
+    ) const
         -> drogon::Task<Result<bool>> {
+        log_context.upload_id = upload_id;
         bool expired = false;
         uint64_t user_id = 0;
         uint64_t reserved_bytes = 0;
@@ -1444,8 +1473,9 @@ namespace disk::upload {
             co_return false;
         }
 
-        Logger::Debug() << "Expired upload task marked as expired: task_id=" << upload_id
-                        << ", user_id=" << user_id << ", reserved_bytes=" << reserved_bytes;
+        Logger::Debug(log_context)
+            << "Expired upload task marked as expired: task_id=" << upload_id
+            << ", user_id=" << user_id << ", reserved_bytes=" << reserved_bytes;
 
         co_return true;
     }

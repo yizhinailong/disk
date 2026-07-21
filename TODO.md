@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 结构化日志信封基础）：CMake 配置、完整构建及聚焦日志/请求追踪/Worker CTest 26/26 通过；完整 CTest 共 1395 项，1388 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 466.69 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 init/chunk 日志关联）：CMake 配置、完整构建、聚焦日志/上传生命周期 CTest 68/68 及真实 HTTP safety 集成 1/1 通过；完整 CTest 共 1395 项，1388 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 469.87 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -517,6 +517,12 @@ Python 语法检查、CMake 配置和完整构建通过；PgBouncer/拓扑聚焦
 stdout、旋转文件以及被捕获的 Drogon/Trantor 诊断现统一输出单行 `schema_version=1` JSON；固定字段包含时间、级别、来源、logger、消息和七个关联字段，未知关联值使用 JSON `null`。应用事件通过 `LogContext` 显式传入类型化关联值，框架事件不猜测协程上下文；配置冻结后全局注册 `instance_id`，HTTP 完成事件写入响应使用的真实 `request_id` 与低基数 `operation`。消息中的引号和换行由 JSON 序列化器转义，不再破坏 NDJSON 边界。
 
 部署运维、系统测试和单元测试文档先行更新；`LogHelperTest` 锁定应用/框架信封、字段类型、空值和字符转义，现有 Worker 日志捕获也使用同一格式。聚焦日志/请求追踪/Worker CTest 26/26 通过，CMake 配置和完整构建通过；完整 CTest 共 1395 项，1388 通过、7 项环境门控跳过、0 失败，总耗时 466.69 秒；OpenSpec 严格校验 24/24 通过。init/chunk/complete/download/cleanup 各域日志尚未全部显式传播 `upload_id`、`job_id`、`lease_owner` 与 `state_version`，API、DB、Worker、S3 的端到端关联也未完成，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.7 init/chunk 日志关联记录（2026-07-22）
+
+部署运维、系统测试和单元测试文档先行固定 init/chunk 的字段与空值合同。`FileController` 现在从请求追踪属性创建显式 `LogContext`，将固定的 `upload_init`/`upload_chunk` operation 和真实 request ID 按值传过 Controller、`UploadService` 与 `UploadLifecycleService` 的协程边界，不依赖 thread-local。init 在任务存在前保持 `upload_id=null`，恢复或创建任务后补齐持久 ID，并在过期旧任务转入新建流程前清除旧 ID；chunk 以方法参数中的非空 upload ID 为规范值，使任务校验、尺寸/哈希检查、staging 写入和数据库记录结果使用同一关联上下文。
+
+`SafetyUploadInvariantsIntegration` 以调用方指定的 `X-Request-Id` 分别触发超限 init 和分片尺寸失败，逐行解析受管后端 stdout NDJSON，精确验证 schema、source、instance/request/operation/upload 字段，并确认 `job_id`、`lease_owner`、`state_version` 为 JSON `null`；测试读取后端实际 `DISK_CONFIG_FILE`，避免配置替换时构造错误边界。聚焦日志/上传生命周期 CTest 68/68、真实 HTTP safety 集成 1/1、CMake 配置和完整构建均通过；完整 CTest 共 1395 项，1388 通过、7 项环境门控跳过、0 失败，总耗时 469.87 秒；OpenSpec 严格校验 24/24 通过。complete/download/cleanup 与 Worker/S3 的 `job_id`、`lease_owner`、`state_version` 端到端传播仍待后续最小批次，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

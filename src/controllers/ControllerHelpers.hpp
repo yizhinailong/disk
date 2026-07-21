@@ -10,8 +10,12 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <string_view>
 
 #include <drogon/drogon.h>
+
+#include "utils/LogHelper.hpp"
 
 namespace disk::controllers {
 
@@ -26,4 +30,23 @@ namespace disk::controllers {
         return request->attributes()->get<uint64_t>("user_id");
     }
 
-} ///< namespace disk::controllers
+    /**
+     * @brief Build explicit request correlation for coroutine-safe logging.
+     */
+    [[nodiscard]]
+    inline auto GetRequestLogContext(
+        const drogon::HttpRequestPtr& request,
+        std::string_view operation
+    ) -> disk::utils::LogContext {
+        disk::utils::LogContext context;
+        const auto attributes = request->attributes();
+        if (attributes->find("request_id")) {
+            context.request_id = attributes->get<std::string>("request_id");
+        }
+        if (!operation.empty()) {
+            context.operation = std::string(operation);
+        }
+        return context;
+    }
+
+} // namespace disk::controllers

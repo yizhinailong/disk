@@ -48,12 +48,18 @@ namespace disk::file {
 
     /// ==================== InitUpload ====================
 
-    auto UploadService::InitUpload(InitUploadRequest request, uint64_t user_id)
+    auto UploadService::InitUpload(
+        InitUploadRequest request,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<InitUploadResponse>> {
+        log_context.operation = "upload_init";
 
-        Logger::Debug() << "Starting initialize upload: filename=\"" << request.filename
-                        << "\", file_size=" << request.file_size << ", file_hash=" << request.file_hash
-                        << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
+        Logger::Debug(log_context)
+            << "Starting initialize upload: filename=\"" << request.filename
+            << "\", file_size=" << request.file_size << ", file_hash=" << request.file_hash
+            << ", parent_id=" << request.parent_id << ", user_id=" << user_id;
 
         auto config = ConfigMgr::GetInstance();
         disk::upload::UploadLifecycleService lifecycle_service(
@@ -72,7 +78,8 @@ namespace disk::file {
                                              .chunk_size = config->GetChunkSize(),
                                              .expiry_seconds = config->GetUploadTaskExpirySeconds(),
                                              .upload_task_creation_enabled =
-                                                 config->GetUploadTaskCreationEnabled() }
+                                                 config->GetUploadTaskCreationEnabled() },
+            log_context
         );
         if (!lifecycle_result) {
             co_return std::unexpected(lifecycle_result.error());
@@ -113,44 +120,58 @@ namespace disk::file {
         uint32_t chunk_index,
         std::string chunk_hash,
         std::string_view chunk_data,
-        uint64_t user_id
+        uint64_t user_id,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<UploadChunkResponse>> {
+        log_context.operation = "upload_chunk";
+        if (upload_id.empty()) {
+            log_context.upload_id.reset();
+        } else {
+            log_context.upload_id = upload_id;
+        }
 
         auto start = std::chrono::steady_clock::now();
 
-        Logger::HighVolumeDetail() << "Starting upload chunk: upload_id=" << upload_id
-                                   << ", chunk_index=" << chunk_index
-                                   << ", chunk_hash=" << chunk_hash
-                                   << ", data_size=" << chunk_data.size();
+        Logger::HighVolumeDetail(log_context)
+            << "Starting upload chunk: upload_id=" << upload_id
+            << ", chunk_index=" << chunk_index
+            << ", chunk_hash=" << chunk_hash
+            << ", data_size=" << chunk_data.size();
 
         /// 1. 优先读取短 TTL 上传任务缓存，命中后避免重复查询数据库
         auto cached_task = TryGetUploadTaskCacheEntry(upload_id, user_id);
         if (!cached_task.has_value()) {
-            auto task_result = co_await FindUploadTask(upload_id, user_id);
+            auto task_result = co_await FindUploadTask(upload_id, user_id, log_context);
             if (!task_result) {
-                Logger::Warn() << "Upload task verification failed: " << upload_id;
+                Logger::Warn(log_context) << "Upload task verification failed: " << upload_id;
 
                 auto end = std::chrono::steady_clock::now();
                 auto duration_us =
                     std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-                Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
-                                            << " outcome=failure upload_id=" << upload_id
-                                            << " chunk_index=" << chunk_index
-                                            << " data_size=" << chunk_data.size();
+                Logger::HighVolumeFailure(log_context)
+                    << "[upload_chunk] duration_us=" << duration_us
+                    << " outcome=failure upload_id=" << upload_id
+                    << " chunk_index=" << chunk_index
+                    << " data_size=" << chunk_data.size();
 
                 co_return std::unexpected(task_result.error());
             }
 
             if (task_result->getValueOfStatus() !=
                 disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)) {
-                Logger::Warn() << "Upload task no longer accepts chunks: upload_id=" << upload_id
-                               << ", status=" << task_result->getValueOfStatus();
+                Logger::Warn(log_context)
+                    << "Upload task no longer accepts chunks: upload_id=" << upload_id
+                    << ", status=" << task_result->getValueOfStatus();
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::ResourceConflict, "Upload task no longer accepts chunks")
                 );
             }
 
-            auto staging_session_result = co_await FindUploadStagingSession(upload_id, user_id);
+            auto staging_session_result = co_await FindUploadStagingSession(
+                upload_id,
+                user_id,
+                log_context
+            );
             if (!staging_session_result) {
                 co_return std::unexpected(staging_session_result.error());
             }
@@ -176,24 +197,27 @@ namespace disk::file {
         if (!chunk_acceptance) {
             const auto& acceptance_error = chunk_acceptance.error();
             if (acceptance_error.error.message == "Chunk index out of range") {
-                Logger::Warn() << "Chunk index out of range: chunk_index=" << chunk_index
-                               << ", total_chunks=" << task.total_chunks;
+                Logger::Warn(log_context)
+                    << "Chunk index out of range: chunk_index=" << chunk_index
+                    << ", total_chunks=" << task.total_chunks;
             } else {
-                Logger::Warn() << "Unexpected chunk size: upload_id=" << upload_id
-                               << ", chunk_index=" << chunk_index
-                               << ", expected_size=" << acceptance_error.expected_size
-                               << ", actual_size=" << chunk_data.size()
-                               << ", file_size=" << task.file_size
-                               << ", chunk_size=" << task.chunk_size;
+                Logger::Warn(log_context)
+                    << "Unexpected chunk size: upload_id=" << upload_id
+                    << ", chunk_index=" << chunk_index
+                    << ", expected_size=" << acceptance_error.expected_size
+                    << ", actual_size=" << chunk_data.size()
+                    << ", file_size=" << task.file_size
+                    << ", chunk_size=" << task.chunk_size;
             }
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
-                                        << " outcome=failure upload_id=" << upload_id
-                                        << " chunk_index=" << chunk_index
-                                        << " data_size=" << chunk_data.size();
+            Logger::HighVolumeFailure(log_context)
+                << "[upload_chunk] duration_us=" << duration_us
+                << " outcome=failure upload_id=" << upload_id
+                << " chunk_index=" << chunk_index
+                << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(acceptance_error.error);
         }
@@ -202,16 +226,17 @@ namespace disk::file {
         std::string chunk_payload{ chunk_data };
         auto actual_hash = FileHashUtil::HashMd5(chunk_payload);
         if (actual_hash != chunk_hash) {
-            Logger::Warn() << "Chunk hash mismatch: expected=" << chunk_hash
-                           << ", actual=" << actual_hash;
+            Logger::Warn(log_context) << "Chunk hash mismatch: expected=" << chunk_hash
+                                      << ", actual=" << actual_hash;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
-                                        << " outcome=failure upload_id=" << upload_id
-                                        << " chunk_index=" << chunk_index
-                                        << " data_size=" << chunk_data.size();
+            Logger::HighVolumeFailure(log_context)
+                << "[upload_chunk] duration_us=" << duration_us
+                << " outcome=failure upload_id=" << upload_id
+                << " chunk_index=" << chunk_index
+                << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ChunkVerifyFailed, "Chunk hash mismatch")
@@ -220,7 +245,7 @@ namespace disk::file {
 
         /// 6. 创建临时目录并写入分片
         if (m_upload_staging_storage == nullptr) {
-            Logger::Error() << "Upload staging storage is not configured";
+            Logger::Error(log_context) << "Upload staging storage is not configured";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Upload staging storage is not configured")
             );
@@ -233,17 +258,18 @@ namespace disk::file {
             std::move(chunk_payload)
         );
         if (!write_result) {
-            Logger::Error() << "Failed to write chunk file: upload_id=" << upload_id
-                            << ", chunk_index=" << chunk_index << ", error="
-                            << static_cast<int>(write_result.error().code);
+            Logger::Error(log_context) << "Failed to write chunk file: upload_id=" << upload_id
+                                       << ", chunk_index=" << chunk_index << ", error="
+                                       << static_cast<int>(write_result.error().code);
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
-                                        << " outcome=failure upload_id=" << upload_id
-                                        << " chunk_index=" << chunk_index
-                                        << " data_size=" << chunk_data.size();
+            Logger::HighVolumeFailure(log_context)
+                << "[upload_chunk] duration_us=" << duration_us
+                << " outcome=failure upload_id=" << upload_id
+                << " chunk_index=" << chunk_index
+                << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(write_result.error());
         }
@@ -262,15 +288,17 @@ namespace disk::file {
             );
             if (record_disposition == ChunkRecordDisposition::TaskRejected) {
                 InvalidateUploadTaskCache(upload_id);
-                Logger::Warn() << "Late chunk rejected by upload task state: upload_id=" << upload_id
-                               << ", chunk_index=" << chunk_index;
+                Logger::Warn(log_context)
+                    << "Late chunk rejected by upload task state: upload_id=" << upload_id
+                    << ", chunk_index=" << chunk_index;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::ResourceConflict, "Upload task no longer accepts chunks")
                 );
             }
             if (record_disposition == ChunkRecordDisposition::MetadataConflict) {
-                Logger::Warn() << "Chunk metadata conflicts with existing upload progress: upload_id="
-                               << upload_id << ", chunk_index=" << chunk_index;
+                Logger::Warn(log_context)
+                    << "Chunk metadata conflicts with existing upload progress: upload_id="
+                    << upload_id << ", chunk_index=" << chunk_index;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::ResourceConflict, "Chunk index already contains different content")
                 );
@@ -280,16 +308,18 @@ namespace disk::file {
                 write_result->size_bytes
             );
 
-            Logger::HighVolumeSuccess() << "Chunk upload successful: upload_id=" << upload_id
-                                        << ", chunk_index=" << chunk_index;
+            Logger::HighVolumeSuccess(log_context)
+                << "Chunk upload successful: upload_id=" << upload_id
+                << ", chunk_index=" << chunk_index;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::HighVolumeSuccess() << "[upload_chunk] duration_us=" << duration_us
-                                        << " outcome=success upload_id=" << upload_id
-                                        << " chunk_index=" << chunk_index
-                                        << " data_size=" << chunk_data.size();
+            Logger::HighVolumeSuccess(log_context)
+                << "[upload_chunk] duration_us=" << duration_us
+                << " outcome=success upload_id=" << upload_id
+                << " chunk_index=" << chunk_index
+                << " data_size=" << chunk_data.size();
 
             UploadChunkResponse response;
             response.chunk_index = chunk_index;
@@ -298,15 +328,16 @@ namespace disk::file {
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to record chunk upload: " << e.base().what();
+            Logger::Error(log_context) << "Failed to record chunk upload: " << e.base().what();
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
-                                        << " outcome=failure upload_id=" << upload_id
-                                        << " chunk_index=" << chunk_index
-                                        << " data_size=" << chunk_data.size();
+            Logger::HighVolumeFailure(log_context)
+                << "[upload_chunk] duration_us=" << duration_us
+                << " outcome=failure upload_id=" << upload_id
+                << " chunk_index=" << chunk_index
+                << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to record chunk upload")
@@ -404,13 +435,18 @@ namespace disk::file {
 
     /// ==================== 私有辅助方法 ====================
 
-    auto UploadService::FindUploadTask(const std::string& upload_id, uint64_t user_id) const
+    auto UploadService::FindUploadTask(
+        const std::string& upload_id,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    ) const
         -> drogon::Task<Result<UploadTasks>> {
         UploadTaskRepository upload_task_repository(m_db_client);
         auto task = co_await upload_task_repository.FindUnexpiredByIdForUser(upload_id, user_id);
         if (!task.has_value()) {
-            Logger::Warn() << "Upload task not found or not owned by user: upload_id=" << upload_id
-                           << ", request_user_id=" << user_id;
+            Logger::Warn(log_context)
+                << "Upload task not found or not owned by user: upload_id=" << upload_id
+                << ", request_user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
         }
 
@@ -419,7 +455,8 @@ namespace disk::file {
 
     auto UploadService::FindUploadStagingSession(
         const std::string& upload_id,
-        uint64_t user_id
+        uint64_t user_id,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<storage::UploadStagingSession>> {
         try {
             UploadTaskRepository upload_task_repository(m_db_client);
@@ -432,8 +469,9 @@ namespace disk::file {
             }
             co_return std::move(session.value());
         } catch (const std::exception& e) {
-            Logger::Error() << "Failed to load upload staging session: upload_id=" << upload_id
-                            << ", error=" << e.what();
+            Logger::Error(log_context)
+                << "Failed to load upload staging session: upload_id=" << upload_id
+                << ", error=" << e.what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to load upload staging session")
             );

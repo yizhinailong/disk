@@ -616,6 +616,51 @@ def wait_for_request_log(request_id: str, instance_id: str, status: int) -> str:
     raise AssertionError("unreachable")
 
 
+def wait_for_correlated_application_log(
+    *,
+    request_id: str,
+    instance_id: str,
+    operation: str,
+    upload_id: str | None,
+    message_marker: str,
+) -> dict[str, object]:
+    """Return one schema-v1 application event with exact typed correlation."""
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if SERVER_LOG_PATH.is_file():
+            for line in SERVER_LOG_PATH.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ).splitlines():
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (
+                    record.get("schema_version") == 1
+                    and record.get("source") == "application"
+                    and record.get("request_id") == request_id
+                    and record.get("instance_id") == instance_id
+                    and record.get("operation") == operation
+                    and record.get("upload_id") == upload_id
+                    and message_marker in str(record.get("message", ""))
+                ):
+                    for field in ("job_id", "lease_owner", "state_version"):
+                        assert_equal(
+                            f"{operation} {field} remains unavailable",
+                            record.get(field),
+                            None,
+                        )
+                    return record
+        time.sleep(0.05)
+
+    log_fail(
+        f"structured log contains {operation} correlation for request_id={request_id}"
+    )
+    print_summary()
+    raise AssertionError("unreachable")
+
+
 def run_expired_cleanup() -> dict[str, int]:
     """Run the deterministic admin/manual cleanup seam and return cleanup counts."""
     resp = fetch(
@@ -632,6 +677,128 @@ def run_expired_cleanup() -> dict[str, int]:
         "expired_trash_deleted": int(json_field(resp.text, "data.expired_trash_deleted") or 0),
         "expired_upload_tasks_cleaned": int(json_field(resp.text, "data.expired_upload_tasks_cleaned") or 0),
     }
+
+
+def test_init_and_chunk_log_context_invariants() -> None:
+    """Verify request correlation survives init/chunk coroutine boundaries."""
+    log_section("Init And Chunk Structured Log Correlation")
+
+    config_path = Path(os.environ.get("DISK_CONFIG_FILE", REPO_ROOT / "config.json"))
+    if not config_path.is_absolute():
+        config_path = REPO_ROOT / config_path
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    max_file_size = int(config["custom_config"]["disk"]["max_file_size"])
+    init_request_id = f"safety-init-log-{unique_name()}"
+    init_response = fetch(
+        "/api/file/upload/init",
+        method="POST",
+        headers={
+            **auth_headers(TOKEN),
+            "X-Request-Id": init_request_id,
+        },
+        json_body={
+            "filename": f"oversized_log_{unique_name()}.bin",
+            "file_size": max_file_size + 1,
+            "file_hash": md5_bytes(b"oversized-log-probe"),
+            "parent_id": 0,
+        },
+    )
+    assert_equal(
+        "oversized init is rejected",
+        json_field(init_response.text, "code") != "0",
+        True,
+    )
+    init_instance_id = header_value(init_response.headers, "X-Disk-Instance-Id")
+    assert_equal(
+        "oversized init preserves caller request ID",
+        header_value(init_response.headers, "X-Request-Id"),
+        init_request_id,
+    )
+    wait_for_correlated_application_log(
+        request_id=init_request_id,
+        instance_id=init_instance_id,
+        operation="upload_init",
+        upload_id=None,
+        message_marker="Upload file exceeds max size",
+    )
+    log_pass("oversized init lifecycle log keeps typed request correlation")
+
+    missing_upload_id = str(uuid.uuid4())
+    missing_request_id = f"safety-missing-chunk-log-{unique_name()}"
+    missing_chunk = b"missing-task"
+    missing_response = fetch(
+        f"/api/file/upload/chunk?upload_id={missing_upload_id}&chunk_index=0"
+        f"&chunk_hash={md5_bytes(missing_chunk)}",
+        method="POST",
+        headers={
+            **auth_headers(TOKEN, "application/octet-stream"),
+            "X-Request-Id": missing_request_id,
+        },
+        data=missing_chunk,
+    )
+    assert_equal(
+        "unknown upload task is rejected",
+        json_field(missing_response.text, "code") != "0",
+        True,
+    )
+    missing_instance_id = header_value(
+        missing_response.headers,
+        "X-Disk-Instance-Id",
+    )
+    wait_for_correlated_application_log(
+        request_id=missing_request_id,
+        instance_id=missing_instance_id,
+        operation="upload_chunk",
+        upload_id=missing_upload_id,
+        message_marker="Upload task not found or not owned by user",
+    )
+    log_pass("chunk database validation log keeps typed request correlation")
+
+    chunk_size = configured_chunk_size()
+    seed = f"safety-chunk-log-{unique_name()}".encode()
+    payload = seed + (b"L" * (chunk_size + 1 - len(seed)))
+    upload_id, _ = init_upload(f"chunk_log_{unique_name()}.bin", payload)
+    try:
+        chunk_request_id = f"safety-chunk-log-{unique_name()}"
+        invalid_chunk = b"short"
+        chunk_response = fetch(
+            f"/api/file/upload/chunk?upload_id={upload_id}&chunk_index=0"
+            f"&chunk_hash={md5_bytes(invalid_chunk)}",
+            method="POST",
+            headers={
+                **auth_headers(TOKEN, "application/octet-stream"),
+                "X-Request-Id": chunk_request_id,
+            },
+            data=invalid_chunk,
+        )
+        assert_equal(
+            "invalid chunk size is rejected",
+            json_field(chunk_response.text, "code") != "0",
+            True,
+        )
+        chunk_instance_id = header_value(chunk_response.headers, "X-Disk-Instance-Id")
+        assert_equal(
+            "invalid chunk preserves caller request ID",
+            header_value(chunk_response.headers, "X-Request-Id"),
+            chunk_request_id,
+        )
+        wait_for_correlated_application_log(
+            request_id=chunk_request_id,
+            instance_id=chunk_instance_id,
+            operation="upload_chunk",
+            upload_id=upload_id,
+            message_marker="Unexpected chunk size",
+        )
+        wait_for_correlated_application_log(
+            request_id=chunk_request_id,
+            instance_id=chunk_instance_id,
+            operation="upload_chunk",
+            upload_id=upload_id,
+            message_marker="[upload_chunk]",
+        )
+        log_pass("chunk service logs keep typed request and upload correlation")
+    finally:
+        cancel_upload(upload_id)
 
 
 def cancel_upload_raw(upload_id: str):
@@ -3648,6 +3815,7 @@ def main() -> None:
     USER_ID = current_user_id()
     log_info(f"Using user_id={USER_ID}, chunk_size={configured_chunk_size()}, base_url={BASE_URL}")
 
+    test_init_and_chunk_log_context_invariants()
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()

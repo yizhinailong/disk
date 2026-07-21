@@ -73,7 +73,14 @@ namespace disk::file {
 
             const auto service_source = ReadSourceFile("src/services/UploadService.cpp");
             EXPECT_TRUE(Contains(service_source, "task.staging_session"));
-            EXPECT_TRUE(Contains(service_source, "FindUploadStagingSession(upload_id, user_id)"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "auto task_result = co_await FindUploadTask(upload_id, user_id, log_context)"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "auto staging_session_result = co_await FindUploadStagingSession(\n" "                upload_id,\n" "                user_id,\n" "                log_context\n" "            )"
+            ));
         }
 
         TEST(UploadTaskRepositoryStagingContractTest, BackendStorageValuesRoundTrip) {
@@ -230,7 +237,8 @@ namespace disk::file {
             EXPECT_TRUE(Contains(service_source, "upload_task_repository.FindUnexpiredByIdForUser("));
             EXPECT_FALSE(Contains(service_source, "IsExpired(task.expires_at"));
             EXPECT_FALSE(Contains(lifecycle_source, "task.setExpiresAt("));
-            EXPECT_TRUE(Contains(lifecycle_source, "auto expire_result = co_await ExpireInProgressUpload(task_id)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "auto expire_result = co_await ExpireInProgressUpload(task_id, log_context)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "auto expire_result = co_await ExpireInProgressUpload(task.id)"));
             EXPECT_TRUE(Contains(lifecycle_source, "if (*expire_result)"));
 
             EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::MarkExpiredIfInProgressReturning("));

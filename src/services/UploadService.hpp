@@ -26,6 +26,7 @@
 #include "services/RedisService.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
     class IBlobStore;
@@ -75,10 +76,15 @@ namespace disk::file {
          *
          * @param request 初始化上传请求
          * @param user_id 用户 ID
+         * @param log_context 显式请求日志关联
          * @return drogon::Task<Result<InitUploadResponse>> 成功返回上传会话信息，失败返回错误
          */
         [[nodiscard]]
-        auto InitUpload(InitUploadRequest request, uint64_t user_id)
+        auto InitUpload(
+            InitUploadRequest request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<InitUploadResponse>>;
 
         /**
@@ -97,6 +103,7 @@ namespace disk::file {
          * @param chunk_hash 分片 MD5 哈希
          * @param chunk_data 分片数据
          * @param user_id 用户 ID
+         * @param log_context 显式请求与上传日志关联
          * @return drogon::Task<Result<UploadChunkResponse>> 成功返回分片上传结果，失败返回错误
          */
         [[nodiscard]]
@@ -105,7 +112,8 @@ namespace disk::file {
             uint32_t chunk_index,
             std::string chunk_hash,
             std::string_view chunk_data,
-            uint64_t user_id
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<UploadChunkResponse>>;
 
         /**
@@ -184,11 +192,19 @@ namespace disk::file {
         auto EvictExpiredUploadTaskCacheEntries() -> void;
 
         [[nodiscard]]
-        auto FindUploadTask(const std::string& upload_id, uint64_t user_id) const
+        auto FindUploadTask(
+            const std::string& upload_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<drogon_model::disk::UploadTasks>>;
 
         [[nodiscard]]
-        auto FindUploadStagingSession(const std::string& upload_id, uint64_t user_id) const
+        auto FindUploadStagingSession(
+            const std::string& upload_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<storage::UploadStagingSession>>;
 
         drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端

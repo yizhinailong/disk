@@ -21,6 +21,7 @@
 
 #include "services/UploadStateMachine.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
     class IBlobStore;
@@ -157,7 +158,10 @@ namespace disk::upload {
         );
 
         [[nodiscard]]
-        auto InitializeUpload(InitUploadCommand command) const
+        auto InitializeUpload(
+            InitUploadCommand command,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<InitUploadOutcome>>;
 
         [[nodiscard]]
@@ -169,7 +173,10 @@ namespace disk::upload {
             -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
-        auto ExpireInProgressUpload(const std::string& upload_id) const
+        auto ExpireInProgressUpload(
+            const std::string& upload_id,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<bool>>;
 
         [[nodiscard]]
