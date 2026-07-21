@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Phase 6 MinIO 应用/迁移身份隔离门禁）：`cmake --preset linux-debug-clang`、完整构建、固定版 MinIO 聚焦 CTest 1/1 和 PgBouncer 聚焦 CTest 1/1 均通过；完整 CTest 共 1392 项，1387 通过、5 项按环境门控跳过（`promtool`、2 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 485.58 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-22，本轮 Phase 6 MinIO 自建冗余、故障域与备份评估）：`cmake --preset linux-debug-clang`、完整构建、MinIO 评估聚焦 CTest 1/1 和固定版 MinIO/PgBouncer 显式门禁 2/2 均通过；完整 CTest 共 1392 项，1387 通过、5 项按环境门控跳过（`promtool`、2 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 470.88 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -368,7 +368,7 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 - [ ] 生产 bucket 开启必要的版本、加密、TLS、最小权限和生命周期规则。
 - [x] API/Worker 凭据仅允许所需前缀和操作，迁移工具使用独立临时权限。
 - [x] 配置连接池、请求超时、重试预算和每实例并发上限。
-- [ ] 评估 MinIO 自建部署的磁盘冗余、节点故障域和备份；不能用单节点 MinIO 宣称存储高可用。
+- [x] 评估 MinIO 自建部署的磁盘冗余、节点故障域和备份；不能用单节点 MinIO 宣称存储高可用。
 
 ### 11.5 负载均衡与发布
 
@@ -456,6 +456,14 @@ Python 语法检查、CMake 配置和完整构建通过；PgBouncer/拓扑聚焦
 `scripts/migrate-final-blobs.py` 的 copy/cutover 只读取 `DISK_S3_MIGRATION_*` 或独立工作负载身份，并在首个 S3 请求前拒绝应用变量、残缺迁移 key 对和孤立 session token。`FinalBlobMigrationIntegration` 1/1 通过（11.47 秒），证明三种误配均为 0 个 S3 请求、无 checkpoint 且数据库不变；`S3LifecycleConfigIntegration` 1/1 通过（0.09 秒）。固定 MinIO/mc 的 `S3ProvisioningIntegration` 1/1 通过（2.58 秒），15 项检查证明应用能力不回退、迁移 final-only 读写/multipart、删除/越界/管理拒绝、撤销前应用凭据隔离和撤销后原迁移凭据失效。
 
 `0600` MinIO 证据 `.sisyphus/evidence/s3-provisioning-summary.json` 的 SHA-256 为 `77de989d8d5e96c97d01360dbd1a408ad0b2a465baf9d4f60bd845e7016269e9`；去敏 copy 证据 `.sisyphus/evidence/final-blob-copy-summary.json` 的 SHA-256 为 `5657a11fc799eda67bf5125fa84620c495e7d76ffcbbb2f7d5b93343914a86e5`。完整 CTest 共 1392 项，1387 通过、5 项预期环境门控跳过、0 失败，总耗时 485.58 秒；OpenSpec 严格校验 24/24 通过。本记录只关闭 11.4 的身份/权限隔离子项，不替代目标 bucket 的加密、TLS、版本保留、备份/恢复、故障域或高可用验收，其余两项继续保持未勾选。
+
+### 11.15 Phase 6 MinIO 自建冗余与备份评估记录（2026-07-22）
+
+固定版本官方 sizing 的 4 server × 2 drive 生产下限只能容忍 1 个节点故障后继续写入，不能覆盖 Disk 要求的双节点完整故障域，因此明确拒绝。`deploy/minio/self-hosted-assessment.json` 将首期生产模型固定为 `managed_s3`，把单节点 Compose 标记为 `development_only`，并将自建候选提高为 6 server × 2 drive、3 个物理故障域各 2 节点、12 shard/4 parity；候选还要求专用同构主机、本地 XFS 数据盘、独立站点/供应商的版本化加密备份、默认不复制删除、对象版本 manifest、周期可读性校验和隔离恢复。
+
+评估合同 SHA-256 为 `1e658ecb9fb10704a62d2dab8ba3d0aab906fb8536d817fd997cded4601ccd6e`。`S3LifecycleConfigIntegration` 1/1 通过（0.09 秒），锁定上游下限、候选拓扑、单节点夹具边界和九项准入证据；固定版 MinIO/mc 与 PgBouncer 显式门禁 2/2 通过（5.60 秒）。完整 CTest 共 1392 项，1387 通过、5 项目标环境门控跳过、0 失败，总耗时 470.88 秒；OpenSpec 严格校验 24/24 通过。
+
+当前 `target_rpo_seconds`/`target_rto_seconds` 为空，全部目标证据未满足，自建状态保持 `not_approved`。本记录只关闭“评估”子项，不代表生产 bucket、自建对象存储、独立备份、故障切换或恢复演练完成；11.4 的生产 bucket 和 11.6 的目标环境验收继续保持未勾选。
 
 ## 12. Phase 7：可观测性与运维工具
 

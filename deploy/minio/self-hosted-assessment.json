@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-07-22",
+  "evaluated_release": "RELEASE.2025-04-22T22-12-26Z",
+  "decision": {
+    "initial_production_model": "managed_s3",
+    "self_hosted_status": "not_approved",
+    "repository_fixture_class": "development_only",
+    "repository_fixture_is_highly_available": false
+  },
+  "upstream_production_floor": {
+    "servers": 4,
+    "drives_per_server": 2,
+    "erasure_set_size": 8,
+    "default_parity": 4,
+    "read_node_failure_tolerance": 2,
+    "write_node_failure_tolerance": 1,
+    "accepted_for_disk": false,
+    "rejection_reason": "write_tolerance_below_failure_domain_width"
+  },
+  "disk_candidate": {
+    "servers": 6,
+    "drives_per_server": 2,
+    "erasure_set_size": 12,
+    "default_parity": 4,
+    "physical_failure_domains": 3,
+    "servers_per_failure_domain": 2,
+    "read_node_failure_tolerance": 2,
+    "write_node_failure_tolerance": 2,
+    "required_failure_drill": "lose_one_complete_failure_domain",
+    "dedicated_hosts": true,
+    "homogeneous_nodes_and_drives": true,
+    "local_data_drives": true,
+    "filesystem": "xfs",
+    "network_filesystems_allowed": false
+  },
+  "backup_requirements": {
+    "independent_site_or_provider": true,
+    "versioned_source": true,
+    "versioned_destination": true,
+    "delete_marker_replication": false,
+    "permanent_delete_replication": false,
+    "encrypted_in_transit": true,
+    "encrypted_at_rest": true,
+    "object_version_manifest": true,
+    "periodic_hash_and_readability_check": true,
+    "isolated_restore_drill": true,
+    "target_rpo_seconds": null,
+    "target_rto_seconds": null
+  },
+  "security_requirements": {
+    "server_and_internode_tls": true,
+    "client_certificate_verification": true,
+    "kms_managed_server_side_encryption": true,
+    "least_privilege_workload_identities": true,
+    "private_service_endpoint": true
+  },
+  "approval": {
+    "status": "not_approved",
+    "required_evidence": [
+      "target_topology_inventory",
+      "capacity_and_healing_headroom",
+      "failure_domain_loss_drill",
+      "independent_backup_inventory",
+      "isolated_restore_drill",
+      "approved_rpo_rto",
+      "bucket_security_and_lifecycle_validation",
+      "tls_kms_network_validation",
+      "native_monitoring_and_alerts"
+    ],
+    "satisfied_evidence": []
+  },
+  "references": [
+    "https://github.com/minio/minio/blob/RELEASE.2025-04-22T22-12-26Z/docs/distributed/SIZING.md",
+    "https://github.com/minio/minio/blob/RELEASE.2025-04-22T22-12-26Z/docs/distributed/README.md",
+    "https://github.com/minio/minio/blob/RELEASE.2025-04-22T22-12-26Z/docs/erasure/README.md",
+    "https://github.com/minio/minio/blob/RELEASE.2025-04-22T22-12-26Z/docs/bucket/replication/README.md",
+    "https://github.com/minio/minio/blob/RELEASE.2025-04-22T22-12-26Z/docs/tls/README.md"
+  ]
+}

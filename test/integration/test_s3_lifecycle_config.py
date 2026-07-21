@@ -21,6 +21,9 @@ LIFECYCLE_PATH = REPO_ROOT / "deploy" / "minio" / "lifecycle.json"
 AWS_LIFECYCLE_PATH = REPO_ROOT / "deploy" / "s3" / "lifecycle.json"
 POLICY_PATH = REPO_ROOT / "deploy" / "minio" / "app-policy.json"
 MIGRATION_POLICY_PATH = REPO_ROOT / "deploy" / "minio" / "migration-policy.json"
+SELF_HOSTED_ASSESSMENT_PATH = (
+    REPO_ROOT / "deploy" / "minio" / "self-hosted-assessment.json"
+)
 PROVISION_PATH = REPO_ROOT / "deploy" / "minio" / "provision.sh"
 REVOKE_PATH = REPO_ROOT / "deploy" / "minio" / "revoke-migration-access.sh"
 S3_COMPOSE_PATH = REPO_ROOT / "docker-compose.s3.yml"
@@ -44,6 +47,109 @@ def main() -> int:
     minimum_retention_days = (
         int(app_config["upload_task_expiry_seconds"]) // 86400
     ) + 1
+
+    assessment = load_json(SELF_HOSTED_ASSESSMENT_PATH)
+    evaluated_release = "RELEASE.2025-04-22T22-12-26Z"
+    assert assessment["schema_version"] == 1
+    assert assessment["reviewed_on"] == "2026-07-22"
+    assert assessment["evaluated_release"] == evaluated_release
+    assert assessment["decision"] == {
+        "initial_production_model": "managed_s3",
+        "self_hosted_status": "not_approved",
+        "repository_fixture_class": "development_only",
+        "repository_fixture_is_highly_available": False,
+    }
+
+    production_floor = assessment["upstream_production_floor"]
+    assert production_floor == {
+        "servers": 4,
+        "drives_per_server": 2,
+        "erasure_set_size": 8,
+        "default_parity": 4,
+        "read_node_failure_tolerance": 2,
+        "write_node_failure_tolerance": 1,
+        "accepted_for_disk": False,
+        "rejection_reason": "write_tolerance_below_failure_domain_width",
+    }
+
+    candidate = assessment["disk_candidate"]
+    assert candidate == {
+        "servers": 6,
+        "drives_per_server": 2,
+        "erasure_set_size": 12,
+        "default_parity": 4,
+        "physical_failure_domains": 3,
+        "servers_per_failure_domain": 2,
+        "read_node_failure_tolerance": 2,
+        "write_node_failure_tolerance": 2,
+        "required_failure_drill": "lose_one_complete_failure_domain",
+        "dedicated_hosts": True,
+        "homogeneous_nodes_and_drives": True,
+        "local_data_drives": True,
+        "filesystem": "xfs",
+        "network_filesystems_allowed": False,
+    }
+    assert candidate["servers"] == (
+        candidate["physical_failure_domains"]
+        * candidate["servers_per_failure_domain"]
+    )
+    assert candidate["erasure_set_size"] == (
+        candidate["servers"] * candidate["drives_per_server"]
+    )
+    assert (
+        production_floor["write_node_failure_tolerance"]
+        < candidate["servers_per_failure_domain"]
+        <= candidate["write_node_failure_tolerance"]
+    )
+
+    backup_requirements = assessment["backup_requirements"]
+    assert backup_requirements == {
+        "independent_site_or_provider": True,
+        "versioned_source": True,
+        "versioned_destination": True,
+        "delete_marker_replication": False,
+        "permanent_delete_replication": False,
+        "encrypted_in_transit": True,
+        "encrypted_at_rest": True,
+        "object_version_manifest": True,
+        "periodic_hash_and_readability_check": True,
+        "isolated_restore_drill": True,
+        "target_rpo_seconds": None,
+        "target_rto_seconds": None,
+    }
+    assert assessment["security_requirements"] == {
+        "server_and_internode_tls": True,
+        "client_certificate_verification": True,
+        "kms_managed_server_side_encryption": True,
+        "least_privilege_workload_identities": True,
+        "private_service_endpoint": True,
+    }
+
+    approval = assessment["approval"]
+    assert approval["status"] == "not_approved"
+    assert set(approval["required_evidence"]) == {
+        "target_topology_inventory",
+        "capacity_and_healing_headroom",
+        "failure_domain_loss_drill",
+        "independent_backup_inventory",
+        "isolated_restore_drill",
+        "approved_rpo_rto",
+        "bucket_security_and_lifecycle_validation",
+        "tls_kms_network_validation",
+        "native_monitoring_and_alerts",
+    }
+    assert approval["satisfied_evidence"] == []
+    assert backup_requirements["target_rpo_seconds"] is None
+    assert backup_requirements["target_rto_seconds"] is None
+
+    expected_references = {
+        f"https://github.com/minio/minio/blob/{evaluated_release}/docs/distributed/SIZING.md",
+        f"https://github.com/minio/minio/blob/{evaluated_release}/docs/distributed/README.md",
+        f"https://github.com/minio/minio/blob/{evaluated_release}/docs/erasure/README.md",
+        f"https://github.com/minio/minio/blob/{evaluated_release}/docs/bucket/replication/README.md",
+        f"https://github.com/minio/minio/blob/{evaluated_release}/docs/tls/README.md",
+    }
+    assert set(assessment["references"]) == expected_references
 
     lifecycle = load_json(LIFECYCLE_PATH)
     rules = lifecycle.get("Rules")
@@ -218,9 +324,17 @@ def main() -> int:
         minio_environment = compose["services"]["minio"]["environment"]
         assert minio_environment["MINIO_API_STALE_UPLOADS_EXPIRY"] == "168h"
         assert minio_environment["MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL"] == "6h"
+        assert compose["services"]["minio"]["command"] == (
+            'server /data --console-address ":9001"'
+        )
+        assert compose["services"]["minio"]["volumes"] == ["minio-data:/data"]
 
     with DISTRIBUTED_COMPOSE_PATH.open(encoding="utf-8") as stream:
         distributed_compose = yaml.safe_load(stream)
+    assert (
+        distributed_compose["services"]["minio"]["image"]
+        == f"minio/minio:{evaluated_release}"
+    )
     for service_name in ("api-a", "api-b", "worker-a", "worker-b"):
         environment = distributed_compose["services"][service_name]["environment"]
         assert (
@@ -292,7 +406,7 @@ def main() -> int:
     )
 
     print(
-        "S3 lifecycle, isolated identities, least-privilege policies, and monitoring: PASS"
+        "S3 lifecycle, identities, MinIO HA assessment, and monitoring: PASS"
     )
     return 0
 
