@@ -56,6 +56,10 @@ public:
     static LogStream Warn() { return LogStream(spdlog::level::warn); }
     static LogStream Error() { return LogStream(spdlog::level::err); }
     static LogStream Fatal() { return LogStream(spdlog::level::critical); }
+
+    static LogStream HighVolumeDetail() { return Debug(); }
+    static LogStream HighVolumeSuccess() { return Debug(); }
+    static LogStream HighVolumeFailure() { return Info(); }
 };
 
 } ///< namespace disk::utils

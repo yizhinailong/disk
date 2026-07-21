@@ -118,9 +118,10 @@ namespace disk::file {
 
         auto start = std::chrono::steady_clock::now();
 
-        Logger::Debug() << "Starting upload chunk: upload_id=" << upload_id
-                        << ", chunk_index=" << chunk_index << ", chunk_hash=" << chunk_hash
-                        << ", data_size=" << chunk_data.size();
+        Logger::HighVolumeDetail() << "Starting upload chunk: upload_id=" << upload_id
+                                   << ", chunk_index=" << chunk_index
+                                   << ", chunk_hash=" << chunk_hash
+                                   << ", data_size=" << chunk_data.size();
 
         /// 1. 优先读取短 TTL 上传任务缓存，命中后避免重复查询数据库
         auto cached_task = TryGetUploadTaskCacheEntry(upload_id, user_id);
@@ -132,10 +133,10 @@ namespace disk::file {
                 auto end = std::chrono::steady_clock::now();
                 auto duration_us =
                     std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-                Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                               << " outcome=failure upload_id=" << upload_id
-                               << " chunk_index=" << chunk_index
-                               << " data_size=" << chunk_data.size();
+                Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
+                                            << " outcome=failure upload_id=" << upload_id
+                                            << " chunk_index=" << chunk_index
+                                            << " data_size=" << chunk_data.size();
 
                 co_return std::unexpected(task_result.error());
             }
@@ -189,10 +190,10 @@ namespace disk::file {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                           << " outcome=failure upload_id=" << upload_id
-                           << " chunk_index=" << chunk_index
-                           << " data_size=" << chunk_data.size();
+            Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
+                                        << " outcome=failure upload_id=" << upload_id
+                                        << " chunk_index=" << chunk_index
+                                        << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(acceptance_error.error);
         }
@@ -207,10 +208,10 @@ namespace disk::file {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                           << " outcome=failure upload_id=" << upload_id
-                           << " chunk_index=" << chunk_index
-                           << " data_size=" << chunk_data.size();
+            Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
+                                        << " outcome=failure upload_id=" << upload_id
+                                        << " chunk_index=" << chunk_index
+                                        << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ChunkVerifyFailed, "Chunk hash mismatch")
@@ -239,10 +240,10 @@ namespace disk::file {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                           << " outcome=failure upload_id=" << upload_id
-                           << " chunk_index=" << chunk_index
-                           << " data_size=" << chunk_data.size();
+            Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
+                                        << " outcome=failure upload_id=" << upload_id
+                                        << " chunk_index=" << chunk_index
+                                        << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(write_result.error());
         }
@@ -279,16 +280,16 @@ namespace disk::file {
                 write_result->size_bytes
             );
 
-            Logger::Debug() << "Chunk upload successful: upload_id=" << upload_id
-                            << ", chunk_index=" << chunk_index;
+            Logger::HighVolumeSuccess() << "Chunk upload successful: upload_id=" << upload_id
+                                        << ", chunk_index=" << chunk_index;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Debug() << "[upload_chunk] duration_us=" << duration_us
-                            << " outcome=success upload_id=" << upload_id
-                            << " chunk_index=" << chunk_index
-                            << " data_size=" << chunk_data.size();
+            Logger::HighVolumeSuccess() << "[upload_chunk] duration_us=" << duration_us
+                                        << " outcome=success upload_id=" << upload_id
+                                        << " chunk_index=" << chunk_index
+                                        << " data_size=" << chunk_data.size();
 
             UploadChunkResponse response;
             response.chunk_index = chunk_index;
@@ -302,10 +303,10 @@ namespace disk::file {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[upload_chunk] duration_us=" << duration_us
-                           << " outcome=failure upload_id=" << upload_id
-                           << " chunk_index=" << chunk_index
-                           << " data_size=" << chunk_data.size();
+            Logger::HighVolumeFailure() << "[upload_chunk] duration_us=" << duration_us
+                                        << " outcome=failure upload_id=" << upload_id
+                                        << " chunk_index=" << chunk_index
+                                        << " data_size=" << chunk_data.size();
 
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to record chunk upload")

@@ -78,7 +78,8 @@ namespace disk::file {
     auto FileController::UploadChunk(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Debug() << "Received upload chunk request: " << request->getPeerAddr().toIpPort();
+        Logger::HighVolumeDetail()
+            << "Received upload chunk request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
@@ -145,7 +146,7 @@ namespace disk::file {
             co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "Missing chunk data"));
         }
 
-        Logger::Debug() << "Upload chunk parameters validated: upload_id=" << upload_id
+        Logger::HighVolumeDetail() << "Upload chunk parameters validated: upload_id=" << upload_id
                   << ", chunk_index=" << chunk_index << ", chunk_size=" << chunk_data.size();
 
         /// 4. 调用 Service 层上传分片
@@ -159,7 +160,7 @@ namespace disk::file {
         }
 
         /// 5. 构造响应
-        Logger::Debug() << "Upload chunk successful: chunk_index=" << result->chunk_index
+        Logger::HighVolumeSuccess() << "Upload chunk successful: chunk_index=" << result->chunk_index
                   << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
         co_return Response::Success(result->ToJson());
     }

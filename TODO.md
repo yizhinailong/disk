@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮迁移运维与 Mermaid 收尾）：Python 语法检查、分布式文档合同、V003/V004 schema 对账 SQL、Mermaid CLI 11.16.0 实际渲染 14/14 张活跃图表、`cmake --preset linux-debug-clang`、完整构建和迁移聚焦 CTest 5/5 均通过；完整 CTest 共 1381 项，1375 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 427.74 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮分片日志采样策略）：`cmake --preset linux-debug-clang`、完整构建和日志策略聚焦 CTest 2/2 均通过；完整 CTest 共 1383 项，1377 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 434.98 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -375,7 +375,7 @@ API Instance A  API Instance B ... N
 - [ ] 所有结构化日志包含 `request_id`、`instance_id`；上传相关日志增加 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。
 - [x] 禁止记录 JWT、share token、密码、S3 凭据和文件正文。
 - [ ] 为 init/chunk/complete/download/cleanup 建立跨 API、DB、Worker、S3 的追踪关联。
-- [ ] 明确日志采样策略，避免大批量分片上传产生不可控日志量。
+- [x] 明确日志采样策略，避免大批量分片上传产生不可控日志量。
 
 ### 12.2 指标
 
@@ -398,6 +398,12 @@ API Instance A  API Instance B ... N
 - [x] 从一个失败请求可定位到具体实例、数据库状态、对象和恢复任务。
 - [x] 故意制造任务积压、租约过期和 S3 失败时，对应指标与告警触发。
 - [x] 运维人员无需直接修改数据库即可完成常见诊断和安全重试。
+
+### 12.5 高频分片日志策略记录（2026-07-21）
+
+生产 `INFO` 采用确定性的结果分层：成功分片的接收、参数、成功结果和 `[upload_chunk] outcome=success` 摘要固定为 `DEBUG`，常态保留比例为 0%；失败摘要及对应 `WARN`/`ERROR` 上下文不做概率采样，常态保留比例为 100%。请求数、字节数和延迟继续由低基数 Prometheus 指标无采样累计，操作审计不受高频诊断日志策略影响。临时 `DEBUG` 仅允许在从入口摘除的单个 API 上按最长 15 分钟和日志空间预算启用，且仍禁止记录凭据或文件正文。
+
+`Logger::HighVolumeDetail`、`HighVolumeSuccess` 和 `HighVolumeFailure` 将策略集中为可复用接口，`FileController` 与 `UploadService` 的分片路径已改用该接口；`LogHelperTest` 通过内存 sink 锁定 `INFO` 丢弃细节/成功、保留失败，以及 `DEBUG` 恢复细节/成功的行为。日志策略聚焦 CTest 2/2 通过；CMake 配置和完整构建通过，完整 CTest 共 1383 项，1377 通过、6 项环境门控跳过、0 失败，总耗时 434.98 秒；OpenSpec 严格校验 24/24 通过。结构化字段与跨 API/DB/Worker/S3 追踪仍未全部收敛，因此 Phase 7 对应两项继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

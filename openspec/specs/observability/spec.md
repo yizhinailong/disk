@@ -42,6 +42,21 @@ The system SHALL associate requests with trace identifiers for log correlation a
 - **WHEN** the system handles an HTTP request
 - **THEN** it SHALL make the request trace identifier available for logging and response propagation
 
+### Requirement: Bounded High-Volume Logging
+The system SHALL apply an outcome-based logging policy to upload-chunk traffic so that the normal production log level does not emit one success record per chunk while failures and low-cardinality metrics remain complete.
+
+#### Scenario: Upload chunk succeeds at the production log level
+- **WHEN** an upload-chunk request succeeds while the application logger is running at `INFO`
+- **THEN** request-detail and success-summary records SHALL remain `DEBUG`-only and the unsampled chunk counters, bytes, and latency metrics SHALL still be updated
+
+#### Scenario: Upload chunk fails at the production log level
+- **WHEN** an upload-chunk request fails validation, storage, or persistence while the application logger is running at `INFO`
+- **THEN** the failure SHALL be emitted at `INFO` or a higher severity without probabilistic sampling
+
+#### Scenario: Temporary chunk debugging is enabled
+- **WHEN** an operator temporarily lowers an isolated API instance to `DEBUG`
+- **THEN** successful chunk details MAY be emitted only for the bounded diagnostic window and SHALL continue to exclude credentials and file content
+
 ### Requirement: Background Maintenance Visibility
 The system SHALL expose Worker claiming configuration and current acceptance state independently, and a Worker in observation mode SHALL continue to expose dependency readiness and database-backed queue snapshots without executing maintenance work.
 
