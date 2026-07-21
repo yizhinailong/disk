@@ -114,6 +114,120 @@ def main() -> int:
         "system test plan retains the obsolete ADR-002 implementation status",
     )
 
+    operations_guide = (root / "docs/design/05-部署运维指南.md").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "deploy/systemd/disk@.service",
+        "DISK_CONFIG_FILE=/etc/disk/config.distributed.json",
+        "DATABASE_PASSWORD=your_db_password",
+        "DATABASE_POOL_SIZE=8",
+        "REDIS_POOL_SIZE=4",
+        "disk@api-a",
+        "disk@worker-a",
+        "后端不解析 -c/--config 命令行参数",
+        "S3/MinIO final + staging",
+        "id -u disk >/dev/null 2>&1 ||",
+        "sudo chown -R root:root /opt/disk",
+        "sudo chown -R disk:disk /var/lib/disk /var/log/disk",
+        "自管 PostgreSQL 只绑定数据库私网地址",
+        "托管 PostgreSQL/Redis 应使用服务商的私网稳定入口",
+        'nssm set DiskApi AppEnvironmentExtra "DISK_CONFIG_FILE=',
+        'nssm set DiskWorker AppEnvironmentExtra "DISK_CONFIG_FILE=',
+        "只恢复明确备份的二进制，不递归删除安装目录",
+        "/opt/disk/bin/disk.bak",
+    ):
+        require(marker in operations_guide, f"operations guide is missing {marker}")
+    for obsolete in (
+        "/etc/systemd/system/disk.service",
+        "ExecStart=/opt/disk/bin/disk -c",
+        'disk.exe\" \"-c',
+        "/var/lib/disk/.config/disk/server/config.json",
+        "systemctl reload disk",
+        "files[\"files/ (用户文件存储)\"]",
+        "uploads[\"uploads/ (上传临时目录)\"]",
+        "sudo systemctl start disk\n",
+        "sudo systemctl stop disk\n",
+        "sudo systemctl restart disk\n",
+        "`DB_PASSWORD`",
+        '${DB_PASSWORD}',
+        '"passwd": "${REDIS_PASSWORD}"',
+        "DATABASE_POOL_SIZE=16",
+        "REDIS_POOL_SIZE=8",
+        "nssm set DiskApi AppEnvironmentExtra \\\n",
+        "nssm set DiskWorker AppEnvironmentExtra \\\n",
+        "sudo cp -r /opt/disk /opt/disk.bak",
+        "sudo rm -rf /opt/disk",
+        "sudo chown -R disk:disk /opt/disk",
+        "sudo ufw allow 6379/tcp",
+        "限制 PostgreSQL 只监听本地",
+        "限制 Redis 只监听本地",
+        "应显示: 0.0.0.0:6379 或 127.0.0.1:6379",
+        'instances/*.env (角色、实例 ID、监听端口)',
+    ):
+        require(obsolete not in operations_guide, f"operations guide retains obsolete: {obsolete}")
+
+    systemd_guide = operations_guide.split("### 5.1 Systemd 服务配置", 1)[1].split(
+        "### 5.3 Windows 服务配置", 1
+    )[0]
+    windows_guide = operations_guide.split("### 5.3 Windows 服务配置", 1)[1].split(
+        "### 5.4 API 与 Worker 角色", 1
+    )[0]
+    for guide_name, guide in (
+        ("systemd", systemd_guide),
+        ("Windows", windows_guide),
+    ):
+        require(
+            "DISK_INSTANCE_ID=" not in guide,
+            f"{guide_name} service example must not reuse a stable lease owner",
+        )
+    require(
+        "由进程每次启动生成" in systemd_guide,
+        "systemd guide must document per-process generated instance IDs",
+    )
+    require(
+        "由每次启动的进程生成新 owner" in windows_guide,
+        "Windows guide must document per-process generated instance IDs",
+    )
+
+    systemd_unit = (root / "deploy/systemd/disk@.service").read_text(
+        encoding="utf-8"
+    )
+    for directive in (
+        "User=disk",
+        "Group=disk",
+        "WorkingDirectory=/opt/disk",
+        "Environment=DISK_CONFIG_FILE=/etc/disk/config.distributed.json",
+        "EnvironmentFile=/etc/disk/env",
+        "EnvironmentFile=/etc/disk/instances/%i.env",
+        "ExecStart=/opt/disk/bin/disk",
+        "Restart=on-failure",
+        "TimeoutStopSec=40s",
+        "KillSignal=SIGTERM",
+        "UMask=0027",
+        "NoNewPrivileges=true",
+        "ProtectSystem=strict",
+        "ProtectHome=true",
+        "ProtectKernelTunables=true",
+        "ProtectKernelModules=true",
+        "ProtectControlGroups=true",
+        "LockPersonality=true",
+        "RestrictSUIDSGID=true",
+        "StateDirectory=disk",
+        "LogsDirectory=disk",
+        "ReadWritePaths=/var/lib/disk /var/log/disk",
+    ):
+        require(directive in systemd_unit, f"systemd template is missing {directive}")
+    for obsolete in (
+        "User=root",
+        "DISK_INSTANCE_ID=",
+        " -c ",
+        "ExecReload=",
+        "Restart=always",
+        "/data/disk",
+    ):
+        require(obsolete not in systemd_unit, f"systemd template retains obsolete: {obsolete}")
+
     unit_test_plan = (root / "docs/design/06-单元测试用例.md").read_text(
         encoding="utf-8"
     )

@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮测试清单同步）：`cmake --preset linux-debug-clang`、完整构建均通过；完整 CTest 共 1381 项，1375 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 427.18 秒；仓库内真实进程的随机路由、Worker/API 调度所有权切换及逐级副本容量门禁已运行通过，OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-21，本轮角色化服务管理同步）：`systemd-analyze verify`、`cmake --preset linux-debug-clang`、完整构建和 `DistributedTopologyContract` 1/1 均通过；完整 CTest 共 1381 项，1375 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 427.87 秒；仓库内真实进程的随机路由、Worker/API 调度所有权切换及逐级副本容量门禁已运行通过，OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -877,6 +877,14 @@ clang-format、后端完整构建和聚焦 CTest 4/4 通过；完整 CTest 保�
 `06-单元测试用例.md` 的活跃清单已映射到实际存在的状态机、任务队列、S3 存储和跨实例撤销测试入口，移除不存在的 `S3UploadStaging_test.cpp`、`test_token_revocation_cluster.py` 以及已经失效的 ADR-002/分享限流“待实现”标记。Redis 测试表不再维护易漂移的预计用例数，改为列出可执行单元与集成入口；`04-系统测试计划.md` 将仓库级合同已实现和目标 MinIO/多实例/故障/性能门禁待执行明确分层。
 
 `DistributedTopologyContract` 现会验证文档入口实际存在、禁止旧状态与虚构路径回归，并固定顶部最近验证的 CTest 数量及 `total = passed + skipped` 对账。Python 语法检查、脚本直接执行和聚焦 CTest 1/1 通过；CMake 配置与完整构建通过，完整 CTest 共 1381 项，其中 1375 项通过、6 项按环境门控跳过、0 失败，总耗时 427.18 秒；OpenSpec 严格校验 24/24 通过。本轮完成 Phase 10 第 821 项中的测试清单与数量子项；部署运维指南余项和 Mermaid 渲染验收尚未完成，因此第 821 项保持未勾选，目标环境多实例与压力门禁未执行，第 822 项也保持未勾选。
+
+### 15.9 角色化服务管理运维同步记录（2026-07-21）
+
+旧 Linux/Windows 服务示例向后端传入未实现的 `-c` 参数，且只定义单一 `disk` 服务、本机 final/暂存目录和无效 HUP reload，会让生产副本仍读取工作目录下的 `config.json` 并混淆 API/Worker 所有权。现在仓库新增 `deploy/systemd/disk@.service`，固定用 `DISK_CONFIG_FILE=/etc/disk/config.distributed.json` 选择配置，通过 `/etc/disk/instances/%i.env` 逐副本注入角色与监听地址，租约 `instance_id` 由每次启动的进程生成新 UUID，避免把稳定副本槽位误当作跨重启 owner。模板同时固定 `Restart=on-failure`、40 秒停机窗口、root 读取的公共 Secret 文件和只允许 `/var/lib/disk`/`/var/log/disk` 写入的 systemd 加固边界。NSSM 示例同样拆分 `DiskApi`/`DiskWorker`，不再使用 Bash 续行或 CLI 配置参数，也不固化跨重启的 owner。
+
+部署指南同步为 S3 final + S3 staging 的生产目录图，区分 Drogon HTTP 请求临时目录与权威业务暂存；安全配置统一使用代码实际读取的 `DATABASE_PASSWORD`，PostgreSQL/Redis 每进程连接池回到已验证的 8/4 基线。角色化日常启停、readiness 监控、备份/恢复变量、manifest 迁移和二进制回滚命令已统一；回滚只覆盖明确备份的制品，不再递归删除 `/opt/disk`。`DistributedTopologyContract` 固定了配置入口、连接预算、双角色命令、单元加固与旧写法禁用集。
+
+Python 语法检查、合同脚本直接执行和聚焦 CTest 1/1 通过；`systemd-analyze verify` 在隔离根目录中通过且无告警，CMake 配置与完整构建通过。完整 CTest 共 1381 项，其中 1375 项通过、6 项按环境门控跳过、0 失败，总耗时 427.87 秒；OpenSpec 严格校验 24/24 通过。本轮完成 Phase 10 第 821 项中的角色化服务管理子项；Nginx 与运维指南其余图表的全量审计、Mermaid 渲染验收仍未完成，因此第 821 项保持未勾选；目标 MinIO/云 S3、多实例与压力门禁未执行，第 822 项也保持未勾选。
 
 ## 16. 最终 Definition of Done
 
