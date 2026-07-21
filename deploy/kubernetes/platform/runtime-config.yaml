@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: disk-runtime-config
+  namespace: disk
+  labels:
+    app.kubernetes.io/name: disk
+    app.kubernetes.io/part-of: disk
+data:
+  DISK_CONFIG_FILE: /app/config.json
+  DISK_LISTEN_ADDRESS: 0.0.0.0
+  DISK_LISTEN_PORT: "8080"
+  DISK_SECURE_MODE: "true"
+  DISK_STORAGE_BACKEND: s3
+  DISK_UPLOAD_STAGING_BACKEND: s3
+  DISK_UPLOAD_TASK_CREATION_ENABLED: "true"
+  DATABASE_HOST: replace-with-private-postgres-writer
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: disk
+  DATABASE_USER: disk
+  DATABASE_POOL_SIZE: "8"
+  PGSSLMODE: verify-full
+  REDIS_HOST: replace-with-private-redis-writer
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  REDIS_POOL_SIZE: "4"
+  DISK_S3_BUCKET: replace-with-production-bucket
+  DISK_S3_REGION: replace-with-production-region
+  DISK_S3_ENDPOINT: https://replace-with-private-s3-endpoint
+  DISK_S3_USE_SSL: "true"
+  DISK_S3_FORCE_PATH_STYLE: "false"
+  DISK_S3_VERIFY_SSL: "true"
+  DISK_S3_OBJECT_PREFIX: objects
+  DISK_S3_STAGING_PREFIX: staging
+  DISK_S3_MAX_CONNECTIONS: "16"
+  DISK_S3_IO_THREADS: "4"
+  DISK_S3_CONNECT_TIMEOUT_MS: "3000"
+  DISK_S3_REQUEST_TIMEOUT_MS: "300000"
+  DISK_S3_MAX_RETRIES: "3"
+  DISK_S3_RETRY_BASE_DELAY_MS: "100"
+  TZ: UTC

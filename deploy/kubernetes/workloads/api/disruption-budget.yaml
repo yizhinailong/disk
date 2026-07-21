@@ -1,0 +1,15 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: disk-api
+  namespace: disk
+  labels:
+    app.kubernetes.io/name: disk
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: disk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: disk
+      app.kubernetes.io/component: api

@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 6 MinIO 自建冗余、故障域与备份评估）：`cmake --preset linux-debug-clang`、完整构建、MinIO 评估聚焦 CTest 1/1 和固定版 MinIO/PgBouncer 显式门禁 2/2 均通过；完整 CTest 共 1392 项，1387 通过、5 项按环境门控跳过（`promtool`、2 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 470.88 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-22，本轮 Phase 6 Kubernetes 兼容发布与扩缩容参考部署）：完整构建和聚焦拓扑/容量 CTest 2/2 通过；Kubernetes 1.30 Kustomize 五个发布/聚合入口 5/5、四个发布入口的离线严格 Schema 资源 11/11 通过；完整 CTest 共 1392 项，1385 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 481.47 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -375,8 +375,8 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 - [x] Nginx 采用无 cookie/ip-hash 的 `least_conn`，覆盖并传递客户端 IP、协议和代理生成的请求 ID。
 - [x] Nginx 固定 20 MiB 请求体、330 秒转发超时、关闭请求缓冲，且未启用 `non_idempotent` 重放。
 - [x] API/Worker 支持 SIGTERM 优雅关闭和有界 drain。
-- [ ] 数据库迁移、API、Worker 按兼容顺序滚动发布。
-- [ ] 配置最小副本、反亲和/故障域、资源 requests/limits 和扩缩容指标。
+- [x] 数据库迁移、API、Worker 按兼容顺序滚动发布。
+- [x] 配置最小副本、反亲和/故障域、资源 requests/limits 和扩缩容指标。
 - [x] 保留现有 `/api/health` 兼容行为，新增或明确 liveness/readiness 端点。
 - [x] readiness 覆盖当前角色必需的 PostgreSQL、Redis、S3 和初始化状态；liveness 不因短暂外部依赖故障反复重启进程。
 
@@ -464,6 +464,16 @@ Python 语法检查、CMake 配置和完整构建通过；PgBouncer/拓扑聚焦
 评估合同 SHA-256 为 `1e658ecb9fb10704a62d2dab8ba3d0aab906fb8536d817fd997cded4601ccd6e`。`S3LifecycleConfigIntegration` 1/1 通过（0.09 秒），锁定上游下限、候选拓扑、单节点夹具边界和九项准入证据；固定版 MinIO/mc 与 PgBouncer 显式门禁 2/2 通过（5.60 秒）。完整 CTest 共 1392 项，1387 通过、5 项目标环境门控跳过、0 失败，总耗时 470.88 秒；OpenSpec 严格校验 24/24 通过。
 
 当前 `target_rpo_seconds`/`target_rto_seconds` 为空，全部目标证据未满足，自建状态保持 `not_approved`。本记录只关闭“评估”子项，不代表生产 bucket、自建对象存储、独立备份、故障切换或恢复演练完成；11.4 的生产 bucket 和 11.6 的目标环境验收继续保持未勾选。
+
+### 11.16 Phase 6 Kubernetes 兼容发布与容量配置记录（2026-07-22）
+
+`deploy/kubernetes/` 现将无敏感 platform、一次性 migration 和长驻 workloads 分为三层，仓库不包含 Secret。API/Worker 均以 2 副本起步，使用主机硬反亲和、至少两个 zone、固定数值 UID/GID 10001、PDB、角色探针、非 root/只读根文件系统和一进程滚动预留；4 副本上限与硬反亲和的滚动容量门禁要求至少 5 个可调度节点。HPA 限定在已测的 2–4 副本，API 使用 CPU/聚合在途请求，Worker 使用 CPU/集群最老可执行任务年龄。`deploy/prometheus/disk-autoscaling.yml` 提供对应的低基数记录规则。
+
+`deploy/kubernetes/release-plan.json` 固定 preflight/capacity → expand migration → Worker → API → post-rollout 顺序。每次 migration overlay 必须使用唯一 `nameSuffix`，任一阶段失败即停；回滚先冻结新上传、按 API/Worker 逆序回滚镜像并保留 expand schema。运行时镜像增加 `psql`、受控迁移脚本、manifest 和 forward-only SQL，不包含破坏性 rollback SQL，因此同一候选镜像可执行发布前 Job，业务 Pod 仍不执行 DDL。
+
+`DistributedTopologyContract` 递归解析 YAML/JSON、Dockerfile 和 Prometheus 规则，并与容量门禁聚焦 CTest 2/2 通过。使用官方 Kubernetes 1.30 客户端完成 platform、migration、worker、API 和 workloads 稳态聚合入口 Kustomize 渲染 5/5，四个发布入口共 11 个渲染资源的 1.30 严格离线 Schema 校验全部通过。完整构建无增量工作；完整 CTest 为 1385 通过、7 项环境门控跳过、0 失败，总耗时 481.47 秒；OpenSpec 严格校验 24/24 通过。
+
+本记录关闭 11.5 的两个仓库级部署实现子项，不代表目标集群已发布。当前无 Kubernetes API Server 和容器运行时，未执行服务端 dry-run、候选镜像构建/拉取、External Metrics API、真实滚动或节点/故障域调度。这些与 11.6 的 API/Worker/依赖故障演练继续保持未勾选。
 
 ## 12. Phase 7：可观测性与运维工具
 

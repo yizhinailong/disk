@@ -24,6 +24,20 @@ def compact_expression(rule: dict[str, object]) -> str:
     return " ".join(str(rule["expr"]).split())
 
 
+def load_yaml_documents(path: Path) -> list[dict[str, object]]:
+    documents = [
+        document
+        for document in yaml.safe_load_all(path.read_text(encoding="utf-8"))
+        if document is not None
+    ]
+    require(bool(documents), f"YAML resource is empty: {path}")
+    require(
+        all(isinstance(document, dict) for document in documents),
+        f"YAML resource must contain only objects: {path}",
+    )
+    return documents
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[2]
     readme = (root / "README.md").read_text(encoding="utf-8")
@@ -203,6 +217,497 @@ def main() -> int:
     require(
         operations_guide.count("```mermaid") == 2,
         "operations guide Mermaid inventory drifted",
+    )
+
+    kubernetes_root = root / "deploy/kubernetes"
+    kubernetes_readme = (kubernetes_root / "README.md").read_text(encoding="utf-8")
+    for marker in (
+        "minimum supported Kubernetes version is 1.30",
+        "least five schedulable nodes across two real zones",
+        "disk-runtime-secrets",
+        "pinned by digest",
+        "unique, DNS-safe `nameSuffix`",
+        "`workloads/worker/`",
+        "`workloads/api/`",
+        "numeric UID/GID `10001`",
+        "Preserve the",
+        "expand schema.",
+    ):
+        require(marker in kubernetes_readme, f"Kubernetes README is missing {marker}")
+
+    kubernetes_yaml_paths = sorted(kubernetes_root.rglob("*.yaml"))
+    require(bool(kubernetes_yaml_paths), "Kubernetes reference manifests are missing")
+    kubernetes_documents = {
+        path.relative_to(kubernetes_root).as_posix(): load_yaml_documents(path)
+        for path in kubernetes_yaml_paths
+    }
+    require(
+        all(
+            document.get("kind") != "Secret"
+            for documents in kubernetes_documents.values()
+            for document in documents
+        ),
+        "Kubernetes reference must not commit a Secret resource",
+    )
+
+    expected_kustomizations = {
+        "platform/kustomization.yaml": {
+            "namespace.yaml",
+            "service-account.yaml",
+            "runtime-config.yaml",
+        },
+        "migration/kustomization.yaml": {"job.yaml"},
+        "workloads/kustomization.yaml": {"worker", "api"},
+        "workloads/api/kustomization.yaml": {
+            "deployment.yaml",
+            "service.yaml",
+            "disruption-budget.yaml",
+            "autoscaler.yaml",
+        },
+        "workloads/worker/kustomization.yaml": {
+            "deployment.yaml",
+            "disruption-budget.yaml",
+            "autoscaler.yaml",
+        },
+    }
+    for relative_path, expected_resources in expected_kustomizations.items():
+        kustomization = kubernetes_documents[relative_path][0]
+        require(
+            kustomization.get("apiVersion") == "kustomize.config.k8s.io/v1beta1"
+            and kustomization.get("kind") == "Kustomization",
+            f"invalid Kustomization contract: {relative_path}",
+        )
+        require(
+            set(kustomization.get("resources", [])) == expected_resources,
+            f"Kustomization resource inventory drifted: {relative_path}",
+        )
+    runtime_config_resource = kubernetes_documents["platform/runtime-config.yaml"][0]
+    require(runtime_config_resource["kind"] == "ConfigMap", "runtime config must be a ConfigMap")
+    runtime_environment = runtime_config_resource["data"]
+    expected_runtime_environment = {
+        "DISK_SECURE_MODE": "true",
+        "DISK_STORAGE_BACKEND": "s3",
+        "DISK_UPLOAD_STAGING_BACKEND": "s3",
+        "DATABASE_POOL_SIZE": "8",
+        "REDIS_POOL_SIZE": "4",
+        "DISK_S3_USE_SSL": "true",
+        "DISK_S3_VERIFY_SSL": "true",
+        "DISK_S3_MAX_CONNECTIONS": "16",
+        "DISK_S3_IO_THREADS": "4",
+        "PGSSLMODE": "verify-full",
+    }
+    for name, expected in expected_runtime_environment.items():
+        require(runtime_environment.get(name) == expected, f"Kubernetes {name} drifted")
+    for name in (
+        "DATABASE_HOST",
+        "REDIS_HOST",
+        "DISK_S3_BUCKET",
+        "DISK_S3_REGION",
+        "DISK_S3_ENDPOINT",
+    ):
+        require(
+            "replace-with-" in runtime_environment[name],
+            f"Kubernetes base must fail closed for {name}",
+        )
+    for secret_name in (
+        "DATABASE_PASSWORD",
+        "REDIS_PASSWORD",
+        "JWT_SECRET",
+        "DISK_S3_ACCESS_KEY",
+        "DISK_S3_SECRET_KEY",
+        "DISK_S3_SESSION_TOKEN",
+    ):
+        require(secret_name not in runtime_environment, f"secret entered ConfigMap: {secret_name}")
+
+    service_account = kubernetes_documents["platform/service-account.yaml"][0]
+    require(
+        service_account["metadata"]["name"] == "disk-runtime"
+        and service_account["automountServiceAccountToken"] is False,
+        "runtime ServiceAccount token policy drifted",
+    )
+
+    migration_job = kubernetes_documents["migration/job.yaml"][0]
+    require(
+        migration_job["apiVersion"] == "batch/v1"
+        and migration_job["kind"] == "Job"
+        and migration_job["metadata"]["name"] == "disk-migrate-expand",
+        "migration Job identity drifted",
+    )
+    require(
+        migration_job["spec"]["backoffLimit"] == 0
+        and migration_job["spec"]["activeDeadlineSeconds"] == 900,
+        "migration Job must fail once and stop",
+    )
+    migration_pod = migration_job["spec"]["template"]["spec"]
+    require(
+        migration_pod["restartPolicy"] == "Never"
+        and migration_pod["automountServiceAccountToken"] is False,
+        "migration Pod restart/token policy drifted",
+    )
+    require(
+        migration_pod["securityContext"]["runAsNonRoot"] is True
+        and migration_pod["securityContext"]["runAsUser"] == 10001
+        and migration_pod["securityContext"]["runAsGroup"] == 10001
+        and migration_pod["securityContext"]["fsGroup"] == 10001,
+        "migration Pod numeric non-root identity drifted",
+    )
+    migration_container = migration_pod["containers"][0]
+    require(
+        migration_container["image"] == "disk-backend:replace-with-reviewed-tag"
+        and migration_container["command"] == ["/app/scripts/migrate-db.sh"],
+        "migration Job must run the reviewed script from the release image",
+    )
+    migration_environment = {
+        variable["name"]: variable for variable in migration_container["env"]
+    }
+    require(
+        set(migration_environment) == {
+            "PGHOST",
+            "PGPORT",
+            "PGDATABASE",
+            "PGUSER",
+            "PGSSLMODE",
+            "PGPASSWORD",
+        },
+        "migration Job environment surface drifted",
+    )
+    require(
+        migration_environment["PGPASSWORD"]["valueFrom"]["secretKeyRef"]
+        == {
+            "name": "disk-runtime-secrets",
+            "key": "DATABASE_PASSWORD",
+        },
+        "migration Job database password reference drifted",
+    )
+
+    dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
+    for marker in (
+        "postgresql-client",
+        "COPY scripts/migrate-db.sh /app/scripts/migrate-db.sh",
+        "COPY sql/migrations/manifest.tsv sql/migrations/*_forward.sql /app/sql/migrations/",
+        "chmod 0555 /app/scripts/migrate-db.sh",
+        "groupadd --gid 10001 disk",
+        "useradd --uid 10001 --gid disk",
+        "USER 10001:10001",
+    ):
+        require(marker in dockerfile, f"migration-capable image is missing {marker}")
+    require(
+        "*_rollback.sql /app/sql/migrations/" not in dockerfile,
+        "runtime image must not package destructive rollback SQL",
+    )
+    migration_manifest_entries = [
+        line.split("\t", 1)[1]
+        for line in (root / "sql/migrations/manifest.tsv")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line and not line.startswith("#")
+    ]
+    require(
+        all(entry.endswith("_forward.sql") for entry in migration_manifest_entries),
+        "migration image forward-only glob no longer covers the manifest",
+    )
+
+    expected_secret_keys = {
+        "DATABASE_PASSWORD",
+        "REDIS_PASSWORD",
+        "JWT_SECRET",
+        "DISK_S3_ACCESS_KEY",
+        "DISK_S3_SECRET_KEY",
+        "DISK_S3_SESSION_TOKEN",
+    }
+    expected_resources = {
+        "api": {
+            "requests": {"cpu": "500m", "memory": "512Mi"},
+            "limits": {"cpu": "2", "memory": "2Gi"},
+        },
+        "worker": {
+            "requests": {"cpu": "250m", "memory": "256Mi"},
+            "limits": {"cpu": "1", "memory": "1Gi"},
+        },
+    }
+
+    def validate_deployment(relative_path: str, role: str) -> None:
+        deployment = kubernetes_documents[relative_path][0]
+        require(
+            deployment["apiVersion"] == "apps/v1"
+            and deployment["kind"] == "Deployment",
+            f"{role} Deployment API drifted",
+        )
+        spec = deployment["spec"]
+        require(spec["replicas"] == 2, f"{role} minimum deployment replicas drifted")
+        require(
+            spec["strategy"] == {
+                "type": "RollingUpdate",
+                "rollingUpdate": {"maxUnavailable": 0, "maxSurge": 1},
+            },
+            f"{role} rolling replacement boundary drifted",
+        )
+        pod = spec["template"]["spec"]
+        require(
+            pod["serviceAccountName"] == "disk-runtime"
+            and pod["automountServiceAccountToken"] is False
+            and pod["terminationGracePeriodSeconds"] > 30,
+            f"{role} Pod identity or drain boundary drifted",
+        )
+        require(
+            pod["securityContext"]["runAsNonRoot"] is True
+            and pod["securityContext"]["runAsUser"] == 10001
+            and pod["securityContext"]["runAsGroup"] == 10001
+            and pod["securityContext"]["fsGroup"] == 10001,
+            f"{role} numeric non-root identity drifted",
+        )
+        anti_affinity = pod["affinity"]["podAntiAffinity"][
+            "requiredDuringSchedulingIgnoredDuringExecution"
+        ]
+        require(
+            len(anti_affinity) == 1
+            and anti_affinity[0]["topologyKey"] == "kubernetes.io/hostname"
+            and anti_affinity[0]["labelSelector"]["matchLabels"][
+                "app.kubernetes.io/component"
+            ]
+            == role,
+            f"{role} hard host anti-affinity drifted",
+        )
+        spread = pod["topologySpreadConstraints"]
+        require(
+            len(spread) == 1
+            and spread[0]["topologyKey"] == "topology.kubernetes.io/zone"
+            and spread[0]["maxSkew"] == 1
+            and spread[0]["minDomains"] == 2
+            and spread[0]["whenUnsatisfiable"] == "DoNotSchedule",
+            f"{role} failure-domain spread drifted",
+        )
+        container = pod["containers"][0]
+        require(
+            spec["template"]["metadata"]["annotations"]["prometheus.io/job"]
+            == f"disk-{role}",
+            f"{role} stable Prometheus job label drifted",
+        )
+        require(
+            container["image"] == "disk-backend:replace-with-reviewed-tag",
+            f"{role} image placeholder drifted",
+        )
+        require(
+            container["envFrom"] == [
+                {"configMapRef": {"name": "disk-runtime-config"}}
+            ],
+            f"{role} must not import an unrestricted Secret",
+        )
+        environment = {variable["name"]: variable for variable in container["env"]}
+        require(
+            environment["DISK_PROCESS_ROLE"]["value"] == role,
+            f"{role} process role drifted",
+        )
+        if role == "worker":
+            require(
+                environment["DISK_WORKER_CLAIMING_ENABLED"]["value"] == "true",
+                "Worker claiming must be explicitly enabled",
+            )
+        else:
+            require(
+                "DISK_WORKER_CLAIMING_ENABLED" not in environment,
+                "API must not receive the Worker claiming override",
+            )
+        secret_keys = {
+            variable["name"]
+            for variable in container["env"]
+            if "secretKeyRef" in variable.get("valueFrom", {})
+        }
+        require(secret_keys == expected_secret_keys, f"{role} secret allowlist drifted")
+        require(
+            environment["DISK_S3_SESSION_TOKEN"]["valueFrom"]["secretKeyRef"].get(
+                "optional"
+            )
+            is True,
+            f"{role} S3 session token must remain optional",
+        )
+        launch_script = "\n".join(container["args"])
+        require(
+            "/proc/sys/kernel/random/uuid" in launch_script
+            and "DISK_INSTANCE_ID" in launch_script
+            and "exec /app/disk" in launch_script,
+            f"{role} must generate a new process identity on every start",
+        )
+        require(
+            container["startupProbe"]["httpGet"]["path"] == "/api/health/live"
+            and container["livenessProbe"]["httpGet"]["path"] == "/api/health/live"
+            and container["readinessProbe"]["httpGet"]["path"]
+            == "/api/health/ready",
+            f"{role} probe contract drifted",
+        )
+        require(
+            container["resources"] == expected_resources[role],
+            f"{role} CPU/memory envelope drifted",
+        )
+        require(
+            container["securityContext"]["readOnlyRootFilesystem"] is True
+            and container["securityContext"]["allowPrivilegeEscalation"] is False
+            and container["securityContext"]["capabilities"]["drop"] == ["ALL"],
+            f"{role} container security boundary drifted",
+        )
+
+    validate_deployment("workloads/api/deployment.yaml", "api")
+    validate_deployment("workloads/worker/deployment.yaml", "worker")
+
+    api_service = kubernetes_documents["workloads/api/service.yaml"][0]
+    require(
+        api_service["kind"] == "Service"
+        and api_service["spec"]["sessionAffinity"] == "None"
+        and api_service["spec"]["selector"]
+        == {
+            "app.kubernetes.io/name": "disk",
+            "app.kubernetes.io/component": "api",
+        },
+        "Kubernetes Service must be API-only and non-sticky",
+    )
+
+    disruption_budgets = {
+        document["metadata"]["name"]: document
+        for relative_path in (
+            "workloads/api/disruption-budget.yaml",
+            "workloads/worker/disruption-budget.yaml",
+        )
+        for document in kubernetes_documents[relative_path]
+    }
+    require(
+        set(disruption_budgets) == {"disk-api", "disk-worker"}
+        and all(
+            budget["apiVersion"] == "policy/v1"
+            and budget["spec"]["minAvailable"] == 1
+            for budget in disruption_budgets.values()
+        ),
+        "per-role disruption budgets drifted",
+    )
+
+    autoscalers = {
+        document["metadata"]["name"]: document
+        for relative_path in (
+            "workloads/api/autoscaler.yaml",
+            "workloads/worker/autoscaler.yaml",
+        )
+        for document in kubernetes_documents[relative_path]
+    }
+    expected_hpa_metrics = {
+        "disk-api": (65, "disk_hpa_api_business_requests_inflight", "AverageValue", "20"),
+        "disk-worker": (70, "disk_hpa_worker_oldest_ready_age_seconds", "Value", "30"),
+    }
+    require(set(autoscalers) == set(expected_hpa_metrics), "HPA role inventory drifted")
+    for name, expected_metric in expected_hpa_metrics.items():
+        cpu_target, external_name, external_type, external_target = expected_metric
+        autoscaler = autoscalers[name]
+        spec = autoscaler["spec"]
+        require(
+            autoscaler["apiVersion"] == "autoscaling/v2"
+            and spec["minReplicas"] == 2
+            and spec["maxReplicas"] == 4,
+            f"{name} HPA replica boundary drifted",
+        )
+        metrics = {metric["type"]: metric for metric in spec["metrics"]}
+        require(set(metrics) == {"Resource", "External"}, f"{name} HPA metrics drifted")
+        require(
+            metrics["Resource"]["resource"]["name"] == "cpu"
+            and metrics["Resource"]["resource"]["target"]["averageUtilization"]
+            == cpu_target,
+            f"{name} HPA CPU target drifted",
+        )
+        external = metrics["External"]["external"]
+        require(
+            external["metric"]["name"] == external_name
+            and external["target"]["type"] == external_type
+            and external["target"].get("averageValue", external["target"].get("value"))
+            == external_target,
+            f"{name} HPA external target drifted",
+        )
+        require(
+            spec["behavior"]["scaleDown"]["stabilizationWindowSeconds"] == 600
+            and spec["behavior"]["scaleDown"]["policies"]
+            == [{"type": "Pods", "value": 1, "periodSeconds": 300}],
+            f"{name} HPA scale-down safety drifted",
+        )
+
+    autoscaling_rules = yaml.safe_load(
+        (root / "deploy/prometheus/disk-autoscaling.yml").read_text(encoding="utf-8")
+    )
+    recorded_metrics = {
+        rule["record"]: compact_expression(rule)
+        for group in autoscaling_rules["groups"]
+        for rule in group["rules"]
+    }
+    require(
+        recorded_metrics
+        == {
+            "disk_hpa_api_business_requests_inflight": 'sum(disk_process_business_requests_inflight{job="disk-api"})',
+            "disk_hpa_worker_oldest_ready_age_seconds": 'max(disk_storage_jobs_oldest_ready_age_seconds{job="disk-worker"})',
+        },
+        "Prometheus HPA recording rules drifted",
+    )
+
+    release_plan = json.loads(
+        (kubernetes_root / "release-plan.json").read_text(encoding="utf-8")
+    )
+    require(
+        release_plan["schema_version"] == 1
+        and release_plan["minimum_kubernetes_version"] == "1.30"
+        and release_plan["image_policy"]["require_digest"] is True,
+        "Kubernetes release identity/image policy drifted",
+    )
+    require(
+        release_plan["artifacts"]
+        == {
+            "platform": "deploy/kubernetes/platform",
+            "migration": "deploy/kubernetes/migration",
+            "worker": "deploy/kubernetes/workloads/worker",
+            "api": "deploy/kubernetes/workloads/api",
+            "steady_state": "deploy/kubernetes/workloads",
+        },
+        "Kubernetes independently deployable artifact paths drifted",
+    )
+    require(
+        [stage["id"] for stage in release_plan["stages"]]
+        == [
+            "preflight_and_capacity",
+            "expand_migration",
+            "worker_rollout",
+            "api_rollout",
+            "post_rollout_gate",
+        ]
+        and [stage["order"] for stage in release_plan["stages"]]
+        == [1, 2, 3, 4, 5]
+        and all(stage["stop_on_failure"] is True for stage in release_plan["stages"]),
+        "Kubernetes compatible rollout order drifted",
+    )
+    require(
+        release_plan["capacity_gate"]["required_topologies"]
+        == ["steady=2:2", "maximum=4:4"]
+        and release_plan["capacity_gate"]["rolling_replacement_reserve_processes"]
+        == 1,
+        "Kubernetes capacity gate drifted",
+    )
+    require(
+        release_plan["capacity_gate"]["scheduling"]
+        == {
+            "minimum_eligible_nodes": 5,
+            "minimum_failure_domains": 2,
+            "topology_key": "topology.kubernetes.io/zone",
+            "reason": "same_role_hard_anti_affinity_with_max_replicas_plus_surge",
+        }
+        and "verify_scheduler_capacity"
+        in release_plan["stages"][0]["actions"],
+        "Kubernetes scheduler capacity gate drifted",
+    )
+    require(
+        release_plan["stages"][1]["actions"][:2]
+        == [
+            "require_unique_release_name_suffix",
+            "create_exactly_one_release_scoped_job",
+        ],
+        "migration release identity gate drifted",
+    )
+    require(
+        release_plan["rollback"]["application_order"] == ["api", "worker"]
+        and release_plan["rollback"]["schema_action"] == "preserve_expand"
+        and release_plan["rollback"]["automatic_destructive_migration"] is False,
+        "Kubernetes rollback policy drifted",
     )
 
     systemd_guide = operations_guide.split("### 5.1 Systemd 服务配置", 1)[1].split(
@@ -398,7 +903,7 @@ def main() -> int:
     require(latest_verification is not None, "TODO latest verification summary is missing or malformed")
     total, passed_count, skipped_count = map(int, latest_verification.groups())
     require(
-        (total, passed_count, skipped_count) == (1392, 1387, 5),
+        (total, passed_count, skipped_count) == (1392, 1385, 7),
         "TODO latest CTest inventory drifted without an explicit contract update",
     )
     require(total == passed_count + skipped_count, "TODO latest CTest totals do not reconcile")

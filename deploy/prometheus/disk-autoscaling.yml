@@ -1,0 +1,8 @@
+groups:
+  - name: disk-autoscaling
+    interval: 15s
+    rules:
+      - record: disk_hpa_api_business_requests_inflight
+        expr: sum(disk_process_business_requests_inflight{job="disk-api"})
+      - record: disk_hpa_worker_oldest_ready_age_seconds
+        expr: max(disk_storage_jobs_oldest_ready_age_seconds{job="disk-worker"})

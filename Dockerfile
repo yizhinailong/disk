@@ -48,16 +48,20 @@ FROM ubuntu:24.04 AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl libgcc-s1 libstdc++6 \
+    && apt-get install -y --no-install-recommends ca-certificates curl libgcc-s1 libstdc++6 postgresql-client \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --create-home --home-dir /var/lib/disk --shell /usr/sbin/nologin disk
+    && groupadd --gid 10001 disk \
+    && useradd --uid 10001 --gid disk --create-home --home-dir /var/lib/disk --shell /usr/sbin/nologin disk
 
 COPY --from=builder /workspace/build/container/src/disk /app/disk
 COPY deploy/config.distributed.json /app/config.json
+COPY scripts/migrate-db.sh /app/scripts/migrate-db.sh
+COPY sql/migrations/manifest.tsv sql/migrations/*_forward.sql /app/sql/migrations/
 
-RUN chown -R disk:disk /app /var/lib/disk
+RUN chmod 0555 /app/scripts/migrate-db.sh \
+    && chown -R disk:disk /app /var/lib/disk
 
-USER disk
+USER 10001:10001
 WORKDIR /app
 EXPOSE 8080
 

@@ -1,0 +1,88 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: disk-migrate-expand
+  namespace: disk
+  labels:
+    app.kubernetes.io/name: disk
+    app.kubernetes.io/component: migration
+    app.kubernetes.io/part-of: disk
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: disk
+        app.kubernetes.io/component: migration
+        app.kubernetes.io/part-of: disk
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      restartPolicy: Never
+      serviceAccountName: disk-runtime
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migration
+          image: disk-backend:replace-with-reviewed-tag
+          imagePullPolicy: IfNotPresent
+          command:
+            - /app/scripts/migrate-db.sh
+          env:
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: disk-runtime-config
+                  key: DATABASE_HOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: disk-runtime-config
+                  key: DATABASE_PORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: disk-runtime-config
+                  key: DATABASE_NAME
+            - name: PGUSER
+              valueFrom:
+                configMapKeyRef:
+                  name: disk-runtime-config
+                  key: DATABASE_USER
+            - name: PGSSLMODE
+              valueFrom:
+                configMapKeyRef:
+                  name: disk-runtime-config
+                  key: PGSSLMODE
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: disk-runtime-secrets
+                  key: DATABASE_PASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
