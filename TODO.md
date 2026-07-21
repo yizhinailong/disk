@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Phase 6 PostgreSQL 读副本准入评估）：`cmake --preset linux-debug-clang`、完整构建和 RuntimeConfig/拓扑聚焦 CTest 10/10 均通过；完整 CTest 共 1391 项，1385 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 485.33 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮 Phase 6 PostgreSQL PgBouncer 事务池兼容性验收）：`cmake --preset linux-debug-clang`、完整构建和 PgBouncer/拓扑聚焦 CTest 2/2 均通过；完整 CTest 共 1392 项，1386 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 483.59 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -350,7 +350,7 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 
 - [x] 采用主库写入端点和经过演练的故障切换方案；第一期不做业务分片。
 - [x] 本地双 API/双 Worker 固定 PostgreSQL 32、Redis 16 条应用连接预算并保留运维余量；扩容公式已写入部署指南。
-- [ ] 区分事务池模式限制，确认 Drogon ORM、prepared statement 和 advisory lock 兼容性。
+- [x] 区分事务池模式限制，确认 Drogon ORM、prepared statement 和 advisory lock 兼容性。
 - [x] Compose PostgreSQL 显式设置 statement、lock、idle transaction 超时，避免故障任务长期占用资源。
 - [x] 建立备份、时间点恢复和恢复演练流程。
 - [x] 只在可证明安全的只读查询上评估读副本；当前查询白名单为空，上传状态、权限及全部既有业务/运维判断只读主库写端点。
@@ -433,6 +433,14 @@ PostgreSQL/认证/Redis/拓扑聚焦 CTest 5/5 通过（48.17 秒）；完整 CT
 `RuntimeConfig` 现在会在环境覆盖、数据库连接和服务初始化前要求 `db_clients` 精确包含一个名为 `default` 的对象；缺失、非数组、空数组、非对象、重命名或追加 replica 均拒绝启动，错误不回显配置中的客户端名称、主机或密码。`DistributedTopologyContract` 同时锁定默认/分布式模板各只有一个 `default` 客户端，并禁止生产源码取得命名数据库客户端。
 
 clang-format、Python 语法检查、CMake 配置和完整构建通过；RuntimeConfig/拓扑聚焦 CTest 10/10 通过，完整 CTest 共 1391 项，1385 通过、6 项既有环境门控跳过、0 失败，总耗时 485.33 秒；OpenSpec 严格校验 24/24 通过。本记录完成 11.2 的“评估”要求但没有启用读副本；未来只有具有版本化陈旧读取合同、最大延迟、数据版本/观测时间、主库降级策略、隔离路由和故障测试的非权限报表可重新评估，所以第 17 节报表读副本演进项继续保持未勾选，事务池兼容项也不受本记录影响。
+
+### 11.12 Phase 6 PostgreSQL PgBouncer 事务池兼容性验收记录（2026-07-21）
+
+设计与部署合同现只准入 PgBouncer 1.25.2 及以上的 `pool_mode=transaction`，要求 `max_prepared_statements` 非零并保持 `server_reset_query_always=0`。允许范围是 Drogon ORM/`TransactionRunner`、协议级命名 prepared statement、`pg_advisory_xact_lock`、`SET LOCAL` 和同一事务内的 `CREATE TEMP TABLE ... ON COMMIT DROP`；静态拓扑合同拒绝会话级 advisory lock、SQL 级 `PREPARE`/`DEALLOCATE`、`LISTEN`/`UNLISTEN`、holdable cursor、会话 SET/RESET 依赖和持久临时表。
+
+本轮先以官方 SHA-256 校验的源码临时构建 PgBouncer 1.25.2，再由 `test_pgbouncer_transaction_pool.py` 启动它与唯一临时 PostgreSQL/Redis、两个真实 API。夹具把每 API 4 条、合计 8 条 Drogon 客户端连接复用到精确 2 条 PostgreSQL 后端连接；跨实例注册/profile、ORM 父子文件夹创建、`TransactionRunner` 子树 rename 和 breadcrumb 回读均成功。`SHOW STATS` 最终记录 client parse 26、server parse 19、bind 54；双代理客户端证明同一 `pg_advisory_xact_lock` 在持有事务提交前拒绝竞争者、提交后立即释放，事务内 `SET LOCAL` 与 `ON COMMIT DROP` 临时表也成功。测试先完成应用连接/plan 取证并停止双 API，再执行双连接锁探针，避免把 2 条后端预算耗尽误判为锁失败。
+
+Python 语法检查、CMake 配置和完整构建通过；PgBouncer/拓扑聚焦 CTest 2/2 通过（3.67 秒），真实脚本另连续重复 3/3 通过；完整 CTest 共 1392 项，1386 通过、6 项既有环境门控跳过、0 失败，总耗时 483.59 秒；OpenSpec 严格校验 24/24 通过。`0600` 原子证据 `.sisyphus/evidence/pgbouncer-transaction-pool-summary.json` 的 SHA-256 为 `02e268afc4bbf8b1b4612af2db9292ca9e70aaa94cd5478d3052c6f9d0e85a30`，不含端口、路径、凭据或业务标识。本记录不支持被禁止的会话特性，也不替代生产 PgBouncer 认证/TLS、稳定写端点 HA、独立故障域、内存/连接容量和版本升级回归。
 
 ## 12. Phase 7：可观测性与运维工具
 

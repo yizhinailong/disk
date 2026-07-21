@@ -155,6 +155,9 @@ def main() -> int:
         "return 308 https://$server_name$request_uri;",
         "sudo systemctl reload nginx",
         "API 继续使用 `deploy/config.distributed.json` 的 HTTP `8080`",
+        "PgBouncer 事务池准入合同",
+        "max_prepared_statements = 200",
+        "DISK_PGBOUNCER_BIN=/usr/sbin/pgbouncer",
     ):
         require(marker in operations_guide, f"operations guide is missing {marker}")
     for obsolete in (
@@ -332,6 +335,59 @@ def main() -> int:
         and "test_postgres_pitr_recovery.py" in test_cmake,
         "PostgreSQL PITR recovery test is not registered in CTest",
     )
+    require(
+        "PgBouncerTransactionPoolIntegration" in test_cmake
+        and "test_pgbouncer_transaction_pool.py" in test_cmake,
+        "PgBouncer transaction-pool test is not registered in CTest",
+    )
+
+    transaction_pool_sources = []
+    for source_root in (root / "src", root / "scripts", root / "sql"):
+        transaction_pool_sources.extend(
+            path
+            for path in source_root.rglob("*")
+            if path.is_file() and path.suffix in {".cpp", ".hpp", ".py", ".sh", ".sql"}
+        )
+    incompatible_patterns = {
+        "session advisory lock": re.compile(r"\bpg_(?:try_)?advisory_lock\s*\(", re.IGNORECASE),
+        "SQL-level PREPARE": re.compile(r"\bPREPARE\s+[A-Za-z_\"]"),
+        "SQL-level EXECUTE": re.compile(
+            r"\bEXECUTE\s+(?!(?:FUNCTION|PROCEDURE)\b)[A-Za-z_\"]"
+        ),
+        "SQL-level DEALLOCATE": re.compile(r"\bDEALLOCATE\s+(?:PREPARE\s+)?[A-Za-z_\"]"),
+        "LISTEN state": re.compile(r"\b(?:LISTEN|UNLISTEN)\s+[A-Za-z_\"]"),
+        "holdable cursor": re.compile(r"\bWITH\s+HOLD\b", re.IGNORECASE),
+        "session SET": re.compile(
+            r"\bSET\s+(?:SESSION\s+)?(?:ROLE|SESSION_AUTHORIZATION|SEARCH_PATH)\b",
+            re.IGNORECASE,
+        ),
+        "session RESET": re.compile(r"\bRESET\s+(?:ALL|ROLE|SESSION_AUTHORIZATION)\b", re.IGNORECASE),
+    }
+    temporary_table_count = 0
+    xact_lock_count = 0
+    for path in transaction_pool_sources:
+        source = path.read_text(encoding="utf-8", errors="replace")
+        relative_path = path.relative_to(root)
+        for label, pattern in incompatible_patterns.items():
+            require(
+                pattern.search(source) is None,
+                f"transaction-pool contract found {label} in {relative_path}",
+            )
+        xact_lock_count += len(re.findall(r"\bpg_advisory_xact_lock\s*\(", source, re.IGNORECASE))
+        for match in re.finditer(
+            r"\bCREATE\s+TEMP(?:ORARY)?\s+TABLE\b",
+            source,
+            re.IGNORECASE,
+        ):
+            temporary_table_count += 1
+            statement_window = source[match.start() : match.start() + 600]
+            require(
+                re.search(r"\bON\s+COMMIT\s+DROP\b", statement_window, re.IGNORECASE)
+                is not None,
+                f"transaction-pool temp table is not ON COMMIT DROP in {relative_path}",
+            )
+    require(xact_lock_count >= 2, "transactional advisory-lock migrations disappeared")
+    require(temporary_table_count == 1, "transaction-pool temp-table inventory drifted")
 
     todo = (root / "TODO.md").read_text(encoding="utf-8")
     latest_verification = re.search(
@@ -342,7 +398,7 @@ def main() -> int:
     require(latest_verification is not None, "TODO latest verification summary is missing or malformed")
     total, passed_count, skipped_count = map(int, latest_verification.groups())
     require(
-        (total, passed_count, skipped_count) == (1391, 1385, 6),
+        (total, passed_count, skipped_count) == (1392, 1386, 6),
         "TODO latest CTest inventory drifted without an explicit contract update",
     )
     require(total == passed_count + skipped_count, "TODO latest CTest totals do not reconcile")

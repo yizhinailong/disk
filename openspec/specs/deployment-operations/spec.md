@@ -37,6 +37,21 @@ Deployment documentation SHALL define PostgreSQL setup, schema initialization, p
 - **WHEN** Redis is configured for the application
 - **THEN** the operator SHALL be able to verify service status, authentication, connection count, and application configuration alignment
 
+### Requirement: PgBouncer transaction-pool compatibility
+Deployment documentation MAY claim PgBouncer transaction-pool compatibility only for PgBouncer 1.25.2 or later with `pool_mode=transaction`, non-zero protocol-level `max_prepared_statements`, and `server_reset_query_always` disabled. PgBouncer SHALL continue to target the single stable PostgreSQL writer endpoint. Application client-pool limits, PgBouncer backend-pool limits, PostgreSQL connection budgets, authentication, and TLS SHALL remain independently bounded and verified.
+
+#### Scenario: Transaction pooling is admitted
+- **WHEN** two real API processes connect through the documented PgBouncer transaction pool
+- **THEN** client connections SHALL be multiplexed onto fewer bounded server connections while cross-instance ORM operations, a multi-statement Drogon transaction, and protocol-level named prepared statements complete successfully
+
+#### Scenario: A transactional advisory lock is exercised
+- **WHEN** one client holds `pg_advisory_xact_lock` through PgBouncer and another client tries the same lock
+- **THEN** the second client SHALL be excluded before the first transaction commits and SHALL acquire the lock after commit
+
+#### Scenario: SQL depends on session identity
+- **WHEN** application or operational SQL introduces a session-level advisory lock, SQL-level prepared statement, LISTEN state, holdable cursor, persistent temporary table, or session SET/RESET dependency
+- **THEN** the repository compatibility contract SHALL fail and transaction pooling SHALL NOT be enabled until the dependency is removed and the real compatibility gate passes again
+
 ### Requirement: Capacity-derived distributed defaults
 The distributed deployment profile SHALL fix conservative per-process starting values derived from the recorded capacity and failure baselines. Each application process SHALL use 4 HTTP threads, 8 PostgreSQL connections, 4 Redis connections, 16 S3 HTTP connections, and 4 S3 I/O threads. Each API process SHALL use 4 authentication CPU threads and an assembly concurrency limit of 2. Worker execution concurrency SHALL remain 1. The recommended highly available starting topology SHALL be 2 API replicas and 2 Worker replicas.
 

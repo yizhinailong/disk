@@ -658,6 +658,17 @@ set_tests_properties(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+add_disk_gated_integration_test(
+    PgBouncerTransactionPoolIntegration
+    test_pgbouncer_transaction_pool.py
+    240
+    "SKIP: DISK_PGBOUNCER_BIN is not an executable PgBouncer"
+)
+set_property(
+    TEST PgBouncerTransactionPoolIntegration
+    APPEND PROPERTY LABELS distributed deployment
+)
+
 add_test(
     NAME DistributedCapacityBudgetContract
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_capacity_budget.py"
