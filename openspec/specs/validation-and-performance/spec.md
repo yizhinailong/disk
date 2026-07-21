@@ -41,6 +41,17 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** completion, cancellation, and expiration scanning concurrently contend for the same active or database-expired upload through different API instances
 - **THEN** the task SHALL reach exactly one legal terminal state, clear its lease and chunk rows, settle reserved and used quota exactly once, preserve file/content/ref-count invariants, and enqueue exactly one deduplicated staging-cleanup task
 
+### Requirement: Data consistency audit validation
+Automated validation SHALL audit exact file counts, user used and reserved quota, content reference counts, bidirectional database/object existence in the staging and final namespaces, and provider-visible incomplete multipart uploads.
+
+#### Scenario: Restored data is audited and repaired
+- **WHEN** a coordinated database and final-object recovery set is restored into isolated resources
+- **THEN** a real Worker SHALL complete every page of the `contents`, `users`, `staging`, and `final` scopes, preserve the expected file count, reject injected quota, reference-count, missing-object, size, and staging/final orphan faults with exact persisted findings, and resolve those findings only after repair and a complete new scan
+
+#### Scenario: Multipart storage is audited
+- **WHEN** a multipart-capable S3 upload is assembled, promoted, and cleaned or a persisted multipart-abort task is recovered
+- **THEN** evidence SHALL use the provider multipart inventory to prove incomplete uploads converge to zero while file, content, quota, final-object hash, and staging-object invariants remain correct
+
 ### Requirement: System functional validation
 The system test plan SHALL define functional test cases for authentication, user profile and storage, file upload/download, file and folder management, trash lifecycle, sharing, and system/admin interfaces.
 

@@ -821,7 +821,7 @@ SHA-256 分别为 `8380abf9d97188bfda1451cf2179f70fecdd62194549c5e24a85b46bd5461
 - [ ] 更新所有架构图、部署样例、运维手册、错误码表和测试数量。
 - [ ] 运行 clang-format、完整构建、完整测试、多实例测试和压力测试。
 - [x] 完成安全审查：S3 key 注入、SSRF/endpoint 配置、凭据泄漏、跨用户 upload ID、重放与限流。
-- [ ] 完成数据一致性审计：用户配额、文件数、内容 ref_count、DB/对象存在性、staging/multipart 孤儿。
+- [x] 完成数据一致性审计：用户配额、文件数、内容 ref_count、DB/对象存在性、staging/multipart 孤儿。
 - [x] 记录最终容量建议、已知限制和下一次扩容触发条件。
 
 ### 15.1 本机组装限流职责收敛记录（2026-07-21）
@@ -839,6 +839,14 @@ S3 对象键边界已覆盖会话标识、staging 前缀、assembled key 和 fin
 上传授权以 `(upload_id, user_id)` 为数据库查询边界，并在分片落盘、组装、取消和清理副作用之前失败。真实双用户 HTTP 集成覆盖未缓存及 5 秒上传任务缓存命中后的 chunk/complete/cancel 共 7 次越权尝试，均返回统一 `400 + 50008`，数据库任务、租约、分片、文件、内容、任务队列和本地对象均保持不变；所有者取消只释放一次配额，随后重复取消仍不泄露任务存在性。既有刷新令牌轮换、完成幂等和精确路由限流测试继续覆盖重放与 `429` 合同；Redis 限流当前仍采用可用性优先的 fail-open，生产需通过 Redis 高可用、告警和边缘限流降低依赖故障窗口风险。
 
 安全聚焦 CTest 63/63 通过；完整构建成功，完整 CTest 共 1381 项：1375 通过、6 项环境门控跳过、0 失败，总耗时 427.07 秒；OpenSpec 严格校验 24/24 通过。允许私网 endpoint 是部署能力而非动态请求能力，目标环境仍须用 MinIO IAM 最小权限、TLS、DNS 固定和出站网络策略约束 SSRF 影响面，并完成环境门控的真实 S3/多实例测试；这些残余验收不据此勾选 Phase 9 或最终 Definition of Done。
+
+### 15.3 数据一致性审计记录（2026-07-21）
+
+`BackupRestoreReconciliationIntegration` 在唯一源库和空恢复库之间真实执行 custom-format `pg_dump/pg_restore`，精确保留预置管理员加 2 个夹具用户、3 条文件、3 条内容、1 条回收站引用和 2 个活动上传。恢复库另加入 2 个有活动分片行引用的 local staging 对象，以每页 1 条让真实 Worker 完成 `contents/users/staging/final` 四 scope 的全部 continuation；干净扫描、故障扫描和修复复扫均只按各自 `scan_id` 验收。故障扫描精确持久化 `content_ref_count_mismatch`、两类 quota mismatch、缺失/大小错误 final Blob、`orphan_staging_object` 和 `orphan_final_blob` 共 7 类 finding；修复后 finding 全部由新扫描消解，文件数、配额、ref_count、完整哈希及 staging/final 双向 DB/对象集合重新一致。聚焦 CTest 1/1 通过（4.14 秒）。
+
+S3 协议审计在父提交 `f11d693` 的候选工作树上，以 Moto 5.2.2 和 6 MiB/6 分片 payload 完成一次真实 multipart 组装、promotion 与 Worker cleanup。provider 清单在组装前看到 6 个 chunk，完成后看到 6 个 chunk、1 个 assembled 和 1 个 final 对象；cleanup 后 staging 对象与 `list_multipart_uploads` 未完成项均为 0，final 保持 1 个且完整 SHA-256 通过。数据库同时精确为 1 条文件、1 条内容、1 条已完成 S3 任务、`ref_count=1`、`storage_used=6291456`、`storage_reserved=0`，API/Worker 本地暂存均为 0；`MultipartRecoveryIntegration` 另行 1/1 通过（0.67 秒），证明持久化 `multipart_abort` 可恢复。`0600` 证据 `.sisyphus/evidence/data-consistency-s3-audit-2026-07-21.json` 的 SHA-256 为 `cba9498bb2665cb760075802f12720196d6dcf2e9ed1d12122bf83f7e73a341e`。
+
+Python 语法检查和 OpenSpec 严格校验 24/24 通过。完整 CTest 首轮共 1381 项：1374 通过、6 项环境门控跳过、1 项失败，总耗时 428.72 秒；失败仅为既有 `SafetyUploadInvariantsIntegration` 中 487 条断言的一条共享库总预留量时序断言，该用例随后聚焦复跑 1/1 通过（105.60 秒）。因此 Phase 10 的“完整测试、多实例测试和压力测试”仍保持未勾选；Moto 证据记录 `git.dirty=true`，只用于一致性协议审计，不是性能基线，也不替代目标 MinIO/云 S3 的 lifecycle、multipart inventory、恢复演练或 Phase 9/最终 Definition of Done。
 
 ## 16. 最终 Definition of Done
 

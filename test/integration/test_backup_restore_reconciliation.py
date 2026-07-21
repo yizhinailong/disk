@@ -36,7 +36,7 @@ from test_expand_mixed_version import (
 
 JOB_SUCCEEDED = 3
 JOB_DEAD_LETTER = 4
-SCOPES = ("contents", "users", "final")
+SCOPES = ("contents", "users", "staging", "final")
 PAGE_LIMIT = 1
 
 
@@ -219,6 +219,10 @@ def business_snapshot(database_name: str) -> dict[str, list[dict[str, Any]]]:
             "SELECT id, user_id, file_size, reserved_bytes, staging_backend, "
             "staging_prefix, status FROM upload_tasks ORDER BY id"
         ),
+        "upload_task_chunks": (
+            "SELECT task_id, chunk_index, size_bytes, hash_md5, object_key, etag "
+            "FROM upload_task_chunks ORDER BY task_id, chunk_index"
+        ),
     }
     with connect(database_name) as connection:
         return {
@@ -308,7 +312,40 @@ def restore_recovery_set(
     )
 
 
-def verify_clean_invariants(database_name: str, final_root: Path) -> None:
+def create_referenced_staging_inventory(
+    database_name: str,
+    staging_root: Path,
+) -> None:
+    chunks = (
+        ("restore-upload-one", b"a" * 37),
+        ("restore-upload-two", b"b" * 53),
+    )
+    rows: list[tuple[str, int, int, str, str]] = []
+    for upload_id, payload in chunks:
+        md5 = digest_bytes(payload, "md5")
+        locator = f"{upload_id}/chunks/0-{md5}.part"
+        path = staging_root / locator
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        rows.append((upload_id, 0, len(payload), md5, locator))
+
+    with connect(database_name) as connection, connection.transaction():
+        for row in rows:
+            connection.execute(
+                """
+                INSERT INTO upload_task_chunks
+                    (task_id, chunk_index, size_bytes, hash_md5, object_key)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                row,
+            )
+
+
+def verify_clean_invariants(
+    database_name: str,
+    final_root: Path,
+    staging_root: Path,
+) -> None:
     with connect(database_name) as connection:
         ref_mismatches = connection.execute(
             """
@@ -338,9 +375,32 @@ def verify_clean_invariants(database_name: str, final_root: Path) -> None:
             "SELECT storage_path, size, hash_md5, hash_sha256 "
             "FROM file_contents ORDER BY id"
         ).fetchall()
+        file_count = int(
+            connection.execute("SELECT COUNT(*) AS count FROM files").fetchone()[
+                "count"
+            ]
+        )
+        staging_rows = connection.execute(
+            """
+            SELECT COALESCE(
+                       chunk.object_key,
+                       task.id || '/' || chunk.chunk_index::text || '.chunk'
+                   ) AS locator
+            FROM upload_task_chunks AS chunk
+            JOIN upload_tasks AS task ON task.id = chunk.task_id
+            WHERE task.status IN (0, 4)
+            UNION ALL
+            SELECT task.id || '.tmp' AS locator
+            FROM upload_tasks AS task
+            WHERE task.status = 4 AND task.staging_backend = 'local'
+            ORDER BY locator
+            """
+        ).fetchall()
 
     require(not ref_mismatches, f"ref_count mismatch after restore: {ref_mismatches}")
     require(not quota_mismatches, f"quota mismatch after restore: {quota_mismatches}")
+    require(file_count == 3, f"restored file count changed: {file_count}")
+    require(len(contents) == 3, f"restored content count changed: {len(contents)}")
     expected_locators: set[str] = set()
     for content in contents:
         path = Path(content["storage_path"])
@@ -360,9 +420,23 @@ def verify_clean_invariants(database_name: str, final_root: Path) -> None:
         )
     inventory = {str(path) for path in final_root.rglob("*") if path.is_file()}
     require(inventory == expected_locators, "restored DB/final inventory sets differ")
+    expected_staging_locators = {str(row["locator"]) for row in staging_rows}
+    staging_inventory = {
+        path.relative_to(staging_root).as_posix()
+        for path in staging_root.rglob("*")
+        if path.is_file()
+    }
+    require(
+        staging_inventory == expected_staging_locators,
+        "restored DB/staging inventory sets differ",
+    )
 
 
-def expected_page_counts(database_name: str, final_root: Path) -> dict[str, int]:
+def expected_page_counts(
+    database_name: str,
+    final_root: Path,
+    staging_root: Path,
+) -> dict[str, int]:
     with connect(database_name) as connection:
         content_count = int(
             connection.execute(
@@ -374,11 +448,13 @@ def expected_page_counts(database_name: str, final_root: Path) -> dict[str, int]
                 "count"
             ]
         )
-    object_count = sum(1 for path in final_root.rglob("*") if path.is_file())
+    staging_count = sum(1 for path in staging_root.rglob("*") if path.is_file())
+    final_count = sum(1 for path in final_root.rglob("*") if path.is_file())
     return {
         "contents": (content_count // PAGE_LIMIT) + 1,
         "users": (user_count // PAGE_LIMIT) + 1,
-        "final": max(1, (object_count + PAGE_LIMIT - 1) // PAGE_LIMIT),
+        "staging": max(1, (staging_count + PAGE_LIMIT - 1) // PAGE_LIMIT),
+        "final": max(1, (final_count + PAGE_LIMIT - 1) // PAGE_LIMIT),
     }
 
 
@@ -510,8 +586,9 @@ def unresolved_findings(database_name: str) -> list[dict[str, Any]]:
 def inject_reconciliation_failures(
     database_name: str,
     final_root: Path,
+    staging_root: Path,
     fixture: dict[str, Any],
-) -> tuple[Path, set[tuple[str, str]]]:
+) -> tuple[Path, Path, set[tuple[str, str]]]:
     alpha, bravo, charlie = fixture["blobs"]
     with connect(database_name) as connection, connection.transaction():
         connection.execute(
@@ -525,24 +602,36 @@ def inject_reconciliation_failures(
         )
     Path(bravo["path"]).unlink()
     Path(charlie["path"]).write_bytes(charlie["payload"] + b"size-mismatch")
-    orphan_path = final_root / "orphan" / "unreferenced-final.bin"
-    orphan_path.parent.mkdir(parents=True, exist_ok=True)
-    orphan_path.write_bytes(b"orphan-final-blob\n")
+    orphan_final_path = final_root / "orphan" / "unreferenced-final.bin"
+    orphan_final_path.parent.mkdir(parents=True, exist_ok=True)
+    orphan_final_path.write_bytes(b"orphan-final-blob\n")
+    orphan_staging_path = staging_root / "orphan" / "unreferenced-staging.chunk"
+    orphan_staging_path.parent.mkdir(parents=True, exist_ok=True)
+    orphan_staging_path.write_bytes(b"orphan-staging-object\n")
+    orphan_staging_locator = orphan_staging_path.relative_to(staging_root).as_posix()
     expected = {
         ("content_ref_count_mismatch", str(alpha["content_id"])),
         ("quota_used_mismatch", str(fixture["user_one_id"])),
         ("quota_reserved_mismatch", str(fixture["user_one_id"])),
         ("missing_final_blob", str(bravo["content_id"])),
         ("final_blob_size_mismatch", str(charlie["content_id"])),
-        ("orphan_final_blob", digest_bytes(str(orphan_path).encode(), "sha256")),
+        (
+            "orphan_staging_object",
+            digest_bytes(orphan_staging_locator.encode(), "sha256"),
+        ),
+        (
+            "orphan_final_blob",
+            digest_bytes(str(orphan_final_path).encode(), "sha256"),
+        ),
     }
-    return orphan_path, expected
+    return orphan_final_path, orphan_staging_path, expected
 
 
 def repair_reconciliation_failures(
     database_name: str,
     fixture: dict[str, Any],
-    orphan_path: Path,
+    orphan_final_path: Path,
+    orphan_staging_path: Path,
 ) -> None:
     alpha, bravo, charlie = fixture["blobs"]
     with connect(database_name) as connection, connection.transaction():
@@ -560,7 +649,8 @@ def repair_reconciliation_failures(
         )
     Path(bravo["path"]).write_bytes(bravo["payload"])
     Path(charlie["path"]).write_bytes(charlie["payload"])
-    orphan_path.unlink()
+    orphan_final_path.unlink()
+    orphan_staging_path.unlink()
 
 
 def verify_detected_findings(
@@ -622,6 +712,24 @@ def main() -> None:
             )
             fixture = seed_source_database(source_database, final_root, staging_root)
             source_snapshot = business_snapshot(source_database)
+            require(
+                len(source_snapshot["files"]) == 3,
+                "backup source file count changed",
+            )
+            require(
+                len(source_snapshot["file_contents"]) == 3,
+                "backup source content count changed",
+            )
+            require(
+                len(source_snapshot["users"]) == 3
+                and len(source_snapshot["trash"]) == 1,
+                "backup source user or trash count changed",
+            )
+            require(
+                len(source_snapshot["upload_tasks"]) == 2
+                and not source_snapshot["upload_task_chunks"],
+                "backup source upload fixture changed",
+            )
             manifest = create_recovery_set(source_database, final_root, backup_root)
 
             create_database(restored_database)
@@ -631,10 +739,15 @@ def main() -> None:
                 business_snapshot(restored_database) == source_snapshot,
                 "restored business snapshot differs from backup source",
             )
-            verify_clean_invariants(restored_database, final_root)
+            create_referenced_staging_inventory(restored_database, staging_root)
+            verify_clean_invariants(restored_database, final_root, staging_root)
 
             clean_scan_id = f"restore-clean-{suffix}"
-            clean_counts = expected_page_counts(restored_database, final_root)
+            clean_counts = expected_page_counts(
+                restored_database,
+                final_root,
+                staging_root,
+            )
             enqueue_reconciliation(restored_database, clean_scan_id)
             port = allocate_ports(1)[0]
             worker = ManagedServer(
@@ -666,13 +779,22 @@ def main() -> None:
                 "clean restored backup produced reconciliation findings",
             )
 
-            orphan_path, expected_findings = inject_reconciliation_failures(
+            (
+                orphan_final_path,
+                orphan_staging_path,
+                expected_findings,
+            ) = inject_reconciliation_failures(
                 restored_database,
                 final_root,
+                staging_root,
                 fixture,
             )
             failure_scan_id = f"restore-failure-{suffix}"
-            failure_counts = expected_page_counts(restored_database, final_root)
+            failure_counts = expected_page_counts(
+                restored_database,
+                final_root,
+                staging_root,
+            )
             enqueue_reconciliation(restored_database, failure_scan_id)
             failure_rows = wait_for_reconciliation(
                 restored_database,
@@ -683,11 +805,20 @@ def main() -> None:
             verify_pagination(failure_rows, failure_counts)
             verify_detected_findings(restored_database, expected_findings)
 
-            repair_reconciliation_failures(restored_database, fixture, orphan_path)
-            verify_clean_invariants(restored_database, final_root)
+            repair_reconciliation_failures(
+                restored_database,
+                fixture,
+                orphan_final_path,
+                orphan_staging_path,
+            )
+            verify_clean_invariants(restored_database, final_root, staging_root)
             time.sleep(0.02)
             repaired_scan_id = f"restore-repaired-{suffix}"
-            repaired_counts = expected_page_counts(restored_database, final_root)
+            repaired_counts = expected_page_counts(
+                restored_database,
+                final_root,
+                staging_root,
+            )
             enqueue_reconciliation(restored_database, repaired_scan_id)
             repaired_rows = wait_for_reconciliation(
                 restored_database,
@@ -697,11 +828,11 @@ def main() -> None:
             )
             verify_pagination(repaired_rows, repaired_counts)
             verify_resolved_history(restored_database, expected_findings)
-            verify_clean_invariants(restored_database, final_root)
+            verify_clean_invariants(restored_database, final_root, staging_root)
             worker.require_running("backup restore acceptance verification")
             print(
-                "PASS: custom-format backup restore completed full quota, ref_count, "
-                "and bidirectional final-object reconciliation"
+                "PASS: custom-format backup restore completed full file-count, quota, "
+                "ref_count, and bidirectional staging/final-object reconciliation"
             )
         except BaseException:
             if worker is not None:
