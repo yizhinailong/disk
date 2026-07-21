@@ -416,9 +416,11 @@ API Instance A  API Instance B ... N
 - [x] 多实例脚本固定 init 在 A、分片跨 A/B、complete 并发到 A/B，并验证另一实例可完成。
 - [x] 多实例脚本同时向 A/B 上传同一分片，验证两次调用幂等并由完成后的 DB/对象唯一性兜底。
 - [x] 多实例脚本同时向 A/B 调用 complete，冲突方重试后必须收敛到同一文件记录。
-- [ ] 并发执行 complete/cancel/expire，验证单一合法终态和配额不变量。
+- [x] 并发执行 complete/cancel/expire，验证单一合法终态和配额不变量。
 - [x] 多实例脚本在 A 登出/取消分享后从 B 立即验证 access/share token 撤销，并并发验证 refresh CAS。
 - [x] 多实例脚本验证两个 Worker 共享队列，并在 A 停止后由 B 接管过期租约；周期任务去重继续由数据库集成测试覆盖。
+
+`test_safety_upload_invariants.py` 对未过期和按 PostgreSQL 截止时间过期的任务分别从同一屏障并发发起 complete、cancel 与 expire，已在完整 CTest 中通过；它验证唯一合法终态、租约/分片清零、唯一 staging cleanup，以及 reserved/used、文件、内容行和 ref_count 不变量。`test_distributed_flow.py` 使用 API A 完成/过期扫描、API B 取消，并重复同一套数据库与 S3 对账；该 Compose/本地多实例入口仍受环境变量门控，本次只确认脚本合同存在，不把未执行的环境门控项计作目标环境验收。
 
 ### 13.3 故障注入
 

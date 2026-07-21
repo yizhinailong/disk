@@ -37,6 +37,10 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** either distributed entry is invoked without its required environment gate
 - **THEN** it SHALL report an environment-gated skip that SHALL NOT count as distributed acceptance evidence
 
+#### Scenario: Upload terminal contenders race across API instances
+- **WHEN** completion, cancellation, and expiration scanning concurrently contend for the same active or database-expired upload through different API instances
+- **THEN** the task SHALL reach exactly one legal terminal state, clear its lease and chunk rows, settle reserved and used quota exactly once, preserve file/content/ref-count invariants, and enqueue exactly one deduplicated staging-cleanup task
+
 ### Requirement: System functional validation
 The system test plan SHALL define functional test cases for authentication, user profile and storage, file upload/download, file and folder management, trash lifecycle, sharing, and system/admin interfaces.
 
