@@ -57,6 +57,10 @@ The system SHALL propagate upload-completion correlation explicitly across contr
 - **WHEN** completion creates or rearms a cleanup or reconciliation job through an interface that does not return its persistent row ID
 - **THEN** the completion event SHALL keep `job_id` null and SHALL NOT derive an ID from the dedupe key, aggregate ID, or message text
 
+#### Scenario: Local storage assembles staged chunks
+- **WHEN** local storage admits and completes or fails an upload assembly across its blocking filesystem queue
+- **THEN** every assembly lifecycle event SHALL retain the caller-supplied request, operation, upload, job, owner, and state-version values exactly, including null values, without reconstructing them from the session, paths, or message text
+
 ### Requirement: Typed Durable Worker Correlation
 The system SHALL derive durable Worker correlation only from claimed PostgreSQL job records and SHALL use a bounded operation vocabulary without message parsing or inferred identifiers.
 

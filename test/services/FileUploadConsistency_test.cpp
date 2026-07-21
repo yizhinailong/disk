@@ -9,28 +9,37 @@
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <drogon/drogon.h>
 #include <drogon/utils/coroutine.h>
 #include <gtest/gtest.h>
 #include <json/json.h>
+#include <spdlog/sinks/ostream_sink.h>
+#include <spdlog/spdlog.h>
 
 #include "../../src/dtos/FileDto.hpp"
 #include "../../src/storage/LocalBlobStore.hpp"
 #include "../../src/storage/LocalFileStorage.hpp"
 #include "../../src/utils/ConfigMgr.hpp"
 #include "../../src/utils/FileHashUtil.hpp"
+#include "../../src/utils/LogHelper.hpp"
 #include "../storage/UploadStagingTestAdapter.hpp"
 
 namespace disk::file {
     namespace {
 
         using disk::storage::LocalBlobStore;
+        using disk::storage::LocalFileStorage;
         using disk::test_support::UploadStagingTestAdapter;
         using disk::utils::ConfigMgr;
         using disk::utils::FileHashUtil;
+        using disk::utils::LogContext;
+        using disk::utils::Logger;
 
         auto SanitizePathComponent(std::string value) -> std::string {
             for (auto& ch : value) {
@@ -108,6 +117,87 @@ namespace disk::file {
             std::filesystem::path m_temp_base;
             std::unique_ptr<UploadStagingTestAdapter> m_storage;
             std::unique_ptr<LocalBlobStore> m_blob_store;
+        };
+
+        class LocalFileStorageAssemblyLogTest : public LocalFileStorageUploadConsistencyTest {
+        protected:
+            void SetUp() override {
+                LocalFileStorageUploadConsistencyTest::SetUp();
+                m_previous_logger = spdlog::default_logger();
+                m_sink = std::make_shared<spdlog::sinks::ostream_sink_mt>(m_output);
+                m_logger = std::make_shared<spdlog::logger>("local-assembly-log-test", m_sink);
+                Logger::ApplyStructuredFormatter(m_logger);
+                m_logger->set_level(spdlog::level::debug);
+                spdlog::set_default_logger(m_logger);
+                Logger::SetInstanceId("local-assembly-test-instance");
+            }
+
+            void TearDown() override {
+                Logger::SetInstanceId("");
+                spdlog::set_default_logger(m_previous_logger);
+                m_logger.reset();
+                m_sink.reset();
+                LocalFileStorageUploadConsistencyTest::TearDown();
+            }
+
+            [[nodiscard]]
+            auto AssemblyRecords() -> std::vector<Json::Value> {
+                m_logger->flush();
+                std::vector<Json::Value> records;
+                std::istringstream lines(m_output.str());
+                std::string line;
+                while (std::getline(lines, line)) {
+                    if (line.empty()) {
+                        continue;
+                    }
+
+                    Json::CharReaderBuilder builder;
+                    builder["collectComments"] = false;
+                    const auto reader = std::unique_ptr<Json::CharReader>(
+                        builder.newCharReader()
+                    );
+                    Json::Value record;
+                    std::string errors;
+                    if (!reader->parse(
+                            line.data(),
+                            line.data() + line.size(),
+                            &record,
+                            &errors
+                        )) {
+                        ADD_FAILURE() << "Invalid structured log line: " << errors;
+                        continue;
+                    }
+
+                    const auto message = record["message"].asString();
+                    if (std::string_view(message).starts_with("[assemble_chunks]") ||
+                        std::string_view(message).starts_with("Assembly ")) {
+                        records.push_back(std::move(record));
+                    }
+                }
+                return records;
+            }
+
+            [[nodiscard]]
+            auto AssembleWithContext(
+                const std::string& upload_id,
+                uint64_t state_version,
+                LogContext log_context
+            ) -> Result<disk::storage::UploadStagingAssembly> {
+                const disk::storage::UploadStagingSession session{
+                    .upload_id = upload_id,
+                    .backend = disk::storage::UploadStagingBackend::Local,
+                    .prefix = upload_id,
+                };
+                const auto chunks = m_storage->DescriptorsFor(upload_id);
+                return drogon::sync_wait(
+                    static_cast<LocalFileStorage&>(*m_storage).AssembleChunks(session, state_version, static_cast<uint32_t>(chunks.size()), chunks, std::move(log_context))
+                );
+            }
+
+            std::shared_ptr<spdlog::logger> m_previous_logger;
+            std::ostringstream m_output;
+            std::shared_ptr<spdlog::sinks::ostream_sink_mt> m_sink;
+            std::shared_ptr<spdlog::logger> m_logger;
         };
 
         /// ============================================================================
@@ -324,6 +414,80 @@ namespace disk::file {
             ASSERT_FALSE(assemble_result.has_value());
             EXPECT_EQ(assemble_result.error().code, ErrorCode::ChunkVerifyFailed);
             EXPECT_FALSE(std::filesystem::exists(AssembledPath(upload_id)));
+        }
+
+        TEST_F(LocalFileStorageAssemblyLogTest, AssembleSuccessRetainsCompleteContextAcrossBlockingQueue) {
+            const std::string upload_id = "assemble-context-success";
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, "assembly-log-payload")).has_value());
+
+            auto result = AssembleWithContext(
+                upload_id,
+                17,
+                LogContext{
+                    .request_id = "request-assembly-success",
+                    .operation = "upload_complete",
+                    .upload_id = upload_id,
+                    .job_id = 41,
+                    .lease_owner = "api-assembly-owner",
+                    .state_version = 17,
+                }
+            );
+            ASSERT_TRUE(result.has_value());
+
+            const auto records = AssemblyRecords();
+            ASSERT_EQ(records.size(), 4U);
+            for (const auto& record : records) {
+                EXPECT_EQ(record["level"].asString(), "debug");
+                EXPECT_EQ(record["instance_id"].asString(), "local-assembly-test-instance");
+                EXPECT_EQ(record["request_id"].asString(), "request-assembly-success");
+                EXPECT_EQ(record["operation"].asString(), "upload_complete");
+                EXPECT_EQ(record["upload_id"].asString(), upload_id);
+                EXPECT_EQ(record["job_id"].asUInt64(), 41U);
+                EXPECT_EQ(record["lease_owner"].asString(), "api-assembly-owner");
+                EXPECT_EQ(record["state_version"].asUInt64(), 17U);
+            }
+            EXPECT_NE(records.back()["message"].asString().find("outcome=success"), std::string::npos);
+        }
+
+        TEST_F(LocalFileStorageAssemblyLogTest, AssembleFailureDoesNotInferMissingContextAcrossBlockingQueue) {
+            const std::string upload_id = "assemble-context-failure";
+            ASSERT_TRUE(drogon::sync_wait(m_storage->EnsureUploadTempDir(upload_id)).has_value());
+            ASSERT_TRUE(drogon::sync_wait(m_storage->WriteChunk(upload_id, 0, "missing-after-write")).has_value());
+
+            std::error_code error;
+            ASSERT_TRUE(std::filesystem::remove(ChunkPath(upload_id, 0), error));
+            ASSERT_FALSE(error);
+
+            auto result = AssembleWithContext(
+                upload_id,
+                23,
+                LogContext{
+                    .request_id = "request-assembly-failure",
+                    .operation = "upload_complete",
+                }
+            );
+            ASSERT_FALSE(result.has_value());
+            EXPECT_EQ(result.error().code, ErrorCode::ChunkVerifyFailed);
+
+            const auto records = AssemblyRecords();
+            ASSERT_EQ(records.size(), 3U);
+            for (size_t index = 0; index < records.size(); ++index) {
+                const auto& record = records[index];
+                EXPECT_EQ(record["level"].asString(), index < 2 ? "debug" : "info");
+                EXPECT_EQ(record["instance_id"].asString(), "local-assembly-test-instance");
+                EXPECT_EQ(record["request_id"].asString(), "request-assembly-failure");
+                EXPECT_EQ(record["operation"].asString(), "upload_complete");
+                for (const auto* field : {
+                         "upload_id",
+                         "job_id",
+                         "lease_owner",
+                         "state_version",
+                     }) {
+                    EXPECT_TRUE(record[field].isNull()) << field;
+                }
+            }
+            EXPECT_NE(records.back()["message"].asString().find("outcome=failure"), std::string::npos);
         }
 
         TEST_F(LocalFileStorageUploadConsistencyTest, PromoteToFinalReportsCreatedForNewBlob) {

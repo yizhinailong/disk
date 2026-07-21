@@ -435,7 +435,7 @@ namespace disk::storage {
         uint64_t state_version,
         uint32_t expected_chunk_count,
         const std::vector<UploadStagingChunk>& chunks,
-        disk::utils::LogContext /*log_context*/
+        disk::utils::LogContext log_context
     )
         -> drogon::Task<Result<UploadStagingAssembly>> {
         auto validation = ValidateLocalSession(session);
@@ -469,32 +469,32 @@ namespace disk::storage {
             resolved_chunks.emplace_back(chunk, std::move(chunk_path.value()));
         }
 
-        Logger::Debug() << "[assemble_chunks] start running_count=" << limiter.RunningCount()
-                        << " max_concurrent=" << limiter.MaxConcurrent()
-                        << " upload_id=" << upload_id;
+        Logger::Debug(log_context) << "[assemble_chunks] start running_count=" << limiter.RunningCount()
+                                   << " max_concurrent=" << limiter.MaxConcurrent()
+                                   << " upload_id=" << upload_id;
 
         auto slot_guard = limiter.TryAcquire();
         if (!slot_guard.has_value()) {
-            Logger::Warn() << "Assembly admission rejected: upload_id=" << upload_id
-                           << ", reason=local_capacity_exhausted"
-                           << ", running=" << limiter.RunningCount()
-                           << ", max_concurrent=" << limiter.MaxConcurrent();
+            Logger::Warn(log_context) << "Assembly admission rejected: upload_id=" << upload_id
+                                      << ", reason=local_capacity_exhausted"
+                                      << ", running=" << limiter.RunningCount()
+                                      << ", max_concurrent=" << limiter.MaxConcurrent();
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[assemble_chunks] duration_us=" << duration_us
-                           << " outcome=failure reason=local_capacity_exhausted"
-                           << " running_count=" << limiter.RunningCount()
-                           << " max_concurrent=" << limiter.MaxConcurrent();
+            Logger::Info(log_context) << "[assemble_chunks] duration_us=" << duration_us
+                                      << " outcome=failure reason=local_capacity_exhausted"
+                                      << " running_count=" << limiter.RunningCount()
+                                      << " max_concurrent=" << limiter.MaxConcurrent();
 
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::TooManyRequests, "Too many concurrent assembly operations, please retry later")
             );
         }
 
-        Logger::Debug() << "Assembly started: upload_id=" << upload_id << ", running=" << limiter.RunningCount()
-                        << ", max_concurrent=" << limiter.MaxConcurrent();
+        Logger::Debug(log_context) << "Assembly started: upload_id=" << upload_id << ", running=" << limiter.RunningCount()
+                                   << ", max_concurrent=" << limiter.MaxConcurrent();
 
         const auto assembled_path = GetAssembleFilePath(upload_id);
         const auto assembled_parent = assembled_path.parent_path();
@@ -614,21 +614,21 @@ namespace disk::storage {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[assemble_chunks] duration_us=" << duration_us
-                           << " outcome=failure running_count=" << limiter.RunningCount()
-                           << " max_concurrent=" << limiter.MaxConcurrent();
+            Logger::Info(log_context) << "[assemble_chunks] duration_us=" << duration_us
+                                      << " outcome=failure running_count=" << limiter.RunningCount()
+                                      << " max_concurrent=" << limiter.MaxConcurrent();
             co_return result;
         }
 
-        Logger::Debug() << "Assembly completed: upload_id=" << upload_id << ", running=" << limiter.RunningCount()
-                        << ", max_concurrent=" << limiter.MaxConcurrent();
+        Logger::Debug(log_context) << "Assembly completed: upload_id=" << upload_id << ", running=" << limiter.RunningCount()
+                                   << ", max_concurrent=" << limiter.MaxConcurrent();
 
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        Logger::Debug() << "[assemble_chunks] duration_us=" << duration_us
-                        << " outcome=success running_count=" << limiter.RunningCount()
-                        << " max_concurrent=" << limiter.MaxConcurrent();
+        Logger::Debug(log_context) << "[assemble_chunks] duration_us=" << duration_us
+                                   << " outcome=success running_count=" << limiter.RunningCount()
+                                   << " max_concurrent=" << limiter.MaxConcurrent();
 
         co_return result;
     }
