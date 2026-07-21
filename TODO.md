@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 complete 日志关联）：完整构建、聚焦日志/请求追踪/上传生命周期/租约仓储 CTest 34/34 及真实 HTTP safety 集成 1/1 通过；完整 CTest 共 1395 项，1388 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 469.41 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 Worker 持久任务日志关联）：完整构建、聚焦 Worker/日志 CTest 24/24 及真实双 Worker 接管集成 1/1 通过；完整 CTest 共 1398 项，1391 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 464.85 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -529,6 +529,12 @@ stdout、旋转文件以及被捕获的 Drogon/Trantor 诊断现统一输出单�
 部署运维、系统测试、单元测试和 OpenSpec 先行固定 complete 的类型化字段合同。`FileController` 从请求属性创建固定 `operation=upload_complete` 的 `LogContext`，在 DTO 得到非空 ID 后补齐 `upload_id`，并按值传过 `UploadService`、`UploadLifecycleService` 及续租、错误记录、对账等辅助协程。Lifecycle 只在 PostgreSQL 认领成功后填入真实 `lease_owner`，以每次 CAS 返回值推进 `state_version`；完成事务提交清空 owner 并记录完成更新后的版本，重放不伪造已清空的 owner。当前 cleanup/reconciliation 入队接口不返回持久行 ID，因此 complete 事件保持 `job_id=null`，不从 dedupe key 或消息文本推断。
 
 `SafetyUploadInvariantsIntegration` 删除数据库已记录的 staging 对象后，以调用方 request ID 发起真实 complete 请求，逐行解析组装错误和 `[complete_upload]` 失败汇总 NDJSON，并查询失败后的 `upload_tasks`；两条 Lifecycle 事件的 request/instance/upload、lease owner 与 state version 均与响应和数据库行精确一致，job ID 为 JSON `null`。完整构建、Python 语法检查、聚焦 CTest 34/34 和真实 HTTP safety 集成 1/1 通过；完整 CTest 共 1395 项，1388 通过、7 项环境门控跳过、0 失败，总耗时 469.41 秒；OpenSpec 严格校验 24/24 通过。download/cleanup 及实际取得持久任务 ID 后的 Worker/S3 关联仍待后续最小批次，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.9 Worker 持久任务日志关联记录（2026-07-22）
+
+部署运维、系统测试、单元测试和 OpenSpec 先行固定 Worker 的类型化字段合同。`BuildStorageJobLogContext` 只从 PostgreSQL 已认领任务构造关联值：正数主键写入 `job_id`，非空 `locked_by` 写入 `lease_owner`，已知任务类型映射为有界 operation，未知类型统一映射为 `storage_job_unknown`；仅完整 payload 通过校验且聚合 ID 一致的 staging cleanup 任务携带业务 `upload_id`，multipart 远端 ID 不冒充业务上传 ID。Worker 没有 HTTP 请求和上传状态版本时保持 JSON `null`，执行汇总在结果回写后或无法确认继续持有所有权时清除 owner；认领、预检、心跳、执行、回滚及结果持久化等 Worker 本地事件均显式使用同一上下文。
+
+`StorageJobWorkerTest` 覆盖六类已知任务、合法 staging cleanup、畸形 payload 和未知任务的映射/空值合同；`WorkerDrainTakeoverIntegration` 让 Worker B 真实接管 Worker A 的过期 Blob GC 租约，逐行解析 stdout NDJSON，验证开始事件携带数据库真实 job/owner、完成事件保留 job 并清空 owner，且两者 instance、operation 与空值字段准确。完整构建、Python 语法检查、聚焦 Worker/日志 CTest 24/24 和真实双 Worker 接管集成 1/1 通过；完整 CTest 共 1398 项，1391 通过、7 项环境门控跳过、0 失败，总耗时 464.85 秒；OpenSpec 严格校验 24/24 通过。download、cleanup API 生命周期及 S3 存储边界的端到端关联仍待后续最小批次，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

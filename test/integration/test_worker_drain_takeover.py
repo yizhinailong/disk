@@ -79,6 +79,38 @@ def read_log(server: ManagedServer) -> str:
     return server.log_path.read_text(encoding="utf-8", errors="replace")
 
 
+def find_worker_job_event(
+    server: ManagedServer,
+    *,
+    instance_id: str,
+    job_id: int,
+    lease_owner: str | None,
+    message_marker: str,
+) -> dict[str, Any] | None:
+    """Find one schema-v1 Blob GC event with exact typed Worker correlation."""
+    for line in read_log(server).splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(record, dict):
+            continue
+        if (
+            record.get("schema_version") == 1
+            and record.get("source") == "application"
+            and record.get("instance_id") == instance_id
+            and record.get("request_id") is None
+            and record.get("operation") == "storage_job_blob_gc"
+            and record.get("upload_id") is None
+            and record.get("job_id") == job_id
+            and record.get("lease_owner") == lease_owner
+            and record.get("state_version") is None
+            and message_marker in str(record.get("message", ""))
+        ):
+            return record
+    return None
+
+
 def worker_config(
     database_name: str,
     port: int,
@@ -526,6 +558,32 @@ def main() -> int:
                 f"lease_owner={WORKER_B}, attempts=2, lease_takeover=1" in worker_b_log,
                 "successor log does not identify the expired-lease takeover",
             )
+            for fixture, label in (
+                (sentinel, "independent sentinel"),
+                (target, "expired-lease takeover"),
+            ):
+                require(
+                    find_worker_job_event(
+                        worker_b,
+                        instance_id=WORKER_B,
+                        job_id=int(fixture["job_id"]),
+                        lease_owner=WORKER_B,
+                        message_marker="Storage job execution started",
+                    )
+                    is not None,
+                    f"{label} start event lacks typed job ownership correlation",
+                )
+                require(
+                    find_worker_job_event(
+                        worker_b,
+                        instance_id=WORKER_B,
+                        job_id=int(fixture["job_id"]),
+                        lease_owner=None,
+                        message_marker="Storage job execution completed",
+                    )
+                    is not None,
+                    f"{label} completion event retains or loses typed correlation",
+                )
             require(
                 content_count(database_name, target["content_id"]) == 0
                 and content_count(database_name, sentinel["content_id"]) == 0,

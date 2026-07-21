@@ -186,6 +186,67 @@ namespace disk::jobs {
             };
         }
 
+        TEST(StorageJobWorkerLogContextTest, MapsKnownJobTypesToBoundedOperations) {
+            const std::vector<std::string> job_types{
+                std::string(kStagingCleanupJobType),
+                std::string(kMultipartAbortJobType),
+                std::string(kBlobGcJobType),
+                std::string(kExpireUploadsJobType),
+                std::string(kExpireTrashJobType),
+                std::string(kStorageReconcileJobType),
+            };
+
+            for (const auto& job_type : job_types) {
+                StorageJob job;
+                job.job_type = job_type;
+
+                const auto context = BuildStorageJobLogContext(job);
+
+                ASSERT_TRUE(context.operation.has_value());
+                EXPECT_EQ(context.operation.value(), "storage_job_" + job_type);
+            }
+        }
+
+        TEST(StorageJobWorkerLogContextTest, UsesPersistedStagingIdentityAndClaimOwner) {
+            const auto context = BuildStorageJobLogContext(MakeCleanupJob());
+
+            ASSERT_TRUE(context.operation.has_value());
+            EXPECT_EQ(context.operation.value(), "storage_job_staging_cleanup");
+            ASSERT_TRUE(context.upload_id.has_value());
+            EXPECT_EQ(context.upload_id.value(), "upload-123");
+            ASSERT_TRUE(context.job_id.has_value());
+            EXPECT_EQ(context.job_id.value(), 42U);
+            ASSERT_TRUE(context.lease_owner.has_value());
+            EXPECT_EQ(context.lease_owner.value(), "worker-1");
+            EXPECT_FALSE(context.request_id.has_value());
+            EXPECT_FALSE(context.state_version.has_value());
+        }
+
+        TEST(StorageJobWorkerLogContextTest, DoesNotInferUnavailableCorrelation) {
+            auto malformed_staging = MakeCleanupJob();
+            malformed_staging.aggregate_id = "different-upload";
+            const auto malformed_context = BuildStorageJobLogContext(malformed_staging);
+            EXPECT_FALSE(malformed_context.upload_id.has_value());
+
+            auto incomplete_staging = MakeCleanupJob();
+            incomplete_staging.payload.removeMember("backend");
+            const auto incomplete_context = BuildStorageJobLogContext(incomplete_staging);
+            EXPECT_FALSE(incomplete_context.upload_id.has_value());
+
+            auto unknown = MakeCleanupJob();
+            unknown.id = 0;
+            unknown.job_type = "future_job";
+            unknown.locked_by.clear();
+            const auto unknown_context = BuildStorageJobLogContext(unknown);
+            ASSERT_TRUE(unknown_context.operation.has_value());
+            EXPECT_EQ(unknown_context.operation.value(), "storage_job_unknown");
+            EXPECT_FALSE(unknown_context.upload_id.has_value());
+            EXPECT_FALSE(unknown_context.job_id.has_value());
+            EXPECT_FALSE(unknown_context.lease_owner.has_value());
+            EXPECT_FALSE(unknown_context.request_id.has_value());
+            EXPECT_FALSE(unknown_context.state_version.has_value());
+        }
+
         TEST(StorageJobWorkerHandlerTest, ExecutesPersistedStagingSessionExactly) {
             RecordingStagingStorage storage;
             StorageJobWorker worker(nullptr, &storage, nullptr, "worker-1");

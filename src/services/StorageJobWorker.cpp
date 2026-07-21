@@ -55,13 +55,15 @@ namespace disk::jobs {
         class PeriodicScanPageLogGuard {
         public:
             PeriodicScanPageLogGuard(
+                disk::utils::LogContext log_context,
                 std::string instance_id,
                 std::string job_type,
                 std::string scan_id,
                 std::string scope,
                 std::string cursor_kind,
                 std::string current_cursor
-            ) : m_instance_id(std::move(instance_id)),
+            ) : m_log_context(std::move(log_context)),
+                m_instance_id(std::move(instance_id)),
                 m_job_type(std::move(job_type)),
                 m_scan_id(std::move(scan_id)),
                 m_scope(std::move(scope)),
@@ -70,12 +72,13 @@ namespace disk::jobs {
                 m_started_at(std::chrono::steady_clock::now()) {
                 m_progress.next_cursor = m_current_cursor;
                 try {
-                    Logger::Info() << "Periodic scan page started: instance_id=" << m_instance_id
-                                   << ", job_type=" << m_job_type
-                                   << ", scan_id=" << m_scan_id
-                                   << ", scope=" << m_scope
-                                   << ", cursor_kind=" << m_cursor_kind
-                                   << ", current_cursor=" << m_current_cursor;
+                    Logger::Info(m_log_context)
+                        << "Periodic scan page started: instance_id=" << m_instance_id
+                        << ", job_type=" << m_job_type
+                        << ", scan_id=" << m_scan_id
+                        << ", scope=" << m_scope
+                        << ", cursor_kind=" << m_cursor_kind
+                        << ", current_cursor=" << m_current_cursor;
                 } catch (...) {
                     // Observability must not change the durable job outcome.
                 }
@@ -139,10 +142,10 @@ namespace disk::jobs {
             auto Emit(bool succeeded) const noexcept -> void {
                 try {
                     if (succeeded) {
-                        auto log = Logger::Info();
+                        auto log = Logger::Info(m_log_context);
                         AppendFields(log, "success");
                     } else {
-                        auto log = Logger::Warn();
+                        auto log = Logger::Warn(m_log_context);
                         AppendFields(log, "failure");
                     }
                 } catch (...) {
@@ -150,6 +153,7 @@ namespace disk::jobs {
                 }
             }
 
+            disk::utils::LogContext m_log_context;
             std::string m_instance_id;
             std::string m_job_type;
             std::string m_scan_id;
@@ -203,9 +207,10 @@ namespace disk::jobs {
                 return;
             }
 
-            Logger::Warn() << "Test fault injection paused blob_gc after blob delete: job_id="
-                           << job.id << ", content_id=" << content_id
-                           << ", instance_id=" << instance_id;
+            Logger::Warn(BuildStorageJobLogContext(job))
+                << "Test fault injection paused blob_gc after blob delete: job_id="
+                << job.id << ", content_id=" << content_id
+                << ", instance_id=" << instance_id;
             std::this_thread::sleep_for(std::chrono::minutes(5));
         }
 
@@ -304,14 +309,18 @@ namespace disk::jobs {
             };
         }
 
-        auto RollbackQuietly(const std::shared_ptr<drogon::orm::Transaction>& transaction) -> void {
+        auto RollbackQuietly(
+            const std::shared_ptr<drogon::orm::Transaction>& transaction,
+            disk::utils::LogContext log_context
+        ) -> void {
             if (transaction == nullptr) {
                 return;
             }
             try {
                 transaction->rollback();
             } catch (const std::exception& error) {
-                Logger::Warn() << "Blob GC transaction rollback failed: " << error.what();
+                Logger::Warn(log_context)
+                    << "Blob GC transaction rollback failed: " << error.what();
             }
         }
 
@@ -322,6 +331,24 @@ namespace disk::jobs {
             return value ^ (value >> 31U);
         }
     } // namespace
+
+    auto BuildStorageJobLogContext(const StorageJob& job) -> disk::utils::LogContext {
+        disk::utils::LogContext log_context;
+        log_context.operation = IsKnownStorageJobType(job.job_type) ? "storage_job_" + job.job_type : "storage_job_unknown";
+        if (job.id > 0) {
+            log_context.job_id = job.id;
+        }
+        if (!job.locked_by.empty()) {
+            log_context.lease_owner = job.locked_by;
+        }
+        if (job.job_type == kStagingCleanupJobType) {
+            const auto session = ParseStagingSession(job);
+            if (session.has_value()) {
+                log_context.upload_id = session->upload_id;
+            }
+        }
+        return log_context;
+    }
 
     StorageJobWorker::StorageJobWorker(
         drogon::orm::DbClientPtr db_client,
@@ -462,6 +489,7 @@ namespace disk::jobs {
 
     auto StorageJobWorker::ExecuteBlobGc(const StorageJob& job) const
         -> drogon::Task<JobExecutionResult> {
+        const auto log_context = BuildStorageJobLogContext(job);
         auto candidate = ParseBlobGcCandidate(job);
         if (!candidate) {
             co_return PermanentFailure(candidate.error());
@@ -488,7 +516,7 @@ namespace disk::jobs {
                     m_instance_id
                 );
                 if (!persisted) {
-                    RollbackQuietly(transaction);
+                    RollbackQuietly(transaction, log_context);
                     co_return RetryableFailure("blob_gc ownership changed before commit");
                 }
                 auto commit_result = co_await disk::file::TransactionRunner::Commit(transaction);
@@ -511,7 +539,7 @@ namespace disk::jobs {
 
             const auto persisted_path = content[0]["storage_path"].as<std::string>();
             if (persisted_path != candidate->storage_path.string()) {
-                RollbackQuietly(transaction);
+                RollbackQuietly(transaction, log_context);
                 co_return PermanentFailure("blob_gc storage_path does not match file_contents");
             }
 
@@ -521,13 +549,13 @@ namespace disk::jobs {
             }
             if (ref_count < 0 || content[0]["has_file_ref"].as<bool>() ||
                 content[0]["has_trash_ref"].as<bool>()) {
-                RollbackQuietly(transaction);
+                RollbackQuietly(transaction, log_context);
                 co_return PermanentFailure("blob_gc found inconsistent content references");
             }
 
             auto delete_result = co_await m_blob_store->DeleteBlob(candidate->storage_path);
             if (!delete_result) {
-                RollbackQuietly(transaction);
+                RollbackQuietly(transaction, log_context);
                 const auto& error = delete_result.error();
                 const auto retryable =
                     error.code != ErrorCode::InvalidParameter &&
@@ -550,16 +578,16 @@ namespace disk::jobs {
                 static_cast<int64_t>(candidate->content_id)
             );
             if (deleted.size() != 1) {
-                RollbackQuietly(transaction);
+                RollbackQuietly(transaction, log_context);
                 co_return RetryableFailure("blob_gc content row changed before deletion");
             }
 
             co_return co_await complete_transaction();
         } catch (const drogon::orm::DrogonDbException& error) {
-            RollbackQuietly(transaction);
+            RollbackQuietly(transaction, log_context);
             co_return RetryableFailure(std::string("blob_gc database failure: ") + error.base().what());
         } catch (const std::exception& error) {
-            RollbackQuietly(transaction);
+            RollbackQuietly(transaction, log_context);
             co_return RetryableFailure(std::string("blob_gc handler failure: ") + error.what());
         }
     }
@@ -571,6 +599,7 @@ namespace disk::jobs {
             co_return PermanentFailure(request.error());
         }
         PeriodicScanPageLogGuard scan_log(
+            BuildStorageJobLogContext(job),
             m_instance_id,
             std::string(kExpireUploadsJobType),
             request->scan_id,
@@ -633,6 +662,7 @@ namespace disk::jobs {
             co_return PermanentFailure(request.error());
         }
         PeriodicScanPageLogGuard scan_log(
+            BuildStorageJobLogContext(job),
             m_instance_id,
             std::string(kExpireTrashJobType),
             request->scan_id,
@@ -696,6 +726,7 @@ namespace disk::jobs {
             request->scope == disk::reconciliation::ReconciliationScope::Contents ||
             request->scope == disk::reconciliation::ReconciliationScope::Users;
         PeriodicScanPageLogGuard scan_log(
+            BuildStorageJobLogContext(job),
             m_instance_id,
             std::string(kStorageReconcileJobType),
             request->scan_id,
@@ -758,6 +789,7 @@ namespace disk::jobs {
 
     auto StorageJobWorker::ProcessClaimedJob(const StorageJob& job) const
         -> drogon::Task<PersistDisposition> {
+        const auto log_context = BuildStorageJobLogContext(job);
         StorageJobRepository repository(m_db_client);
         try {
             const auto renewed = co_await repository.RenewLease(
@@ -766,11 +798,15 @@ namespace disk::jobs {
                 m_options.lease_duration_seconds
             );
             if (!renewed) {
+                Logger::Warn(log_context)
+                    << "Storage job lease preflight lost ownership: job_id=" << job.id
+                    << ", instance_id=" << m_instance_id;
                 co_return PersistDisposition::OwnershipLost;
             }
         } catch (const std::exception& error) {
-            Logger::Warn() << "Storage job lease preflight failed: job_id=" << job.id
-                           << ", instance_id=" << m_instance_id << ", error=" << error.what();
+            Logger::Warn(log_context)
+                << "Storage job lease preflight failed: job_id=" << job.id
+                << ", instance_id=" << m_instance_id << ", error=" << error.what();
             co_return PersistDisposition::OwnershipLost;
         }
 
@@ -784,15 +820,16 @@ namespace disk::jobs {
             const auto instance_id = m_instance_id;
             const auto lease_duration_seconds = m_options.lease_duration_seconds;
             const auto job_id = job.id;
+            const auto heartbeat_log_context = log_context;
             heartbeat_timer = loop->runEvery(
                 heartbeat_interval,
-                [heartbeat_state, db_client, instance_id, lease_duration_seconds, job_id]() {
+                [heartbeat_state, db_client, instance_id, lease_duration_seconds, job_id, heartbeat_log_context]() {
                     if (!heartbeat_state->active.load() ||
                         heartbeat_state->renewal_inflight.exchange(true)) {
                         return;
                     }
                     drogon::async_run(
-                        [heartbeat_state, db_client, instance_id, lease_duration_seconds, job_id]()
+                        [heartbeat_state, db_client, instance_id, lease_duration_seconds, job_id, heartbeat_log_context]()
                             -> drogon::Task<void> {
                             try {
                                 StorageJobRepository repository(db_client);
@@ -802,13 +839,17 @@ namespace disk::jobs {
                                     lease_duration_seconds
                                 );
                                 if (!renewed) {
+                                    Logger::Warn(heartbeat_log_context)
+                                        << "Storage job lease heartbeat lost ownership: job_id="
+                                        << job_id << ", instance_id=" << instance_id;
                                     heartbeat_state->ownership_lost.store(true);
                                     heartbeat_state->active.store(false);
                                 }
                             } catch (const std::exception& error) {
-                                Logger::Warn() << "Storage job lease heartbeat failed: job_id="
-                                               << job_id << ", instance_id=" << instance_id
-                                               << ", error=" << error.what();
+                                Logger::Warn(heartbeat_log_context)
+                                    << "Storage job lease heartbeat failed: job_id="
+                                    << job_id << ", instance_id=" << instance_id
+                                    << ", error=" << error.what();
                             }
                             heartbeat_state->renewal_inflight.store(false);
                         }
@@ -859,8 +900,9 @@ namespace disk::jobs {
             }
             co_return persisted.value() == StorageJobStatus::Retry ? PersistDisposition::Retried : PersistDisposition::DeadLettered;
         } catch (const std::exception& error) {
-            Logger::Warn() << "Storage job result persistence failed: job_id=" << job.id
-                           << ", instance_id=" << m_instance_id << ", error=" << error.what();
+            Logger::Warn(log_context)
+                << "Storage job result persistence failed: job_id=" << job.id
+                << ", instance_id=" << m_instance_id << ", error=" << error.what();
             co_return PersistDisposition::OwnershipLost;
         }
     }
@@ -875,8 +917,11 @@ namespace disk::jobs {
                 m_options.lease_duration_seconds
             );
         } catch (const std::exception& error) {
-            Logger::Error() << "Storage job claim failed: instance_id=" << m_instance_id
-                            << ", error=" << error.what();
+            disk::utils::LogContext log_context;
+            log_context.operation = "storage_job_claim";
+            Logger::Error(log_context)
+                << "Storage job claim failed: instance_id=" << m_instance_id
+                << ", error=" << error.what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to claim storage jobs")
             );
@@ -885,12 +930,14 @@ namespace disk::jobs {
         StorageJobRunResult result{ .claimed = jobs.size() };
         for (const auto& job : jobs) {
             const auto started_at = std::chrono::steady_clock::now();
-            Logger::Info() << "Storage job execution started: instance_id=" << m_instance_id
-                           << ", job_id=" << job.id
-                           << ", job_type=" << job.job_type
-                           << ", lease_owner=" << job.locked_by
-                           << ", attempts=" << job.attempts
-                           << ", lease_takeover=" << job.lease_takeover;
+            const auto log_context = BuildStorageJobLogContext(job);
+            Logger::Info(log_context)
+                << "Storage job execution started: instance_id=" << m_instance_id
+                << ", job_id=" << job.id
+                << ", job_type=" << job.job_type
+                << ", lease_owner=" << job.locked_by
+                << ", attempts=" << job.attempts
+                << ", lease_takeover=" << job.lease_takeover;
             const auto disposition = co_await ProcessClaimedJob(job);
             disk::metrics::StorageJobOutcome metric_outcome;
             switch (disposition) {
@@ -920,13 +967,15 @@ namespace disk::jobs {
                 duration,
                 job.lease_takeover
             );
-            Logger::Info() << "Storage job execution completed: instance_id=" << m_instance_id
-                           << ", job_id=" << job.id
-                           << ", job_type=" << job.job_type
-                           << ", lease_takeover=" << job.lease_takeover
-                           << ", outcome="
-                           << disk::metrics::StorageJobOutcomeName(metric_outcome)
-                           << ", duration_us=" << duration.count();
+            auto completed_log_context = log_context;
+            completed_log_context.lease_owner.reset();
+            Logger::Info(completed_log_context)
+                << "Storage job execution completed: instance_id=" << m_instance_id
+                << ", job_id=" << job.id
+                << ", job_type=" << job.job_type
+                << ", lease_takeover=" << job.lease_takeover
+                << ", outcome=" << disk::metrics::StorageJobOutcomeName(metric_outcome)
+                << ", duration_us=" << duration.count();
         }
 
         co_return result;

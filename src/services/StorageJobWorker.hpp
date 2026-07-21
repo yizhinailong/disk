@@ -18,6 +18,7 @@
 
 #include "services/StorageJobRepository.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
     class IBlobStore;
@@ -33,6 +34,9 @@ namespace disk::jobs {
     ) noexcept -> size_t {
         return std::min(configured_batch_size, concurrency);
     }
+
+    [[nodiscard]]
+    auto BuildStorageJobLogContext(const StorageJob& job) -> disk::utils::LogContext;
 
     struct StorageJobWorkerOptions {
         size_t batch_size{ 16 };

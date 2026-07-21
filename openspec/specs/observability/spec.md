@@ -57,6 +57,21 @@ The system SHALL propagate upload-completion correlation explicitly across contr
 - **WHEN** completion creates or rearms a cleanup or reconciliation job through an interface that does not return its persistent row ID
 - **THEN** the completion event SHALL keep `job_id` null and SHALL NOT derive an ID from the dedupe key, aggregate ID, or message text
 
+### Requirement: Typed Durable Worker Correlation
+The system SHALL derive durable Worker correlation only from claimed PostgreSQL job records and SHALL use a bounded operation vocabulary without message parsing or inferred identifiers.
+
+#### Scenario: Worker executes a claimed durable job
+- **WHEN** a Worker starts, renews, or persists the outcome of a job returned by the database claim operation
+- **THEN** its owned events SHALL use the positive persistent job ID, claimed owner, actual Worker instance, and a fixed operation derived from a known job type, while request ID and state version remain null when the job record does not carry them
+
+#### Scenario: Worker correlates staging cleanup to an upload
+- **WHEN** a claimed `staging_cleanup` job has a valid cleanup payload whose non-empty upload ID exactly matches its aggregate ID
+- **THEN** Worker events SHALL carry that value as the upload ID, while malformed staging jobs and every other job type SHALL keep the upload ID null
+
+#### Scenario: Worker no longer owns the completed attempt
+- **WHEN** the Worker persists a succeeded, retry, or dead-letter result, or can no longer confirm continued ownership
+- **THEN** the execution-completed event SHALL retain the persistent job ID and instance but SHALL use a null lease owner
+
 ### Requirement: Bounded High-Volume Logging
 The system SHALL apply an outcome-based logging policy to upload-chunk traffic so that the normal production log level does not emit one success record per chunk while failures and low-cardinality metrics remain complete.
 
