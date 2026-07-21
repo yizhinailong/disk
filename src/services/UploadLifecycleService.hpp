@@ -172,8 +172,11 @@ namespace disk::upload {
             -> drogon::Task<Result<CompleteUploadOutcome>>;
 
         [[nodiscard]]
-        auto CancelInProgressUpload(const std::string& upload_id, uint64_t user_id) const
-            -> drogon::Task<Result<void>>;
+        auto CancelInProgressUpload(
+            const std::string& upload_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) const -> drogon::Task<Result<uint64_t>>;
 
         [[nodiscard]]
         auto ExpireInProgressUpload(

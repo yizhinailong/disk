@@ -226,13 +226,18 @@ namespace disk::file {
 
     auto FileController::CancelUpload(drogon::HttpRequestPtr request, std::string upload_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "upload_cancel");
+        if (!upload_id.empty()) {
+            log_context.upload_id = upload_id;
+        }
 
-        Logger::Debug() << "Received cancel upload request: " << request->getPeerAddr().toIpPort()
-                        << ", upload_id=" << upload_id;
+        Logger::Debug(log_context)
+            << "Received cancel upload request: " << request->getPeerAddr().toIpPort()
+            << ", upload_id=" << upload_id;
 
         /// 1. 验证 upload_id 非空
         if (upload_id.empty()) {
-            Logger::Warn() << "Cancel upload request missing upload_id";
+            Logger::Warn(log_context) << "Cancel upload request missing upload_id";
             co_return Response::Error(ErrorInfo(ErrorCode::ValidationFailed, "Missing upload_id"));
         }
 
@@ -240,16 +245,18 @@ namespace disk::file {
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层取消上传
-        auto result = co_await m_upload_service->CancelUpload(upload_id, user_id);
+        auto result = co_await m_upload_service->CancelUpload(upload_id, user_id, log_context);
         if (!result) {
-            Logger::Error() << "Cancel upload failed: " << result.error().message
-                            << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
+            Logger::Error(log_context)
+                << "Cancel upload failed: " << result.error().message
+                << " (user_id=" << user_id << ", upload_id=" << upload_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 返回成功响应
-        Logger::Debug() << "Cancel upload successful: upload_id=" << upload_id << " (user_id=" << user_id
-                        << ")";
+        log_context.state_version = result.value();
+        Logger::Debug(log_context)
+            << "Cancel upload successful: upload_id=" << upload_id << " (user_id=" << user_id << ")";
         co_return Response::Success({});
     }
 

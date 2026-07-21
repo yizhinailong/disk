@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 本地组装日志关联）：完整构建、聚焦本地组装 CTest 4/4 通过；完整 CTest 共 1404 项，1397 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 484.42 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 取消上传日志关联）：完整构建、聚焦取消仓储/生命周期 GTest 10/10、真实 HTTP safety 集成 1/1（脚本内 515 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1404 项，1397 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 464.22 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -559,6 +559,12 @@ stdout、旋转文件以及被捕获的 Drogon/Trantor 诊断现统一输出单�
 OpenSpec、部署运维、系统测试和单元测试文档先行固定本地 staging 组装的日志合同。`LocalFileStorage::AssembleChunks` 现将调用方 `LogContext` 用于既有的准入、容量拒绝、开始、失败、完成及耗时事件，使完整上下文跨过阻塞文件系统队列；实现没有新增事件或改变级别，也不从 session upload ID、状态版本参数、路径、文件名或消息文本推断调用方未提供的字段。
 
 `LocalFileStorageAssemblyLogTest` 通过真实临时文件分别覆盖组装成功和已登记分片被删除后的工作线程失败，逐行解析内存 sink 的 NDJSON：成功路径 4 条事件完整保留六个业务字段并保持 `DEBUG`，失败路径 3 条事件保留 request/operation、其余字段保持 JSON `null`，最终汇总为 `INFO`。测试清单合同同步到 1404 项；完整构建、Python 语法检查、聚焦本地组装 CTest 4/4、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1404 项，1397 通过、7 项环境门控跳过、0 失败，总耗时 484.42 秒。取消上传等历史日志仍未全部使用调用方上下文，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.14 取消上传日志关联记录（2026-07-22）
+
+API、数据库、部署运维、系统测试、单元测试和 OpenSpec 文档先行固定取消上传的状态迁移与类型化日志合同。`FileController` 在解析出非空上传 ID 后创建固定 `operation=upload_cancel` 的 `LogContext`，按值传过 `UploadService`、`UploadLifecycleService` 和 PostgreSQL 事务。生命周期层现在是取消决策的唯一权威：CAS 只匹配同一 `upload_id + user_id` 下未过期的 `InProgress` 任务，原子推进并返回 `state_version`；竞争失败后读取持久状态，已取消重放返回原版本且不再次推进。低频成功/重放汇总固定为 `INFO`，Controller/Service 细节保持 `DEBUG`；取消没有已认领持久任务，`job_id` 和 `lease_owner` 保持 JSON `null`，公开响应仍保持 `data=null`。
+
+`UploadTaskRepositoryTest` 锁定版本推进、截止时间约束、持久状态回读、单一生命周期决策及上下文传播。`SafetyUploadInvariantsIntegration` 使用两个不同的调用方 request ID 真实执行首次取消与重放，逐行解析 stdout NDJSON，并核对数据库版本只增加一次、预留配额只释放一次、staging cleanup 任务只创建一条，以及两条 `INFO` 汇总的 request/instance/upload/version 和空 job/owner 精确一致。完整构建、Python 语法检查、聚焦取消仓储/生命周期 GTest 10/10、真实 HTTP safety 集成 1/1（脚本内 515 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1404 项，1397 通过、7 项环境门控跳过、0 失败，总耗时 464.22 秒。其他历史上传辅助日志和目标 S3/多实例环境门控仍未全部完成，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

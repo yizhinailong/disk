@@ -111,8 +111,10 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Completed"));
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkCancelledIfInProgressReturning("));
-            EXPECT_TRUE(Contains(source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 "));
-            EXPECT_TRUE(Contains(source, "WHERE id = $3 AND user_id = $4 AND status = $5 "));
+            EXPECT_TRUE(Contains(source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2, "));
+            EXPECT_TRUE(Contains(source, "state_version = state_version + 1 "));
+            EXPECT_TRUE(Contains(source, "WHERE id = $3 AND user_id = $4 AND status = $5 AND expires_at >= NOW() "));
+            EXPECT_TRUE(Contains(source, "AS staging_prefix, state_version"));
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Cancelled"));
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkExpiredIfInProgressReturning("));
@@ -121,13 +123,17 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Expired"));
         }
 
-        TEST(UploadTaskRepositoryCancellationContractTest, WinnerReleasesQuotaAndChunksInOneTransaction) {
+        TEST(UploadTaskRepositoryCancellationContractTest, WinnerAdvancesVersionAndOwnsTransactionalSideEffects) {
             const auto repository_source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
             const auto lifecycle_source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
             const auto service_source = ReadSourceFile("src/services/UploadService.cpp");
+            const auto controller_source = ReadSourceFile("src/controllers/FileController.cpp");
 
             EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::MarkCancelledIfInProgressReturning("));
             EXPECT_TRUE(Contains(repository_source, "RETURNING id, temp_path, user_id, reserved_bytes, staging_backend"));
+            EXPECT_TRUE(Contains(repository_source, "AS staging_prefix, state_version"));
+            EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::FindCancellationStateByIdForUser("));
+            EXPECT_TRUE(Contains(repository_source, "SELECT status, state_version, expires_at < NOW() AS task_expired"));
 
             const auto transition = lifecycle_source.find("MarkCancelledIfInProgressReturning(");
             const auto quota_release = lifecycle_source.find("ReleaseReservedStorageChecked(", transition);
@@ -141,8 +147,13 @@ namespace disk::file {
             EXPECT_LT(quota_release, cleanup_enqueue);
             EXPECT_LT(cleanup_enqueue, chunk_delete);
             EXPECT_FALSE(Contains(lifecycle_source, "->CleanupSession("));
-            EXPECT_TRUE(Contains(lifecycle_source, "DecideCancelRequest(current_task->getValueOfStatus())"));
-            EXPECT_TRUE(Contains(service_source, "DecideCancelRequest(task.getValueOfStatus())"));
+            EXPECT_TRUE(Contains(lifecycle_source, "DecideCancelRequest(current_state->status)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "outcome=success"));
+            EXPECT_TRUE(Contains(lifecycle_source, "outcome=replay"));
+            EXPECT_FALSE(Contains(service_source, "DecideCancelRequest("));
+            EXPECT_TRUE(Contains(service_source, "log_context.operation = \"upload_cancel\""));
+            EXPECT_TRUE(Contains(controller_source, "GetRequestLogContext(request, \"upload_cancel\")"));
+            EXPECT_TRUE(Contains(controller_source, "log_context.state_version = result.value()"));
         }
 
         TEST(UploadTaskRepositoryFinalizeLeaseContractTest, LeaseMutationsUseDatabaseTimeOwnerAndVersion) {

@@ -146,15 +146,20 @@ namespace disk::file {
          *
          * 业务规则：
          * - 验证上传任务存在且属于当前用户
-         * - 删除临时文件目录
-         * - 删除上传任务记录
+         * - 原子迁移状态并释放预留配额
+         * - 入队持久化 staging 清理任务并删除分片元数据
          *
          * @param upload_id 上传会话 ID
          * @param user_id 用户 ID
-         * @return drogon::Task<Result<void>> 成功返回空，失败返回错误
+         * @param log_context 显式请求与上传日志关联
+         * @return drogon::Task<Result<uint64_t>> 成功返回持久状态版本，失败返回错误
          */
         [[nodiscard]]
-        auto CancelUpload(std::string upload_id, uint64_t user_id) -> drogon::Task<Result<void>>;
+        auto CancelUpload(
+            std::string upload_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<uint64_t>>;
 
     private:
         /**

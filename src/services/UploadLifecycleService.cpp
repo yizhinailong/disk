@@ -1455,9 +1455,21 @@ namespace disk::upload {
 
     auto UploadLifecycleService::CancelInProgressUpload(
         const std::string& upload_id,
-        uint64_t user_id
-    ) const -> drogon::Task<Result<void>> {
-        bool cancelled = false;
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    ) const -> drogon::Task<Result<uint64_t>> {
+        log_context.operation = "upload_cancel";
+        if (upload_id.empty()) {
+            log_context.upload_id.reset();
+        } else {
+            log_context.upload_id = upload_id;
+        }
+        log_context.job_id.reset();
+        log_context.lease_owner.reset();
+        log_context.state_version.reset();
+
+        const auto start = std::chrono::steady_clock::now();
+        std::optional<uint64_t> transitioned_state_version;
 
         disk::file::UploadTaskRepository upload_task_repository(m_db_client);
         disk::jobs::StorageJobRepository storage_job_repository(m_db_client);
@@ -1478,7 +1490,7 @@ namespace disk::upload {
                 auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
                     transaction,
                     user_id,
-                    cancelled_record->reserved_bytes
+                    cancelled_record->cleanup.reserved_bytes
                 );
                 if (!release_result) {
                     co_return std::unexpected(release_result.error());
@@ -1486,40 +1498,79 @@ namespace disk::upload {
 
                 co_await storage_job_repository.Enqueue(
                     transaction,
-                    disk::jobs::BuildStagingCleanupJob(cancelled_record->staging_session)
+                    disk::jobs::BuildStagingCleanupJob(cancelled_record->cleanup.staging_session)
                 );
                 co_await upload_task_repository.DeleteChunks(transaction, upload_id);
-                cancelled = true;
+                transitioned_state_version = cancelled_record->state_version;
                 co_return {};
             }
         );
         if (!tx_result) {
+            Logger::Warn(log_context)
+                << "[cancel_upload] outcome=transaction_failed upload_id=" << upload_id;
             co_return std::unexpected(tx_result.error());
         }
 
-        if (!cancelled) {
-            auto current_task = co_await upload_task_repository.FindByIdForUser(upload_id, user_id);
-            if (!current_task.has_value()) {
-                co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
-            }
-
-            switch (DecideCancelRequest(current_task->getValueOfStatus())) {
-                case CancelRequestAction::ReplayCancelled:
-                    co_return {};
-                case CancelRequestAction::RejectConflict:
-                    co_return std::unexpected(
-                        ErrorInfo(ErrorCode::ResourceConflict, "Upload task cannot be cancelled while finalizing or completed")
-                    );
-                case CancelRequestAction::RejectTerminal:
-                    co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
-                case CancelRequestAction::Cancel:
-                    co_return std::unexpected(
-                        ErrorInfo(ErrorCode::ResourceConflict, "Upload task state changed during cancellation")
-                    );
-            }
+        if (transitioned_state_version.has_value()) {
+            log_context.state_version = transitioned_state_version.value();
+            const auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                         std::chrono::steady_clock::now() - start
+            )
+                                         .count();
+            Logger::Info(log_context)
+                << "[cancel_upload] duration_us=" << duration_us
+                << " outcome=success upload_id=" << upload_id;
+            co_return transitioned_state_version.value();
         }
 
-        co_return {};
+        auto current_state = co_await upload_task_repository.FindCancellationStateByIdForUser(
+            upload_id,
+            user_id
+        );
+        if (!current_state.has_value()) {
+            Logger::Info(log_context)
+                << "[cancel_upload] outcome=not_found upload_id=" << upload_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
+        }
+
+        log_context.state_version = current_state->state_version;
+        if (current_state->task_expired &&
+            current_state->status == ToStorageValue(UploadTaskStatus::InProgress)) {
+            Logger::Info(log_context)
+                << "[cancel_upload] outcome=expired upload_id=" << upload_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
+        }
+
+        switch (DecideCancelRequest(current_state->status)) {
+            case CancelRequestAction::ReplayCancelled: {
+                const auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                             std::chrono::steady_clock::now() - start
+                )
+                                             .count();
+                Logger::Info(log_context)
+                    << "[cancel_upload] duration_us=" << duration_us
+                    << " outcome=replay upload_id=" << upload_id;
+                co_return current_state->state_version;
+            }
+            case CancelRequestAction::RejectConflict:
+                Logger::Info(log_context)
+                    << "[cancel_upload] outcome=conflict upload_id=" << upload_id;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ResourceConflict, "Upload task cannot be cancelled while finalizing or completed")
+                );
+            case CancelRequestAction::RejectTerminal:
+                Logger::Info(log_context)
+                    << "[cancel_upload] outcome=terminal upload_id=" << upload_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
+            case CancelRequestAction::Cancel:
+                Logger::Info(log_context)
+                    << "[cancel_upload] outcome=raced upload_id=" << upload_id;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ResourceConflict, "Upload task state changed during cancellation")
+                );
+        }
+
+        co_return std::unexpected(ErrorInfo(ErrorCode::ResourceConflict));
     }
 
     auto UploadLifecycleService::ExpireInProgressUpload(

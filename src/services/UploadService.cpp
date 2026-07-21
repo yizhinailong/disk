@@ -405,32 +405,23 @@ namespace disk::file {
         co_return response;
     }
 
-    auto UploadService::CancelUpload(std::string upload_id, uint64_t user_id)
-        -> drogon::Task<Result<void>> {
-
-        Logger::Debug() << "Starting cancel upload: upload_id=" << upload_id << ", user_id=" << user_id;
-
-        /// 1. 查找并验证上传任务
-        auto task_result = co_await FindUploadTask(upload_id, user_id);
-        if (!task_result) {
-            Logger::Warn() << "Upload task verification failed: " << upload_id;
-            co_return std::unexpected(task_result.error());
+    auto UploadService::CancelUpload(
+        std::string upload_id,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<Result<uint64_t>> {
+        log_context.operation = "upload_cancel";
+        if (upload_id.empty()) {
+            log_context.upload_id.reset();
+        } else {
+            log_context.upload_id = upload_id;
         }
-        const auto task = task_result.value();
+        log_context.job_id.reset();
+        log_context.lease_owner.reset();
+        log_context.state_version.reset();
 
-        /// 2. Apply the stable request semantics before attempting the transactional CAS.
-        switch (disk::upload::DecideCancelRequest(task.getValueOfStatus())) {
-            case disk::upload::CancelRequestAction::ReplayCancelled:
-                co_return {};
-            case disk::upload::CancelRequestAction::RejectConflict:
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::ResourceConflict, "Upload task cannot be cancelled while finalizing or completed")
-                );
-            case disk::upload::CancelRequestAction::RejectTerminal:
-                co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
-            case disk::upload::CancelRequestAction::Cancel:
-                break;
-        }
+        Logger::Debug(log_context)
+            << "Starting cancel upload: upload_id=" << upload_id << ", user_id=" << user_id;
 
         disk::upload::UploadLifecycleService lifecycle_service(
             m_db_client,
@@ -438,14 +429,22 @@ namespace disk::file {
             m_upload_staging_storage,
             m_blob_store
         );
-        auto cancel_result = co_await lifecycle_service.CancelInProgressUpload(upload_id, user_id);
+        auto cancel_result = co_await lifecycle_service.CancelInProgressUpload(
+            upload_id,
+            user_id,
+            log_context
+        );
         if (!cancel_result) {
+            Logger::Warn(log_context)
+                << "Cancel upload lifecycle failed: upload_id=" << upload_id
+                << ", error=" << cancel_result.error().message;
             co_return std::unexpected(cancel_result.error());
         }
         InvalidateUploadTaskCache(upload_id);
 
-        Logger::Debug() << "Upload task cancelled: upload_id=" << upload_id;
-        co_return {};
+        log_context.state_version = cancel_result.value();
+        Logger::Debug(log_context) << "Upload cancellation resolved: upload_id=" << upload_id;
+        co_return cancel_result.value();
     }
 
     /// ==================== 私有辅助方法 ====================

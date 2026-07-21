@@ -411,7 +411,7 @@ namespace disk::file {
         const std::string& fail_reason
     ) const -> drogon::Task<std::optional<CancelledUploadTaskRecord>> {
         auto result = co_await client->execSqlCoro(
-            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 " "WHERE id = $3 AND user_id = $4 AND status = $5 " "RETURNING id, temp_path, user_id, reserved_bytes, staging_backend, " "COALESCE(staging_prefix, temp_path) AS staging_prefix",
+            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2, " "state_version = state_version + 1 " "WHERE id = $3 AND user_id = $4 AND status = $5 AND expires_at >= NOW() " "RETURNING id, temp_path, user_id, reserved_bytes, staging_backend, " "COALESCE(staging_prefix, temp_path) AS staging_prefix, state_version",
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Cancelled),
             fail_reason,
             upload_id,
@@ -421,7 +421,30 @@ namespace disk::file {
         if (result.empty()) {
             co_return std::nullopt;
         }
-        co_return ToUploadTaskCleanupRecord(result[0]);
+        co_return CancelledUploadTaskRecord{
+            .cleanup = ToUploadTaskCleanupRecord(result[0]),
+            .state_version = result[0]["state_version"].as<uint64_t>(),
+        };
+    }
+
+    auto UploadTaskRepository::FindCancellationStateByIdForUser(
+        const std::string& upload_id,
+        uint64_t user_id
+    ) const -> drogon::Task<std::optional<UploadTaskCancellationState>> {
+        auto result = co_await m_db_client->execSqlCoro(
+            "SELECT status, state_version, expires_at < NOW() AS task_expired " "FROM upload_tasks WHERE id = $1 AND user_id = $2",
+            upload_id,
+            user_id
+        );
+        if (result.empty()) {
+            co_return std::nullopt;
+        }
+
+        co_return UploadTaskCancellationState{
+            .status = result[0]["status"].as<int>(),
+            .state_version = result[0]["state_version"].as<uint64_t>(),
+            .task_expired = result[0]["task_expired"].as<bool>(),
+        };
     }
 
     auto UploadTaskRepository::MarkExpiredIfInProgressBatch(

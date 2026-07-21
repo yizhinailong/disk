@@ -831,14 +831,21 @@ def test_init_and_chunk_log_context_invariants() -> None:
         cancel_upload(upload_id)
 
 
-def cancel_upload_raw(upload_id: str):
+def cancel_upload_raw(upload_id: str, request_id: str | None = None):
     """Call cancel upload and return the raw response."""
+    headers = auth_headers(TOKEN)
+    if request_id is not None:
+        headers["X-Request-Id"] = request_id
     resp = fetch(
         f"/api/file/upload/{upload_id}",
         method="DELETE",
-        headers={"Authorization": f"Bearer {TOKEN}"},
+        headers=headers,
     )
-    save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-cancel.json", resp.text)
+    evidence_request_id = request_id or "generated-request-id"
+    save_evidence(
+        f"{EVIDENCE_PREFIX}-{upload_id}-{evidence_request_id}-cancel.json",
+        resp.text,
+    )
     return resp
 
 
@@ -3647,7 +3654,7 @@ def test_complete_cancel_expire_race_invariants() -> None:
 
 
 def test_cancel_upload_invariants() -> None:
-    """Verify cancel releases reservations and removes temp artifacts."""
+    """Verify cancel correlation, versioning, and cleanup invariants."""
     log_section("Canceled Upload Invariants")
     payload = f"safety-cancel-{unique_name()}".encode()
     filename = f"safety_cancel_{unique_name()}.bin"
@@ -3657,11 +3664,43 @@ def test_cancel_upload_invariants() -> None:
     quota_after_init = user_quota()
     upload_single_chunk(upload_id, payload)
     assert_chunk_row_count(upload_id, 1)
-    cancel_upload(upload_id)
+    task_before_cancel = assert_upload_task(upload_id, 0)
+    version_before_cancel = int(task_before_cancel["state_version"])
+
+    cancel_request_id = f"safety-cancel-log-{unique_name()}"
+    cancel_response = cancel_upload_raw(upload_id, cancel_request_id)
+    assert_equal("cancel request returns HTTP 200", cancel_response.status_code, 200)
+    assert_equal("cancel request returns success code", json_field(cancel_response.text, "code"), "0")
+    assert_equal(
+        "cancel response preserves caller request ID",
+        header_value(cancel_response.headers, "X-Request-Id"),
+        cancel_request_id,
+    )
+    cancel_instance_id = header_value(
+        cancel_response.headers,
+        "X-Disk-Instance-Id",
+    )
+
     assert_chunk_row_count(upload_id, 0)
     quota_after_cancel = user_quota()
 
-    assert_upload_task(upload_id, 2)
+    cancelled_task = assert_upload_task(upload_id, 2)
+    cancelled_version = int(cancelled_task["state_version"])
+    assert_equal(
+        "cancel transition increments state_version once",
+        cancelled_version,
+        version_before_cancel + 1,
+    )
+    wait_for_correlated_application_log(
+        request_id=cancel_request_id,
+        instance_id=cancel_instance_id,
+        operation="upload_cancel",
+        upload_id=upload_id,
+        message_marker="outcome=success",
+        state_version=cancelled_version,
+    )
+    log_pass("cancel lifecycle summary records the committed version")
+
     assert_numeric_delta(
         "cancel releases reserved storage",
         quota_after_init["storage_reserved"],
@@ -3680,6 +3719,51 @@ def test_cancel_upload_invariants() -> None:
     )
     assert_path_absent("temp upload directory cleaned after cancel", upload_temp_dir(upload_id))
     assert_path_absent("final blob absent after cancel", final_blob_path(sha256_bytes(payload)))
+
+    replay_request_id = f"safety-cancel-replay-log-{unique_name()}"
+    replay_response = cancel_upload_raw(upload_id, replay_request_id)
+    assert_equal("cancel replay returns HTTP 200", replay_response.status_code, 200)
+    assert_equal("cancel replay returns success code", json_field(replay_response.text, "code"), "0")
+    assert_equal(
+        "cancel replay preserves caller request ID",
+        header_value(replay_response.headers, "X-Request-Id"),
+        replay_request_id,
+    )
+    replay_instance_id = header_value(
+        replay_response.headers,
+        "X-Disk-Instance-Id",
+    )
+    replayed_task = assert_upload_task(upload_id, 2)
+    assert_equal(
+        "cancel replay preserves state_version",
+        int(replayed_task["state_version"]),
+        cancelled_version,
+    )
+    assert_equal(
+        "cancel replay preserves released quota",
+        user_quota()["storage_reserved"],
+        quota_after_cancel["storage_reserved"],
+    )
+    assert_equal(
+        "cancel creates one cleanup job",
+        int(
+            scalar(
+                "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+                (f"staging-cleanup:{upload_id}",),
+            )
+            or 0
+        ),
+        1,
+    )
+    wait_for_correlated_application_log(
+        request_id=replay_request_id,
+        instance_id=replay_instance_id,
+        operation="upload_cancel",
+        upload_id=upload_id,
+        message_marker="outcome=replay",
+        state_version=cancelled_version,
+    )
+    log_pass("cancel replay keeps the persisted version and typed correlation")
 
 
 def test_expired_upload_cleanup_invariants() -> None:

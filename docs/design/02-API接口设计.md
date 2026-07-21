@@ -1001,7 +1001,7 @@ PostgreSQL 租约是同一上传完成权的唯一判断来源。存储层的 `A
 **DELETE** `/api/file/upload/{upload_id}`
 
 #### 实现状态
-**状态 CAS、配额释放与分片元数据删除已在同一短事务中实现；持久化 staging cleanup 任务待 Worker 阶段接入**
+**已实现**
 
 取消上传任务，清理临时数据。
 
@@ -1017,6 +1017,12 @@ PostgreSQL 租约是同一上传完成权的唯一判断来源。存储层的 `A
 - `Finalizing` 或 `Completed`：返回 `409 + 10004 ResourceConflict`，取消不能覆盖完成流程。
 - `Expired` 或 `Failed`：返回 `400 + 50008 UploadTaskNotFound`。
 - 取消事务提交后，即使对象清理暂时失败，任务仍保持 `Cancelled`；Worker 负责重试清理。
+
+#### 状态版本与日志关联
+
+- `InProgress -> Cancelled` 的同一条件更新必须把 `state_version` 递增一次并返回更新后的版本；配额释放、staging cleanup 入队和分片元数据删除与该更新在同一事务提交。
+- 重复取消读取并返回内部持久版本供日志使用，不再次递增 `state_version`；公开成功响应仍保持 `data: null`。
+- Controller 从请求属性创建固定 `operation=upload_cancel` 的类型化日志上下文，并把非空路径 `upload_id` 按值传过 Service、Lifecycle 和数据库边界。成功迁移与重放日志使用数据库返回的 `state_version`；取消路径不持有完成租约，`lease_owner` 为 `null`；请求侧入队接口不返回持久任务主键时 `job_id` 为 `null`。
 
 #### 请求头
 

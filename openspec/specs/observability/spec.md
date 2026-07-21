@@ -61,6 +61,17 @@ The system SHALL propagate upload-completion correlation explicitly across contr
 - **WHEN** local storage admits and completes or fails an upload assembly across its blocking filesystem queue
 - **THEN** every assembly lifecycle event SHALL retain the caller-supplied request, operation, upload, job, owner, and state-version values exactly, including null values, without reconstructing them from the session, paths, or message text
 
+### Requirement: Typed Upload Cancellation Correlation
+The system SHALL propagate upload-cancellation correlation explicitly across controller, service, lifecycle, and PostgreSQL transaction boundaries while preserving the public idempotent response contract.
+
+#### Scenario: Cancellation wins the in-progress transition
+- **WHEN** an upload-cancellation request atomically changes an owned task from in progress to cancelled
+- **THEN** the transition SHALL increment the persistent state version exactly once, and post-commit events SHALL retain the response request ID, handling instance, `upload_cancel` operation, upload ID, and returned state version while job ID and lease owner remain null
+
+#### Scenario: Cancellation replays a cancelled task
+- **WHEN** a later cancellation request observes the same task already cancelled
+- **THEN** it SHALL return the same public success response, SHALL record a replay using the persisted state version, and SHALL NOT advance that version, release quota again, or enqueue another cleanup job
+
 ### Requirement: Typed Durable Worker Correlation
 The system SHALL derive durable Worker correlation only from claimed PostgreSQL job records and SHALL use a bounded operation vocabulary without message parsing or inferred identifiers.
 
