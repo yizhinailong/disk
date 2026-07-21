@@ -119,6 +119,10 @@ def main() -> int:
     )
     for marker in (
         "deploy/systemd/disk@.service",
+        "deploy/nginx/includes/upstream.inc",
+        "deploy/nginx/includes/proxy-server.inc",
+        "deploy/nginx/disk-tls.conf.example",
+        "deploy/nginx/upstreams/production.example.inc",
         "DISK_CONFIG_FILE=/etc/disk/config.distributed.json",
         "DATABASE_PASSWORD=your_db_password",
         "DATABASE_POOL_SIZE=8",
@@ -136,6 +140,9 @@ def main() -> int:
         'nssm set DiskWorker AppEnvironmentExtra "DISK_CONFIG_FILE=',
         "只恢复明确备份的二进制，不递归删除安装目录",
         "/opt/disk/bin/disk.bak",
+        "return 308 https://$server_name$request_uri;",
+        "sudo systemctl reload nginx",
+        "API 继续使用 `deploy/config.distributed.json` 的 HTTP `8080`",
     ):
         require(marker in operations_guide, f"operations guide is missing {marker}")
     for obsolete in (
@@ -164,6 +171,11 @@ def main() -> int:
         "限制 Redis 只监听本地",
         "应显示: 0.0.0.0:6379 或 127.0.0.1:6379",
         'instances/*.env (角色、实例 ID、监听端口)',
+        "upstream disk_backend",
+        "return 301 https://$server_name$request_uri;",
+        "location /api/file/download/",
+        '"port": 443,\n      "https": true',
+        "sudo systemctl restart nginx",
     ):
         require(obsolete not in operations_guide, f"operations guide retains obsolete: {obsolete}")
 
@@ -430,10 +442,15 @@ def main() -> int:
         )
 
     nginx_lines = []
-    for raw_line in (root / "deploy/nginx/disk.conf").read_text(encoding="utf-8").splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if line:
-            nginx_lines.append(line)
+    for nginx_path in (
+        root / "deploy/nginx/disk.conf",
+        root / "deploy/nginx/includes/upstream.inc",
+        root / "deploy/nginx/includes/proxy-server.inc",
+    ):
+        for raw_line in nginx_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.split("#", 1)[0].strip()
+            if line:
+                nginx_lines.append(line)
     nginx = "\n".join(nginx_lines)
     require(not re.search(r"\bip_hash\s*;", nginx), "load balancer must not use ip_hash")
     require("sticky" not in nginx.lower(), "load balancer must not use sticky routing")

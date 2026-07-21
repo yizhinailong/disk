@@ -218,6 +218,7 @@ services:
       - "127.0.0.1:${DISK_LB_PORT:-18080}:8080"
     volumes:
       - ./deploy/nginx/disk.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/includes:/etc/nginx/disk:ro
       - ./deploy/nginx/upstreams/api-a-b.inc:/etc/nginx/conf.d/disk-api-upstreams.inc:ro
       - ./deploy/nginx/upload-mode/open.inc:/etc/nginx/conf.d/disk-upload-mode.inc:ro
     healthcheck:

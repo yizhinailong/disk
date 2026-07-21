@@ -23,15 +23,23 @@ COMPOSE_PATH = REPO_ROOT / "docker-compose.distributed.yml"
 FALLBACK_COMPOSE_PATH = REPO_ROOT / "deploy/docker-compose.api-a-only.yml"
 UPLOAD_FREEZE_COMPOSE_PATH = REPO_ROOT / "deploy/docker-compose.upload-frozen.yml"
 NGINX_PATH = REPO_ROOT / "deploy/nginx/disk.conf"
+NGINX_TLS_PATH = REPO_ROOT / "deploy/nginx/disk-tls.conf.example"
+NGINX_UPSTREAM_INCLUDE_PATH = REPO_ROOT / "deploy/nginx/includes/upstream.inc"
+NGINX_PROXY_INCLUDE_PATH = REPO_ROOT / "deploy/nginx/includes/proxy-server.inc"
 DUAL_UPSTREAM_PATH = REPO_ROOT / "deploy/nginx/upstreams/api-a-b.inc"
 FALLBACK_UPSTREAM_PATH = REPO_ROOT / "deploy/nginx/upstreams/api-a-only.inc"
+PRODUCTION_UPSTREAM_PATH = REPO_ROOT / "deploy/nginx/upstreams/production.example.inc"
 OPEN_UPLOAD_PATH = REPO_ROOT / "deploy/nginx/upload-mode/open.inc"
 FROZEN_UPLOAD_PATH = REPO_ROOT / "deploy/nginx/upload-mode/frozen.inc"
 SWITCH_SCRIPT = REPO_ROOT / "scripts/switch-api-pool.sh"
 UPLOAD_SWITCH_SCRIPT = REPO_ROOT / "scripts/switch-upload-ingress.sh"
 EVIDENCE_PATH = REPO_ROOT / ".sisyphus/evidence/api-pool-rollout-summary.json"
+NGINX_TARGET = "/etc/nginx/conf.d/default.conf"
 UPSTREAM_TARGET = "/etc/nginx/conf.d/disk-api-upstreams.inc"
 UPLOAD_MODE_TARGET = "/etc/nginx/conf.d/disk-upload-mode.inc"
+INCLUDES_TARGET = "/etc/nginx/disk"
+UPSTREAM_INCLUDE_TARGET = f"{INCLUDES_TARGET}/upstream.inc"
+PROXY_INCLUDE_TARGET = f"{INCLUDES_TARGET}/proxy-server.inc"
 
 
 def require(condition: bool, message: str) -> None:
@@ -192,16 +200,93 @@ def main() -> int:
 
     nginx = active_lines(NGINX_PATH)
     require(
-        f"include {UPSTREAM_TARGET};" in nginx,
-        "Nginx must load the selected upstream fragment",
+        nginx
+        == [
+            f"include {UPSTREAM_INCLUDE_TARGET};",
+            "server {",
+            "listen 8080;",
+            "server_name _;",
+            f"include {PROXY_INCLUDE_TARGET};",
+            "}",
+        ],
+        "container Nginx entry point must only select its listener and shared policy",
+    )
+
+    upstream_include = active_lines(NGINX_UPSTREAM_INCLUDE_PATH)
+    require(
+        upstream_include
+        == [
+            "upstream disk_api {",
+            "zone disk_api 64k;",
+            "least_conn;",
+            f"include {UPSTREAM_TARGET};",
+            "keepalive 32;",
+            "}",
+        ],
+        "shared upstream policy drifted",
     )
     require(
-        f"include {UPLOAD_MODE_TARGET};" in nginx,
-        "Nginx must load the selected upload-mode fragment",
+        not any(line.startswith("server api-") for line in upstream_include),
+        "API members must not remain hard-coded in the shared upstream policy",
+    )
+
+    proxy_include = active_lines(NGINX_PROXY_INCLUDE_PATH)
+    required_proxy_lines = {
+        "client_max_body_size 20m;",
+        "client_body_timeout 60s;",
+        "location = /metrics {",
+        "return 404;",
+        f"include {UPLOAD_MODE_TARGET};",
+        "proxy_pass http://disk_api;",
+        'proxy_set_header Connection "";',
+        "proxy_set_header Host $host;",
+        "proxy_set_header X-Real-IP $remote_addr;",
+        "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
+        "proxy_set_header X-Forwarded-Proto $scheme;",
+        "proxy_set_header X-Request-Id $request_id;",
+        "proxy_request_buffering off;",
+        "proxy_buffering off;",
+        "proxy_connect_timeout 3s;",
+        "proxy_send_timeout 330s;",
+        "proxy_read_timeout 330s;",
+        "proxy_next_upstream error timeout http_502 http_503 http_504;",
+        "proxy_next_upstream_tries 2;",
+    }
+    require(
+        required_proxy_lines <= set(proxy_include),
+        "shared proxy-server policy drifted",
     )
     require(
-        not any(line.startswith("server api-") for line in nginx),
-        "API members must not remain hard-coded in the main Nginx config",
+        not any("non_idempotent" in line for line in proxy_include),
+        "shared proxy policy must not replay non-idempotent requests",
+    )
+    require(
+        not any("/api/file/download" in line for line in proxy_include),
+        "downloads must not bypass the shared forwarding policy",
+    )
+
+    tls_nginx = active_lines(NGINX_TLS_PATH)
+    for line in (
+        f"include {UPSTREAM_INCLUDE_TARGET};",
+        "listen 80;",
+        "listen [::]:80;",
+        "return 308 https://$server_name$request_uri;",
+        "listen 443 ssl http2;",
+        "listen [::]:443 ssl http2;",
+        "ssl_certificate /etc/letsencrypt/live/disk.example.com/fullchain.pem;",
+        "ssl_certificate_key /etc/letsencrypt/live/disk.example.com/privkey.pem;",
+        "ssl_protocols TLSv1.2 TLSv1.3;",
+        "ssl_session_tickets off;",
+        f"include {PROXY_INCLUDE_TARGET};",
+    ):
+        require(line in tls_nginx, f"production TLS entry point is missing: {line}")
+    require(
+        not any(line.startswith("proxy_") for line in tls_nginx),
+        "production TLS entry point must not duplicate shared proxy directives",
+    )
+    require(
+        not any(line.startswith("location ") for line in tls_nginx),
+        "production TLS entry point must not duplicate shared locations",
     )
 
     expected_a = "server api-a:8080 max_fails=2 fail_timeout=5s;"
@@ -214,10 +299,22 @@ def main() -> int:
         active_lines(FALLBACK_UPSTREAM_PATH) == [expected_a],
         "reviewed api-a-only pool drifted",
     )
+    require(
+        active_lines(PRODUCTION_UPSTREAM_PATH)
+        == [
+            "server 10.0.1.11:8080 max_fails=2 fail_timeout=5s;",
+            "server 10.0.1.12:8080 max_fails=2 fail_timeout=5s;",
+        ],
+        "production private API pool example drifted",
+    )
 
     load_balancer = services.get("load-balancer")
     require(isinstance(load_balancer, dict), "base load-balancer service is missing")
     base_mounts = short_mounts(load_balancer.get("volumes"), "base load balancer")
+    require(
+        base_mounts.get(NGINX_TARGET) == "./deploy/nginx/disk.conf",
+        "base Compose must mount the reviewed Nginx entry point",
+    )
     require(
         base_mounts.get(UPSTREAM_TARGET) == "./deploy/nginx/upstreams/api-a-b.inc",
         "base Compose must mount the dual API pool",
@@ -225,6 +322,10 @@ def main() -> int:
     require(
         base_mounts.get(UPLOAD_MODE_TARGET) == "./deploy/nginx/upload-mode/open.inc",
         "base Compose must mount the reviewed open upload mode",
+    )
+    require(
+        base_mounts.get(INCLUDES_TARGET) == "./deploy/nginx/includes",
+        "base Compose must mount the shared Nginx policy directory",
     )
     require(active_lines(OPEN_UPLOAD_PATH) == [], "open upload mode must not add a location")
 

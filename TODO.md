@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮角色化服务管理同步）：`systemd-analyze verify`、`cmake --preset linux-debug-clang`、完整构建和 `DistributedTopologyContract` 1/1 均通过；完整 CTest 共 1381 项，1375 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 427.87 秒；仓库内真实进程的随机路由、Worker/API 调度所有权切换及逐级副本容量门禁已运行通过，OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-21，本轮 Nginx/TLS 入口同步）：Python 语法检查、两个部署合同脚本、`cmake --preset linux-debug-clang`、完整构建和聚焦 CTest 2/2 均通过；完整 CTest 共 1381 项，1375 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 427.50 秒；仓库内真实进程的随机路由、Worker/API 调度所有权切换及逐级副本容量门禁已运行通过，OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链和双 API 随机路由门禁。
 
 ## 1. 目标与范围
 
@@ -885,6 +885,14 @@ clang-format、后端完整构建和聚焦 CTest 4/4 通过；完整 CTest 保�
 部署指南同步为 S3 final + S3 staging 的生产目录图，区分 Drogon HTTP 请求临时目录与权威业务暂存；安全配置统一使用代码实际读取的 `DATABASE_PASSWORD`，PostgreSQL/Redis 每进程连接池回到已验证的 8/4 基线。角色化日常启停、readiness 监控、备份/恢复变量、manifest 迁移和二进制回滚命令已统一；回滚只覆盖明确备份的制品，不再递归删除 `/opt/disk`。`DistributedTopologyContract` 固定了配置入口、连接预算、双角色命令、单元加固与旧写法禁用集。
 
 Python 语法检查、合同脚本直接执行和聚焦 CTest 1/1 通过；`systemd-analyze verify` 在隔离根目录中通过且无告警，CMake 配置与完整构建通过。完整 CTest 共 1381 项，其中 1375 项通过、6 项按环境门控跳过、0 失败，总耗时 427.87 秒；OpenSpec 严格校验 24/24 通过。本轮完成 Phase 10 第 821 项中的角色化服务管理子项；Nginx 与运维指南其余图表的全量审计、Mermaid 渲染验收仍未完成，因此第 821 项保持未勾选；目标 MinIO/云 S3、多实例与压力门禁未执行，第 822 项也保持未勾选。
+
+### 15.10 Nginx 与 TLS 入口运维同步记录（2026-07-21）
+
+旧运维指南同时让 Drogon 和 Nginx 监听公网 `443`，并内嵌一份与运行资产不同的 `disk_backend` 配置：它缺少 `X-Request-Id`，为下载维护了绕过公共转发头的特殊 `location`，超时和 upstream 失败参数也与 Compose 入口不一致。现在 OpenSpec 与部署指南统一为 Nginx 单点终止公网 TLS，API 只监听受私网或容器网络保护的 HTTP `8080`；HTTP 使用固定 `server_name` 的 `308` 跳转，complete 响应未知继续通过原 `upload_id` 的幂等业务恢复处理，而不依赖代理重放。
+
+仓库新增 `deploy/nginx/includes/upstream.inc` 和 `proxy-server.inc`，将 `least_conn`、可切换 API 池、请求头、`20m` 分片请求上限、3/330 秒超时、流式请求/响应、公网 `/metrics` 拒绝和不含 `non_idempotent` 的重试策略收敛为一份共享合同。Compose 明文入口与新增的 `deploy/nginx/disk-tls.conf.example` 均只选择监听器并加载该合同；`deploy/nginx/upstreams/production.example.inc` 给出两台私网 API 基线，生产 TLS 站点不再复制代理指令或下载特例。`ApiPoolRolloutContract` 同时锁定共享 include、只读 Compose 挂载、TLS/双栈监听、证书路径、308 跳转和生产 upstream；`DistributedTopologyContract` 跨文件验证无 cookie/ip-hash、必需转发头、关闭请求缓冲及运维指南禁用旧配置。
+
+Python 语法检查、两个合同脚本直接执行、聚焦 CTest 2/2、CMake 配置与完整构建均通过；完整 CTest 共 1381 项，其中 1375 项通过、6 项按环境门控跳过、0 失败，总耗时 427.50 秒；OpenSpec 严格校验 24/24 通过。当前主机没有 Nginx、Docker 或其他容器运行时，因此只完成仓库级静态合同，目标环境仍须执行真实 `nginx -t`、证书续期 dry-run、HTTPS readiness、`/metrics` 拒绝和双 API 随机路由。本轮完成 Phase 10 第 821 项中的 Nginx/HTTPS 运维子项；运维指南其余图表的全量审计和 Mermaid 渲染仍未完成，第 821 项保持未勾选，目标 MinIO/云 S3、多实例与压力门禁未执行，第 822 项也保持未勾选。
 
 ## 16. 最终 Definition of Done
 

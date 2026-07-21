@@ -166,11 +166,19 @@ Deployment documentation SHALL define service installation, systemd or Windows s
 - **THEN** it SHALL run under a dedicated service account with configured working directory, environment file, restart policy, and write access limited to documented data/log paths
 
 ### Requirement: HTTPS and reverse proxy operations
-Deployment documentation SHALL define HTTPS certificate options, reverse proxy settings, upload body-size limits tied to chunk size, timeout requirements, and download buffering considerations.
+Deployment documentation SHALL define HTTPS certificate options, reverse proxy settings, upload body-size limits tied to chunk size, timeout requirements, and download buffering considerations. In the reviewed Nginx topology, public TLS SHALL terminate once at Nginx while application instances continue to listen on private HTTP endpoints. The container and production TLS entry points SHALL consume the same reviewed upstream and proxy-server policy so routing, forwarding, buffering, timeout, metrics-deny, and retry behavior cannot drift.
 
 #### Scenario: Nginx front end configured
 - **WHEN** Nginx proxies requests to the backend
-- **THEN** the configuration SHALL preserve host and forwarding headers, support long upload/download operations, and set request body limits based on upload chunk size rather than maximum logical file size
+- **THEN** the configuration SHALL preserve host, client address, forwarded protocol, and request ID headers, support long upload/download operations, and set request body limits based on upload chunk size rather than maximum logical file size
+
+#### Scenario: Public TLS terminates at Nginx
+- **WHEN** the production TLS entry point is installed
+- **THEN** HTTP SHALL redirect to HTTPS without changing the request target, only Nginx SHALL bind the public HTTPS port, and API instances SHALL remain reachable only through documented private HTTP endpoints
+
+#### Scenario: A streamed non-idempotent request loses its upstream
+- **WHEN** Nginx has begun forwarding a POST, PUT, or PATCH request body and the selected API becomes unavailable
+- **THEN** the proxy SHALL NOT automatically replay that request on another API, and client recovery SHALL use the documented idempotent business operation
 
 ### Requirement: Monitoring, logging, backup, restore, and troubleshooting
 Deployment documentation SHALL define log rotation, health checks, service/database/cache monitoring, database and file backups, restore procedures, and troubleshooting paths for startup, database, Redis, upload, CPU, memory, and disk I/O issues. If the Prometheus plugin is enabled, deployment documentation SHALL identify the `/metrics` endpoint as the metrics scrape hook.
