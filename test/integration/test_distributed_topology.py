@@ -273,6 +273,7 @@ def main() -> int:
         "test/storage/S3ObjectStorage_test.cpp + test/integration/test_s3_app_flow.py",
         "test/services/TokenServiceRevocation_test.cpp + test/integration/test_distributed_flow.py",
         "test_auth_cluster_consistency.py",
+        "test_redis_session_persistence.py",
         "目标 S3/MinIO 环境门控",
         "目标双 API 环境门控",
     ):
@@ -295,6 +296,7 @@ def main() -> int:
         "test/services/TokenServiceRevocation_test.cpp",
         "test/integration/test_distributed_flow.py",
         "test/integration/test_auth_cluster_consistency.py",
+        "test/integration/test_redis_session_persistence.py",
     ):
         require((root / relative_path).is_file(), f"documented test entry is missing: {relative_path}")
 
@@ -303,6 +305,11 @@ def main() -> int:
         "NAME AuthClusterConsistencyIntegration" in test_cmake
         and "test_auth_cluster_consistency.py" in test_cmake,
         "non-gated auth cluster consistency test is not registered in CTest",
+    )
+    require(
+        "NAME RedisSessionPersistenceIntegration" in test_cmake
+        and "test_redis_session_persistence.py" in test_cmake,
+        "Redis session persistence test is not registered in CTest",
     )
 
     todo = (root / "TODO.md").read_text(encoding="utf-8")
@@ -314,7 +321,7 @@ def main() -> int:
     require(latest_verification is not None, "TODO latest verification summary is missing or malformed")
     total, passed_count, skipped_count = map(int, latest_verification.groups())
     require(
-        (total, passed_count, skipped_count) == (1384, 1378, 6),
+        (total, passed_count, skipped_count) == (1385, 1379, 6),
         "TODO latest CTest inventory drifted without an explicit contract update",
     )
     require(total == passed_count + skipped_count, "TODO latest CTest totals do not reconcile")

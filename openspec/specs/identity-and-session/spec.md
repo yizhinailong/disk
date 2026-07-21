@@ -96,6 +96,19 @@ Access-token and share-token revocation checks SHALL treat an unavailable shared
 - **WHEN** Redis connectivity returns after a temporary fault
 - **THEN** the original API processes SHALL resume token validation without restart, preserve persisted revocations, and SHALL NOT retain a permanent negative or failure cache
 
+### Requirement: Redis-backed session security state is durable
+The current refresh-token hash and unexpired access/share-token revocations SHALL be treated as expiring session security state rather than disposable cache. A supported Redis restart or failover SHALL preserve acknowledged security-state writes and their remaining TTL. File-list caches and rate-limit counters MAY follow their separately documented rebuild or degradation policy.
+
+#### Scenario: Persistent Redis restarts
+- **WHEN** Redis acknowledges a refresh-token state and an access-token revocation, then restarts from its configured durable storage
+- **THEN** both keys SHALL remain present with positive TTLs that have not been reset
+- **AND** a cold API instance SHALL reject the revoked access token while two API instances racing the retained refresh token SHALL still select exactly one rotation winner
+
+#### Scenario: Redis security state cannot be trusted after disaster recovery
+- **WHEN** Redis recovery cannot prove preservation of every acknowledged, unexpired session-security write
+- **THEN** authentication traffic SHALL remain closed until the JWT signing secret is rotated and every API instance is restarted with the new secret
+- **AND** all previously issued access, refresh, and share tokens SHALL require reauthentication or reissuance before traffic reopens
+
 ### Requirement: Account Protection
 The system SHALL enforce account status and rate-limit protections for authentication-sensitive flows.
 

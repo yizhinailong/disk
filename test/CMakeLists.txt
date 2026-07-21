@@ -607,6 +607,19 @@ set_tests_properties(
 )
 
 add_test(
+    NAME RedisSessionPersistenceIntegration
+    COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_redis_session_persistence.py"
+)
+set_tests_properties(
+    RedisSessionPersistenceIntegration
+    PROPERTIES
+    LABELS "backend-integration;distributed;security"
+    RUN_SERIAL TRUE
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
     NAME DistributedCapacityBudgetContract
     COMMAND uv run "${CMAKE_SOURCE_DIR}/test/integration/test_capacity_budget.py"
 )

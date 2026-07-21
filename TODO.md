@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-21，本轮 Phase 5 跨实例令牌一致性）：`cmake --preset linux-debug-clang`、完整构建和令牌/过滤器/双 API Redis 故障聚焦 CTest 115/115 均通过；完整 CTest 共 1384 项，1378 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 456.94 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
+> 最近验证（2026-07-21，本轮 Phase 6 Redis 会话安全状态持久化）：`cmake --preset linux-debug-clang`、完整构建和认证/Redis 聚焦 CTest 62/62 均通过；完整 CTest 共 1385 项，1379 通过、6 项按环境门控跳过（`promtool`、3 项显式 S3/MinIO 门控、2 项显式分布式拓扑门控），0 失败，总耗时 452.44 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Nginx、Docker 或其他容器运行时，目标环境还须执行真实 `nginx -t`、证书链、双 API 随机路由和压力门禁。
 
 ## 1. 目标与范围
 
@@ -360,7 +360,7 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 - [ ] 使用私网高可用端点并开启认证/TLS（目标环境支持时）。
 - [ ] 验证故障切换期间连接重建、命令超时、Lua/CAS、SCAN 和 key TTL 行为。
 - [x] 分布式配置默认每实例 4 条 Redis 连接，双 API/双 Worker 总预算 16 条；扩容必须重新核算。
-- [ ] 备份或持久化要求按 refresh token/撤销语义明确，不把 Redis 当作可随意清空的纯缓存。
+- [x] 备份或持久化要求按 refresh token/撤销语义明确，不把 Redis 当作可随意清空的纯缓存。
 
 ### 11.4 S3/MinIO
 
@@ -385,6 +385,16 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 - [ ] 关闭任一 Worker，任务由其他 Worker 接管。
 - [ ] PostgreSQL、Redis 和对象存储的故障切换均完成演练并记录 RTO/RPO。
 - [ ] 扩容 API 不需要迁移本地文件、复制会话或修改负载均衡粘性规则。
+
+### 11.7 Phase 6 Redis 会话安全状态持久化验收记录（2026-07-21）
+
+设计合同现将 Redis 状态分为两类：文件列表、版本键和限流窗口按各自合同重建或降级；`refresh_token:*` 当前哈希、`access_token_blacklist:*` 和 `share_token_blacklist:*` 是带绝对过期时间的会话安全状态。受支持的常规重启/无损故障切换必须保留已确认写入和原到期时间；若目标恢复无法证明安全键完整，则保持认证入口关闭，轮换 JWT Secret、重启全部 API，并确认所有旧 access/refresh/share token 失效后才能切流。
+
+`test_redis_session_persistence.py` 使用唯一临时 PostgreSQL、两个真实 API 和测试专属 Redis/Valkey 持久目录。夹具通过真实登录/登出写入 refresh 当前哈希和 access 撤销，确认 `appendonly=yes`、`appendfsync=always` 及 `WAITAOF` 本地 fsync 屏障后 `SIGKILL` Redis；从同一目录启动新 Redis 进程时，两安全键的值不变、`PTTL` 保持为正且严格递减。
+
+故障期间 API A 进程 PID 保持不变，liveness 为 200、readiness 因 Redis 为 503；恢复后 A 无需重启即可重新 ready。恢复后才启动的冷 API B 没有进程内撤销缓存，仍从持久 Redis 以 `401 + 40111` 拒绝旧 access token；A/B 对故障前 refresh token 并发轮换只产生一个赢家，旧 token 重放失败。测试不连接、不停止也不清空共享 Redis，`0600` 证据不含 token、密码、JTI 或 Redis key。
+
+认证/Redis 聚焦 CTest 62/62 通过；完整 CTest 共 1385 项，1379 通过、6 项既有环境门控跳过、0 失败，总耗时 452.44 秒；OpenSpec 严格校验 24/24 通过。本记录关闭 Redis 持久化语义与同一持久卷进程崩溃门禁，但不替代目标高可用端点的复制、自动故障切换、TLS/认证、RTO/RPO 和全会话失效演练，因此 11.3 的目标环境 HA 两项及 11.6 故障切换验收继续保持未勾选。
 
 ## 12. Phase 7：可观测性与运维工具
 
