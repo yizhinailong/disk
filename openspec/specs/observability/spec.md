@@ -42,6 +42,21 @@ The system SHALL associate requests with trace identifiers for log correlation a
 - **WHEN** the system handles an HTTP request
 - **THEN** it SHALL make the request trace identifier available for logging and response propagation
 
+### Requirement: Typed Upload Completion Correlation
+The system SHALL propagate upload-completion correlation explicitly across controller, service, lifecycle, database, and storage coroutine boundaries without thread-local request state or message parsing.
+
+#### Scenario: Completion acquires and advances a finalize lease
+- **WHEN** a valid upload-completion request acquires a PostgreSQL finalize lease and advances it through one or more compare-and-set renewals
+- **THEN** its application events SHALL retain the response request ID, handling instance, `upload_complete` operation, and upload ID, SHALL add the lease owner only after successful acquisition, and SHALL update the state version from each successful database result
+
+#### Scenario: Completion commits or replays a completed task
+- **WHEN** finalization commits or a later request replays the completed result
+- **THEN** post-commit events SHALL use the persisted completed state version and a null lease owner because the completion update clears the lease
+
+#### Scenario: Completion has not observed a durable job ID
+- **WHEN** completion creates or rearms a cleanup or reconciliation job through an interface that does not return its persistent row ID
+- **THEN** the completion event SHALL keep `job_id` null and SHALL NOT derive an ID from the dedupe key, aggregate ID, or message text
+
 ### Requirement: Bounded High-Volume Logging
 The system SHALL apply an outcome-based logging policy to upload-chunk traffic so that the normal production log level does not emit one success record per chunk while failures and low-cardinality metrics remain complete.
 

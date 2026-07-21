@@ -165,7 +165,10 @@ namespace disk::upload {
             -> drogon::Task<Result<InitUploadOutcome>>;
 
         [[nodiscard]]
-        auto CompleteUpload(CompleteUploadCommand command) const
+        auto CompleteUpload(
+            CompleteUploadCommand command,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<CompleteUploadOutcome>>;
 
         [[nodiscard]]

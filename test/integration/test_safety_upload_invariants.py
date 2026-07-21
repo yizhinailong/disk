@@ -623,6 +623,9 @@ def wait_for_correlated_application_log(
     operation: str,
     upload_id: str | None,
     message_marker: str,
+    job_id: int | None = None,
+    lease_owner: str | None = None,
+    state_version: int | None = None,
 ) -> dict[str, object]:
     """Return one schema-v1 application event with exact typed correlation."""
     deadline = time.monotonic() + 5
@@ -643,14 +646,11 @@ def wait_for_correlated_application_log(
                     and record.get("instance_id") == instance_id
                     and record.get("operation") == operation
                     and record.get("upload_id") == upload_id
+                    and record.get("job_id") == job_id
+                    and record.get("lease_owner") == lease_owner
+                    and record.get("state_version") == state_version
                     and message_marker in str(record.get("message", ""))
                 ):
-                    for field in ("job_id", "lease_owner", "state_version"):
-                        assert_equal(
-                            f"{operation} {field} remains unavailable",
-                            record.get(field),
-                            None,
-                        )
                     return record
         time.sleep(0.05)
 
@@ -3180,6 +3180,39 @@ def test_missing_staging_object_records_reconciliation() -> None:
             file_hash,
             quota_before_complete,
         )
+        failed_task = query_one(
+            "SELECT lease_owner, state_version FROM upload_tasks "
+            "WHERE id = %s AND user_id = %s",
+            (upload_id, USER_ID),
+        )
+        if failed_task is None:
+            log_fail("failed finalize task remains queryable for log correlation")
+            print_summary()
+            raise AssertionError("unreachable")
+        assert_equal(
+            "failed finalize lease owner matches handling instance",
+            str(failed_task["lease_owner"]),
+            instance_id,
+        )
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="upload_complete",
+            upload_id=upload_id,
+            message_marker="Failed to assemble chunks",
+            lease_owner=str(failed_task["lease_owner"]),
+            state_version=int(failed_task["state_version"]),
+        )
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="upload_complete",
+            upload_id=upload_id,
+            message_marker="[complete_upload]",
+            lease_owner=str(failed_task["lease_owner"]),
+            state_version=int(failed_task["state_version"]),
+        )
+        log_pass("failed completion log matches persisted lease owner and state version")
 
         finding = query_one(
             "SELECT severity, resolution_strategy, resource_locator, details "

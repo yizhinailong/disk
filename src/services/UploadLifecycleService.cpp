@@ -45,6 +45,7 @@ namespace disk::upload {
     namespace {
         auto PauseUploadForFaultInjection(
             const CompleteUploadCommand& command,
+            disk::utils::LogContext log_context,
             const char* target_env_name,
             const char* stage,
             const char* release_file_env_name = nullptr
@@ -59,9 +60,11 @@ namespace disk::upload {
                 return;
             }
 
-            Logger::Warn() << "Test fault injection paused upload " << stage
-                           << ": upload_id=" << command.upload_id
-                           << ", lease_owner=" << command.lease_owner;
+            log_context.upload_id = command.upload_id;
+            Logger::Warn(log_context)
+                << "Test fault injection paused upload " << stage
+                << ": upload_id=" << command.upload_id
+                << ", lease_owner=" << command.lease_owner;
             if (release_file_env_name != nullptr) {
                 const auto* release_file = std::getenv(release_file_env_name);
                 if (release_file != nullptr && !std::string_view(release_file).empty()) {
@@ -69,9 +72,10 @@ namespace disk::upload {
                     std::error_code error;
                     while (std::chrono::steady_clock::now() < deadline) {
                         if (std::filesystem::exists(release_file, error)) {
-                            Logger::Warn() << "Test fault injection released upload " << stage
-                                           << ": upload_id=" << command.upload_id
-                                           << ", lease_owner=" << command.lease_owner;
+                            Logger::Warn(log_context)
+                                << "Test fault injection released upload " << stage
+                                << ": upload_id=" << command.upload_id
+                                << ", lease_owner=" << command.lease_owner;
                             return;
                         }
                         error.clear();
@@ -176,8 +180,12 @@ namespace disk::upload {
             const disk::file::UploadTaskRepository& repository,
             const drogon::orm::DbClientPtr& client,
             const CompleteUploadCommand& command,
-            uint64_t state_version
+            uint64_t state_version,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<Result<uint64_t>> {
+            log_context.upload_id = command.upload_id;
+            log_context.lease_owner = command.lease_owner;
+            log_context.state_version = state_version;
             try {
                 auto renewed_version = co_await repository.RenewFinalizeLease(
                     client,
@@ -192,8 +200,9 @@ namespace disk::upload {
                 }
                 co_return renewed_version.value();
             } catch (const std::exception& e) {
-                Logger::Error() << "Failed to renew upload finalize lease: upload_id="
-                                << command.upload_id << ", error=" << e.what();
+                Logger::Error(log_context)
+                    << "Failed to renew upload finalize lease: upload_id="
+                    << command.upload_id << ", error=" << e.what();
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to renew upload finalize lease")
                 );
@@ -204,8 +213,12 @@ namespace disk::upload {
             const disk::file::UploadTaskRepository& repository,
             const CompleteUploadCommand& command,
             uint64_t state_version,
-            ErrorCode error_code
+            ErrorCode error_code,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<void> {
+            log_context.upload_id = command.upload_id;
+            log_context.lease_owner = command.lease_owner;
+            log_context.state_version = state_version;
             try {
                 const auto recorded = co_await repository.RecordFinalizeErrorIfLeaseOwned(
                     command.upload_id,
@@ -215,12 +228,14 @@ namespace disk::upload {
                     ErrorInfo(error_code).CodeInt()
                 );
                 if (!recorded) {
-                    Logger::Warn() << "Finalize error was not recorded because lease ownership changed: upload_id="
-                                   << command.upload_id << ", state_version=" << state_version;
+                    Logger::Warn(log_context)
+                        << "Finalize error was not recorded because lease ownership changed: upload_id="
+                        << command.upload_id << ", state_version=" << state_version;
                 }
             } catch (const std::exception& e) {
-                Logger::Warn() << "Failed to record upload finalize error: upload_id="
-                               << command.upload_id << ", error=" << e.what();
+                Logger::Warn(log_context)
+                    << "Failed to record upload finalize error: upload_id="
+                    << command.upload_id << ", error=" << e.what();
             }
         }
 
@@ -230,8 +245,12 @@ namespace disk::upload {
             disk::storage::IBlobStore* blob_store,
             const disk::storage::UploadStagingSession& session,
             const CompleteUploadCommand& command,
-            uint64_t state_version
+            uint64_t state_version,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<void> {
+            log_context.upload_id = command.upload_id;
+            log_context.lease_owner = command.lease_owner;
+            log_context.state_version = state_version;
             const auto scan_id =
                 "upload-integrity-" +
                 disk::reconciliation::BuildObjectResourceId(command.upload_id).substr(0, 32);
@@ -264,8 +283,9 @@ namespace disk::upload {
                     }
                 );
             } catch (const std::exception& error) {
-                Logger::Warn() << "Failed to persist upload staging mismatch: upload_id="
-                               << command.upload_id << ", error=" << error.what();
+                Logger::Warn(log_context)
+                    << "Failed to persist upload staging mismatch: upload_id="
+                    << command.upload_id << ", error=" << error.what();
             }
 
             auto reconciliation_job = disk::jobs::BuildStorageReconcileJob(
@@ -276,9 +296,9 @@ namespace disk::upload {
                 }
             );
             if (!reconciliation_job) {
-                Logger::Warn() << "Failed to build upload staging reconciliation job: upload_id="
-                               << command.upload_id << ", error="
-                               << reconciliation_job.error();
+                Logger::Warn(log_context)
+                    << "Failed to build upload staging reconciliation job: upload_id="
+                    << command.upload_id << ", error=" << reconciliation_job.error();
                 co_return;
             }
 
@@ -289,8 +309,9 @@ namespace disk::upload {
                     reconciliation_job.value()
                 );
             } catch (const std::exception& error) {
-                Logger::Warn() << "Failed to enqueue upload staging reconciliation: upload_id="
-                               << command.upload_id << ", error=" << error.what();
+                Logger::Warn(log_context)
+                    << "Failed to enqueue upload staging reconciliation: upload_id="
+                    << command.upload_id << ", error=" << error.what();
             }
         }
 
@@ -747,13 +768,26 @@ namespace disk::upload {
         );
     }
 
-    auto UploadLifecycleService::CompleteUpload(CompleteUploadCommand command) const
+    auto UploadLifecycleService::CompleteUpload(
+        CompleteUploadCommand command,
+        disk::utils::LogContext log_context
+    ) const
         -> drogon::Task<Result<CompleteUploadOutcome>> {
+        log_context.operation = "upload_complete";
+        if (command.upload_id.empty()) {
+            log_context.upload_id.reset();
+        } else {
+            log_context.upload_id = command.upload_id;
+        }
+        log_context.job_id.reset();
+        log_context.lease_owner.reset();
+        log_context.state_version.reset();
 
         auto start = std::chrono::steady_clock::now();
 
-        Logger::Debug() << "Starting complete upload lifecycle: upload_id=" << command.upload_id
-                        << ", user_id=" << command.user_id;
+        Logger::Debug(log_context)
+            << "Starting complete upload lifecycle: upload_id=" << command.upload_id
+            << ", user_id=" << command.user_id;
 
         disk::file::UploadTaskRepository upload_task_repository(m_db_client);
         disk::file::FinalizeClaimResult claim_result;
@@ -767,27 +801,42 @@ namespace disk::upload {
             );
         } catch (const std::exception& e) {
             claim_timer.Stop();
-            Logger::Error() << "Failed to claim upload finalize lease: upload_id="
-                            << command.upload_id << ", error=" << e.what();
+            Logger::Error(log_context)
+                << "Failed to claim upload finalize lease: upload_id="
+                << command.upload_id << ", error=" << e.what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to claim upload finalize lease")
             );
         }
         claim_timer.Stop();
+        if (claim_result.disposition != disk::file::FinalizeClaimDisposition::NotFound) {
+            log_context.state_version = claim_result.state_version;
+        }
 
         switch (claim_result.disposition) {
             case disk::file::FinalizeClaimDisposition::Acquired:
+                log_context.lease_owner = command.lease_owner;
+                Logger::Debug(log_context)
+                    << "Upload finalize lease acquired: upload_id=" << command.upload_id
+                    << ", state_version=" << claim_result.state_version;
                 break;
             case disk::file::FinalizeClaimDisposition::IncompleteChunks:
+                Logger::Warn(log_context)
+                    << "Upload finalize rejected because chunks are incomplete: upload_id="
+                    << command.upload_id;
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Not all chunks uploaded")
                 );
             case disk::file::FinalizeClaimDisposition::LeaseHeld:
+                Logger::Warn(log_context)
+                    << "Upload finalize lease is held by another owner: upload_id="
+                    << command.upload_id;
                 co_return std::unexpected(LeaseConflictError());
             case disk::file::FinalizeClaimDisposition::CompletedReplay: {
                 if (!claim_result.completed_file_id.has_value()) {
-                    Logger::Error() << "Completed upload task has no completed_file_id: upload_id="
-                                    << command.upload_id;
+                    Logger::Error(log_context)
+                        << "Completed upload task has no completed_file_id: upload_id="
+                        << command.upload_id;
                     co_return std::unexpected(
                         ErrorInfo(ErrorCode::InternalError, "Completed upload result is unavailable")
                     );
@@ -804,9 +853,10 @@ namespace disk::upload {
                     );
                     load_timer.Stop();
                     if (!completed_file.has_value()) {
-                        Logger::Error() << "Completed upload file is missing: upload_id="
-                                        << command.upload_id << ", file_id="
-                                        << claim_result.completed_file_id.value();
+                        Logger::Error(log_context)
+                            << "Completed upload file is missing: upload_id="
+                            << command.upload_id << ", file_id="
+                            << claim_result.completed_file_id.value();
                         co_return std::unexpected(
                             ErrorInfo(ErrorCode::InternalError, "Completed upload result is unavailable")
                         );
@@ -819,8 +869,9 @@ namespace disk::upload {
                     co_return outcome;
                 } catch (const std::exception& e) {
                     load_timer.Stop();
-                    Logger::Error() << "Failed to load completed upload result: upload_id="
-                                    << command.upload_id << ", error=" << e.what();
+                    Logger::Error(log_context)
+                        << "Failed to load completed upload result: upload_id="
+                        << command.upload_id << ", error=" << e.what();
                     co_return std::unexpected(
                         ErrorInfo(ErrorCode::InternalError, "Failed to load completed upload result")
                     );
@@ -833,6 +884,7 @@ namespace disk::upload {
 
         PauseUploadForFaultInjection(
             command,
+            log_context,
             "DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID",
             "after finalize claim"
         );
@@ -843,8 +895,8 @@ namespace disk::upload {
         auto task = co_await upload_task_repository.FindByIdForUser(command.upload_id, command.user_id);
         if (!task.has_value()) {
             load_timer.Stop();
-            Logger::Error() << "Claimed upload task could not be loaded: upload_id="
-                            << command.upload_id;
+            Logger::Error(log_context)
+                << "Claimed upload task could not be loaded: upload_id=" << command.upload_id;
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to load claimed upload task")
             );
@@ -859,8 +911,9 @@ namespace disk::upload {
                 command.user_id
             );
         } catch (const std::exception& e) {
-            Logger::Error() << "Failed to load staging session: upload_id=" << command.upload_id
-                            << ", error=" << e.what();
+            Logger::Error(log_context)
+                << "Failed to load staging session: upload_id=" << command.upload_id
+                << ", error=" << e.what();
         }
         if (!staging_session.has_value()) {
             load_timer.Stop();
@@ -868,7 +921,8 @@ namespace disk::upload {
                 upload_task_repository,
                 command,
                 state_version,
-                ErrorCode::InternalError
+                ErrorCode::InternalError,
+                log_context
             );
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to load upload staging session")
@@ -880,8 +934,9 @@ namespace disk::upload {
         try {
             chunks = co_await upload_task_repository.ListChunksForAssembly(command.upload_id);
         } catch (const std::exception& e) {
-            Logger::Error() << "Failed to load chunk descriptors for assembly: upload_id="
-                            << command.upload_id << ", error=" << e.what();
+            Logger::Error(log_context)
+                << "Failed to load chunk descriptors for assembly: upload_id="
+                << command.upload_id << ", error=" << e.what();
             chunk_descriptor_load_failed = true;
         }
         load_timer.Stop();
@@ -890,7 +945,8 @@ namespace disk::upload {
                 upload_task_repository,
                 command,
                 state_version,
-                ErrorCode::InternalError
+                ErrorCode::InternalError,
+                log_context
             );
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to load upload chunk descriptors")
@@ -898,12 +954,13 @@ namespace disk::upload {
         }
 
         if (m_upload_staging_storage == nullptr) {
-            Logger::Error() << "Upload staging storage is not configured";
+            Logger::Error(log_context) << "Upload staging storage is not configured";
             co_await RecordFinalizeErrorBestEffort(
                 upload_task_repository,
                 command,
                 state_version,
-                ErrorCode::InternalError
+                ErrorCode::InternalError,
+                log_context
             );
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Upload staging storage is not configured")
@@ -920,28 +977,29 @@ namespace disk::upload {
             chunks
         );
         const auto assemble_duration = assemble_timer.Stop();
-        Logger::Debug() << "[stage_timer] assemble duration_ms="
-                        << std::chrono::duration_cast<std::chrono::milliseconds>(
-                               assemble_duration
-                           )
-                               .count()
-                        << " upload_id=" << command.upload_id
-                        << " total_chunks=" << upload_task.getValueOfTotalChunks();
+        Logger::Debug(log_context)
+            << "[stage_timer] assemble duration_ms="
+            << std::chrono::duration_cast<std::chrono::milliseconds>(assemble_duration).count()
+            << " upload_id=" << command.upload_id
+            << " total_chunks=" << upload_task.getValueOfTotalChunks();
         if (!assemble_result) {
-            Logger::Error() << "Failed to assemble chunks: upload_id=" << command.upload_id
-                            << ", error=" << static_cast<int>(assemble_result.error().code);
+            Logger::Error(log_context)
+                << "Failed to assemble chunks: upload_id=" << command.upload_id
+                << ", error=" << static_cast<int>(assemble_result.error().code);
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[complete_upload] duration_us=" << duration_us
-                           << " outcome=failure upload_id=" << command.upload_id
-                           << " total_chunks=" << upload_task.getValueOfTotalChunks();
+            Logger::Info(log_context)
+                << "[complete_upload] duration_us=" << duration_us
+                << " outcome=failure upload_id=" << command.upload_id
+                << " total_chunks=" << upload_task.getValueOfTotalChunks();
 
             co_await RecordFinalizeErrorBestEffort(
                 upload_task_repository,
                 command,
                 state_version,
-                assemble_result.error().code
+                assemble_result.error().code,
+                log_context
             );
             if (assemble_result.error().code == ErrorCode::ChunkVerifyFailed) {
                 co_await TriggerStagingReconciliationBestEffort(
@@ -950,13 +1008,15 @@ namespace disk::upload {
                     m_blob_store,
                     staging_session.value(),
                     command,
-                    state_version
+                    state_version,
+                    log_context
                 );
             }
             co_return std::unexpected(assemble_result.error());
         }
         PauseUploadForFaultInjection(
             command,
+            log_context,
             "DISK_TEST_PAUSE_AFTER_ASSEMBLY_UPLOAD_ID",
             "after assembly"
         );
@@ -968,7 +1028,8 @@ namespace disk::upload {
             upload_task_repository,
             m_db_client,
             command,
-            state_version
+            state_version,
+            log_context
         );
         if (!renew_after_assembly) {
             auto cleanup_result = co_await m_upload_staging_storage->DiscardAssembly(
@@ -976,47 +1037,52 @@ namespace disk::upload {
                 assembled
             );
             if (!cleanup_result) {
-                Logger::Warn() << "Failed to discard assembly after lease loss: upload_id="
-                               << command.upload_id;
+                Logger::Warn(log_context)
+                    << "Failed to discard assembly after lease loss: upload_id="
+                    << command.upload_id;
             }
             co_return std::unexpected(renew_after_assembly.error());
         }
         state_version = renew_after_assembly.value();
+        log_context.state_version = state_version;
 
         if (assembled.size_bytes != static_cast<uint64_t>(upload_task.getValueOfFileSize()) ||
             final_hash != upload_task.getValueOfFileHash()) {
-            Logger::Error() << "File integrity mismatch: expected_size="
-                            << upload_task.getValueOfFileSize()
-                            << ", actual_size=" << assembled.size_bytes
-                            << ", expected_md5=" << upload_task.getValueOfFileHash()
-                            << ", actual_md5=" << final_hash;
+            Logger::Error(log_context)
+                << "File integrity mismatch: expected_size=" << upload_task.getValueOfFileSize()
+                << ", actual_size=" << assembled.size_bytes
+                << ", expected_md5=" << upload_task.getValueOfFileHash()
+                << ", actual_md5=" << final_hash;
             auto delete_result = co_await m_upload_staging_storage->DiscardAssembly(
                 staging_session.value(),
                 assembled
             );
             if (!delete_result) {
-                Logger::Warn() << "Failed to cleanup assemble file after hash mismatch: "
-                               << static_cast<int>(delete_result.error().code);
+                Logger::Warn(log_context)
+                    << "Failed to cleanup assemble file after hash mismatch: "
+                    << static_cast<int>(delete_result.error().code);
             }
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[complete_upload] duration_us=" << duration_us
-                           << " outcome=failure upload_id=" << command.upload_id
-                           << " total_chunks=" << upload_task.getValueOfTotalChunks();
+            Logger::Info(log_context)
+                << "[complete_upload] duration_us=" << duration_us
+                << " outcome=failure upload_id=" << command.upload_id
+                << " total_chunks=" << upload_task.getValueOfTotalChunks();
 
             co_await RecordFinalizeErrorBestEffort(
                 upload_task_repository,
                 command,
                 state_version,
-                ErrorCode::ChunkVerifyFailed
+                ErrorCode::ChunkVerifyFailed,
+                log_context
             );
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ChunkVerifyFailed, "File hash verification failed")
             );
         }
 
-        Logger::Debug() << "File hash verification passed: " << final_hash;
+        Logger::Debug(log_context) << "File hash verification passed: " << final_hash;
 
         struct FinalizeLookupResult {
             std::optional<disk::content::ContentMetadata> existing_content;
@@ -1026,7 +1092,7 @@ namespace disk::upload {
         UploadCompleteStageTimer dedup_timer(
             disk::metrics::UploadCompleteStage::DedupLookup
         );
-        auto lookup_result = co_await [this, &final_hash, &upload_task, &command]() -> drogon::Task<FinalizeLookupResult> {
+        auto lookup_result = co_await [this, &final_hash, &upload_task, &command, &log_context]() -> drogon::Task<FinalizeLookupResult> {
             FinalizeLookupResult lookup;
             disk::content::ContentService content_service(m_db_client);
             auto existing_content = co_await content_service.FindByMd5(final_hash);
@@ -1048,42 +1114,46 @@ namespace disk::upload {
 
                 co_return lookup;
             } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Error() << "Failed to query finalize upload metadata: " << e.base().what();
+                Logger::Error(log_context)
+                    << "Failed to query finalize upload metadata: " << e.base().what();
                 co_return lookup;
             }
         }();
         const auto dedup_duration = dedup_timer.Stop();
-        Logger::Debug() << "[stage_timer] dedup_lookup duration_ms="
-                        << std::chrono::duration_cast<std::chrono::milliseconds>(dedup_duration)
-                               .count()
-                        << " upload_id=" << command.upload_id
-                        << " candidate_found="
-                        << (lookup_result.existing_content.has_value() ? "true" : "false")
-                        << " filename_exists="
-                        << (lookup_result.filename_exists ? "true" : "false");
+        Logger::Debug(log_context)
+            << "[stage_timer] dedup_lookup duration_ms="
+            << std::chrono::duration_cast<std::chrono::milliseconds>(dedup_duration).count()
+            << " upload_id=" << command.upload_id
+            << " candidate_found="
+            << (lookup_result.existing_content.has_value() ? "true" : "false")
+            << " filename_exists=" << (lookup_result.filename_exists ? "true" : "false");
 
         if (lookup_result.filename_exists) {
-            Logger::Warn() << "File with same name already exists: " << upload_task.getValueOfFilename();
+            Logger::Warn(log_context)
+                << "File with same name already exists: " << upload_task.getValueOfFilename();
             auto delete_result = co_await m_upload_staging_storage->DiscardAssembly(
                 staging_session.value(),
                 assembled
             );
             if (!delete_result) {
-                Logger::Warn() << "Failed to cleanup assemble file on duplicate name: "
-                               << static_cast<int>(delete_result.error().code);
+                Logger::Warn(log_context)
+                    << "Failed to cleanup assemble file on duplicate name: "
+                    << static_cast<int>(delete_result.error().code);
             }
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[complete_upload] duration_us=" << duration_us
-                           << " outcome=failure upload_id=" << command.upload_id
-                           << " total_chunks=" << upload_task.getValueOfTotalChunks();
+            Logger::Info(log_context)
+                << "[complete_upload] duration_us=" << duration_us
+                << " outcome=failure upload_id=" << command.upload_id
+                << " total_chunks=" << upload_task.getValueOfTotalChunks();
 
             co_await RecordFinalizeErrorBestEffort(
                 upload_task_repository,
                 command,
                 state_version,
-                ErrorCode::FileAlreadyExists
+                ErrorCode::FileAlreadyExists,
+                log_context
             );
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
@@ -1094,8 +1164,9 @@ namespace disk::upload {
             existing_content->hash_sha256 == precomputed_sha256 &&
             existing_content->size == assembled.size_bytes;
         if (existing_content.has_value() && !existing_content_matches) {
-            Logger::Warn() << "MD5 lookup did not match assembled SHA-256/size; promoting distinct content: upload_id="
-                           << command.upload_id << ", content_id=" << existing_content->id;
+            Logger::Warn(log_context)
+                << "MD5 lookup did not match assembled SHA-256/size; promoting distinct content: upload_id="
+                << command.upload_id << ", content_id=" << existing_content->id;
         }
         auto finalize_storage_decision = DecideFinalizeStorage(
             existing_content_matches ? std::optional<uint64_t>(existing_content->id) : std::nullopt
@@ -1104,8 +1175,9 @@ namespace disk::upload {
         std::string final_sha256 = precomputed_sha256;
 
         if (finalize_storage_decision.type == FinalizeStorageDecisionType::ReuseExistingContent) {
-            Logger::Debug() << "File dedup successful: content_id="
-                            << finalize_storage_decision.existing_content_id.value();
+            Logger::Debug(log_context)
+                << "File dedup successful: content_id="
+                << finalize_storage_decision.existing_content_id.value();
             final_storage_path = existing_content->storage_path;
         } else {
             UploadCompleteStageTimer promote_timer(
@@ -1113,20 +1185,22 @@ namespace disk::upload {
             );
             if (m_blob_store == nullptr) {
                 promote_timer.Stop();
-                Logger::Error() << "Blob store is not configured";
+                Logger::Error(log_context) << "Blob store is not configured";
                 auto cleanup_result = co_await m_upload_staging_storage->DiscardAssembly(
                     staging_session.value(),
                     assembled
                 );
                 if (!cleanup_result) {
-                    Logger::Warn() << "Failed to cleanup assemble file after missing blob store: "
-                                   << static_cast<int>(cleanup_result.error().code);
+                    Logger::Warn(log_context)
+                        << "Failed to cleanup assemble file after missing blob store: "
+                        << static_cast<int>(cleanup_result.error().code);
                 }
                 co_await RecordFinalizeErrorBestEffort(
                     upload_task_repository,
                     command,
                     state_version,
-                    ErrorCode::InternalError
+                    ErrorCode::InternalError,
+                    log_context
                 );
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Blob store is not configured")
@@ -1136,22 +1210,26 @@ namespace disk::upload {
             auto promote_result = co_await m_blob_store->PromoteToFinal(assembled, precomputed_sha256);
             promote_timer.Stop();
             if (!promote_result) {
-                Logger::Error() << "Failed to move file to final storage: error="
-                                << static_cast<int>(promote_result.error().code);
-                Logger::Warn() << "Keeping assembled staging object after promote failure: upload_id="
-                               << command.upload_id << ", locator=" << assembled.locator;
+                Logger::Error(log_context)
+                    << "Failed to move file to final storage: error="
+                    << static_cast<int>(promote_result.error().code);
+                Logger::Warn(log_context)
+                    << "Keeping assembled staging object after promote failure: upload_id="
+                    << command.upload_id << ", locator=" << assembled.locator;
 
                 auto end = std::chrono::steady_clock::now();
                 auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-                Logger::Info() << "[complete_upload] duration_us=" << duration_us
-                               << " outcome=failure upload_id=" << command.upload_id
-                               << " total_chunks=" << upload_task.getValueOfTotalChunks();
+                Logger::Info(log_context)
+                    << "[complete_upload] duration_us=" << duration_us
+                    << " outcome=failure upload_id=" << command.upload_id
+                    << " total_chunks=" << upload_task.getValueOfTotalChunks();
 
                 co_await RecordFinalizeErrorBestEffort(
                     upload_task_repository,
                     command,
                     state_version,
-                    promote_result.error().code
+                    promote_result.error().code,
+                    log_context
                 );
                 co_return std::unexpected(promote_result.error());
             }
@@ -1164,15 +1242,18 @@ namespace disk::upload {
             upload_task_repository,
             m_db_client,
             command,
-            state_version
+            state_version,
+            log_context
         );
         if (!renew_before_transaction) {
             co_return std::unexpected(renew_before_transaction.error());
         }
         state_version = renew_before_transaction.value();
+        log_context.state_version = state_version;
 
         drogon_model::disk::Files file;
         bool db_operation_failed = false;
+        uint64_t completed_state_version = state_version;
         UploadCompleteStageTimer commit_timer(disk::metrics::UploadCompleteStage::Commit);
         disk::file::TransactionRunner transaction_runner(m_db_client);
         disk::jobs::StorageJobRepository storage_job_repository(m_db_client);
@@ -1180,6 +1261,7 @@ namespace disk::upload {
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
                 PauseUploadForFaultInjection(
                     command,
+                    log_context,
                     "DISK_TEST_PAUSE_BEFORE_FINALIZE_TRANSACTION_UPLOAD_ID",
                     "before finalize transaction renewal",
                     "DISK_TEST_FINALIZE_TRANSACTION_RELEASE_FILE"
@@ -1189,7 +1271,8 @@ namespace disk::upload {
                     upload_task_repository,
                     transaction,
                     command,
-                    state_version
+                    state_version,
+                    log_context
                 );
                 if (!transaction_renew) {
                     co_return std::unexpected(transaction_renew.error());
@@ -1272,6 +1355,7 @@ namespace disk::upload {
                         "Upload finalization lease changed before commit"
                     ));
                 }
+                completed_state_version = transaction_state_version + 1;
 
                 co_await storage_job_repository.Enqueue(
                     transaction,
@@ -1284,66 +1368,77 @@ namespace disk::upload {
         );
         const auto commit_duration = commit_timer.Stop();
         if (!tx_result) {
-            Logger::Error() << "Upload finalization transaction failed: " << tx_result.error().message;
+            Logger::Error(log_context)
+                << "Upload finalization transaction failed: " << tx_result.error().message;
             db_operation_failed = true;
         }
-        Logger::Debug() << "[stage_timer] tx duration_ms="
-                        << std::chrono::duration_cast<std::chrono::milliseconds>(
-                               commit_duration
-                           )
-                               .count()
-                        << " upload_id=" << command.upload_id
-                        << " success=" << (!db_operation_failed ? "true" : "false");
+        Logger::Debug(log_context)
+            << "[stage_timer] tx duration_ms="
+            << std::chrono::duration_cast<std::chrono::milliseconds>(commit_duration).count()
+            << " upload_id=" << command.upload_id
+            << " success=" << (!db_operation_failed ? "true" : "false");
 
         if (db_operation_failed) {
             auto compensation_start = std::chrono::steady_clock::now();
             if (!existing_content_matches && !final_storage_path.empty()) {
-                Logger::Warn() << "Keeping promoted blob after transaction failure for retry/reconciliation: upload_id="
-                               << command.upload_id << ", storage_path=" << final_storage_path;
+                Logger::Warn(log_context)
+                    << "Keeping promoted blob after transaction failure for retry/reconciliation: upload_id="
+                    << command.upload_id << ", storage_path=" << final_storage_path;
             }
-            Logger::Info() << "[stage_timer] compensation_cleanup duration_ms="
-                           << std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  std::chrono::steady_clock::now() - compensation_start
-                              )
-                                  .count()
-                           << " upload_id=" << command.upload_id;
+            Logger::Info(log_context)
+                << "[stage_timer] compensation_cleanup duration_ms="
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - compensation_start
+                   )
+                       .count()
+                << " upload_id=" << command.upload_id;
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[complete_upload] duration_us=" << duration_us
-                           << " outcome=failure upload_id=" << command.upload_id
-                           << " total_chunks=" << upload_task.getValueOfTotalChunks();
+            Logger::Info(log_context)
+                << "[complete_upload] duration_us=" << duration_us
+                << " outcome=failure upload_id=" << command.upload_id
+                << " total_chunks=" << upload_task.getValueOfTotalChunks();
 
             co_await RecordFinalizeErrorBestEffort(
                 upload_task_repository,
                 command,
                 state_version,
-                tx_result.error().code
+                tx_result.error().code,
+                log_context
             );
             co_return std::unexpected(tx_result.error());
         }
 
+        state_version = completed_state_version;
+        log_context.state_version = state_version;
+        log_context.lease_owner.reset();
+
         PauseUploadForFaultInjection(
             command,
+            log_context,
             "DISK_TEST_PAUSE_AFTER_FINALIZE_COMMIT_UPLOAD_ID",
             "after finalize commit"
         );
 
-        Logger::Debug() << "Files record created successfully: file_id=" << file.getValueOfId();
+        Logger::Debug(log_context)
+            << "Files record created successfully: file_id=" << file.getValueOfId();
 
         CompleteUploadOutcome outcome;
         outcome.file = ToLifecycleFileItem(file, final_hash);
         outcome.invalidation.upload_task_ids.push_back(command.upload_id);
         outcome.invalidation.file_list_folder_ids.push_back(file.getValueOfFolderId());
 
-        Logger::Debug() << "File upload completed: file_id=" << file.getValueOfId()
-                        << ", filename=" << upload_task.getValueOfFilename();
+        Logger::Debug(log_context)
+            << "File upload completed: file_id=" << file.getValueOfId()
+            << ", filename=" << upload_task.getValueOfFilename();
 
         auto end = std::chrono::steady_clock::now();
         auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        Logger::Debug() << "[complete_upload] duration_us=" << duration_us
-                        << " outcome=success upload_id=" << command.upload_id
-                        << " total_chunks=" << upload_task.getValueOfTotalChunks();
+        Logger::Debug(log_context)
+            << "[complete_upload] duration_us=" << duration_us
+            << " outcome=success upload_id=" << command.upload_id
+            << " total_chunks=" << upload_task.getValueOfTotalChunks();
 
         co_return outcome;
     }

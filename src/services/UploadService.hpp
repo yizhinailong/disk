@@ -130,10 +130,15 @@ namespace disk::file {
          *
          * @param upload_id 上传会话 ID
          * @param user_id 用户 ID
+         * @param log_context 显式请求与上传日志关联
          * @return drogon::Task<Result<CompleteUploadResponse>> 成功返回文件信息，失败返回错误
          */
         [[nodiscard]]
-        auto CompleteUpload(std::string upload_id, uint64_t user_id)
+        auto CompleteUpload(
+            std::string upload_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<CompleteUploadResponse>>;
 
         /**

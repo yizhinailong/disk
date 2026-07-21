@@ -347,8 +347,21 @@ namespace disk::file {
 
     /// ==================== CompleteUpload ====================
 
-    auto UploadService::CompleteUpload(std::string upload_id, uint64_t user_id)
+    auto UploadService::CompleteUpload(
+        std::string upload_id,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<CompleteUploadResponse>> {
+        log_context.operation = "upload_complete";
+        if (upload_id.empty()) {
+            log_context.upload_id.reset();
+        } else {
+            log_context.upload_id = upload_id;
+        }
+        log_context.job_id.reset();
+        log_context.lease_owner.reset();
+        log_context.state_version.reset();
 
         const auto config = ConfigMgr::GetInstance();
         disk::upload::UploadLifecycleService lifecycle_service(
@@ -361,7 +374,8 @@ namespace disk::file {
             disk::upload::CompleteUploadCommand{ .upload_id = std::move(upload_id),
                                                  .user_id = user_id,
                                                  .lease_owner = config->GetInstanceId(),
-                                                 .lease_duration_seconds = config->GetUploadFinalizeLeaseSeconds() }
+                                                 .lease_duration_seconds = config->GetUploadFinalizeLeaseSeconds() },
+            log_context
         );
         if (!lifecycle_result) {
             co_return std::unexpected(lifecycle_result.error());

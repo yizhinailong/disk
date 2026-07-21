@@ -183,34 +183,44 @@ namespace disk::file {
 
     auto FileController::CompleteUpload(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "upload_complete");
 
-        Logger::Debug() << "Received complete upload request: " << request->getPeerAddr().toIpPort();
+        Logger::Debug(log_context)
+            << "Received complete upload request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
         auto parse_result = CompleteUploadRequest::FromRequest(request);
         if (!parse_result) {
-            Logger::Warn() << "Complete upload request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Complete upload request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "Complete upload parameters validated: upload_id=" << parse_result->upload_id;
+        log_context.upload_id = parse_result->upload_id;
+        Logger::Debug(log_context)
+            << "Complete upload parameters validated: upload_id=" << parse_result->upload_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层完成上传
-        auto result = co_await m_upload_service->CompleteUpload(parse_result->upload_id, user_id);
+        auto result = co_await m_upload_service->CompleteUpload(
+            parse_result->upload_id,
+            user_id,
+            log_context
+        );
         if (!result) {
-            Logger::Error() << "Complete upload failed: " << result.error().message
-                            << " (user_id=" << user_id << ", upload_id=" << parse_result->upload_id
-                            << ")";
+            Logger::Error(log_context)
+                << "Complete upload failed: " << result.error().message
+                << " (user_id=" << user_id << ", upload_id=" << parse_result->upload_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Debug() << "Complete upload successful: file_id=" << result->file.id << ", filename=\""
-                        << result->file.name << "\""
-                        << " (user_id=" << user_id << ")";
+        Logger::Debug(log_context)
+            << "Complete upload successful: file_id=" << result->file.id << ", filename=\""
+            << result->file.name << "\""
+            << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 

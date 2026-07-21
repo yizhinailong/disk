@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 init/chunk 日志关联）：CMake 配置、完整构建、聚焦日志/上传生命周期 CTest 68/68 及真实 HTTP safety 集成 1/1 通过；完整 CTest 共 1395 项，1388 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 469.87 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 complete 日志关联）：完整构建、聚焦日志/请求追踪/上传生命周期/租约仓储 CTest 34/34 及真实 HTTP safety 集成 1/1 通过；完整 CTest 共 1395 项，1388 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 469.41 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -523,6 +523,12 @@ stdout、旋转文件以及被捕获的 Drogon/Trantor 诊断现统一输出单�
 部署运维、系统测试和单元测试文档先行固定 init/chunk 的字段与空值合同。`FileController` 现在从请求追踪属性创建显式 `LogContext`，将固定的 `upload_init`/`upload_chunk` operation 和真实 request ID 按值传过 Controller、`UploadService` 与 `UploadLifecycleService` 的协程边界，不依赖 thread-local。init 在任务存在前保持 `upload_id=null`，恢复或创建任务后补齐持久 ID，并在过期旧任务转入新建流程前清除旧 ID；chunk 以方法参数中的非空 upload ID 为规范值，使任务校验、尺寸/哈希检查、staging 写入和数据库记录结果使用同一关联上下文。
 
 `SafetyUploadInvariantsIntegration` 以调用方指定的 `X-Request-Id` 分别触发超限 init 和分片尺寸失败，逐行解析受管后端 stdout NDJSON，精确验证 schema、source、instance/request/operation/upload 字段，并确认 `job_id`、`lease_owner`、`state_version` 为 JSON `null`；测试读取后端实际 `DISK_CONFIG_FILE`，避免配置替换时构造错误边界。聚焦日志/上传生命周期 CTest 68/68、真实 HTTP safety 集成 1/1、CMake 配置和完整构建均通过；完整 CTest 共 1395 项，1388 通过、7 项环境门控跳过、0 失败，总耗时 469.87 秒；OpenSpec 严格校验 24/24 通过。complete/download/cleanup 与 Worker/S3 的 `job_id`、`lease_owner`、`state_version` 端到端传播仍待后续最小批次，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.8 complete 日志关联记录（2026-07-22）
+
+部署运维、系统测试、单元测试和 OpenSpec 先行固定 complete 的类型化字段合同。`FileController` 从请求属性创建固定 `operation=upload_complete` 的 `LogContext`，在 DTO 得到非空 ID 后补齐 `upload_id`，并按值传过 `UploadService`、`UploadLifecycleService` 及续租、错误记录、对账等辅助协程。Lifecycle 只在 PostgreSQL 认领成功后填入真实 `lease_owner`，以每次 CAS 返回值推进 `state_version`；完成事务提交清空 owner 并记录完成更新后的版本，重放不伪造已清空的 owner。当前 cleanup/reconciliation 入队接口不返回持久行 ID，因此 complete 事件保持 `job_id=null`，不从 dedupe key 或消息文本推断。
+
+`SafetyUploadInvariantsIntegration` 删除数据库已记录的 staging 对象后，以调用方 request ID 发起真实 complete 请求，逐行解析组装错误和 `[complete_upload]` 失败汇总 NDJSON，并查询失败后的 `upload_tasks`；两条 Lifecycle 事件的 request/instance/upload、lease owner 与 state version 均与响应和数据库行精确一致，job ID 为 JSON `null`。完整构建、Python 语法检查、聚焦 CTest 34/34 和真实 HTTP safety 集成 1/1 通过；完整 CTest 共 1395 项，1388 通过、7 项环境门控跳过、0 失败，总耗时 469.41 秒；OpenSpec 严格校验 24/24 通过。download/cleanup 及实际取得持久任务 ID 后的 Worker/S3 关联仍待后续最小批次，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 
