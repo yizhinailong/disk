@@ -41,6 +41,10 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** completion, cancellation, and expiration scanning concurrently contend for the same active or database-expired upload through different API instances
 - **THEN** the task SHALL reach exactly one legal terminal state, clear its lease and chunk rows, settle reserved and used quota exactly once, preserve file/content/ref-count invariants, and enqueue exactly one deduplicated staging-cleanup task
 
+#### Scenario: Shared-user reservations change during a fault wait
+- **WHEN** a lease-expiry fault scenario waits long enough for an unrelated upload owned by the same test user to expire or settle
+- **THEN** validation SHALL prove the target task's single settlement from its terminal state and persisted accounting fields, and in one database snapshot SHALL calculate the residual between current reserved quota and all Pending and Finalizing task reservations and prove that residual is unchanged from the pre-fault snapshot instead of comparing stale aggregate totals or attributing a pre-existing shared-fixture residual to the target task
+
 ### Requirement: Data consistency audit validation
 Automated validation SHALL audit exact file counts, user used and reserved quota, content reference counts, bidirectional database/object existence in the staging and final namespaces, and provider-visible incomplete multipart uploads.
 

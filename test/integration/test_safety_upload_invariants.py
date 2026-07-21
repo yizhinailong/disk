@@ -457,6 +457,31 @@ def user_quota() -> dict[str, int]:
     return {key: int(row[key]) for key in ("storage_used", "storage_reserved", "storage_quota")}
 
 
+def user_quota_balance() -> dict[str, int]:
+    """Return quota counters and their active-upload reservation residual."""
+    row = query_one(
+        """
+        SELECT users.storage_used, users.storage_reserved, users.storage_quota,
+               COALESCE(SUM(tasks.reserved_bytes), 0) AS active_reserved
+        FROM users
+        LEFT JOIN upload_tasks AS tasks
+          ON tasks.user_id = users.id AND tasks.status IN (0, 4)
+        WHERE users.id = %s
+        GROUP BY users.id, users.storage_used, users.storage_reserved, users.storage_quota
+        """,
+        (USER_ID,),
+    )
+    if row is None:
+        log_fail(f"Could not load quota balance for user_id={USER_ID}")
+        print_summary()
+    balance = {
+        key: int(row[key])
+        for key in ("storage_used", "storage_reserved", "storage_quota", "active_reserved")
+    }
+    balance["reservation_residual"] = balance["storage_reserved"] - balance["active_reserved"]
+    return balance
+
+
 def init_upload(filename: str, payload: bytes) -> tuple[str, str]:
     """Initialize a non-dedup chunked upload and return upload_id and file hash."""
     file_hash = md5_bytes(payload)
@@ -1179,7 +1204,7 @@ def test_finalize_claim_process_death_takeover_invariants() -> None:
     filename = f"safety_finalize_claim_death_{unique_name()}.bin"
     payload_md5 = md5_bytes(payload)
     payload_sha256 = sha256_bytes(payload)
-    quota_before = user_quota()
+    quota_before = user_quota_balance()
 
     upload_id, file_hash = init_upload(filename, payload)
     assembled_path = upload_temp_dir(upload_id).parent / f"{upload_id}.tmp"
@@ -1436,7 +1461,7 @@ def test_finalize_claim_process_death_takeover_invariants() -> None:
 
     completed_task = query_one(
         "SELECT status, completed_file_id, lease_owner, lease_expires_at, "
-        "state_version, finalize_attempts "
+        "state_version, finalize_attempts, reserved_bytes "
         "FROM upload_tasks WHERE id = %s AND user_id = %s",
         (upload_id, USER_ID),
     )
@@ -1461,13 +1486,18 @@ def test_finalize_claim_process_death_takeover_invariants() -> None:
         int(completed_task["finalize_attempts"]),
         2,
     )
+    assert_equal(
+        "takeover preserves the target reservation amount",
+        int(completed_task["reserved_bytes"]),
+        len(payload),
+    )
 
     assert_chunk_row_count(upload_id, 0)
-    completed_quota = user_quota()
+    completed_quota = user_quota_balance()
     assert_equal(
-        "takeover releases reserved storage once",
-        completed_quota["storage_reserved"],
-        quota_before["storage_reserved"],
+        "takeover leaves the shared reservation residual unchanged",
+        completed_quota["reservation_residual"],
+        quota_before["reservation_residual"],
     )
     assert_numeric_delta(
         "takeover increases used storage once",
@@ -1557,7 +1587,7 @@ def test_assembled_object_process_death_takeover_invariants() -> None:
     filename = f"safety_assembled_death_{unique_name()}.bin"
     payload_md5 = md5_bytes(payload)
     payload_sha256 = sha256_bytes(payload)
-    quota_before = user_quota()
+    quota_before = user_quota_balance()
 
     upload_id, file_hash = init_upload(filename, payload)
     assembled_path = upload_temp_dir(upload_id).parent / f"{upload_id}.tmp"
@@ -1847,7 +1877,7 @@ def test_assembled_object_process_death_takeover_invariants() -> None:
 
     completed_task = query_one(
         "SELECT status, completed_file_id, lease_owner, lease_expires_at, "
-        "state_version, finalize_attempts "
+        "state_version, finalize_attempts, reserved_bytes "
         "FROM upload_tasks WHERE id = %s AND user_id = %s",
         (upload_id, USER_ID),
     )
@@ -1872,13 +1902,18 @@ def test_assembled_object_process_death_takeover_invariants() -> None:
         int(completed_task["finalize_attempts"]),
         2,
     )
+    assert_equal(
+        "assembly takeover preserves the target reservation amount",
+        int(completed_task["reserved_bytes"]),
+        len(payload),
+    )
 
     assert_chunk_row_count(upload_id, 0)
-    completed_quota = user_quota()
+    completed_quota = user_quota_balance()
     assert_equal(
-        "assembly takeover releases reserved storage once",
-        completed_quota["storage_reserved"],
-        quota_before["storage_reserved"],
+        "assembly takeover leaves the shared reservation residual unchanged",
+        completed_quota["reservation_residual"],
+        quota_before["reservation_residual"],
     )
     assert_numeric_delta(
         "assembly takeover increases used storage once",
@@ -1972,7 +2007,7 @@ def test_finalize_renewal_network_partition_fencing_invariants() -> None:
     payload_sha256 = sha256_bytes(payload)
     filename = f"safety_finalize_renewal_partition_{unique_name()}.bin"
     blob_path = final_blob_path(payload_sha256)
-    quota_before = user_quota()
+    quota_before = user_quota_balance()
 
     upload_id, file_hash = init_upload(filename, payload)
     assert_equal("renewal-partition fixture MD5 matches", file_hash, payload_md5)
@@ -2298,7 +2333,7 @@ def test_finalize_renewal_network_partition_fencing_invariants() -> None:
 
     completed_after_recovery = query_one(
         "SELECT status, completed_file_id, lease_owner, lease_expires_at, state_version, "
-        "finalize_attempts, finalized_at FROM upload_tasks "
+        "finalize_attempts, finalized_at, reserved_bytes FROM upload_tasks "
         "WHERE id = %s AND user_id = %s",
         (upload_id, USER_ID),
     )
@@ -2329,6 +2364,11 @@ def test_finalize_renewal_network_partition_fencing_invariants() -> None:
         "stale owner cannot replace takeover finalized_at",
         completed_after_recovery["finalized_at"],
         takeover_finalized_at,
+    )
+    assert_equal(
+        "partition recovery preserves the target reservation amount",
+        int(completed_after_recovery["reserved_bytes"]),
+        len(payload),
     )
     assert_equal("stale owner leaves lease_owner cleared", completed_after_recovery["lease_owner"], None)
     assert_equal(
@@ -2367,11 +2407,11 @@ def test_finalize_renewal_network_partition_fencing_invariants() -> None:
     )
     assert_equal("partition recovery creates one content row", content_rows, 1)
 
-    completed_quota = user_quota()
+    completed_quota = user_quota_balance()
     assert_equal(
-        "partition recovery releases reserved storage once",
-        completed_quota["storage_reserved"],
-        quota_before["storage_reserved"],
+        "partition recovery leaves the shared reservation residual unchanged",
+        completed_quota["reservation_residual"],
+        quota_before["reservation_residual"],
     )
     assert_numeric_delta(
         "partition recovery increases used storage once",
