@@ -101,6 +101,70 @@ def main() -> int:
     ):
         require(obsolete not in decision_record, f"backend decision record retains obsolete: {obsolete}")
 
+    system_test_plan = (root / "docs/design/04-系统测试计划.md").read_text(
+        encoding="utf-8"
+    )
+    require(
+        "✅ 代码与仓库级合同已实现；⏳ 目标环境 MinIO、多实例、故障与性能门禁待执行"
+        in system_test_plan,
+        "system test plan must distinguish repository contracts from target-environment gates",
+    )
+    require(
+        "⏳ ADR-002 重构范围，完成前不得宣称生产级分布式" not in system_test_plan,
+        "system test plan retains the obsolete ADR-002 implementation status",
+    )
+
+    unit_test_plan = (root / "docs/design/06-单元测试用例.md").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "test/services/UploadStateMachine_test.cpp | ✅ 已实现",
+        "test/integration/test_upload_state_machine.py | ✅ 已实现",
+        "test/services/StorageJobRepository_test.cpp + test/integration/test_storage_job_queue.py",
+        "test/storage/S3ObjectStorage_test.cpp + test/integration/test_s3_app_flow.py",
+        "test/services/TokenServiceRevocation_test.cpp + test/integration/test_distributed_flow.py",
+        "目标 S3/MinIO 环境门控",
+        "目标双 API 环境门控",
+    ):
+        require(marker in unit_test_plan, f"unit test inventory is missing {marker}")
+    for obsolete in (
+        "⏳ ADR-002 待实现",
+        "S3UploadStaging_test.cpp",
+        "test_token_revocation_cluster.py",
+        "现有 + 待新增",
+        "分享操作限流测试，待新增",
+    ):
+        require(obsolete not in unit_test_plan, f"unit test inventory retains obsolete: {obsolete}")
+    for relative_path in (
+        "test/services/UploadStateMachine_test.cpp",
+        "test/integration/test_upload_state_machine.py",
+        "test/services/StorageJobRepository_test.cpp",
+        "test/integration/test_storage_job_queue.py",
+        "test/storage/S3ObjectStorage_test.cpp",
+        "test/integration/test_s3_app_flow.py",
+        "test/services/TokenServiceRevocation_test.cpp",
+        "test/integration/test_distributed_flow.py",
+    ):
+        require((root / relative_path).is_file(), f"documented test entry is missing: {relative_path}")
+
+    todo = (root / "TODO.md").read_text(encoding="utf-8")
+    latest_verification = re.search(
+        r"^> 最近验证（[^\n]*?）：[^\n]*完整 CTest 共 (\d+) 项，(\d+) 通过、(\d+) 项按环境门控跳过[^\n]*0 失败[^\n]*$",
+        todo,
+        re.MULTILINE,
+    )
+    require(latest_verification is not None, "TODO latest verification summary is missing or malformed")
+    total, passed_count, skipped_count = map(int, latest_verification.groups())
+    require(
+        (total, passed_count, skipped_count) == (1381, 1375, 6),
+        "TODO latest CTest inventory drifted without an explicit contract update",
+    )
+    require(total == passed_count + skipped_count, "TODO latest CTest totals do not reconcile")
+    require(
+        "环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行" in latest_verification.group(0),
+        "TODO latest verification must retain the target-environment caveat",
+    )
+
     compose = yaml.safe_load((root / "docker-compose.distributed.yml").read_text(encoding="utf-8"))
     services = compose["services"]
     expected_services = {
