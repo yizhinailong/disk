@@ -78,6 +78,7 @@ set(TEST_SOURCES
     filters/DownloadRateLimitLogContext_test.cpp
     filters/DownloadRateLimit_test.cpp
     filters/AdminRateLimit_test.cpp
+    filters/AdminRateLimitLogContext_test.cpp
     filters/FolderRateLimitLogContext_test.cpp
     filters/FolderRateLimit_test.cpp
     filters/FilterOwnership_test.cpp

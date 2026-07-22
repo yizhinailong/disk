@@ -130,6 +130,25 @@ The route-owned folder rate-limit filter SHALL build explicit request correlatio
 - **WHEN** a direct caller omits the request trace attribute or a request supplies an Authorization value, access token, folder name, parent ID, rename body, or other request content
 - **THEN** the event SHALL retain the bounded route operation with explicit JSON null request correlation when needed and SHALL NOT contain the Authorization value, access token, password, request body, folder name, or storage credential
 
+### Requirement: Admin Rate-Limit Filter Correlation
+The route-owned administrator rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing administrator authentication order, route ownership, user fixed-window key, configured window or threshold, fail-open behavior, HTTP response, or administration side effects.
+
+#### Scenario: Admin rate-limit filter handles traced administration routes
+- **WHEN** the filter emits an event for an administrator user, share, statistics, log, upload-diagnostic, storage-job, or recovery route
+- **THEN** it SHALL retain the same request ID and actual handling instance as the HTTP completion event with bounded `admin`
+
+#### Scenario: Admin rate-limit filter handles traced cleanup route
+- **WHEN** the filter emits an event for the exact `/api/admin/maintenance/cleanup/expired` route
+- **THEN** it SHALL retain the same request ID and actual handling instance as the HTTP completion event with bounded `cleanup`, even though the route shares the administrator user counter
+
+#### Scenario: Admin rate-limit filter observes identity and route identifiers
+- **WHEN** the filter observes a user ID, path, upload ID, storage-job ID, scan ID, counter key, count, window, threshold, request field, or dependency result before the administrator controller validates the business request
+- **THEN** it SHALL NOT derive upload ID, job ID, lease owner, or state version from that value, and those fields SHALL remain null
+
+#### Scenario: Admin rate-limit filter handles credentials, content, or missing trace state
+- **WHEN** a direct caller omits the request trace attribute or a request supplies an Authorization value, access token, confirmation, reason, or other request content
+- **THEN** the event SHALL retain the bounded route operation with explicit JSON null request correlation when needed and SHALL NOT contain the Authorization value, access token, password, request body, recovery reason, or storage credential
+
 ### Requirement: Register Rate-Limit Filter Correlation
 The register rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing the exact-path scope, normalized-IP key, configured window or threshold, fail-open behavior, or HTTP response.
 

@@ -10,12 +10,18 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
+#include <functional>
+#include <string>
 
 #include <drogon/HttpFilter.h>
 
-#include "services/RedisService.hpp"
+#include "utils/ErrorCode.hpp"
 
 namespace disk::filters {
+
+    using AdminRateLimitCounter =
+        std::function<drogon::Task<Result<int64_t>>(const std::string&, int)>;
 
     /**
      * @brief 管理员接口频率限制过滤器
@@ -36,6 +42,7 @@ namespace disk::filters {
     class AdminRateLimitFilter : public drogon::HttpCoroFilter<AdminRateLimitFilter> {
     public:
         AdminRateLimitFilter();
+        explicit AdminRateLimitFilter(AdminRateLimitCounter counter);
 
         [[nodiscard]]
         auto doFilter(const drogon::HttpRequestPtr& request)
@@ -45,7 +52,7 @@ namespace disk::filters {
         static constexpr int WINDOW_SECONDS = 60;
 
     private:
-        std::shared_ptr<disk::services::RedisService> m_redis_service{};
+        AdminRateLimitCounter m_counter;
 
         [[nodiscard]]
         static auto GetCurrentWindow() -> int64_t {
@@ -61,4 +68,4 @@ namespace disk::filters {
         }
     };
 
-} ///< namespace disk::filters
+} // namespace disk::filters

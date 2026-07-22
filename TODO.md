@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 文件夹限流日志关联）：完整构建、文件夹限流与过滤器归属聚焦 GoogleTest 22/22、直接文件夹生命周期集成 25/25、文件夹生命周期注册 CTest 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1432 项，1425 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 479.10 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 管理员限流日志关联）：完整构建、管理员限流与过滤器归属聚焦 GoogleTest 21/21、直接存储任务运维集成 1/1、存储任务运维注册 CTest 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1434 项，1427 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 476.79 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -731,6 +731,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定路由级
 tree 与 breadcrumb 路由继续共享同一个用户限流桶并保持 `folder_query` operation，create 与 rename 路由使用同一桶但保持 `folder_mutation` operation，不因共享计数键而合并语义。过滤器不读取 Authorization 或请求正文，也不从用户、path、folder ID、计数键、窗口、阈值或依赖结果推断 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。`FolderRateLimitLogContextContractTest` 与内存 NDJSON 用例锁定一个上下文构造点、三个日志调用、失败/成功/拒绝分支、四类路由、空所有权字段、默认真实 Redis helper 及凭据/目录名排除；`FilterOwnershipTest` 同步锁定注入计数器失败后的放行顺序。
 
 `test_folder_lifecycle.py` 读取活动配置和当前已认证用户，以 TTL 将该用户的文件夹固定窗口键预置到阈值，再以唯一 request ID 和唯一目录名发送真实创建请求；它核对 429、业务码 `10005`、四个限流头、响应 request/instance、warning 的 `folder_mutation` 关联和四个空所有权字段，并验证被拒绝的目录未创建且受管 stdout 不含登录密码、JWT 或目录名。完整构建、Python 语法检查、文件夹限流与过滤器归属聚焦 GoogleTest 22/22、直接文件夹生命周期集成 25/25、文件夹生命周期注册 CTest 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1432 项，1425 通过、7 项环境门控跳过、0 失败，总耗时 479.10 秒。`TokenService`、`RedisService`、管理员/通用用户限流过滤器及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.36 管理员限流过滤器日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定路由级管理员限流器的显式关联合同。`AdminRateLimitFilter` 现在在入口通过 `GetFilterLogContext` 从请求属性和现有 HTTP 分类器构造一次上下文；Redis 计数失败、成功检查和超限拒绝三条直接事件继续使用原有 `ERROR`、`DEBUG` 和 `WARN` 级别，并统一保留该上下文。计数动作新增同签名可注入边界供内存测试使用，默认构造仍取得真实 `RedisService` 并调用既有固定窗口 helper；管理员认证顺序、`/api/admin/` 路由范围、用户固定窗口键、配置回退、Redis 故障 fail-open、阈值和 429 响应未改变。
+
+普通管理员、上传诊断、存储任务与恢复命令继续共享同一个管理员用户桶并保持 `admin` operation，精确过期清理路由使用同一桶但保持 `cleanup` operation，不因共享计数键而合并语义。过滤器不读取 Authorization 或请求正文，也不从用户、path、upload/job/scan ID、计数键、窗口、阈值或依赖结果推断 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。`AdminRateLimitLogContextContractTest` 与内存 NDJSON 用例锁定一个上下文构造点、三个日志调用、失败/成功/拒绝分支、五类代表路由、空所有权字段、默认真实 Redis helper 及凭据/恢复正文排除；`FilterOwnershipTest` 同步锁定当前 21 条路由的认证先行归属与注入计数器失败后的放行顺序。
+
+`test_storage_job_operations.py` 读取活动配置和当前已认证管理员，以 TTL 将该用户的管理员固定窗口键预置到阈值，再以唯一 request ID 发送真实存储任务列表请求；它核对 429、业务码 `10005`、四个限流头、响应 request/instance、warning 的 `admin` 关联和四个空所有权字段，并验证 `storage_jobs` 与 `operation_logs` 行数未改变且受管 stdout 不含管理员 JWT。完整构建、Python 语法检查、管理员限流与过滤器归属聚焦 GoogleTest 21/21、直接存储任务运维集成 1/1、存储任务运维注册 CTest 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1434 项，1427 通过、7 项环境门控跳过、0 失败，总耗时 476.79 秒。`TokenService`、`RedisService`、通用用户限流过滤器及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

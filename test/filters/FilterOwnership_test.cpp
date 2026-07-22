@@ -198,12 +198,34 @@ TEST(FilterOwnershipTest, AuthenticatedRateLimitersRemainRouteOwnedExactlyOnce) 
     EXPECT_EQ(CountOccurrences(folder_controller, "\"disk::filters::FolderRateLimitFilter\""), 4U);
 
     const auto admin_controller = ControllerText("AdminController.hpp");
+    EXPECT_EQ(CountOccurrences(admin_controller, "\"disk::filters::AdminAuthFilter\""), 14U);
     EXPECT_EQ(CountOccurrences(admin_controller, "\"disk::filters::AdminRateLimitFilter\""), 14U);
 
     EXPECT_TRUE(ContainsAllInOrder(
         admin_controller,
         {
             "AdminController::ListUsers",
+            "\"disk::filters::AdminAuthFilter\"",
+            "\"disk::filters::AdminRateLimitFilter\"",
+        }
+    ));
+
+    const auto storage_job_controller = ControllerText("StorageJobAdminController.hpp");
+    EXPECT_EQ(CountOccurrences(storage_job_controller, "\"disk::filters::AdminAuthFilter\""), 3U);
+    EXPECT_EQ(
+        CountOccurrences(storage_job_controller, "\"disk::filters::AdminRateLimitFilter\""),
+        3U
+    );
+    EXPECT_TRUE(ContainsAllInOrder(
+        storage_job_controller,
+        {
+            "StorageJobAdminController::List",
+            "\"disk::filters::AdminAuthFilter\"",
+            "\"disk::filters::AdminRateLimitFilter\"",
+            "StorageJobAdminController::Get",
+            "\"disk::filters::AdminAuthFilter\"",
+            "\"disk::filters::AdminRateLimitFilter\"",
+            "StorageJobAdminController::Replay",
             "\"disk::filters::AdminAuthFilter\"",
             "\"disk::filters::AdminRateLimitFilter\"",
         }
@@ -247,22 +269,18 @@ TEST(FilterOwnershipTest, ShareRateLimitersHaveExactRouteOwnershipAndOrder) {
 }
 
 TEST(FilterOwnershipTest, RateLimitFiltersFailOpenOnRedisFailure) {
-    const std::vector<std::string_view> filter_files{
-        "AdminRateLimitFilter.cpp",
-    };
-
-    for (const auto filter_file : filter_files) {
-        const auto text = ReadTextFile(SourceRoot() / "src" / "filters" / std::string{ filter_file });
-        EXPECT_TRUE(ContainsAllInOrder(
-            text,
-            {
-                "auto incr_result = co_await CheckFixedWindowLimit",
-                "if (!incr_result)",
-                "Logger::Error() << \"Redis IncrWithExpire failed:",
-                "co_return nullptr;",
-            }
-        )) << filter_file;
-    }
+    const auto admin_filter =
+        ReadTextFile(SourceRoot() / "src" / "filters" / "AdminRateLimitFilter.cpp");
+    EXPECT_TRUE(ContainsAllInOrder(
+        admin_filter,
+        {
+            "auto incr_result = co_await m_counter",
+            "if (!incr_result)",
+            "Logger::Error(log_context)",
+            "Redis IncrWithExpire failed:",
+            "co_return nullptr;",
+        }
+    ));
 
     const auto folder_filter =
         ReadTextFile(SourceRoot() / "src" / "filters" / "FolderRateLimitFilter.cpp");

@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -30,10 +31,13 @@ from lib_py import (
     ensure_server,
     execute,
     fetch,
+    header_value,
     log_info,
     log_pass,
     query_all,
     query_one,
+    redis_delete_pattern,
+    redis_set_value,
     scalar,
     upload_temp_dir,
 )
@@ -50,6 +54,35 @@ RECOVERY_JOB_IDS: list[int] = []
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def configured_admin_rate_value(key: str, fallback: int) -> int:
+    """Read one positive administrator rate-limit value from active config."""
+    repo_root = Path(__file__).resolve().parents[2]
+    config_path = Path(os.environ.get("DISK_CONFIG_FILE", repo_root / "config.json"))
+    if not config_path.is_absolute():
+        config_path = repo_root / config_path
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        value = int(config.get("custom_config", {}).get("disk", {}).get(key, fallback))
+        return value if value > 0 else fallback
+    except Exception:
+        return fallback
+
+
+def access_token_subject(token: str) -> int:
+    """Read the trusted local access token subject for test-key ownership."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError("access token is not a compact JWT")
+    payload_segment = parts[1] + "=" * (-len(parts[1]) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
+    if payload.get("iss") != "disk" or payload.get("type") != "access":
+        raise ValueError("token payload is not a disk access token")
+    subject = str(payload.get("sub", ""))
+    if not subject.isdigit() or int(subject) <= 0:
+        raise ValueError("access token subject is not a positive user ID")
+    return int(subject)
 
 
 def cleanup_fixture() -> None:
@@ -1280,6 +1313,78 @@ def test_recovery_commands(token: str) -> None:
     test_storage_reconciliation_enqueue(token)
 
 
+def test_admin_rate_limit_correlation(token: str) -> None:
+    log_info("Checking administrator rate-limit rejection correlation")
+
+    user_id = access_token_subject(token)
+    limit = configured_admin_rate_value("admin_rate_limit_per_minute", 30)
+    window_seconds = configured_admin_rate_value("admin_rate_limit_window_seconds", 60)
+    now = time.time()
+    window_start = (int(now) // window_seconds) * window_seconds
+    seconds_until_reset = window_start + window_seconds - now
+    if seconds_until_reset < 2:
+        time.sleep(seconds_until_reset + 0.05)
+        now = time.time()
+        window_start = (int(now) // window_seconds) * window_seconds
+
+    rate_key = f"rate:admin:{user_id}:{window_start}"
+    request_id = f"ops-admin-rate-limit-{uuid.uuid4().hex}"
+    storage_job_count = int(scalar("SELECT COUNT(*) FROM storage_jobs"))
+    operation_log_count = int(scalar("SELECT COUNT(*) FROM operation_logs"))
+
+    try:
+        redis_set_value(
+            rate_key,
+            str(limit),
+            max(1, window_start + window_seconds - int(time.time())),
+        )
+        response = fetch(
+            "/api/admin/storage-jobs",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Request-Id": request_id,
+            },
+        )
+
+        require(response.status_code == 429, f"admin rate limit returned {response.status_code}")
+        require(
+            str(response_json(response).get("code")) == "10005",
+            "admin rate limit business code drifted",
+        )
+        expected_headers = {
+            "X-RateLimit-Limit": str(limit),
+            "X-RateLimit-Remaining": "0",
+            "X-Request-Id": request_id,
+        }
+        for name, expected in expected_headers.items():
+            require(
+                header_value(response.headers, name) == expected,
+                f"admin rate limit {name} drifted",
+            )
+        for name in ("X-RateLimit-Reset", "Retry-After"):
+            require(header_value(response.headers, name) != "", f"admin rate limit {name} is missing")
+
+        instance_id = require_response_context(response, request_id)
+        warning = wait_for_admin_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            message_marker="Admin rate limit:",
+        )
+        require(warning.get("level") == "warning", "admin rate limit log level drifted")
+        require(
+            int(scalar("SELECT COUNT(*) FROM storage_jobs")) == storage_job_count,
+            "rejected admin list request changed storage jobs",
+        )
+        require(
+            int(scalar("SELECT COUNT(*) FROM operation_logs")) == operation_log_count,
+            "rejected admin list request changed operation logs",
+        )
+    finally:
+        redis_delete_pattern(f"rate:admin:{user_id}:*")
+
+    log_pass("Administrator 429 preserves correlation without database side effects")
+
+
 def main() -> int:
     os.environ["DISK_PROCESS_ROLE"] = "api"
     os.environ["DISK_INSTANCE_ID"] = "ops-api"
@@ -1292,6 +1397,7 @@ def main() -> int:
         test_dead_letter_operations(token)
         test_upload_diagnostics(token)
         test_recovery_commands(token)
+        test_admin_rate_limit_correlation(token)
         log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
         require(token not in log_text, "storage administration logs exposed the administrator JWT")
         return 0
