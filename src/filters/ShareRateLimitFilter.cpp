@@ -12,6 +12,7 @@
 #include <string_view>
 #include <utility>
 
+#include "filters/FilterLogContext.hpp"
 #include "filters/RateLimitHelper.hpp"
 #include "filters/ShareAuthFilter.hpp"
 #include "services/RedisService.hpp"
@@ -61,6 +62,7 @@ namespace disk::filters {
 
     auto ShareAccessRateLimitFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        const auto log_context = GetFilterLogContext(request);
         if (!request->path().starts_with("/api/share/access/")) {
             co_return nullptr;
         }
@@ -79,14 +81,15 @@ namespace disk::filters {
 
         auto count_result = co_await m_counter(key, window_seconds);
         if (!count_result) {
-            Logger::Error() << "Share rate-limit counter failed: operation=access, client_ip="
-                            << normalized_ip << ", error=" << count_result.error().message;
+            Logger::Error(log_context)
+                << "Share rate-limit counter failed: operation=access, client_ip="
+                << normalized_ip << ", error=" << count_result.error().message;
             co_return nullptr;
         }
 
         if (*count_result > limit) {
-            Logger::Warn() << "Share rate limit exceeded: operation=access, count="
-                           << *count_result;
+            Logger::Warn(log_context)
+                << "Share rate limit exceeded: operation=access, count=" << *count_result;
             co_return BuildRateLimitExceededResponse(
                 limit,
                 GetFixedWindowReset(window, window_seconds)
@@ -106,6 +109,7 @@ namespace disk::filters {
 
     auto ShareOperationRateLimitFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        const auto log_context = GetFilterLogContext(request);
         const auto operation = ResolveOperation(request->path());
         if (!operation.has_value()) {
             co_return nullptr;
@@ -113,16 +117,16 @@ namespace disk::filters {
 
         const auto attributes = request->attributes();
         if (!attributes || !attributes->find(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE)) {
-            Logger::Error() << "Share rate-limit attribute missing: operation="
-                            << OperationName(*operation);
+            Logger::Error(log_context)
+                << "Share rate-limit attribute missing: operation=" << OperationName(*operation);
             co_return nullptr;
         }
 
         const auto& jti =
             attributes->get<std::string>(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE);
         if (jti.empty()) {
-            Logger::Error() << "Share rate-limit attribute empty: operation="
-                            << OperationName(*operation);
+            Logger::Error(log_context)
+                << "Share rate-limit attribute empty: operation=" << OperationName(*operation);
             co_return nullptr;
         }
 
@@ -149,15 +153,16 @@ namespace disk::filters {
 
         auto count_result = co_await m_counter(key, window_seconds);
         if (!count_result) {
-            Logger::Error() << "Share rate-limit counter failed: operation="
-                            << OperationName(*operation)
-                            << ", error=" << count_result.error().message;
+            Logger::Error(log_context)
+                << "Share rate-limit counter failed: operation=" << OperationName(*operation)
+                << ", error=" << count_result.error().message;
             co_return nullptr;
         }
 
         if (*count_result > limit) {
-            Logger::Warn() << "Share rate limit exceeded: operation="
-                           << OperationName(*operation) << ", count=" << *count_result;
+            Logger::Warn(log_context)
+                << "Share rate limit exceeded: operation=" << OperationName(*operation)
+                << ", count=" << *count_result;
             co_return BuildRateLimitExceededResponse(
                 limit,
                 GetFixedWindowReset(window, window_seconds)

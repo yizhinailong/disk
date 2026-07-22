@@ -68,6 +68,7 @@ set(TEST_SOURCES
     filters/AuthFilterLogContext_test.cpp
     filters/AdminAuthFilter_test.cpp
     filters/ShareAuthFilter_test.cpp
+    filters/ShareRateLimitLogContext_test.cpp
     filters/ShareRateLimitFilter_test.cpp
     filters/JwtAuthFilter_test.cpp
     filters/RegisterRateLimit_test.cpp

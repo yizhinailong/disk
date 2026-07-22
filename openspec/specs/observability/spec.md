@@ -81,6 +81,25 @@ The JWT authentication, share-token authentication, and administrator-authorizat
 - **WHEN** JWT or share-token authentication succeeds or fails
 - **THEN** filter events and typed correlation fields SHALL NOT contain raw Authorization or `X-Share-Token` header values, access tokens, refresh tokens, share tokens, passwords, password hashes, or storage credentials
 
+### Requirement: Share Rate-Limit Filter Correlation
+The share access and authenticated share-operation rate-limit filters SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every counter-dependency failure, verified-JTI attribute failure, and limit-rejection event directly owned by those filters SHALL use that context without changing rate-limit keys, windows, thresholds, authentication order, fail-open behavior, or HTTP responses.
+
+#### Scenario: Share rate-limit filter handles a traced request
+- **WHEN** a share rate-limit filter emits a dependency-failure, attribute-failure, or rejection event for a request whose trace attribute has been established
+- **THEN** the event SHALL retain the same request ID, actual handling instance, and bounded operation as the HTTP completion event
+
+#### Scenario: HTTP operation remains distinct from the internal rate bucket
+- **WHEN** access, browse, or save uses the bounded `share` HTTP operation, or an exact share-download route uses the bounded `download` HTTP operation
+- **THEN** the filter event SHALL retain that HTTP operation even when save consumes the internal download rate-limit bucket
+
+#### Scenario: Share rate-limit filter observes rate identities
+- **WHEN** a filter observes a normalized client IP, verified token JTI, share code, counter key, count, window, or dependency result
+- **THEN** it SHALL NOT derive upload ID, job ID, lease owner, or state version from that value, and those fields SHALL remain null
+
+#### Scenario: Share rate-limit filter handles credentials or missing trace state
+- **WHEN** a direct caller omits the request trace attribute or a request supplies owner or visitor credentials
+- **THEN** the event SHALL retain the bounded operation with explicit JSON null request correlation when needed and SHALL NOT contain raw Authorization or `X-Share-Token` values, share tokens, token JTIs, passwords, password hashes, or storage credentials
+
 ### Requirement: Typed Authentication Correlation
 The system SHALL classify only the exact register, login, refresh, and logout paths as the bounded `auth` operation and SHALL propagate their correlation explicitly by value across the JWT authentication filter, authentication controller, direct authentication-DTO events, and authentication-service coroutine boundaries.
 

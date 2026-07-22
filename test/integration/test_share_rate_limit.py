@@ -367,6 +367,56 @@ def assert_standard_429(response: Any, expected_limit: int, family: str) -> dict
     }
 
 
+def wait_for_correlated_rate_limit_log(
+    *,
+    response: Any,
+    request_id: str,
+    operation: str,
+    rate_operation: str,
+) -> dict[str, Any]:
+    actual_request_id = response.headers.get("X-Request-Id", "")
+    instance_id = response.headers.get("X-Disk-Instance-Id", "")
+    require(actual_request_id == request_id, "limited response request ID mismatch")
+    require(bool(instance_id), "limited response is missing instance ID")
+
+    message_marker = f"Share rate limit exceeded: operation={rate_operation}"
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if SERVER_LOG_PATH.is_file():
+            for line in SERVER_LOG_PATH.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ).splitlines():
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (
+                    isinstance(record, dict)
+                    and record.get("schema_version") == 1
+                    and record.get("source") == "application"
+                    and record.get("level") == "warning"
+                    and record.get("request_id") == request_id
+                    and record.get("instance_id") == instance_id
+                    and record.get("operation") == operation
+                    and record.get("upload_id") is None
+                    and record.get("job_id") is None
+                    and record.get("lease_owner") is None
+                    and record.get("state_version") is None
+                    and message_marker in str(record.get("message", ""))
+                ):
+                    return {
+                        "request_id": request_id,
+                        "instance_id": instance_id,
+                        "operation": operation,
+                        "level": "warning",
+                        "ownership_fields_null": True,
+                    }
+        time.sleep(0.05)
+
+    fail(f"{rate_operation} 429 log did not preserve typed request correlation")
+
+
 def test_auth_precedence(
     download_share: str,
     view_share: str,
@@ -472,13 +522,23 @@ def test_access_boundary(share_code: str, config: FamilyConfig) -> tuple[dict[st
             key = require_single_rate_key("access", CLIENT_IP)
 
     require(counter_value(key) == config.limit, "access allowed requests must match configured limit")
+    request_id = f"share-rate-access-{uuid.uuid4().hex[:16]}"
     limited = fetch(
         f"/api/share/access/{share_code}",
         method="POST",
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "X-Request-Id": request_id,
+        },
         json_body={},
     )
     response = assert_standard_429(limited, config.limit, "access")
+    correlation = wait_for_correlated_rate_limit_log(
+        response=limited,
+        request_id=request_id,
+        operation="share",
+        rate_operation="access",
+    )
     require(counter_value(key) == config.limit + 1, "access boundary counter must include limited request")
     ttl = redis_ttl(key)
     require(0 < ttl <= config.window_seconds, "access counter TTL must match fixed window")
@@ -491,6 +551,7 @@ def test_access_boundary(share_code: str, config: FamilyConfig) -> tuple[dict[st
         "counter_after_limit": config.limit + 1,
         "ttl_seconds": ttl,
         "response": response,
+        "correlation": correlation,
     }, key
 
 
@@ -514,11 +575,21 @@ def test_browse_boundary(
             key = require_single_rate_key("browse", jti)
 
     require(counter_value(key) == config.limit, "browse allowed requests must match configured limit")
+    request_id = f"share-rate-browse-{uuid.uuid4().hex[:16]}"
     limited = fetch(
         f"/api/share/browse/{share_code}",
-        headers={"X-Share-Token": token},
+        headers={
+            "X-Request-Id": request_id,
+            "X-Share-Token": token,
+        },
     )
     response = assert_standard_429(limited, config.limit, "browse")
+    correlation = wait_for_correlated_rate_limit_log(
+        response=limited,
+        request_id=request_id,
+        operation="share",
+        rate_operation="browse",
+    )
     require(counter_value(key) == config.limit + 1, "browse counter must include limited request")
     log_pass("Browse boundary is enforced per verified JTI")
     return {
@@ -528,6 +599,7 @@ def test_browse_boundary(
         "limited_request": config.limit + 1,
         "counter_after_limit": config.limit + 1,
         "response": response,
+        "correlation": correlation,
     }, key
 
 
@@ -671,11 +743,21 @@ def test_download_boundary(
     )
     require(counter_value(key) == config.limit, "download shared bucket must reach configured limit")
 
+    request_id = f"share-rate-download-{uuid.uuid4().hex[:16]}"
     limited = fetch(
         f"/api/share/download/{share_code}/{file_id}/info",
-        headers={"X-Share-Token": token},
+        headers={
+            "X-Request-Id": request_id,
+            "X-Share-Token": token,
+        },
     )
     response = assert_standard_429(limited, config.limit, "download")
+    correlation = wait_for_correlated_rate_limit_log(
+        response=limited,
+        request_id=request_id,
+        operation="download",
+        rate_operation="download",
+    )
     require(counter_value(key) == config.limit + 1, "download counter must include limited request")
     require(counter_value(browse_key) == browse_before, "download requests must not consume browse bucket")
     require(
@@ -696,6 +778,7 @@ def test_download_boundary(
         "limited_request": config.limit + 1,
         "counter_after_limit": config.limit + 1,
         "response": response,
+        "correlation": correlation,
     }
     range_evidence = {
         "initial_counter": route_trace[1]["counter"],
