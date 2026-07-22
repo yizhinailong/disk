@@ -41,7 +41,10 @@ namespace disk::file {
         TEST(FileListCacheContractTest, QueryUsesGenerationAndSkipsWritesWhenRedisIsUnavailable) {
             const auto source = ReadSourceFile("src/services/FileQueryService.cpp");
 
-            EXPECT_NE(source.find("FileListCache::GetVersion(m_redis_service, user_id)"), std::string::npos);
+            EXPECT_NE(
+                source.find("FileListCache::GetVersion(m_redis_service, user_id, log_context)"),
+                std::string::npos
+            );
             EXPECT_NE(source.find("*version_result,"), std::string::npos);
             EXPECT_NE(source.find("if (cache_available)"), std::string::npos);
             EXPECT_NE(source.find("cache_available = false;"), std::string::npos);
@@ -124,11 +127,11 @@ namespace disk::file {
             const auto trash = ReadSourceFile("src/services/TrashService.cpp");
             const auto share = ReadSourceFile("src/services/ShareService.cpp");
 
-            EXPECT_GE(CountOccurrences(upload, "FileListCache::Invalidate(m_redis_service, user_id)"), 2);
-            EXPECT_GE(CountOccurrences(mutation, "FileListCache::Invalidate(m_redis_service, user_id)"), 4);
-            EXPECT_GE(CountOccurrences(folder, "FileListCache::Invalidate(m_redis_service, user_id)"), 2);
-            EXPECT_GE(CountOccurrences(trash, "FileListCache::Invalidate(m_redis_service, user_id)"), 2);
-            EXPECT_GE(CountOccurrences(share, "FileListCache::Invalidate(m_redis_service, target_user_id)"), 1);
+            EXPECT_GE(CountOccurrences(upload, "FileListCache::Invalidate("), 2);
+            EXPECT_GE(CountOccurrences(mutation, "FileListCache::Invalidate("), 4);
+            EXPECT_GE(CountOccurrences(folder, "FileListCache::Invalidate("), 2);
+            EXPECT_GE(CountOccurrences(trash, "FileListCache::Invalidate("), 2);
+            EXPECT_GE(CountOccurrences(share, "FileListCache::Invalidate("), 1);
         }
 
         TEST(FileListCacheContractTest, TransactionalWritersCommitBeforeBumpingGeneration) {
@@ -138,7 +141,7 @@ namespace disk::file {
             const auto folder_commit = folder.find("TransactionRunner::Commit(");
             const auto folder_commit_context = folder.find("log_context", folder_commit);
             const auto folder_invalidation = folder.find(
-                "FileListCache::Invalidate(m_redis_service, user_id)",
+                "FileListCache::Invalidate(",
                 folder_commit
             );
             ASSERT_NE(folder_commit, std::string::npos);
@@ -151,7 +154,7 @@ namespace disk::file {
             const auto share_commit = share.find("TransactionRunner::Commit(", save_to_drive);
             const auto share_commit_context = share.find("log_context", share_commit);
             const auto share_invalidation = share.find(
-                "FileListCache::Invalidate(m_redis_service, target_user_id)",
+                "FileListCache::Invalidate(",
                 save_to_drive
             );
             ASSERT_NE(save_to_drive, std::string::npos);

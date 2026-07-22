@@ -59,7 +59,8 @@ namespace disk::file {
         /// 0. Try the current per-user Redis cache generation.
         std::string cache_key;
         bool cache_available = false;
-        auto version_result = co_await FileListCache::GetVersion(m_redis_service, user_id);
+        auto version_result =
+            co_await FileListCache::GetVersion(m_redis_service, user_id, log_context);
         if (version_result) {
             cache_available = true;
             cache_key = disk::redis::RedisKeyPrefix::BuildFileListCacheKey(
@@ -73,7 +74,7 @@ namespace disk::file {
                 query_params.page_size
             );
 
-            auto cache_result = co_await m_redis_service->Get(cache_key);
+            auto cache_result = co_await m_redis_service->Get(cache_key, log_context);
             if (cache_result.has_value()) {
                 Logger::Debug(log_context) << "File list cache hit: key=" << cache_key;
                 Json::Value cached_json;
@@ -140,7 +141,8 @@ namespace disk::file {
             auto set_result = co_await m_redis_service->Set(
                 cache_key,
                 serialized,
-                FileListCache::ENTRY_TTL_SECONDS
+                FileListCache::ENTRY_TTL_SECONDS,
+                log_context
             );
             if (!set_result) {
                 Logger::Warn(log_context) << "File list cache write failed: user_id=" << user_id;

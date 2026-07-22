@@ -12,6 +12,7 @@
 
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::file {
 
@@ -22,12 +23,14 @@ namespace disk::file {
         [[nodiscard]]
         static auto GetVersion(
             const std::shared_ptr<disk::services::RedisService>& redis_service,
-            uint64_t user_id
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<uint64_t>>;
 
         static auto Invalidate(
             const std::shared_ptr<disk::services::RedisService>& redis_service,
-            uint64_t user_id
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<void>;
     };
 

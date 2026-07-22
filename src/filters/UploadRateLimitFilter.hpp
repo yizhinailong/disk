@@ -17,11 +17,16 @@
 #include <drogon/HttpFilter.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::filters {
 
     using UploadRateLimitCounter =
-        std::function<drogon::Task<Result<int64_t>>(const std::string&, int)>;
+        std::function<drogon::Task<Result<int64_t>>(
+            const std::string&,
+            int,
+            disk::utils::LogContext
+        )>;
 
     /**
      * @brief 上传频率限制过滤器

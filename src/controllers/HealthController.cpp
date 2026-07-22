@@ -7,6 +7,7 @@
 
 #include <utility>
 
+#include "controllers/ControllerHelpers.hpp"
 #include "services/ObservedDbClient.hpp"
 #include "services/ProcessRuntime.hpp"
 #include "storage/BlobStoreMgr.hpp"
@@ -38,14 +39,20 @@ namespace disk::health {
 
     auto HealthController::Live(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
-        Logger::Debug() << "Received liveness request: " << request->getPeerAddr().toIpPort();
+        auto log_context =
+            disk::controllers::GetRequestLogContext(request, "health");
+        Logger::Debug(log_context)
+            << "Received liveness request: " << request->getPeerAddr().toIpPort();
         co_return ToResponse(m_health_service->CheckLiveness());
     }
 
     auto HealthController::Ready(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
-        Logger::Debug() << "Received readiness request: " << request->getPeerAddr().toIpPort();
-        co_return ToResponse(co_await m_health_service->CheckReadiness());
+        auto log_context =
+            disk::controllers::GetRequestLogContext(request, "health");
+        Logger::Debug(log_context)
+            << "Received readiness request: " << request->getPeerAddr().toIpPort();
+        co_return ToResponse(co_await m_health_service->CheckReadiness(log_context));
     }
 
     auto HealthController::ToResponse(const HealthResult& result) -> drogon::HttpResponsePtr {

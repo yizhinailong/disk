@@ -346,7 +346,11 @@ namespace disk::trash {
         result.removed_file_ids = std::move(file_ids_to_delete);
         result.removed_folder_ids = std::move(folder_ids_to_delete);
 
-        co_await disk::file::FileListCache::Invalidate(m_redis_service, user_id);
+        co_await disk::file::FileListCache::Invalidate(
+            m_redis_service,
+            user_id,
+            log_context
+        );
 
         co_return result;
     }
@@ -694,7 +698,11 @@ namespace disk::trash {
                                   << ", failure=" << response.summary.failure_count;
 
         if (response.summary.success_count > 0) {
-            co_await disk::file::FileListCache::Invalidate(m_redis_service, user_id);
+            co_await disk::file::FileListCache::Invalidate(
+                m_redis_service,
+                user_id,
+                log_context
+            );
         }
 
         co_return response;

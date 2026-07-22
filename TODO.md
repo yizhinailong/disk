@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 TokenService 日志关联）：完整构建、TokenService/认证/分享/过滤器聚焦 GoogleTest 124/124、直接 safety 集成 767/767、注册 safety CTest 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1440 项，1433 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 491.76 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 RedisService 日志关联）：完整构建、Redis/Token/缓存/健康/限流聚焦 GoogleTest 52/52、直接 safety 集成 769/769、注册 safety CTest 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1444 项，1437 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 476.32 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -755,6 +755,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定令牌服
 新增 `TokenServiceLogContextContractTest` 与 3 个内存 NDJSON 用例，锁定 8 个入口默认值、21/6 条请求/进程日志归属、全部生产调用点、access/refresh/share 成功和畸形输入、默认空调用方语义，以及密钥、原始 access/refresh/share token 不进入结构化日志。认证和分享源码合同同步锁定调用方上下文；`SafetyUploadInvariantsIntegration` 真实触发登录、刷新、登出、畸形 owner JWT 和畸形 visitor share token，核对 CPU 池跨线程计时与解析失败事件仍匹配响应的 request/instance/operation，并扫描受管日志排除临时密码、Authorization 和原始 token。
 
 完整构建、Python 语法检查、TokenService/认证/分享/过滤器聚焦 GoogleTest 124/124、直接 safety 集成 767/767、注册 safety CTest 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1440 项，1433 通过、7 项环境门控跳过、0 失败，总耗时 491.76 秒。`RedisService` 共享基础设施边界及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.39 RedisService 日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定 Redis 命令边界的显式关联合同。`RedisService` 的 PING、单键、批量、计数、CAS 和固定窗口共 13 个命令 API 新增可选 `LogContext`；23 条命令成功、协议、解析和依赖失败事件统一使用调用方 request/instance/operation，单例初始化继续是空请求关联的进程事件。日志只保留固定命令名及数量、TTL、布尔结果等有界诊断，不记录 key、value、expected/new value、Lua、异常文本、token hash/JTI、分享码、IP、文件列表内容、endpoint 或凭据，也不从命令输入推断 `upload_id`、`job_id`、`lease_owner` 和 `state_version`；Redis 命令、TTL、事务、Lua/CAS、依赖指标、`Result` 错误及上层 fail-open/fail-closed 语义不变。
+
+已有请求上下文现按值穿过 `TokenService` 的 refresh/access/share Redis 入口、`AuthService` 登录计数与清理、`ShareService` 口令失败计数、`FileListCache`/`FileQueryService`、七类限流计数适配器、管理员系统状态和 readiness；文件列表失效调用点同步传入各自请求上下文，健康控制器为 live/ready 建立固定 `health` operation。新增 `RedisServiceLogContextContractTest` 和 3 个真实 Redis/内存 NDJSON 用例，锁定 13 个默认入口、23 条命令事件、主要生产调用点、7 类成功日志、命令失败脱敏及默认空调用方语义。`SafetyUploadInvariantsIntegration` 将真实登录限流键预置为唯一非整数值，确认 Redis Lua 错误保持登录 fail-open、错误事件与响应使用同一关联，并扫描受管日志排除探针 key/value、密码和 token。
+
+完整构建、Python 语法检查、Redis/Token/缓存/健康/限流聚焦 GoogleTest 52/52、直接 safety 集成 769/769、注册 safety CTest 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过。首次完整 CTest 的唯一失败是 `FileMutationServiceMoveContractTest` 仍断言旧的无上下文缓存失效调用文本；更新为显式 `log_context` 合同后聚焦复验 6/6 通过，第二次完整 CTest 共 1444 项，1437 通过、7 项环境门控跳过、0 失败，总耗时 476.32 秒。目标 MinIO/云 S3 和多实例环境门控仍未执行，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

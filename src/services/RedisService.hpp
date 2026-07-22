@@ -15,6 +15,7 @@
 #include <drogon/nosql/RedisClient.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 #include "utils/Singleton.hpp"
 
 namespace disk::services {
@@ -78,7 +79,7 @@ namespace disk::services {
          * @return Result<bool> 成功返回响应是否有效，连接故障返回错误
          */
         [[nodiscard]]
-        auto Ping() -> drogon::Task<Result<bool>>;
+        auto Ping(disk::utils::LogContext log_context = {}) -> drogon::Task<Result<bool>>;
 
         /**
          * @brief 设置 Redis 键值对
@@ -88,7 +89,12 @@ namespace disk::services {
          * @return Result<void> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto Set(const std::string& key, const std::string& value, int ttl = 0)
+        auto Set(
+            const std::string& key,
+            const std::string& value,
+            int ttl = 0,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>>;
 
         /**
@@ -97,7 +103,8 @@ namespace disk::services {
          * @return Result<std::string> 成功返回值，失败返回错误
          */
         [[nodiscard]]
-        auto Get(const std::string& key) -> drogon::Task<Result<std::string>>;
+        auto Get(const std::string& key, disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<std::string>>;
 
         /**
          * @brief 删除 Redis 键
@@ -105,7 +112,8 @@ namespace disk::services {
          * @return Result<void> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto Delete(const std::string& key) -> drogon::Task<Result<void>>;
+        auto Delete(const std::string& key, disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<void>>;
 
         /**
          * @brief 检查 Redis 键是否存在
@@ -113,7 +121,8 @@ namespace disk::services {
          * @return Result<bool> 成功时返回是否存在，Redis 故障返回错误
          */
         [[nodiscard]]
-        auto Exists(const std::string& key) -> drogon::Task<Result<bool>>;
+        auto Exists(const std::string& key, disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<bool>>;
 
         /**
          * @brief 设置 Redis 键的过期时间
@@ -122,7 +131,11 @@ namespace disk::services {
          * @return Result<void> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto Expire(const std::string& key, int ttl) -> drogon::Task<Result<void>>;
+        auto Expire(
+            const std::string& key,
+            int ttl,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<void>>;
 
         /**
          * @brief 批量设置键值对
@@ -135,7 +148,11 @@ namespace disk::services {
          * @return Result<void> 成功返回void，失败返回错误
          */
         [[nodiscard]]
-        auto MSet(const std::vector<KeyValue>& pairs, int ttl) -> drogon::Task<Result<void>>;
+        auto MSet(
+            const std::vector<KeyValue>& pairs,
+            int ttl,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<void>>;
 
         /**
          * @brief 批量获取键值
@@ -147,7 +164,10 @@ namespace disk::services {
          * @return Result<std::vector<std::string>> 成功返回值数组，失败返回错误
          */
         [[nodiscard]]
-        auto MGet(const std::vector<std::string>& keys) -> drogon::Task<Result<std::vector<std::string>>>;
+        auto MGet(
+            const std::vector<std::string>& keys,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<std::vector<std::string>>>;
 
         /**
          * @brief 批量删除键
@@ -158,7 +178,10 @@ namespace disk::services {
          * @return Result<int> 成功返回删除的键数量，失败返回错误
          */
         [[nodiscard]]
-        auto MDelete(const std::vector<std::string>& keys) -> drogon::Task<Result<int>>;
+        auto MDelete(
+            const std::vector<std::string>& keys,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<int>>;
 
         /**
          * @brief 原子性递增 Redis 键值（递增 1）
@@ -166,7 +189,8 @@ namespace disk::services {
          * @return Result<std::int64_t> 成功返回递增后的新值，失败返回错误
          */
         [[nodiscard]]
-        auto Incr(const std::string& key) -> drogon::Task<Result<std::int64_t>>;
+        auto Incr(const std::string& key, disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<std::int64_t>>;
 
         /**
          * @brief 原子性递增 Redis 键值（递增指定值）
@@ -175,7 +199,11 @@ namespace disk::services {
          * @return Result<std::int64_t> 成功返回递增后的新值，失败返回错误
          */
         [[nodiscard]]
-        auto IncrBy(const std::string& key, std::int64_t increment) -> drogon::Task<Result<std::int64_t>>;
+        auto IncrBy(
+            const std::string& key,
+            std::int64_t increment,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<std::int64_t>>;
 
         /**
          * @brief 原子性比较并交换 (Compare-And-Swap)
@@ -196,7 +224,8 @@ namespace disk::services {
             const std::string& key,
             const std::string& expected,
             const std::string& new_value,
-            int ttl
+            int ttl,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<bool>>;
 
         /**
@@ -214,7 +243,8 @@ namespace disk::services {
         [[nodiscard]]
         auto IncrWithExpire(
             const std::string& key,
-            int ttl
+            int ttl,
+            disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<std::int64_t>>;
 
     private:

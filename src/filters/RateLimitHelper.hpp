@@ -19,6 +19,7 @@
 
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::filters {
@@ -27,8 +28,9 @@ namespace disk::filters {
     inline auto GetFixedWindowStart(int64_t window_seconds) -> int64_t {
         auto now = std::chrono::system_clock::now();
         auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(
-            now.time_since_epoch()
-        ).count();
+                             now.time_since_epoch()
+        )
+                             .count();
         return (timestamp / window_seconds) * window_seconds;
     }
 
@@ -51,8 +53,9 @@ namespace disk::filters {
         if (include_retry_after) {
             const auto now = std::chrono::system_clock::now();
             const auto now_seconds = std::chrono::duration_cast<std::chrono::seconds>(
-                now.time_since_epoch()
-            ).count();
+                                         now.time_since_epoch()
+            )
+                                         .count();
             const auto retry_after = std::max<int64_t>(1, reset_time - now_seconds);
             response->addHeader("Retry-After", std::to_string(retry_after));
         }
@@ -64,9 +67,11 @@ namespace disk::filters {
     inline auto CheckFixedWindowLimit(
         const std::shared_ptr<disk::services::RedisService>& redis_service,
         const std::string& key,
-        int64_t window_seconds
+        int64_t window_seconds,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<int64_t>> {
-        auto incr_result = co_await redis_service->IncrWithExpire(key, window_seconds);
+        auto incr_result =
+            co_await redis_service->IncrWithExpire(key, window_seconds, log_context);
         if (!incr_result) {
             co_return std::unexpected(incr_result.error());
         }
@@ -74,4 +79,4 @@ namespace disk::filters {
         co_return incr_result.value();
     }
 
-} ///< namespace disk::filters
+} // namespace disk::filters

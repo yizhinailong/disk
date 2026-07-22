@@ -24,9 +24,13 @@ namespace disk::filters {
         auto MakeRedisCounter() -> ApiRateLimitCounter {
             const auto redis_service = disk::services::RedisService::GetInstance();
             disk::services::RedisService::Initialize(drogon::app().getRedisClient());
-            return [redis_service](const std::string& key, int window_seconds)
+            return [redis_service](
+                       const std::string& key,
+                       int window_seconds,
+                       disk::utils::LogContext log_context
+                   )
                        -> drogon::Task<Result<int64_t>> {
-                co_return co_await CheckFixedWindowLimit(redis_service, key, window_seconds);
+                co_return co_await CheckFixedWindowLimit(redis_service, key, window_seconds, log_context);
             };
         }
 
@@ -66,7 +70,7 @@ namespace disk::filters {
         const auto key = RedisKeyPrefix::BuildApiRateLimitKey(user_id, window);
 
         /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
-        auto incr_result = co_await m_counter(key, WINDOW_SECONDS);
+        auto incr_result = co_await m_counter(key, WINDOW_SECONDS, log_context);
         if (!incr_result) {
             Logger::Error(log_context)
                 << "Redis IncrWithExpire failed: " << incr_result.error().message;

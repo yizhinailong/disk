@@ -104,6 +104,29 @@ The shared token service SHALL accept explicit correlation by value for request-
 - **WHEN** token-singleton initialization, authentication CPU-pool creation, cache-maintenance timer startup, metrics timer startup, periodic pool metrics, or cache eviction emits a process event
 - **THEN** request ID, operation, upload ID, job ID, lease owner, and state version SHALL remain JSON null because no HTTP request owns that event
 
+### Requirement: Redis Service Correlation
+The shared Redis service SHALL accept explicit correlation by value for every command API and SHALL apply the supplied context to every directly owned command success, protocol, parsing, and dependency-failure event. Authentication, token, share, file-list cache, rate-limit, administrator status, and readiness callers SHALL pass their already established context without changing Redis commands, keys, values, TTLs, transactions, Lua scripts, CAS behavior, metrics, error results, or dependency-failure policy.
+
+#### Scenario: A request reaches Redis through a shared service
+- **WHEN** an authenticated, share, file, administrator, or readiness request performs Redis work through a service or cache helper
+- **THEN** every directly owned Redis event SHALL retain the caller's request ID, actual handling instance, and bounded HTTP operation across all helper and coroutine boundaries
+
+#### Scenario: A request reaches Redis through a rate-limit filter
+- **WHEN** any owner, visitor, upload, download, folder, administrator, registration, or trash fixed-window filter increments its Redis counter
+- **THEN** the counter adapter and Redis event SHALL receive the same request context used by the filter without changing its key, window, threshold, authentication order, or fail-open behavior
+
+#### Scenario: Redis observes command inputs and dependency failures
+- **WHEN** the service observes a key, value, expected or replacement value, Lua script, TTL, user or token identifier, Redis exception, or parse failure
+- **THEN** its application event SHALL contain only the fixed command name and bounded result metadata, SHALL NOT contain the key, value, script, exception text, credential, token hash, JTI, share code, IP address, file-list payload, or connection detail, and SHALL NOT derive upload ID, job ID, lease owner, or state version from any command input
+
+#### Scenario: Redis receives no request context
+- **WHEN** a unit, utility, background, or compatibility caller omits explicit correlation
+- **THEN** the command event SHALL use explicit JSON null request and ownership correlation rather than thread-local, key-derived, or value-derived state
+
+#### Scenario: Redis service initializes
+- **WHEN** the singleton accepts its Redis client before serving command work
+- **THEN** the initialization event SHALL remain a context-free process event and SHALL NOT disclose endpoint or credential data
+
 ### Requirement: Upload Rate-Limit Filter Correlation
 The route-owned upload rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every request-attribute failure, counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing its init, chunk, complete, and cancel route ownership, user fixed-window key, configured window or threshold, fail-open behavior, or HTTP response.
 

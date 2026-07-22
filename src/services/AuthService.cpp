@@ -143,7 +143,7 @@ namespace disk::auth {
             disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(ip_address);
 
         /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
-        auto incr_result = co_await m_redis_service->IncrWithExpire(rate_key, 300);
+        auto incr_result = co_await m_redis_service->IncrWithExpire(rate_key, 300, log_context);
         if (incr_result.has_value()) {
             const auto count = incr_result.value();
 
@@ -207,8 +207,11 @@ namespace disk::auth {
         );
 
         /// 5. 存储 refresh_token 到 Redis
-        auto store_result =
-            co_await TokenService::GetInstance()->StoreRefreshToken(user.getValueOfId(), refresh_token);
+        auto store_result = co_await TokenService::GetInstance()->StoreRefreshToken(
+            user.getValueOfId(),
+            refresh_token,
+            log_context
+        );
         if (!store_result.has_value()) {
             Logger::Warn(log_context)
                 << "Failed to store refresh_token in Redis: " << user.getValueOfId();
@@ -343,7 +346,8 @@ namespace disk::auth {
         }
 
         /// 步骤 2: 撤销刷新令牌
-        auto revoke_result = co_await TokenService::GetInstance()->RevokeRefreshToken(user_id);
+        auto revoke_result =
+            co_await TokenService::GetInstance()->RevokeRefreshToken(user_id, log_context);
         if (!revoke_result) {
             Logger::Warn(log_context)
                 << "Refresh token revocation failed: user_id=" << user_id;
@@ -457,7 +461,7 @@ namespace disk::auth {
             const std::string rate_key =
                 disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(ip_address);
 
-            auto delete_result = co_await m_redis_service->Delete(rate_key);
+            auto delete_result = co_await m_redis_service->Delete(rate_key, log_context);
             if (delete_result.has_value()) {
                 const std::string ip_only = disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
                 Logger::Debug(log_context)

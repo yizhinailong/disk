@@ -45,7 +45,10 @@ namespace disk::health {
             };
         }
 
-        auto CheckDatabase(drogon::orm::DbClientPtr db_client)
+        auto CheckDatabase(
+            drogon::orm::DbClientPtr db_client,
+            disk::utils::LogContext
+        )
             -> drogon::Task<ComponentStatus> {
             const auto start = std::chrono::steady_clock::now();
             if (db_client == nullptr) {
@@ -59,18 +62,25 @@ namespace disk::health {
             }
         }
 
-        auto CheckRedis(drogon::nosql::RedisClientPtr redis_client)
+        auto CheckRedis(
+            drogon::nosql::RedisClientPtr redis_client,
+            disk::utils::LogContext log_context
+        )
             -> drogon::Task<ComponentStatus> {
             const auto start = std::chrono::steady_clock::now();
             if (redis_client == nullptr) {
                 co_return UnhealthyStatus(start);
             }
             disk::services::RedisService::Initialize(std::move(redis_client));
-            const auto result = co_await disk::services::RedisService::GetInstance()->Ping();
+            const auto result =
+                co_await disk::services::RedisService::GetInstance()->Ping(log_context);
             co_return result.has_value() && *result ? HealthyStatus(start) : UnhealthyStatus(start);
         }
 
-        auto CheckStagingStorage(disk::storage::UploadStagingStorage* storage)
+        auto CheckStagingStorage(
+            disk::storage::UploadStagingStorage* storage,
+            disk::utils::LogContext
+        )
             -> drogon::Task<ComponentStatus> {
             const auto start = std::chrono::steady_clock::now();
             if (storage == nullptr) {
@@ -84,7 +94,10 @@ namespace disk::health {
             }
         }
 
-        auto CheckFinalStorage(disk::storage::IBlobStore* storage)
+        auto CheckFinalStorage(
+            disk::storage::IBlobStore* storage,
+            disk::utils::LogContext
+        )
             -> drogon::Task<ComponentStatus> {
             const auto start = std::chrono::steady_clock::now();
             if (storage == nullptr) {
@@ -98,7 +111,10 @@ namespace disk::health {
             }
         }
 
-        auto CheckStorageJobs(drogon::orm::DbClientPtr db_client)
+        auto CheckStorageJobs(
+            drogon::orm::DbClientPtr db_client,
+            disk::utils::LogContext
+        )
             -> drogon::Task<ComponentStatus> {
             const auto start = std::chrono::steady_clock::now();
             if (db_client == nullptr) {
@@ -169,11 +185,11 @@ namespace disk::health {
         disk::storage::IBlobStore* blob_store,
         std::shared_ptr<disk::runtime::ProcessRuntimeState> runtime_state
     ) : HealthService(std::move(runtime_state), HealthCheckCallbacks{
-                                                    .database = [db_client]() { return CheckDatabase(db_client); },
-                                                    .redis = [redis_client]() { return CheckRedis(redis_client); },
-                                                    .staging_storage = [staging_storage]() { return CheckStagingStorage(staging_storage); },
-                                                    .final_storage = [blob_store]() { return CheckFinalStorage(blob_store); },
-                                                    .storage_jobs = [db_client]() { return CheckStorageJobs(db_client); },
+                                                    .database = [db_client](disk::utils::LogContext log_context) { return CheckDatabase(db_client, log_context); },
+                                                    .redis = [redis_client](disk::utils::LogContext log_context) { return CheckRedis(redis_client, log_context); },
+                                                    .staging_storage = [staging_storage](disk::utils::LogContext log_context) { return CheckStagingStorage(staging_storage, log_context); },
+                                                    .final_storage = [blob_store](disk::utils::LogContext log_context) { return CheckFinalStorage(blob_store, log_context); },
+                                                    .storage_jobs = [db_client](disk::utils::LogContext log_context) { return CheckStorageJobs(db_client, log_context); },
                                                 }) {
     }
 
@@ -197,7 +213,8 @@ namespace disk::health {
         return result;
     }
 
-    auto HealthService::CheckReadiness() const -> drogon::Task<HealthResult> {
+    auto HealthService::CheckReadiness(disk::utils::LogContext log_context) const
+        -> drogon::Task<HealthResult> {
         auto result = BuildBaseResult();
         const auto check_start = std::chrono::steady_clock::now();
 
@@ -214,17 +231,20 @@ namespace disk::health {
         result.components["database"] = co_await RunComponentCheck(
             "database",
             "Database check failed",
-            m_checks.database
+            m_checks.database,
+            log_context
         );
         result.components["staging_storage"] = co_await RunComponentCheck(
             "staging_storage",
             "Staging storage check failed",
-            m_checks.staging_storage
+            m_checks.staging_storage,
+            log_context
         );
         result.components["final_storage"] = co_await RunComponentCheck(
             "final_storage",
             "Final storage check failed",
-            m_checks.final_storage
+            m_checks.final_storage,
+            log_context
         );
 
         const auto role = m_runtime_state->Role();
@@ -232,14 +252,16 @@ namespace disk::health {
             result.components["redis"] = co_await RunComponentCheck(
                 "redis",
                 "Redis check failed",
-                m_checks.redis
+                m_checks.redis,
+                log_context
             );
         }
         if (disk::utils::IncludesWorker(role)) {
             result.components["storage_jobs"] = co_await RunComponentCheck(
                 "storage_jobs",
                 "Storage job queue check failed",
-                m_checks.storage_jobs
+                m_checks.storage_jobs,
+                log_context
             );
         }
 
@@ -276,21 +298,23 @@ namespace disk::health {
     auto HealthService::RunComponentCheck(
         std::string component,
         std::string failure_message,
-        const ComponentCheck& check
+        const ComponentCheck& check,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<ComponentStatus> {
         ComponentStatus status;
         try {
             if (!check) {
                 throw std::runtime_error("Component check is not configured");
             }
-            status = co_await check();
+            status = co_await check(log_context);
         } catch (const std::exception&) {
             status.status = "unhealthy";
             status.latency_ms = 0;
         }
 
         if (status.status != "healthy") {
-            Logger::Warn() << "Health dependency check failed: component=" << component;
+            Logger::Warn(log_context)
+                << "Health dependency check failed: component=" << component;
             status.status = "unhealthy";
             status.message = std::move(failure_message);
         } else {

@@ -29,9 +29,13 @@ namespace disk::filters {
 
         auto MakeRedisCounter() -> ShareRateLimitCounter {
             const auto redis_service = disk::services::RedisService::GetInstance();
-            return [redis_service](const std::string& key, int window_seconds)
+            return [redis_service](
+                       const std::string& key,
+                       int window_seconds,
+                       disk::utils::LogContext log_context
+                   )
                        -> drogon::Task<Result<int64_t>> {
-                co_return co_await CheckFixedWindowLimit(redis_service, key, window_seconds);
+                co_return co_await CheckFixedWindowLimit(redis_service, key, window_seconds, log_context);
             };
         }
 
@@ -79,7 +83,7 @@ namespace disk::filters {
         const auto key =
             disk::redis::RedisKeyPrefix::BuildShareAccessRateLimitKey(peer_ip, window);
 
-        auto count_result = co_await m_counter(key, window_seconds);
+        auto count_result = co_await m_counter(key, window_seconds, log_context);
         if (!count_result) {
             Logger::Error(log_context)
                 << "Share rate-limit counter failed: operation=access, client_ip="
@@ -151,7 +155,7 @@ namespace disk::filters {
                              disk::redis::RedisKeyPrefix::BuildShareBrowseRateLimitKey(jti, window) :
                              disk::redis::RedisKeyPrefix::BuildShareDownloadRateLimitKey(jti, window);
 
-        auto count_result = co_await m_counter(key, window_seconds);
+        auto count_result = co_await m_counter(key, window_seconds, log_context);
         if (!count_result) {
             Logger::Error(log_context)
                 << "Share rate-limit counter failed: operation=" << OperationName(*operation)

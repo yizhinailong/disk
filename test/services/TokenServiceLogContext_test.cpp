@@ -128,7 +128,7 @@ namespace disk::services {
             ASSERT_FALSE(source.empty());
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                8U
+                13U
             );
             EXPECT_EQ(CountOccurrences(source, "Logger::Debug(log_context)"), 4U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Info(log_context)"), 2U);
@@ -165,10 +165,25 @@ namespace disk::services {
                 "TokenService::GetInstance()->InvalidateAccessToken(",
                 1U
             ));
+            EXPECT_TRUE(EveryCallContainsContext(
+                auth_service,
+                "TokenService::GetInstance()->StoreRefreshToken(",
+                1U
+            ));
+            EXPECT_TRUE(EveryCallContainsContext(
+                auth_service,
+                "TokenService::GetInstance()->RevokeRefreshToken(",
+                1U
+            ));
             EXPECT_TRUE(Contains(jwt_filter, "[token_service, token, log_context]"));
             EXPECT_TRUE(EveryCallContainsContext(
                 jwt_filter,
                 "token_service->VerifyAccessToken(",
+                1U
+            ));
+            EXPECT_TRUE(EveryCallContainsContext(
+                jwt_filter,
+                "token_service->IsAccessTokenRevoked(",
                 1U
             ));
             EXPECT_TRUE(EveryCallContainsContext(
@@ -183,6 +198,12 @@ namespace disk::services {
             ));
             EXPECT_TRUE(Contains(source, "VerifyShareToken(m_jwt_secret, token, log_context)"));
             EXPECT_TRUE(Contains(source, "ExtractJti(token, log_context)"));
+            EXPECT_TRUE(Contains(source, "IsShareTokenRevoked(hash_result.value(), log_context)"));
+            EXPECT_TRUE(Contains(source, "REFRESH_TOKEN_TTL, log_context"));
+            EXPECT_TRUE(Contains(source, "ACCESS_TOKEN_TTL, log_context"));
+            EXPECT_TRUE(Contains(source, "SHARE_TOKEN_TTL, log_context"));
+            EXPECT_TRUE(Contains(source, "m_redis_service->Delete(key, log_context)"));
+            EXPECT_EQ(CountOccurrences(source, "m_redis_service->Exists(key, log_context)"), 2U);
 
             for (const auto* sensitive : { "token", "old_token", "new_token", "jwt_secret" }) {
                 EXPECT_FALSE(StreamsIdentifier(source, sensitive)) << sensitive;

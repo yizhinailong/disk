@@ -40,7 +40,11 @@ namespace {
     };
 
     auto MakeCounter(const std::shared_ptr<CounterState>& state) -> ShareRateLimitCounter {
-        return [state](const std::string& key, int window_seconds)
+        return [state](
+                   const std::string& key,
+                   int window_seconds,
+                   disk::utils::LogContext
+               )
                    -> drogon::Task<Result<int64_t>> {
             state->calls.push_back(CounterCall{ .key = key, .window_seconds = window_seconds });
             if (state->next_result >= state->results.size()) {

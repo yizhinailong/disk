@@ -71,7 +71,8 @@ namespace disk::filters {
 
         const auto& claims = verify_result.value();
 
-        auto revocation_result = co_await token_service->IsAccessTokenRevoked(claims.jti);
+        auto revocation_result =
+            co_await token_service->IsAccessTokenRevoked(claims.jti, log_context);
         if (!revocation_result) {
             Logger::Error(log_context) << "Access token revocation check failed: user_id=" << claims.user_id;
             co_return disk::Response::Error(revocation_result.error().code);

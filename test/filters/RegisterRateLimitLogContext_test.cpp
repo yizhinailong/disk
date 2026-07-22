@@ -60,13 +60,15 @@ namespace disk::filters {
         }
 
         auto MakeCountCounter(int64_t count) -> RegisterRateLimitCounter {
-            return [count](const std::string&, int) -> drogon::Task<Result<int64_t>> {
+            return [count](const std::string&, int, disk::utils::LogContext)
+                       -> drogon::Task<Result<int64_t>> {
                 co_return count;
             };
         }
 
         auto MakeFailureCounter() -> RegisterRateLimitCounter {
-            return [](const std::string&, int) -> drogon::Task<Result<int64_t>> {
+            return [](const std::string&, int, disk::utils::LogContext)
+                       -> drogon::Task<Result<int64_t>> {
                 co_return std::unexpected(
                     ErrorInfo(
                         disk::error::Code::RedisOperationFailed,

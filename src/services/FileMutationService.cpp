@@ -109,7 +109,7 @@ namespace disk::file {
             response.name = new_name;
             response.updated_at = updated_at.toDbStringLocal();
 
-            co_await FileListCache::Invalidate(m_redis_service, user_id);
+            co_await FileListCache::Invalidate(m_redis_service, user_id, log_context);
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
@@ -406,7 +406,7 @@ namespace disk::file {
             << ", moved_folder_count=" << moved_folder_count;
 
         if (moved_file_count > 0 || moved_folder_count > 0) {
-            co_await FileListCache::Invalidate(m_redis_service, user_id);
+            co_await FileListCache::Invalidate(m_redis_service, user_id, log_context);
         }
 
         MoveResponse response;
@@ -548,7 +548,7 @@ namespace disk::file {
         auto return_release_error = [&](ErrorInfo error)
             -> drogon::Task<Result<CopyResponse>> {
             if (copied_file_count > 0 || copied_folder_count > 0 || !new_files.empty() || !new_folders.empty()) {
-                co_await FileListCache::Invalidate(m_redis_service, user_id);
+                co_await FileListCache::Invalidate(m_redis_service, user_id, log_context);
             }
             co_return std::unexpected(error);
         };
@@ -1122,7 +1122,7 @@ namespace disk::file {
                                   << ", released_size=" << released_copy_size;
 
         if (response.copied_count > 0) {
-            co_await FileListCache::Invalidate(m_redis_service, user_id);
+            co_await FileListCache::Invalidate(m_redis_service, user_id, log_context);
         }
 
         co_return response;

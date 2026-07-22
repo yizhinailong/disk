@@ -1399,7 +1399,11 @@ namespace disk::share {
                 );
             }
             if (response.saved_count > 0) {
-                co_await disk::file::FileListCache::Invalidate(m_redis_service, target_user_id);
+                co_await disk::file::FileListCache::Invalidate(
+                    m_redis_service,
+                    target_user_id,
+                    log_context
+                );
             }
 
             co_return response;
@@ -1925,7 +1929,8 @@ namespace disk::share {
         /// 单个 Lua 操作原子递增，并仅在首次失败时设置固定窗口。
         auto incr_result = co_await m_redis_service->IncrWithExpire(
             key,
-            SHARE_ACCESS_FAILURE_WINDOW_SECONDS
+            SHARE_ACCESS_FAILURE_WINDOW_SECONDS,
+            log_context
         );
         if (!incr_result) {
             Logger::Error(log_context)

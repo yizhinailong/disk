@@ -17,7 +17,7 @@ namespace disk::health {
         };
 
         [[nodiscard]] auto HealthyCheck(size_t& calls) -> ComponentCheck {
-            return [&calls]() -> drogon::Task<ComponentStatus> {
+            return [&calls](disk::utils::LogContext) -> drogon::Task<ComponentStatus> {
                 calls++;
                 co_return ComponentStatus{ .status = "healthy", .latency_ms = 1 };
             };
@@ -165,7 +165,8 @@ namespace disk::health {
         TEST(HealthServiceTest, SanitizesDependencyFailures) {
             CheckCounts counts;
             auto checks = HealthyChecks(counts);
-            checks.database = [&counts]() -> drogon::Task<ComponentStatus> {
+            checks.database = [&counts](disk::utils::LogContext)
+                -> drogon::Task<ComponentStatus> {
                 counts.database++;
                 throw std::runtime_error("postgres://user:password@secret-host/disk");
                 co_return ComponentStatus{};

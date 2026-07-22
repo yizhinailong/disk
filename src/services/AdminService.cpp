@@ -864,7 +864,8 @@ namespace disk::services {
             auto redis_client = drogon::app().getRedisClient();
             if (redis_client) {
                 RedisService::Initialize(redis_client);
-                const auto result = co_await RedisService::GetInstance()->Ping();
+                const auto result =
+                    co_await RedisService::GetInstance()->Ping(log_context);
                 response.redis_connected = result.has_value() && *result;
             } else {
                 response.redis_connected = false;

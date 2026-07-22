@@ -130,7 +130,11 @@ namespace disk::folder {
             co_await IncrementParentItemCount(request.parent_id, log_context);
         }
 
-        co_await disk::file::FileListCache::Invalidate(m_redis_service, user_id);
+        co_await disk::file::FileListCache::Invalidate(
+            m_redis_service,
+            user_id,
+            log_context
+        );
 
         /// 7. 构造响应
         CreateFolderResponse response;
@@ -276,7 +280,11 @@ namespace disk::folder {
                     ErrorInfo(ErrorCode::InternalError, "Failed to rename folder")
                 );
             }
-            co_await disk::file::FileListCache::Invalidate(m_redis_service, user_id);
+            co_await disk::file::FileListCache::Invalidate(
+                m_redis_service,
+                user_id,
+                log_context
+            );
 
             RenameFolderResponse response;
             response.id = folder_id;

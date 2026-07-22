@@ -84,7 +84,10 @@ namespace disk::file {
             ASSERT_FALSE(move_body.empty());
             EXPECT_TRUE(Contains(move_body, "Cannot move a folder into itself or its descendant"));
             EXPECT_TRUE(Contains(move_body, "co_return std::unexpected(ErrorInfo("));
-            EXPECT_TRUE(Contains(move_body, "co_await FileListCache::Invalidate(m_redis_service, user_id);"));
+            EXPECT_TRUE(Contains(
+                move_body,
+                "co_await FileListCache::Invalidate(m_redis_service, user_id, log_context);"
+            ));
             EXPECT_FALSE(Contains(move_body, "BuildFileListCachePrefix"));
 
             const auto result_check = move_body.find("if (!transaction_result)");

@@ -292,7 +292,11 @@ namespace disk::services {
         }
     }
 
-    auto TokenService::StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
+    auto TokenService::StoreRefreshToken(
+        uint64_t user_id,
+        const std::string& refresh_token,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
         const auto key = disk::redis::RedisKeyPrefix::BuildRefreshTokenKey(user_id);
 
@@ -302,7 +306,7 @@ namespace disk::services {
         }
         const auto hash = disk::utils::HashUtil::TokenHashToHex(hash_result.value());
 
-        co_return co_await m_redis_service->Set(key, hash, REFRESH_TOKEN_TTL);
+        co_return co_await m_redis_service->Set(key, hash, REFRESH_TOKEN_TTL, log_context);
     }
 
     auto TokenService::RefreshRefreshToken(
@@ -330,7 +334,8 @@ namespace disk::services {
             key,
             old_hash,
             new_hash,
-            REFRESH_TOKEN_TTL
+            REFRESH_TOKEN_TTL,
+            log_context
         );
 
         if (!cas_result) {
@@ -361,7 +366,7 @@ namespace disk::services {
         const auto jti = jti_result.value();
 
         const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
-        auto result = co_await m_redis_service->Set(key, "1", ACCESS_TOKEN_TTL);
+        auto result = co_await m_redis_service->Set(key, "1", ACCESS_TOKEN_TTL, log_context);
         if (!result) {
             co_return std::unexpected(result.error());
         }
@@ -372,12 +377,18 @@ namespace disk::services {
         co_return {};
     }
 
-    auto TokenService::RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>> {
+    auto TokenService::RevokeRefreshToken(
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<Result<void>> {
         const auto key = disk::redis::RedisKeyPrefix::BuildRefreshTokenKey(user_id);
-        co_return co_await m_redis_service->Delete(key);
+        co_return co_await m_redis_service->Delete(key, log_context);
     }
 
-    auto TokenService::IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<Result<bool>> {
+    auto TokenService::IsAccessTokenRevoked(
+        const std::string& jti,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<Result<bool>> {
         const auto now = std::chrono::steady_clock::now();
 
         {
@@ -389,7 +400,7 @@ namespace disk::services {
         }
 
         const auto key = disk::redis::RedisKeyPrefix::BuildAccessTokenBlacklistKey(jti);
-        auto revoked = co_await m_redis_service->Exists(key);
+        auto revoked = co_await m_redis_service->Exists(key, log_context);
         if (!revoked) {
             co_return std::unexpected(revoked.error());
         }
@@ -680,7 +691,7 @@ namespace disk::services {
             co_return std::unexpected(hash_result.error());
         }
 
-        auto revoked = co_await IsShareTokenRevoked(hash_result.value());
+        auto revoked = co_await IsShareTokenRevoked(hash_result.value(), log_context);
         if (!revoked) {
             co_return std::unexpected(revoked.error());
         }
@@ -692,7 +703,10 @@ namespace disk::services {
         co_return verify_result.value();
     }
 
-    auto TokenService::RevokeShareToken(const std::string& token) -> drogon::Task<Result<void>> {
+    auto TokenService::RevokeShareToken(
+        const std::string& token,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<Result<void>> {
         auto hash_result = ExtractShareTokenHash(token);
         if (!hash_result) {
             co_return std::unexpected(hash_result.error());
@@ -700,7 +714,7 @@ namespace disk::services {
 
         const auto key =
             disk::redis::RedisKeyPrefix::BuildShareTokenBlacklistKey(hash_result.value());
-        auto result = co_await m_redis_service->Set(key, "1", SHARE_TOKEN_TTL);
+        auto result = co_await m_redis_service->Set(key, "1", SHARE_TOKEN_TTL, log_context);
         if (!result) {
             co_return std::unexpected(result.error());
         }
@@ -711,7 +725,10 @@ namespace disk::services {
         co_return {};
     }
 
-    auto TokenService::IsShareTokenRevoked(const std::string& token_hash) -> drogon::Task<Result<bool>> {
+    auto TokenService::IsShareTokenRevoked(
+        const std::string& token_hash,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<Result<bool>> {
         const auto now = std::chrono::steady_clock::now();
 
         {
@@ -723,7 +740,7 @@ namespace disk::services {
         }
 
         const auto key = disk::redis::RedisKeyPrefix::BuildShareTokenBlacklistKey(token_hash);
-        auto revoked = co_await m_redis_service->Exists(key);
+        auto revoked = co_await m_redis_service->Exists(key, log_context);
         if (!revoked) {
             co_return std::unexpected(revoked.error());
         }

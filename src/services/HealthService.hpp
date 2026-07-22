@@ -18,6 +18,7 @@
 #include <json/json.h>
 
 #include "services/ProcessRuntime.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
     class IBlobStore;
@@ -55,7 +56,8 @@ namespace disk::health {
         auto ToJson() const -> Json::Value;
     };
 
-    using ComponentCheck = std::function<drogon::Task<ComponentStatus>()>;
+    using ComponentCheck =
+        std::function<drogon::Task<ComponentStatus>(disk::utils::LogContext)>;
 
     struct HealthCheckCallbacks {
         ComponentCheck database;
@@ -84,7 +86,8 @@ namespace disk::health {
         auto CheckLiveness() const -> HealthResult;
 
         [[nodiscard]]
-        auto CheckReadiness() const -> drogon::Task<HealthResult>;
+        auto CheckReadiness(disk::utils::LogContext log_context = {}) const
+            -> drogon::Task<HealthResult>;
 
     private:
         [[nodiscard]]
@@ -94,7 +97,8 @@ namespace disk::health {
         auto RunComponentCheck(
             std::string component,
             std::string failure_message,
-            const ComponentCheck& check
+            const ComponentCheck& check,
+            disk::utils::LogContext log_context
         ) const -> drogon::Task<ComponentStatus>;
 
         static auto GetTimestamp() -> std::string;

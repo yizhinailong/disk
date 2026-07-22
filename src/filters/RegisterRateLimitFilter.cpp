@@ -25,9 +25,13 @@ namespace disk::filters {
 
         auto MakeRedisCounter() -> RegisterRateLimitCounter {
             const auto redis_service = disk::services::RedisService::GetInstance();
-            return [redis_service](const std::string& key, int window_seconds)
+            return [redis_service](
+                       const std::string& key,
+                       int window_seconds,
+                       disk::utils::LogContext log_context
+                   )
                        -> drogon::Task<Result<int64_t>> {
-                co_return co_await CheckFixedWindowLimit(redis_service, key, window_seconds);
+                co_return co_await CheckFixedWindowLimit(redis_service, key, window_seconds, log_context);
             };
         }
 
@@ -64,7 +68,7 @@ namespace disk::filters {
         const auto configured_limit = config->GetRegisterRateLimitPerWindow();
         const auto limit = configured_limit > 0 ? configured_limit : DEFAULT_LIMIT;
 
-        auto incr_result = co_await m_counter(key, window_seconds);
+        auto incr_result = co_await m_counter(key, window_seconds, log_context);
         if (!incr_result) {
             Logger::Error(log_context)
                 << "Redis IncrWithExpire failed: " << incr_result.error().message;

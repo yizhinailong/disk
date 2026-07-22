@@ -90,7 +90,7 @@ namespace disk::file {
             InvalidateUploadTaskCache(upload_task_id);
         }
         if (!invalidation.file_list_folder_ids.empty()) {
-            co_await FileListCache::Invalidate(m_redis_service, user_id);
+            co_await FileListCache::Invalidate(m_redis_service, user_id, log_context);
         }
 
         InitUploadResponse response;
@@ -387,7 +387,7 @@ namespace disk::file {
             InvalidateUploadTaskCache(upload_task_id);
         }
         if (!invalidation.file_list_folder_ids.empty()) {
-            co_await FileListCache::Invalidate(m_redis_service, user_id);
+            co_await FileListCache::Invalidate(m_redis_service, user_id, log_context);
         }
 
         CompleteUploadResponse response{};

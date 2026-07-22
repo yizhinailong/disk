@@ -17,11 +17,16 @@
 #include <drogon/HttpFilter.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::filters {
 
     using ApiRateLimitCounter =
-        std::function<drogon::Task<Result<int64_t>>(const std::string&, int)>;
+        std::function<drogon::Task<Result<int64_t>>(
+            const std::string&,
+            int,
+            disk::utils::LogContext
+        )>;
 
     /**
      * @brief 回收站路由通用用户频率限制过滤器

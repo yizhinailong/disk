@@ -1676,26 +1676,34 @@ def test_auth_log_context_invariants() -> None:
         redis_delete_pattern("rate:register:*")
 
     login_request_id = f"safety-auth-login-log-{unique_name()}"
-    login_response = fetch(
-        "/api/auth/login",
-        method="POST",
-        headers={"Content-Type": "application/json", "X-Request-Id": login_request_id},
-        json_body={"account": TEST_USER, "password": TEST_PASS},
-    )
-    access_token = json_field(login_response.text, "data.access_token")
-    refresh_token = json_field(login_response.text, "data.refresh_token")
-    assert_equal("correlated login returns an access token", bool(access_token), True)
-    assert_equal("correlated login returns a refresh token", bool(refresh_token), True)
-    assert_auth_log_context(
-        response=login_response,
-        request_id=login_request_id,
-        expected_success=True,
-        message_markers=(
-            "Received login request",
-            "User login successful",
-            "Login successful",
-        ),
-    )
+    login_rate_key = "rate:login:127.0.0.1"
+    login_rate_poison = f"safety-login-rate-poison-{unique_name()}"
+    redis_delete_pattern("rate:login:*")
+    try:
+        redis_set_value(login_rate_key, login_rate_poison, 300)
+        login_response = fetch(
+            "/api/auth/login",
+            method="POST",
+            headers={"Content-Type": "application/json", "X-Request-Id": login_request_id},
+            json_body={"account": TEST_USER, "password": TEST_PASS},
+        )
+        access_token = json_field(login_response.text, "data.access_token")
+        refresh_token = json_field(login_response.text, "data.refresh_token")
+        assert_equal("correlated login returns an access token", bool(access_token), True)
+        assert_equal("correlated login returns a refresh token", bool(refresh_token), True)
+        assert_auth_log_context(
+            response=login_response,
+            request_id=login_request_id,
+            expected_success=True,
+            message_markers=(
+                "Received login request",
+                "Redis operation failed: IncrWithExpire",
+                "User login successful",
+                "Login successful",
+            ),
+        )
+    finally:
+        redis_delete_pattern("rate:login:*")
 
     refresh_request_id = f"safety-auth-refresh-log-{unique_name()}"
     refresh_response = fetch(
@@ -1746,6 +1754,8 @@ def test_auth_log_context_invariants() -> None:
         (
             register_password,
             limited_register_password,
+            login_rate_key,
+            login_rate_poison,
             TEST_PASS,
             access_token,
             refresh_token,

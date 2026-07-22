@@ -187,7 +187,11 @@ namespace disk::services {
          * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto StoreRefreshToken(uint64_t user_id, const std::string& refresh_token)
+        auto StoreRefreshToken(
+            uint64_t user_id,
+            const std::string& refresh_token,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>>;
 
         /**
@@ -224,7 +228,10 @@ namespace disk::services {
          * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto RevokeRefreshToken(uint64_t user_id) -> drogon::Task<Result<void>>;
+        auto RevokeRefreshToken(
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<void>>;
 
         /**
          * @brief 检查访问令牌是否被撤销
@@ -232,7 +239,10 @@ namespace disk::services {
          * @return Result<bool> 成功时返回是否撤销，Redis 故障返回错误
          */
         [[nodiscard]]
-        auto IsAccessTokenRevoked(const std::string& jti) -> drogon::Task<Result<bool>>;
+        auto IsAccessTokenRevoked(
+            const std::string& jti,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<bool>>;
 
         auto ClearRevocationCache() -> void;
 
@@ -347,7 +357,10 @@ namespace disk::services {
          * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto RevokeShareToken(const std::string& token) -> drogon::Task<Result<void>>;
+        auto RevokeShareToken(
+            const std::string& token,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<void>>;
 
         /**
          * @brief 检查分享令牌是否已被撤销
@@ -358,7 +371,10 @@ namespace disk::services {
          * @return Result<bool> 成功时返回是否撤销，Redis 故障返回错误
          */
         [[nodiscard]]
-        auto IsShareTokenRevoked(const std::string& token_hash) -> drogon::Task<Result<bool>>;
+        auto IsShareTokenRevoked(
+            const std::string& token_hash,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<bool>>;
 
         /**
          * @brief 测试用：直接向分享令牌撤销缓存插入条目

@@ -15,11 +15,16 @@
 #include <drogon/HttpFilter.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::filters {
 
     using ShareRateLimitCounter =
-        std::function<drogon::Task<Result<int64_t>>(const std::string&, int)>;
+        std::function<drogon::Task<Result<int64_t>>(
+            const std::string&,
+            int,
+            disk::utils::LogContext
+        )>;
 
     class ShareAccessRateLimitFilter : public drogon::HttpCoroFilter<ShareAccessRateLimitFilter> {
     public:
