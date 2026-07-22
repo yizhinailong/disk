@@ -9,6 +9,7 @@
 
 #include "dtos/UploadDiagnosticDto.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
     class UploadStagingStorage;
@@ -24,7 +25,10 @@ namespace disk::upload {
         );
 
         [[nodiscard]]
-        auto Diagnose(const disk::admin::UploadDiagnosticRequest& request) const
+        auto Diagnose(
+            const disk::admin::UploadDiagnosticRequest& request,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<disk::admin::UploadDiagnosticResponse>>;
 
     private:

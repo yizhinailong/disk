@@ -248,7 +248,8 @@ namespace disk::jobs {
         const std::string& upload_id,
         const std::string& staging_prefix,
         int page,
-        int page_size
+        int page_size,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<disk::admin::StorageJobListResponse>> {
         try {
             constexpr std::string_view relation =
@@ -299,9 +300,8 @@ namespace disk::jobs {
                 response.items.push_back(std::move(item));
             }
             co_return response;
-        } catch (const std::exception& error) {
-            Logger::Error() << "Related upload storage job list failed: upload_id=" << upload_id
-                            << ", error=" << error.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Related upload storage job list failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to list related storage jobs"

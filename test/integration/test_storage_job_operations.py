@@ -609,8 +609,13 @@ def test_upload_diagnostics(token: str) -> None:
     require(missing.status_code == 404, "unknown diagnostic upload did not return HTTP 404")
 
     before = diagnostic_database_snapshot(upload_id)
-    response = fetch(path, headers=headers)
+    diagnostic_request_id = f"ops-upload-diagnostic-{uuid.uuid4().hex}"
+    response = fetch(
+        path,
+        headers={**headers, "X-Request-Id": diagnostic_request_id},
+    )
     require(response.status_code == 200, f"upload diagnostics failed: {response.text}")
+    diagnostic_instance_id = require_response_context(response, diagnostic_request_id)
     data = response_json(response)["data"]
     task = data["task"]
     require(task["upload_id"] == upload_id, "diagnostic task ID drifted")
@@ -643,6 +648,28 @@ def test_upload_diagnostics(token: str) -> None:
     require(
         all(item["last_error"] is None for item in related["items"]),
         "related diagnostic jobs leaked underlying error text",
+    )
+    received_log = wait_for_admin_log(
+        request_id=diagnostic_request_id,
+        instance_id=diagnostic_instance_id,
+        message_marker="Received upload diagnostic request",
+        upload_id=upload_id,
+    )
+    completed_log = wait_for_admin_log(
+        request_id=diagnostic_request_id,
+        instance_id=diagnostic_instance_id,
+        message_marker="Upload diagnostic completed",
+        upload_id=upload_id,
+        lease_owner="ops-diagnostic-owner",
+        state_version=3,
+    )
+    require(
+        received_log.get("message") == "Received upload diagnostic request",
+        "upload diagnostic request log exposed domain values",
+    )
+    require(
+        completed_log.get("message") == "Upload diagnostic completed",
+        "upload diagnostic completion log exposed domain values",
     )
 
     object_path.unlink()

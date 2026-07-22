@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 操作日志查询关联）：完整构建、OperationLog 分类/服务聚焦 GoogleTest 10/10、直接 safety 集成 777/777、注册 OperationLog/safety CTest 10/10 和拓扑合同 1/1 通过；完整 CTest 共 1445 项，1438 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 473.12 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 上传诊断日志关联）：完整构建、上传诊断/存储任务聚焦 GoogleTest 6/6、直接存储任务运维集成 1/1、注册上传诊断/存储任务 CTest 8/8 和拓扑合同 1/1 通过；完整 CTest 共 1446 项，1439 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 476.94 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -771,6 +771,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定操作日
 Controller 接收与失败事件、Service 的查询与计数数据库失败事件均使用同一 request/instance/operation；诊断日志不再写 peer IP、用户 ID、页码、审计详情、SQL、连接信息、异常正文或业务错误正文，也不从查询参数或审计行推断 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。`MetricsServiceTest` 锁定精确分类边界，`OperationLogQueryContractTest` 锁定上下文传播、默认空调用方和脱敏边界；`SafetyUploadInvariantsIntegration` 以两个唯一 request ID 分别执行认证成功查询与未认证拒绝，核对响应 request/instance、Controller 或 HTTP 完成事件的固定 operation，以及四个所有权字段均为 JSON `null`。
 
 完整构建、Python 语法检查、OperationLog 分类/服务聚焦 GoogleTest 10/10、直接 safety 集成 777/777、注册 OperationLog/safety CTest 10/10、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1445 项，1438 通过、7 项环境门控跳过、0 失败，总耗时 473.12 秒。其他尚未逐条归属的日志路径及目标 MinIO/云 S3、多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.41 上传诊断日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定管理员上传诊断的显式关联合同。`UploadDiagnosticController` 现在在 DTO 解析前从请求属性建立固定 `operation=admin` 的 `LogContext`，原始路径或分页校验失败时不写类型化 upload ID；只有 DTO 返回规范非空 ID 后，Controller 才填入 `upload_id`、记录固定接收事件并按值调用 `UploadDiagnosticService`。
+
+诊断服务仅在调用方 upload ID 与 PostgreSQL 返回任务行精确一致时，补入该行真实 `state_version` 和可选 `lease_owner`；同一上下文逐个传入 staging `HeadChunkObject` 与 `StorageJobAdminService::ListRelatedToUpload`。关联任务可能为零或多行，整条诊断链保持 `job_id=null`；helper 和默认空调用不从 upload/prefix、对象描述符、任务行、返回任务或消息推断字段。Controller 接收、Service 完成及两个异常事件均使用固定消息，不记录路径/分页、用户/文件元数据、hash、对象 key/prefix、ETag、任务 payload/error、SQL、连接信息、异常正文、Authorization/JWT 或存储凭据；数据库查询、对象 HEAD、分页、响应和只读语义不变。
+
+新增上传诊断源码合同并扩展真实存储任务运维集成：唯一 request ID 的 Controller 事件携带 validated upload 且 state/lease 为空，Service 完成事件再携带数据库真实 `state_version=3` 与 lease owner，两者 request/实际 instance/admin/upload 一致、job ID 为空且 message 精确等于固定文本。完整构建、Python 语法检查、聚焦 GoogleTest 6/6、直接存储任务运维集成 1/1、注册上传诊断/存储任务 CTest 8/8、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1446 项，1439 通过、7 项环境门控跳过、0 失败，总耗时 476.94 秒。真实 S3/MinIO HEAD 和多实例环境门控仍未执行，其他共享数据库 helper 也尚未全部关联，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

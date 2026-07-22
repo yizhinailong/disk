@@ -149,7 +149,8 @@ namespace disk::upload {
     }
 
     auto UploadDiagnosticService::Diagnose(
-        const disk::admin::UploadDiagnosticRequest& request
+        const disk::admin::UploadDiagnosticRequest& request,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<disk::admin::UploadDiagnosticResponse>> {
         try {
             auto task_rows = co_await m_db_client->execSqlCoro(
@@ -165,6 +166,15 @@ namespace disk::upload {
 
             disk::admin::UploadDiagnosticResponse response;
             response.task = ParseTask(task_rows[0]);
+            if (log_context.upload_id.has_value() &&
+                log_context.upload_id == response.task.upload_id) {
+                log_context.state_version = response.task.state_version;
+                if (response.task.lease.has_value()) {
+                    log_context.lease_owner = response.task.lease->owner;
+                } else {
+                    log_context.lease_owner.reset();
+                }
+            }
             response.chunk_page = request.chunk_page;
             response.chunk_page_size = request.chunk_page_size;
 
@@ -198,7 +208,8 @@ namespace disk::upload {
                 auto chunk = ParseChunk(row);
                 auto head = co_await m_staging_storage->HeadChunkObject(
                     staging_session,
-                    ToStorageChunk(chunk)
+                    ToStorageChunk(chunk),
+                    log_context
                 );
                 chunk.object_head = BuildObjectHead(head, chunk, response.task.staging_backend);
                 response.chunks.push_back(std::move(chunk));
@@ -213,16 +224,17 @@ namespace disk::upload {
                 request.upload_id,
                 multipart_staging_prefix,
                 request.job_page,
-                request.job_page_size
+                request.job_page_size,
+                log_context
             );
             if (!related_jobs) {
                 co_return std::unexpected(related_jobs.error());
             }
             response.related_jobs = std::move(related_jobs.value());
+            Logger::Info(log_context) << "Upload diagnostic completed";
             co_return response;
-        } catch (const std::exception& error) {
-            Logger::Error() << "Upload diagnostic failed: upload_id=" << request.upload_id
-                            << ", error=" << error.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Upload diagnostic failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to diagnose upload task"

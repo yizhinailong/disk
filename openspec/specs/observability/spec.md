@@ -337,8 +337,27 @@ The system SHALL propagate storage-job administration request correlation explic
 - **THEN** the replay event SHALL retain the request context and parsed persistent job ID, and the JSON audit details SHALL persist the same non-empty request ID and `admin` operation in the replay transaction without recording credentials or storage payload contents
 
 #### Scenario: Upload diagnostics list related jobs
-- **WHEN** upload diagnostics internally call `ListRelatedToUpload` without entering a storage-job administration route
-- **THEN** that helper SHALL remain outside this request-bound propagation requirement and SHALL NOT infer a storage-job request ID or job ID from the upload ID, staging prefix, related rows, or error message
+- **WHEN** upload diagnostics pass their caller-owned context to `ListRelatedToUpload` without entering a storage-job administration route
+- **THEN** that helper SHALL preserve the supplied request, instance, `admin`, upload, state-version, and lease-owner fields while job ID remains null, and SHALL NOT infer or overwrite correlation from the upload ID, staging prefix, related rows, or error message
+
+### Requirement: Typed Upload Diagnostic Correlation
+The system SHALL propagate administrator upload-diagnostic correlation explicitly by value across `UploadDiagnosticController`, `UploadDiagnosticService`, staging-object HEAD calls, and the related-storage-job query without changing authentication, validation, database reads, object inspection, pagination, response data, or the read-only contract. These routes SHALL retain the existing bounded `admin` operation classification.
+
+#### Scenario: Administrator validates an upload diagnostic request
+- **WHEN** an authenticated administrator calls `/api/admin/uploads/{upload_id}/diagnostics`
+- **THEN** the controller SHALL create `admin` context before DTO parsing, SHALL keep upload ID null for rejected raw path values, and SHALL add only the DTO-validated non-empty upload ID before emitting or delegating request-owned events
+
+#### Scenario: Upload diagnostics load authoritative task ownership
+- **WHEN** the diagnostic service loads the PostgreSQL upload-task row for the same caller-owned upload ID
+- **THEN** it SHALL add only that row's state version and optional lease owner, SHALL preserve request ID, actual instance, `admin`, and upload ID through every staging HEAD and related-job query, and SHALL keep job ID null because the response can contain zero or multiple jobs
+
+#### Scenario: A diagnostic caller omits correlation
+- **WHEN** a unit, utility, or compatibility caller invokes the diagnostic service or related-job helper without `LogContext`
+- **THEN** request and ownership fields SHALL remain JSON null, and neither service SHALL infer them from request values, task rows, staging prefixes, object descriptors, related jobs, thread-local state, or messages
+
+#### Scenario: Upload diagnostic messages remain bounded and secret-free
+- **WHEN** diagnostics succeed or observe validation, PostgreSQL, parsing, staging, or related-job failures
+- **THEN** application messages SHALL use fixed event names and SHALL NOT contain raw path or pagination values, user or file metadata, hashes, object keys or prefixes, ETags, job payload or errors, SQL, connection details, exception text, Authorization values, JWTs, or storage credentials
 
 ### Requirement: Typed Storage Recovery Administration Correlation
 The system SHALL propagate storage-recovery administration request correlation explicitly by value across `StorageRecoveryAdminController`, storage-recovery service coroutines, and each transactional audit boundary. These routes SHALL retain the existing bounded `admin` operation classification.

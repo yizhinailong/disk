@@ -45,7 +45,8 @@ namespace disk::jobs {
             const std::string& upload_id,
             const std::string& staging_prefix,
             int page,
-            int page_size
+            int page_size,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<disk::admin::StorageJobListResponse>>;
 
         [[nodiscard]]
