@@ -78,6 +78,14 @@ namespace disk::metrics {
             EXPECT_EQ(ClassifyHttpOperation("/api/system"), HttpOperation::Other);
             EXPECT_EQ(ClassifyHttpOperation("/api/system/info/extra"), HttpOperation::Other);
             EXPECT_EQ(ClassifyHttpOperation("/api/system/unknown"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/user/profile"), HttpOperation::User);
+            EXPECT_EQ(ClassifyHttpOperation("/api/user/password"), HttpOperation::User);
+            EXPECT_EQ(ClassifyHttpOperation("/api/user/storage"), HttpOperation::User);
+            EXPECT_EQ(HttpOperationName(HttpOperation::User), "user");
+            EXPECT_EQ(ClassifyHttpOperation("/api/user"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/user/profile/extra"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/user/unknown"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/users/profile"), HttpOperation::Other);
             EXPECT_EQ(ClassifyHttpOperation("/api/share/secret-id"), HttpOperation::Share);
             EXPECT_EQ(
                 ClassifyHttpOperation("/api/admin/maintenance/cleanup/expired"),

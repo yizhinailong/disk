@@ -793,6 +793,45 @@ def assert_trash_log_context(
     log_pass("trash logs keep typed request correlation and null ownership fields")
 
 
+def assert_user_log_context(
+    *,
+    response,
+    request_id: str,
+    expected_success: bool,
+    message_markers: tuple[str, ...],
+) -> None:
+    """Assert one user request keeps its bounded typed correlation."""
+    if expected_success:
+        assert_equal(
+            "user request preserves its documented success envelope",
+            response.status_code == 200 and json_field(response.text, "code") == "0",
+            True,
+        )
+    else:
+        assert_equal(
+            "user request returns a documented failure",
+            response.status_code >= 400 and json_field(response.text, "code") != "0",
+            True,
+        )
+    assert_equal(
+        "user request preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal("user request identifies the handling instance", bool(instance_id), True)
+
+    for marker in message_markers:
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="user",
+            upload_id=None,
+            message_marker=marker,
+        )
+    log_pass("user logs keep typed request correlation and null ownership fields")
+
+
 def test_file_query_log_context_invariants() -> None:
     """Verify file list, numeric detail, and search use one bounded query operation."""
     log_section("File Query Structured Log Correlation")
@@ -1141,6 +1180,81 @@ def test_system_info_log_context_invariants() -> None:
         message_marker="HTTP request completed",
     )
     log_pass("system info HTTP failure completion keeps typed request correlation")
+
+
+def test_user_log_context_invariants() -> None:
+    """Verify exact user profile paths share one bounded non-ownership operation."""
+    log_section("User Structured Log Correlation")
+
+    profile_request_id = f"safety-user-profile-log-{unique_name()}"
+    profile_response = fetch(
+        "/api/user/profile",
+        headers={**auth_headers(TOKEN), "X-Request-Id": profile_request_id},
+    )
+    assert_user_log_context(
+        response=profile_response,
+        request_id=profile_request_id,
+        expected_success=True,
+        message_markers=(
+            "Received user info request",
+            "Get user profile request",
+            "Get user profile successful",
+            "User info retrieved successfully",
+        ),
+    )
+
+    update_request_id = f"safety-user-update-log-{unique_name()}"
+    update_response = fetch(
+        "/api/user/profile",
+        method="PATCH",
+        headers={**auth_headers(TOKEN), "X-Request-Id": update_request_id},
+        json_body={},
+    )
+    assert_user_log_context(
+        response=update_response,
+        request_id=update_request_id,
+        expected_success=False,
+        message_markers=(
+            "Received profile update request",
+            "At least one field must be provided",
+            "Profile update request validation failed",
+            "HTTP request completed",
+        ),
+    )
+
+    password_request_id = f"safety-user-password-log-{unique_name()}"
+    password_response = fetch(
+        "/api/user/password",
+        method="PUT",
+        headers={**auth_headers(TOKEN), "X-Request-Id": password_request_id},
+        json_body={"old_password": "UnusedOld123", "new_password": "short"},
+    )
+    assert_user_log_context(
+        response=password_response,
+        request_id=password_request_id,
+        expected_success=False,
+        message_markers=(
+            "Received change password request",
+            "New password format error",
+            "Change password request validation failed",
+            "HTTP request completed",
+        ),
+    )
+
+    storage_request_id = f"safety-user-storage-log-{unique_name()}"
+    storage_response = fetch(
+        "/api/user/storage",
+        headers={**auth_headers(TOKEN), "X-Request-Id": storage_request_id},
+    )
+    assert_user_log_context(
+        response=storage_response,
+        request_id=storage_request_id,
+        expected_success=True,
+        message_markers=(
+            "Received storage stats request",
+            "Get storage stats successful",
+        ),
+    )
 
 
 def run_expired_cleanup(
@@ -4480,6 +4594,7 @@ def main() -> None:
     test_folder_log_context_invariants()
     test_trash_log_context_invariants()
     test_system_info_log_context_invariants()
+    test_user_log_context_invariants()
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()

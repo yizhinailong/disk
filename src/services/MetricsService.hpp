@@ -34,6 +34,7 @@ namespace disk::metrics {
         FolderMutation,
         Trash,
         SystemInfo,
+        User,
         UploadInit,
         UploadChunk,
         UploadComplete,

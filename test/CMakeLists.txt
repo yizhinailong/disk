@@ -52,6 +52,7 @@ set(TEST_SOURCES
     services/TrashQuery_test.cpp
     services/TrashServiceBatch_test.cpp
     services/UserService_test.cpp
+    services/UserLogContext_test.cpp
     services/CleanupService_test.cpp
     services/SystemService_test.cpp
     services/SystemLogContext_test.cpp

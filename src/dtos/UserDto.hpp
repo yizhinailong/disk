@@ -48,42 +48,51 @@ namespace disk::user {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req)
-            -> Result<ChangePasswordRequest> {
-            Logger::Debug() << "Start parsing change password request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<ChangePasswordRequest> {
+            Logger::Debug(log_context) << "Start parsing change password request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto old_pwd = RequireString(json, "old_password");
-            if (!old_pwd) return std::unexpected(old_pwd.error());
+            if (!old_pwd) {
+                return std::unexpected(old_pwd.error());
+            }
 
             auto new_pwd = RequireString(json, "new_password");
-            if (!new_pwd) return std::unexpected(new_pwd.error());
+            if (!new_pwd) {
+                return std::unexpected(new_pwd.error());
+            }
 
             ChangePasswordRequest request;
             request.old_password = std::move(*old_pwd);
             request.new_password = std::move(*new_pwd);
 
-            Logger::Debug() << "Parsed change password request";
+            Logger::Debug(log_context) << "Parsed change password request";
 
             if (!request.ValidateNewPassword()) {
-                Logger::Warn() << "New password format error";
+                Logger::Warn(log_context) << "New password format error";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "New password format error")
                 );
             }
 
             if (request.old_password == request.new_password) {
-                Logger::Warn() << "New password cannot be the same as old password";
+                Logger::Warn(log_context)
+                    << "New password cannot be the same as old password";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "New password cannot be the same as old password"
                 ));
             }
 
-            Logger::Debug() << "Request parameters validated";
+            Logger::Debug(log_context) << "Request parameters validated";
 
             return request;
         }
@@ -118,11 +127,16 @@ namespace disk::user {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<UpdateProfileRequest> {
-            Logger::Debug() << "Start parsing update profile request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<UpdateProfileRequest> {
+            Logger::Debug(log_context) << "Start parsing update profile request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             UpdateProfileRequest request;
@@ -130,14 +144,16 @@ namespace disk::user {
             /// 解析 nickname（可选，显式 null 无效）
             if (json.isMember("nickname")) {
                 if (json["nickname"].isNull()) {
-                    Logger::Warn() << "Parameter 'nickname' cannot be null";
+                    Logger::Warn(log_context) << "Parameter 'nickname' cannot be null";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'nickname' cannot be null"
                     ));
                 }
                 auto nickname_result = RequireString(json, "nickname");
-                if (!nickname_result) return std::unexpected(nickname_result.error());
+                if (!nickname_result) {
+                    return std::unexpected(nickname_result.error());
+                }
                 auto trimmed = TrimWhitespace(*nickname_result);
                 if (!trimmed.empty()) {
                     request.nickname = std::move(trimmed);
@@ -147,13 +163,15 @@ namespace disk::user {
             /// 解析 avatar（可选，显式 null 无效）
             if (json.isMember("avatar")) {
                 if (json["avatar"].isNull()) {
-                    Logger::Warn() << "Parameter 'avatar' cannot be null";
+                    Logger::Warn(log_context) << "Parameter 'avatar' cannot be null";
                     return std::unexpected(
                         ErrorInfo(ErrorCode::ValidationFailed, "Parameter 'avatar' cannot be null")
                     );
                 }
                 auto avatar_result = RequireString(json, "avatar");
-                if (!avatar_result) return std::unexpected(avatar_result.error());
+                if (!avatar_result) {
+                    return std::unexpected(avatar_result.error());
+                }
                 auto trimmed = TrimWhitespace(*avatar_result);
                 if (!trimmed.empty()) {
                     request.avatar = std::move(trimmed);
@@ -162,7 +180,7 @@ namespace disk::user {
 
             /// 验证字段长度
             if (request.nickname.has_value() && !request.ValidateNickname()) {
-                Logger::Warn() << "Nickname format error";
+                Logger::Warn(log_context) << "Nickname format error";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Nickname length must be between 1-64 characters"
@@ -170,7 +188,7 @@ namespace disk::user {
             }
 
             if (request.avatar.has_value() && !request.ValidateAvatar()) {
-                Logger::Warn() << "Avatar format error";
+                Logger::Warn(log_context) << "Avatar format error";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Avatar URL length must be between 1-512 characters"
@@ -179,14 +197,14 @@ namespace disk::user {
 
             /// 至少提供一个字段
             if (!request.nickname.has_value() && !request.avatar.has_value()) {
-                Logger::Warn() << "At least one field must be provided";
+                Logger::Warn(log_context) << "At least one field must be provided";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "At least one field must be provided (nickname or avatar)"
                 ));
             }
 
-            Logger::Debug() << "Request parameters validated";
+            Logger::Debug(log_context) << "Request parameters validated";
 
             return request;
         }
@@ -273,10 +291,10 @@ namespace disk::user {
      * 使用百分比、文件/文件夹数量。
      */
     struct StorageResponse : DtoBase<StorageResponse> {
-        uint64_t used;       ///< 已使用空间（字节）
-        uint64_t quota;      ///< 总配额（字节）
-        double percentage;   ///< 使用百分比（1位小数）
-        uint32_t file_count; ///< 文件数量
+        uint64_t used;         ///< 已使用空间（字节）
+        uint64_t quota;        ///< 总配额（字节）
+        double percentage;     ///< 使用百分比（1位小数）
+        uint32_t file_count;   ///< 文件数量
         uint32_t folder_count; ///< 文件夹数量
 
         /// 转换为 JSON
@@ -292,4 +310,4 @@ namespace disk::user {
         }
     };
 
-} ///< namespace disk::user
+} // namespace disk::user

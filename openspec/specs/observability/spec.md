@@ -43,6 +43,25 @@ The system SHALL classify only the exact authenticated system-information path a
 - **WHEN** a system path is not exactly `/api/system/info`, including an extra suffix
 - **THEN** the system-information classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
 
+### Requirement: Typed User Profile Correlation
+The system SHALL classify only the exact authenticated user-profile, password, and storage paths as the bounded `user` operation and SHALL propagate their correlation explicitly by value across the controller, direct user-DTO events, and user-service coroutine boundaries.
+
+#### Scenario: User reads or changes account details
+- **WHEN** an authenticated request reads or updates `/api/user/profile`, changes `/api/user/password`, or reads `/api/user/storage`
+- **THEN** its response, HTTP completion event at the configured level, controller events, direct user-DTO events, and user-service events SHALL retain the same request ID, actual handling instance, and `user` operation
+
+#### Scenario: Profile methods share one path classification
+- **WHEN** either GET or PATCH uses the exact `/api/user/profile` path
+- **THEN** both methods SHALL use the same `user` operation because the HTTP metrics classifier receives only the normalized path
+
+#### Scenario: User profile requests have no upload or durable-job ownership
+- **WHEN** a user request records account, profile, password-change, quota, or aggregate storage values
+- **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those user-domain values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: User classification remains bounded
+- **WHEN** a user path is not exactly `/api/user/profile`, `/api/user/password`, or `/api/user/storage`, including an extra suffix
+- **THEN** the user classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
+
 ### Requirement: Operation Logs
 The system SHALL record and expose user-visible operation logs for key actions.
 

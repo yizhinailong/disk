@@ -234,6 +234,10 @@ namespace disk::metrics {
         if (path == "/api/system/info") {
             return HttpOperation::SystemInfo;
         }
+        if (path == "/api/user/profile" || path == "/api/user/password" ||
+            path == "/api/user/storage") {
+            return HttpOperation::User;
+        }
         if (path == "/api/share" || path.starts_with("/api/share/")) {
             return HttpOperation::Share;
         }
@@ -257,6 +261,7 @@ namespace disk::metrics {
             "folder_mutation",
             "trash",
             "system_info",
+            "user",
             "upload_init",
             "upload_chunk",
             "upload_complete",

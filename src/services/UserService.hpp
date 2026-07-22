@@ -24,6 +24,7 @@
 #include "models/Folders.hpp"
 #include "models/Users.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::user {
 
@@ -71,7 +72,10 @@ namespace disk::user {
          * @return drogon::Task<Result<UserProfileResponse>> 成功返回用户信息，失败返回错误
          */
         [[nodiscard]]
-        auto GetProfile(uint64_t user_id) -> drogon::Task<Result<UserProfileResponse>>;
+        auto GetProfile(
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<UserProfileResponse>>;
 
         /**
          * @brief 修改用户密码
@@ -94,7 +98,11 @@ namespace disk::user {
          * @return drogon::Task<Result<void>> 成功返回空，失败返回错误
          */
         [[nodiscard]]
-        auto ChangePassword(uint64_t user_id, ChangePasswordRequest request)
+        auto ChangePassword(
+            uint64_t user_id,
+            ChangePasswordRequest request,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>>;
 
         /**
@@ -112,7 +120,11 @@ namespace disk::user {
          * @return drogon::Task<Result<UserProfileResponse>> 成功返回更新后的用户信息，失败返回错误
          */
         [[nodiscard]]
-        auto UpdateProfile(uint64_t user_id, UpdateProfileRequest request)
+        auto UpdateProfile(
+            uint64_t user_id,
+            UpdateProfileRequest request,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<UserProfileResponse>>;
 
         /**
@@ -131,10 +143,13 @@ namespace disk::user {
          * @return drogon::Task<Result<StorageResponse>> 成功返回存储统计，失败返回错误
          */
         [[nodiscard]]
-        auto GetStorage(uint64_t user_id) -> drogon::Task<Result<StorageResponse>>;
+        auto GetStorage(
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<StorageResponse>>;
 
     private:
         drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
     };
 
-} ///< namespace disk::user
+} // namespace disk::user
