@@ -51,22 +51,32 @@ namespace disk::file {
 
     /// ==================== Rename ====================
 
-    auto FileMutationService::Rename(uint64_t file_id, std::string new_name, uint64_t user_id)
+    auto FileMutationService::Rename(
+        uint64_t file_id,
+        std::string new_name,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<RenameResponse>> {
 
-        Logger::Debug() << "Starting rename file: file_id=" << file_id << ", new_name=\"" << new_name
-                        << "\""
-                        << ", user_id=" << user_id;
+        Logger::Debug(log_context)
+            << "Starting rename file: file_id=" << file_id << ", new_name=\"" << new_name
+            << "\""
+            << ", user_id=" << user_id;
 
         try {
             auto file = co_await m_file_repository.FindOwnedFile(m_db_client, file_id, user_id);
             if (!file) {
+                Logger::Warn(log_context)
+                    << "Rename target file not found or no permission: file_id=" << file_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
             }
 
             auto folder_id = file->getValueOfFolderId();
-            if (file->getValueOfName() != new_name && co_await IsFilenameExists(folder_id, new_name, user_id)) {
-                Logger::Warn() << "Target folder already has file with same name: " << new_name;
+            if (file->getValueOfName() != new_name &&
+                co_await IsFilenameExists(folder_id, new_name, user_id, log_context)) {
+                Logger::Warn(log_context)
+                    << "Target folder already has file with same name: " << new_name;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
 
@@ -90,8 +100,9 @@ namespace disk::file {
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
             }
 
-            Logger::Info() << "File rename successful: file_id=" << file_id << ", new_name=\"" << new_name
-                           << "\"";
+            Logger::Info(log_context)
+                << "File rename successful: file_id=" << file_id << ", new_name=\"" << new_name
+                << "\"";
 
             RenameResponse response;
             response.id = file->getValueOfId();
@@ -102,23 +113,32 @@ namespace disk::file {
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "File not found or no permission: file_id=" << file_id;
+            Logger::Warn(log_context)
+                << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
 
     /// ==================== Move ====================
 
-    auto FileMutationService::Move(MoveRequest request, uint64_t user_id)
+    auto FileMutationService::Move(
+        MoveRequest request,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<MoveResponse>> {
 
-        Logger::Debug() << "Starting move drive items: file_ids.size()=" << request.file_ids.size()
-                        << ", folder_ids.size()=" << request.folder_ids.size()
-                        << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
+        Logger::Debug(log_context)
+            << "Starting move drive items: file_ids.size()=" << request.file_ids.size()
+            << ", folder_ids.size()=" << request.folder_ids.size()
+            << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
         auto target_location_result =
             co_await m_folder_repository.ResolveOwnedFolderLocation(m_db_client, request.target_folder_id, user_id);
         if (!target_location_result) {
+            Logger::Warn(log_context)
+                << "Move target folder not found or no permission: folder_id="
+                << request.target_folder_id;
             co_return std::unexpected(target_location_result.error());
         }
         const auto target_location = *target_location_result;
@@ -179,8 +199,9 @@ namespace disk::file {
                         for (const auto file_id : chunk) {
                             auto it = files.find(file_id);
                             if (it == files.end()) {
-                                Logger::Warn() << "File not found or no permission, skipping move: file_id="
-                                               << file_id;
+                                Logger::Warn(log_context)
+                                    << "File not found or no permission, skipping move: file_id="
+                                    << file_id;
                                 continue;
                             }
 
@@ -192,8 +213,9 @@ namespace disk::file {
                             }
 
                             if (occupied_names.contains(name)) {
-                                Logger::Warn() << "Target folder already has file with same name, skipping: "
-                                               << name;
+                                Logger::Warn(log_context)
+                                    << "Target folder already has file with same name, skipping: "
+                                    << name;
                                 continue;
                             }
                             occupied_names.insert(name);
@@ -261,8 +283,9 @@ namespace disk::file {
                 for (const auto folder_id : top_level_folder_ids) {
                     auto plan_it = folder_plans.find(folder_id);
                     if (plan_it == folder_plans.end()) {
-                        Logger::Warn() << "Folder not found or no permission, skipping move: folder_id="
-                                       << folder_id;
+                        Logger::Warn(log_context)
+                            << "Folder not found or no permission, skipping move: folder_id="
+                            << folder_id;
                         continue;
                     }
 
@@ -291,8 +314,9 @@ namespace disk::file {
                     }
 
                     if (occupied_folder_names.contains(folder_name)) {
-                        Logger::Warn() << "Target folder already has folder with same name, skipping: "
-                                       << folder_name;
+                        Logger::Warn(log_context)
+                            << "Target folder already has folder with same name, skipping: "
+                            << folder_name;
                         continue;
                     }
                     occupied_folder_names.insert(folder_name);
@@ -376,8 +400,9 @@ namespace disk::file {
             co_return std::unexpected(transaction_result.error());
         }
 
-        Logger::Info() << "Move completed: moved_file_count=" << moved_file_count
-                       << ", moved_folder_count=" << moved_folder_count;
+        Logger::Info(log_context)
+            << "Move completed: moved_file_count=" << moved_file_count
+            << ", moved_folder_count=" << moved_folder_count;
 
         if (moved_file_count > 0 || moved_folder_count > 0) {
             co_await FileListCache::Invalidate(m_redis_service, user_id);
@@ -392,12 +417,17 @@ namespace disk::file {
 
     /// ==================== Copy ====================
 
-    auto FileMutationService::Copy(CopyRequest request, uint64_t user_id)
+    auto FileMutationService::Copy(
+        CopyRequest request,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<CopyResponse>> {
 
-        Logger::Debug() << "Starting copy items: file_ids.size()=" << request.file_ids.size()
-                        << ", folder_ids.size()=" << request.folder_ids.size()
-                        << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
+        Logger::Debug(log_context)
+            << "Starting copy items: file_ids.size()=" << request.file_ids.size()
+            << ", folder_ids.size()=" << request.folder_ids.size()
+            << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
         auto normalize_ids = [](std::vector<uint64_t> ids) {
             std::sort(ids.begin(), ids.end());
@@ -414,8 +444,9 @@ namespace disk::file {
             user_id
         );
         if (!target_location_result) {
-            Logger::Warn() << "Target folder not found or no permission: folder_id="
-                           << request.target_folder_id;
+            Logger::Warn(log_context)
+                << "Target folder not found or no permission: folder_id="
+                << request.target_folder_id;
             co_return std::unexpected(target_location_result.error());
         }
 
@@ -429,7 +460,8 @@ namespace disk::file {
         explicit_file_ids.reserve(requested_file_ids.size());
         for (const auto file_id : requested_file_ids) {
             if (covered_file_ids.contains(file_id)) {
-                Logger::Debug() << "Skipping explicit file copy covered by folder copy: file_id=" << file_id;
+                Logger::Debug(log_context)
+                    << "Skipping explicit file copy covered by folder copy: file_id=" << file_id;
                 continue;
             }
             explicit_file_ids.push_back(file_id);
@@ -458,14 +490,16 @@ namespace disk::file {
                     file_map[file.getValueOfId()] = std::move(file);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Warn() << "File batch fetch failed in copy, skipping chunk: " << e.base().what();
+                Logger::Warn(log_context)
+                    << "File batch fetch failed in copy, skipping chunk: " << e.base().what();
                 continue;
             }
 
             for (const auto file_id : chunk) {
                 auto it = file_map.find(file_id);
                 if (it == file_map.end()) {
-                    Logger::Warn() << "File not found or no permission, skipping: file_id=" << file_id;
+                    Logger::Warn(log_context)
+                        << "File not found or no permission, skipping: file_id=" << file_id;
                     continue;
                 }
                 total_copy_size += it->second.getValueOfSize();
@@ -496,8 +530,9 @@ namespace disk::file {
                 }
             );
             if (!quota_result) {
-                Logger::Warn() << "Storage quota reservation failed for copy: user_id=" << user_id
-                               << ", total_copy_size=" << total_copy_size;
+                Logger::Warn(log_context)
+                    << "Storage quota reservation failed for copy: user_id=" << user_id
+                    << ", total_copy_size=" << total_copy_size;
                 co_return std::unexpected(quota_result.error());
             }
         }
@@ -533,10 +568,11 @@ namespace disk::file {
                 }
             );
             if (!release_result) {
-                Logger::Error() << "Failed to release copy reservation: user_id=" << user_id
-                                << ", bytes=" << bytes << ", reason=" << reason
-                                << ", error=" << release_result.error().message
-                                << ", orphaned reservation remains visible via quota reconciliation";
+                Logger::Error(log_context)
+                    << "Failed to release copy reservation: user_id=" << user_id
+                    << ", bytes=" << bytes << ", reason=" << reason
+                    << ", error=" << release_result.error().message
+                    << ", orphaned reservation remains visible via quota reconciliation";
                 co_return std::unexpected(release_result.error());
             }
             co_return {};
@@ -567,8 +603,9 @@ namespace disk::file {
                     candidate_names
                 );
             } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Warn() << "Filename conflict query failed in copy, skipping chunk: "
-                               << e.base().what();
+                Logger::Warn(log_context)
+                    << "Filename conflict query failed in copy, skipping chunk: "
+                    << e.base().what();
                 file_conflict_query_failed = true;
             }
             if (file_conflict_query_failed) {
@@ -595,8 +632,9 @@ namespace disk::file {
 
             for (const auto& [old_id, file] : chunk) {
                 if (occupied_names.contains(file.getValueOfName())) {
-                    Logger::Warn() << "Target folder already has file with same name, skipping: "
-                                   << file.getValueOfName();
+                    Logger::Warn(log_context)
+                        << "Target folder already has file with same name, skipping: "
+                        << file.getValueOfName();
                     skipped_before_tx_size += file.getValueOfSize();
                     continue;
                 }
@@ -620,8 +658,9 @@ namespace disk::file {
                 try {
                     existing_content_ids = co_await content_service.FindExistingIds(m_db_client, content_ids);
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    Logger::Warn() << "File content batch query failed in copy, skipping chunk: "
-                                   << e.base().what();
+                    Logger::Warn(log_context)
+                        << "File content batch query failed in copy, skipping chunk: "
+                        << e.base().what();
                     content_query_failed = true;
                 }
                 if (content_query_failed) {
@@ -642,7 +681,8 @@ namespace disk::file {
             for (const auto& pending : pending_items) {
                 auto content_id_ptr = pending.file.getContentId();
                 if (content_id_ptr && !existing_content_ids.contains(*content_id_ptr)) {
-                    Logger::Warn() << "File content not found during copy: content_id=" << *content_id_ptr;
+                    Logger::Warn(log_context)
+                        << "File content not found during copy: content_id=" << *content_id_ptr;
                     skipped_before_tx_size += pending.file.getValueOfSize();
                     continue;
                 }
@@ -691,8 +731,9 @@ namespace disk::file {
                         (void)old_id;
                         auto cid = file_ptr->getContentId();
                         if (cid && !incremented_ids.contains(*cid)) {
-                            Logger::Warn() << "Content ref_count increment missing in copy transaction: content_id="
-                                           << *cid;
+                            Logger::Warn(log_context)
+                                << "Content ref_count increment missing in copy transaction: content_id="
+                                << *cid;
                             co_return std::unexpected(ErrorInfo(
                                 ErrorCode::InternalError,
                                 "Failed to update file content reference counts"
@@ -704,7 +745,8 @@ namespace disk::file {
                         transaction,
                         user_id,
                         request.target_folder_id,
-                        valid_items
+                        valid_items,
+                        log_context
                     );
                     if (!id_mappings_result) {
                         co_return std::unexpected(id_mappings_result.error());
@@ -729,7 +771,8 @@ namespace disk::file {
             );
 
             if (!tx_result) {
-                Logger::Error() << "Copy file batch transaction failed: " << tx_result.error().message;
+                Logger::Error(log_context)
+                    << "Copy file batch transaction failed: " << tx_result.error().message;
                 auto release_result = co_await release_copy_reservation(
                     chunk_reserved_size,
                     "file batch transaction failed"
@@ -776,7 +819,7 @@ namespace disk::file {
                 root_folder_names
             );
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Folder conflict query failed in copy: " << e.base().what();
+            Logger::Warn(log_context) << "Folder conflict query failed in copy: " << e.base().what();
             folder_conflict_query_failed = true;
         }
 
@@ -811,8 +854,8 @@ namespace disk::file {
                     }
                 );
                 if (target_inside_source) {
-                    Logger::Warn() << "Cannot copy folder into itself or descendant, skipping: folder_id="
-                                   << folder_id;
+                    Logger::Warn(log_context) << "Cannot copy folder into itself or descendant, skipping: folder_id="
+                                              << folder_id;
                     auto release_result = co_await release_copy_reservation(
                         plan.item_size,
                         "target folder inside source folder"
@@ -826,7 +869,7 @@ namespace disk::file {
 
                 auto root_name = plan.root.getValueOfName();
                 if (occupied_root_folder_names.contains(root_name)) {
-                    Logger::Warn() << "Target folder already has folder with same name, skipping: " << root_name;
+                    Logger::Warn(log_context) << "Target folder already has folder with same name, skipping: " << root_name;
                     auto release_result = co_await release_copy_reservation(
                         plan.item_size,
                         "folder name conflict"
@@ -858,8 +901,8 @@ namespace disk::file {
                     try {
                         existing_content_ids = co_await content_service.FindExistingIds(m_db_client, content_ids);
                     } catch (const drogon::orm::DrogonDbException& e) {
-                        Logger::Warn() << "Folder copy content query failed, skipping folder_id=" << folder_id
-                                       << ": " << e.base().what();
+                        Logger::Warn(log_context) << "Folder copy content query failed, skipping folder_id=" << folder_id
+                                                  << ": " << e.base().what();
                         content_query_failed = true;
                     }
                     if (content_query_failed) {
@@ -879,8 +922,8 @@ namespace disk::file {
                 for (const auto& file : plan.files) {
                     auto content_id_ptr = file.getContentId();
                     if (content_id_ptr && !existing_content_ids.contains(*content_id_ptr)) {
-                        Logger::Warn() << "File content not found during folder copy: content_id="
-                                       << *content_id_ptr << ", folder_id=" << folder_id;
+                        Logger::Warn(log_context) << "File content not found during folder copy: content_id="
+                                                  << *content_id_ptr << ", folder_id=" << folder_id;
                         missing_content = true;
                         break;
                     }
@@ -918,8 +961,8 @@ namespace disk::file {
                         for (const auto& file : plan.files) {
                             auto content_id_ptr = file.getContentId();
                             if (content_id_ptr && !incremented_ids.contains(*content_id_ptr)) {
-                                Logger::Warn() << "Content ref_count increment missing in folder copy transaction: content_id="
-                                               << *content_id_ptr;
+                                Logger::Warn(log_context) << "Content ref_count increment missing in folder copy transaction: content_id="
+                                                          << *content_id_ptr;
                                 co_return std::unexpected(ErrorInfo(
                                     ErrorCode::InternalError,
                                     "Failed to update file content reference counts"
@@ -1038,8 +1081,8 @@ namespace disk::file {
                 );
 
                 if (!tx_result) {
-                    Logger::Error() << "Folder copy transaction failed: folder_id=" << folder_id
-                                    << ", error=" << tx_result.error().message;
+                    Logger::Error(log_context) << "Folder copy transaction failed: folder_id=" << folder_id
+                                               << ", error=" << tx_result.error().message;
                     auto release_result = co_await release_copy_reservation(
                         plan.item_size,
                         "folder transaction failed"
@@ -1060,9 +1103,9 @@ namespace disk::file {
         }
 
         if (total_copy_size != actual_copy_size + released_copy_size) {
-            Logger::Warn() << "Copy accounting mismatch: total_copy_size=" << total_copy_size
-                           << ", actual_copy_size=" << actual_copy_size
-                           << ", released_copy_size=" << released_copy_size;
+            Logger::Warn(log_context) << "Copy accounting mismatch: total_copy_size=" << total_copy_size
+                                      << ", actual_copy_size=" << actual_copy_size
+                                      << ", released_copy_size=" << released_copy_size;
         }
 
         CopyResponse response;
@@ -1072,10 +1115,10 @@ namespace disk::file {
         response.new_files = std::move(new_files);
         response.new_folders = std::move(new_folders);
 
-        Logger::Info() << "Copy completed: copied_files=" << response.copied_file_count
-                       << ", copied_folders=" << response.copied_folder_count
-                       << ", total_size=" << actual_copy_size
-                       << ", released_size=" << released_copy_size;
+        Logger::Info(log_context) << "Copy completed: copied_files=" << response.copied_file_count
+                                  << ", copied_folders=" << response.copied_folder_count
+                                  << ", total_size=" << actual_copy_size
+                                  << ", released_size=" << released_copy_size;
 
         if (response.copied_count > 0) {
             co_await FileListCache::Invalidate(m_redis_service, user_id);
@@ -1086,11 +1129,15 @@ namespace disk::file {
 
     /// ==================== Delete ====================
 
-    auto FileMutationService::Delete(DeleteRequest request, uint64_t user_id)
+    auto FileMutationService::Delete(
+        DeleteRequest request,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<DeleteResponse>> {
 
-        Logger::Debug() << "Starting delete items: file_ids.size()=" << request.file_ids.size()
-                        << ", folder_ids.size()=" << request.folder_ids.size() << ", user_id=" << user_id;
+        Logger::Debug(log_context) << "Starting delete items: file_ids.size()=" << request.file_ids.size()
+                                   << ", folder_ids.size()=" << request.folder_ids.size() << ", user_id=" << user_id;
 
         auto delete_start = std::chrono::steady_clock::now();
 
@@ -1100,19 +1147,20 @@ namespace disk::file {
             .folder_ids = std::move(request.folder_ids),
         };
 
-        auto move_result = co_await trash_service.MoveToTrash(std::move(move_request), user_id);
+        auto move_result = co_await trash_service.MoveToTrash(std::move(move_request), user_id, log_context);
         if (!move_result) {
+            Logger::Warn(log_context) << "Move-to-trash failed: " << move_result.error().message;
             co_return std::unexpected(move_result.error());
         }
 
         auto delete_elapsed = std::chrono::steady_clock::now() - delete_start;
-        Logger::Info() << "FileMutationService::Delete completed: deleted_count=" << move_result->deleted_count
-                       << ", deleted_file_count=" << move_result->deleted_file_count
-                       << ", deleted_folder_count=" << move_result->deleted_folder_count
-                       << ", removed_file_rows=" << move_result->removed_file_ids.size()
-                       << ", removed_folder_rows=" << move_result->removed_folder_ids.size()
-                       << ", elapsed_ms="
-                       << std::chrono::duration_cast<std::chrono::milliseconds>(delete_elapsed).count();
+        Logger::Info(log_context) << "FileMutationService::Delete completed: deleted_count=" << move_result->deleted_count
+                                  << ", deleted_file_count=" << move_result->deleted_file_count
+                                  << ", deleted_folder_count=" << move_result->deleted_folder_count
+                                  << ", removed_file_rows=" << move_result->removed_file_ids.size()
+                                  << ", removed_folder_rows=" << move_result->removed_folder_ids.size()
+                                  << ", elapsed_ms="
+                                  << std::chrono::duration_cast<std::chrono::milliseconds>(delete_elapsed).count();
 
         DeleteResponse response;
         response.deleted_count = move_result->deleted_count;
@@ -1147,7 +1195,8 @@ namespace disk::file {
         const drogon::orm::DbClientPtr& client,
         uint64_t user_id,
         uint64_t target_folder_id,
-        const std::vector<std::pair<uint64_t, const drogon_model::disk::Files*>>& valid_items
+        const std::vector<std::pair<uint64_t, const drogon_model::disk::Files*>>& valid_items,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<std::vector<std::pair<uint64_t, uint64_t>>>> {
 
         std::vector<std::pair<uint64_t, uint64_t>> id_mappings;
@@ -1201,8 +1250,8 @@ namespace disk::file {
             );
 
             if (result.size() != valid_items.size()) {
-                Logger::Error() << "Copied file insert returned unexpected row count: expected="
-                                << valid_items.size() << ", actual=" << result.size();
+                Logger::Error(log_context) << "Copied file insert returned unexpected row count: expected="
+                                           << valid_items.size() << ", actual=" << result.size();
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
                     "Failed to insert copied files"
@@ -1214,7 +1263,7 @@ namespace disk::file {
                 id_mappings.emplace_back(valid_items[i].first, new_id);
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Batch file insert failed in copy: " << e.base().what();
+            Logger::Error(log_context) << "Batch file insert failed in copy: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to insert copied files"
@@ -1235,7 +1284,8 @@ namespace disk::file {
     auto FileMutationService::IsFilenameExists(
         uint64_t folder_id,
         const std::string& filename,
-        uint64_t user_id
+        uint64_t user_id,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<bool> {
 
         try {
@@ -1249,7 +1299,7 @@ namespace disk::file {
             co_return count > 0;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to check filename: " << e.base().what();
+            Logger::Error(log_context) << "Failed to check filename: " << e.base().what();
             co_return false;
         }
     }

@@ -692,6 +692,37 @@ def assert_file_query_log_context(
     log_pass("file query logs keep typed request correlation and null ownership fields")
 
 
+def assert_file_mutation_log_context(
+    *,
+    response,
+    request_id: str,
+    message_markers: tuple[str, ...],
+) -> None:
+    """Assert one failed file mutation keeps typed correlation through its subflow."""
+    assert_equal(
+        "file mutation returns a documented failure",
+        response.status_code >= 400 and json_field(response.text, "code") != "0",
+        True,
+    )
+    assert_equal(
+        "file mutation preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal("file mutation identifies the handling instance", bool(instance_id), True)
+
+    for marker in (*message_markers, "HTTP request completed"):
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="file_mutation",
+            upload_id=None,
+            message_marker=marker,
+        )
+    log_pass("file mutation logs keep typed request correlation and null ownership fields")
+
+
 def test_file_query_log_context_invariants() -> None:
     """Verify file list, numeric detail, and search use one bounded query operation."""
     log_section("File Query Structured Log Correlation")
@@ -734,6 +765,77 @@ def test_file_query_log_context_invariants() -> None:
         response=search_response,
         request_id=search_request_id,
         message_markers=("File search request parameter validation failed",),
+    )
+
+
+def test_file_mutation_log_context_invariants() -> None:
+    """Verify rename, move, copy, and soft-delete share one bounded operation."""
+    log_section("File Mutation Structured Log Correlation")
+    missing_id = 999_999_999_999
+
+    rename_request_id = f"safety-file-rename-log-{unique_name()}"
+    rename_response = fetch(
+        f"/api/file/{missing_id}/rename",
+        method="PUT",
+        headers={**auth_headers(TOKEN), "X-Request-Id": rename_request_id},
+        json_body={"new_name": "missing-renamed.bin"},
+    )
+    assert_file_mutation_log_context(
+        response=rename_response,
+        request_id=rename_request_id,
+        message_markers=(
+            "Rename target file not found or no permission",
+            "Rename failed",
+        ),
+    )
+
+    move_request_id = f"safety-file-move-log-{unique_name()}"
+    move_response = fetch(
+        "/api/file/move",
+        method="PUT",
+        headers={**auth_headers(TOKEN), "X-Request-Id": move_request_id},
+        json_body={"file_ids": [missing_id], "target_folder_id": missing_id},
+    )
+    assert_file_mutation_log_context(
+        response=move_response,
+        request_id=move_request_id,
+        message_markers=(
+            "Move target folder not found or no permission",
+            "Move file failed",
+        ),
+    )
+
+    copy_request_id = f"safety-file-copy-log-{unique_name()}"
+    copy_response = fetch(
+        "/api/file/copy",
+        method="POST",
+        headers={**auth_headers(TOKEN), "X-Request-Id": copy_request_id},
+        json_body={"file_ids": [missing_id], "target_folder_id": missing_id},
+    )
+    assert_file_mutation_log_context(
+        response=copy_response,
+        request_id=copy_request_id,
+        message_markers=(
+            "Target folder not found or no permission",
+            "Copy file failed",
+        ),
+    )
+
+    delete_request_id = f"safety-file-delete-log-{unique_name()}"
+    delete_response = fetch(
+        "/api/file",
+        method="DELETE",
+        headers={**auth_headers(TOKEN), "X-Request-Id": delete_request_id},
+        json_body={"file_ids": [missing_id]},
+    )
+    assert_file_mutation_log_context(
+        response=delete_response,
+        request_id=delete_request_id,
+        message_markers=(
+            "File not found or delete failed, skipping",
+            "Move-to-trash failed",
+            "Delete file failed",
+        ),
     )
 
 
@@ -4070,6 +4172,7 @@ def main() -> None:
 
     test_init_and_chunk_log_context_invariants()
     test_file_query_log_context_invariants()
+    test_file_mutation_log_context_invariants()
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()

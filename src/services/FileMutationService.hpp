@@ -23,6 +23,7 @@
 #include "services/FolderRepository.hpp"
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
     class IFileStorage;
@@ -64,10 +65,16 @@ namespace disk::file {
          * @param file_id 文件 ID
          * @param new_name 新文件名
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<RenameResponse>> 成功返回重命名后的文件信息，失败返回错误
          */
         [[nodiscard]]
-        auto Rename(uint64_t file_id, std::string new_name, uint64_t user_id)
+        auto Rename(
+            uint64_t file_id,
+            std::string new_name,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<RenameResponse>>;
 
         /**
@@ -81,10 +88,15 @@ namespace disk::file {
          *
          * @param request 移动请求
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<MoveResponse>> 成功返回移动统计，失败返回错误
          */
         [[nodiscard]]
-        auto Move(MoveRequest request, uint64_t user_id) -> drogon::Task<Result<MoveResponse>>;
+        auto Move(
+            MoveRequest request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<MoveResponse>>;
 
         /**
          * @brief 复制文件到目标文件夹
@@ -100,10 +112,15 @@ namespace disk::file {
          *
          * @param request 复制请求
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<CopyResponse>> 成功返回复制统计和ID映射，失败返回错误
          */
         [[nodiscard]]
-        auto Copy(CopyRequest request, uint64_t user_id) -> drogon::Task<Result<CopyResponse>>;
+        auto Copy(
+            CopyRequest request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<CopyResponse>>;
 
         /**
          * @brief 删除文件（移入回收站）
@@ -118,10 +135,15 @@ namespace disk::file {
          *
          * @param request 删除请求
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<DeleteResponse>> 成功返回删除统计，失败返回错误
          */
         [[nodiscard]]
-        auto Delete(DeleteRequest request, uint64_t user_id)
+        auto Delete(
+            DeleteRequest request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<DeleteResponse>>;
 
     private:
@@ -160,6 +182,7 @@ namespace disk::file {
          * @param user_id 用户 ID
          * @param target_folder_id 目标文件夹 ID
          * @param valid_items 待插入的文件列表
+         * @param log_context 请求日志上下文
          * @return 成功返回 (old_id, new_id) 映射；失败返回错误并由调用方回滚事务
          */
         [[nodiscard]]
@@ -167,7 +190,8 @@ namespace disk::file {
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
             uint64_t target_folder_id,
-            const std::vector<std::pair<uint64_t, const drogon_model::disk::Files*>>& valid_items
+            const std::vector<std::pair<uint64_t, const drogon_model::disk::Files*>>& valid_items,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<Result<std::vector<std::pair<uint64_t, uint64_t>>>>;
 
         [[nodiscard]]
@@ -177,7 +201,8 @@ namespace disk::file {
         auto IsFilenameExists(
             uint64_t folder_id,
             const std::string& filename,
-            uint64_t user_id
+            uint64_t user_id,
+            disk::utils::LogContext log_context
         ) const -> drogon::Task<bool>;
 
         drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端

@@ -57,6 +57,21 @@ The system SHALL classify file-list, numeric file-detail, and file-search reques
 - **WHEN** the request targets upload, download, or a file-mutation route
 - **THEN** the file-query classifier SHALL NOT absorb it, and the route SHALL retain its existing bounded operation classification
 
+### Requirement: Typed File Mutation Correlation
+The system SHALL classify numeric file rename, drive move, drive copy, and file soft-delete requests as the bounded `file_mutation` operation and SHALL propagate their correlation explicitly by value across controller, mutation-service, and move-to-trash coroutine boundaries.
+
+#### Scenario: User renames, moves, copies, or soft-deletes drive items
+- **WHEN** an authenticated request enters a numeric rename, move, copy, or supported soft-delete route
+- **THEN** its response, HTTP completion event, controller events, mutation-service events, and delete subflow events SHALL retain the same request ID, actual handling instance, and `file_mutation` operation
+
+#### Scenario: File mutation has no upload or durable-job ownership
+- **WHEN** a file mutation records file, folder, content, user, quota, or cache identifiers
+- **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those mutation values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: File mutation classification remains bounded
+- **WHEN** the request targets file query, upload, download, a nonnumeric rename path, or an unrecognized file-domain path
+- **THEN** the file-mutation classifier SHALL NOT absorb it, and the route SHALL retain its existing bounded operation classification
+
 ### Requirement: Typed Upload Completion Correlation
 The system SHALL propagate upload-completion correlation explicitly across controller, service, lifecycle, database, and storage coroutine boundaries without thread-local request state or message parsing.
 

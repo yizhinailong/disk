@@ -172,7 +172,11 @@ namespace disk::trash {
         co_return co_await disk::file::utils::InsertTrashRecords(client, trash_items, user_id);
     }
 
-    auto TrashService::MoveToTrash(MoveToTrashRequest request, uint64_t user_id)
+    auto TrashService::MoveToTrash(
+        MoveToTrashRequest request,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<MoveToTrashResult>> {
 
         auto normalize_ids = [](std::vector<uint64_t> ids) {
@@ -194,7 +198,7 @@ namespace disk::trash {
         explicit_file_ids.reserve(requested_file_ids.size());
         for (const auto file_id : requested_file_ids) {
             if (covered_file_ids.contains(file_id)) {
-                Logger::Debug() << "Skipping explicit file delete covered by folder delete: file_id=" << file_id;
+                Logger::Debug(log_context) << "Skipping explicit file delete covered by folder delete: file_id=" << file_id;
                 continue;
             }
             explicit_file_ids.push_back(file_id);
@@ -219,7 +223,7 @@ namespace disk::trash {
                     file_map[file.getValueOfId()] = std::move(file);
                 }
             } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Warn() << "File batch fetch failed in move-to-trash, skipping chunk: " << e.base().what();
+                Logger::Warn(log_context) << "File batch fetch failed in move-to-trash, skipping chunk: " << e.base().what();
             }
         }
 
@@ -233,7 +237,7 @@ namespace disk::trash {
         for (const auto file_id : explicit_file_ids) {
             auto it = file_map.find(file_id);
             if (it == file_map.end()) {
-                Logger::Warn() << "File not found or delete failed, skipping: file_id=" << file_id;
+                Logger::Warn(log_context) << "File not found or delete failed, skipping: file_id=" << file_id;
                 continue;
             }
 
@@ -312,10 +316,10 @@ namespace disk::trash {
                     file_ids_to_delete,
                     folder_ids_to_delete
                 );
-                Logger::Debug() << "Cleaned share links during delete: file_links="
-                                << share_stats.deleted_file_share_links
-                                << ", folder_links=" << share_stats.deleted_folder_share_links
-                                << ", cancelled_empty_shares=" << share_stats.cancelled_empty_shares;
+                Logger::Debug(log_context) << "Cleaned share links during delete: file_links="
+                                           << share_stats.deleted_file_share_links
+                                           << ", folder_links=" << share_stats.deleted_folder_share_links
+                                           << ", cancelled_empty_shares=" << share_stats.cancelled_empty_shares;
 
                 auto deleted_file_rows = co_await disk::file::utils::DeleteFilesByIds(transaction, file_ids_to_delete);
                 if (deleted_file_rows != static_cast<int>(file_ids_to_delete.size())) {
@@ -331,7 +335,7 @@ namespace disk::trash {
             }
         );
         if (!tx_result) {
-            Logger::Error() << "Delete transaction failed: " << tx_result.error().message;
+            Logger::Error(log_context) << "Delete transaction failed: " << tx_result.error().message;
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
         }
 

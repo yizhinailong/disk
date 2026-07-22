@@ -102,8 +102,18 @@ namespace disk::trash {
             uint64_t user_id
         ) const -> drogon::Task<bool>;
 
+        /**
+         * @brief 将文件和文件夹移入回收站
+         * @param request 待删除项目
+         * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
+         */
         [[nodiscard]]
-        auto MoveToTrash(MoveToTrashRequest request, uint64_t user_id)
+        auto MoveToTrash(
+            MoveToTrashRequest request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<MoveToTrashResult>>;
 
         [[nodiscard]]

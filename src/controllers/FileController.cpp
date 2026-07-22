@@ -456,19 +456,23 @@ namespace disk::file {
 
     auto FileController::Rename(drogon::HttpRequestPtr request, std::string file_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "file_mutation");
 
-        Logger::Info() << "Received rename request: " << request->getPeerAddr().toIpPort()
-                       << ", file_id=" << file_id;
+        Logger::Info(log_context)
+            << "Received rename request: " << request->getPeerAddr().toIpPort()
+            << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数和请求体
         auto parse_result = RenameRequest::FromPathAndRequest(file_id, request);
         if (!parse_result) {
-            Logger::Warn() << "Rename request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Rename request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "Rename parameters validated: file_id=" << parse_result->file_id
-                        << ", new_name=\"" << parse_result->new_name << "\"";
+        Logger::Debug(log_context)
+            << "Rename parameters validated: file_id=" << parse_result->file_id
+            << ", new_name=\"" << parse_result->new_name << "\"";
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
@@ -477,124 +481,146 @@ namespace disk::file {
         auto result = co_await m_mutation_service->Rename(
             parse_result->file_id,
             std::move(parse_result->new_name),
-            user_id
+            user_id,
+            log_context
         );
         if (!result) {
-            Logger::Error() << "Rename failed: " << result.error().message << " (user_id=" << user_id
-                            << ", file_id=" << file_id << ")";
+            Logger::Error(log_context)
+                << "Rename failed: " << result.error().message << " (user_id=" << user_id
+                << ", file_id=" << file_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info() << "Rename successful: file_id=" << file_id << ", new_name=\"" << result->name
-                       << "\""
-                       << " (user_id=" << user_id << ")";
+        Logger::Info(log_context)
+            << "Rename successful: file_id=" << file_id << ", new_name=\"" << result->name
+            << "\""
+            << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::Move(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "file_mutation");
 
-        Logger::Info() << "Received move file request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context)
+            << "Received move file request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
         auto parse_result = MoveRequest::FromRequest(request);
         if (!parse_result) {
-            Logger::Warn() << "Move file request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Move file request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "Move file parameters validated: file_ids.size()="
-                        << parse_result->file_ids.size()
-                        << ", target_folder_id=" << parse_result->target_folder_id;
+        Logger::Debug(log_context)
+            << "Move file parameters validated: file_ids.size()="
+            << parse_result->file_ids.size()
+            << ", target_folder_id=" << parse_result->target_folder_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层移动文件
-        auto result = co_await m_mutation_service->Move(*parse_result, user_id);
+        auto result = co_await m_mutation_service->Move(*parse_result, user_id, log_context);
         if (!result) {
-            Logger::Error() << "Move file failed: " << result.error().message << " (user_id=" << user_id
-                            << ")";
+            Logger::Error(log_context)
+                << "Move file failed: " << result.error().message << " (user_id=" << user_id
+                << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info() << "Move file successful: moved_count=" << result->moved_count
-                       << " (user_id=" << user_id << ")";
+        Logger::Info(log_context)
+            << "Move file successful: moved_count=" << result->moved_count
+            << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::Copy(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "file_mutation");
 
-        Logger::Info() << "Received copy file request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context)
+            << "Received copy file request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
         auto parse_result = CopyRequest::FromRequest(request);
         if (!parse_result) {
-            Logger::Warn() << "Copy file request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Copy file request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "Copy file parameters validated: file_ids.size()="
-                        << parse_result->file_ids.size()
-                        << ", target_folder_id=" << parse_result->target_folder_id;
+        Logger::Debug(log_context)
+            << "Copy file parameters validated: file_ids.size()="
+            << parse_result->file_ids.size()
+            << ", target_folder_id=" << parse_result->target_folder_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层复制文件
-        auto result = co_await m_mutation_service->Copy(*parse_result, user_id);
+        auto result = co_await m_mutation_service->Copy(*parse_result, user_id, log_context);
         if (!result) {
-            Logger::Error() << "Copy file failed: " << result.error().message << " (user_id=" << user_id
-                            << ")";
+            Logger::Error(log_context)
+                << "Copy file failed: " << result.error().message << " (user_id=" << user_id
+                << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info() << "Copy file successful: copied_count=" << result->copied_count
-                       << " (user_id=" << user_id << ")";
+        Logger::Info(log_context)
+            << "Copy file successful: copied_count=" << result->copied_count
+            << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::Delete(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "file_mutation");
 
-        Logger::Info() << "Received delete file request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context)
+            << "Received delete file request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
         auto parse_result = DeleteRequest::FromRequest(request);
         if (!parse_result) {
-            Logger::Warn() << "Delete file request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Delete file request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "Delete file parameters validated: file_ids.size()="
-                        << parse_result->file_ids.size()
-                        << ", folder_ids.size()=" << parse_result->folder_ids.size();
+        Logger::Debug(log_context)
+            << "Delete file parameters validated: file_ids.size()="
+            << parse_result->file_ids.size()
+            << ", folder_ids.size()=" << parse_result->folder_ids.size();
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层删除文件（异常边界：防止未捕获异常导致连接中断）
         try {
-            auto result = co_await m_mutation_service->Delete(*parse_result, user_id);
+            auto result = co_await m_mutation_service->Delete(*parse_result, user_id, log_context);
             if (!result) {
-                Logger::Error() << "Delete file failed: " << result.error().message << " (user_id=" << user_id
-                                << ")";
+                Logger::Error(log_context)
+                    << "Delete file failed: " << result.error().message << " (user_id=" << user_id
+                    << ")";
                 co_return Response::Error(result.error());
             }
 
             /// 4. 构造响应
-            Logger::Info() << "Delete file successful: deleted_count=" << result->deleted_count
-                           << ", deleted_file_count=" << result->deleted_file_count
-                           << ", deleted_folder_count=" << result->deleted_folder_count
-                           << " (user_id=" << user_id << ")";
+            Logger::Info(log_context)
+                << "Delete file successful: deleted_count=" << result->deleted_count
+                << ", deleted_file_count=" << result->deleted_file_count
+                << ", deleted_folder_count=" << result->deleted_folder_count
+                << " (user_id=" << user_id << ")";
             co_return Response::Success(result->ToJson());
         } catch (const std::exception& e) {
-            Logger::Error() << "Unexpected exception in delete file: " << e.what()
-                            << " (user_id=" << user_id << ")";
+            Logger::Error(log_context)
+                << "Unexpected exception in delete file: " << e.what()
+                << " (user_id=" << user_id << ")";
             co_return Response::Error(
                 ErrorInfo(ErrorCode::InternalError, "Internal error during file deletion")
             );

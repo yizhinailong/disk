@@ -141,15 +141,31 @@ namespace disk::metrics {
             return row[field].isNull() ? 0.0 : row[field].as<double>();
         }
 
+        [[nodiscard]] auto IsUnsignedDecimalSegment(std::string_view segment) noexcept -> bool {
+            return !segment.empty() && std::ranges::all_of(segment, [](char character) {
+                return character >= '0' && character <= '9';
+            });
+        }
+
         [[nodiscard]] auto IsNumericFileDetailPath(std::string_view path) noexcept -> bool {
             constexpr std::string_view prefix = "/api/file/";
             if (!path.starts_with(prefix)) {
                 return false;
             }
-            const auto segment = path.substr(prefix.size());
-            return !segment.empty() && std::ranges::all_of(segment, [](char character) {
-                return character >= '0' && character <= '9';
-            });
+            return IsUnsignedDecimalSegment(path.substr(prefix.size()));
+        }
+
+        [[nodiscard]] auto IsNumericFileRenamePath(std::string_view path) noexcept -> bool {
+            constexpr std::string_view prefix = "/api/file/";
+            constexpr std::string_view suffix = "/rename";
+            if (!path.starts_with(prefix) || !path.ends_with(suffix) ||
+                path.size() <= prefix.size() + suffix.size()) {
+                return false;
+            }
+            return IsUnsignedDecimalSegment(path.substr(
+                prefix.size(),
+                path.size() - prefix.size() - suffix.size()
+            ));
         }
     } // namespace
 
@@ -183,6 +199,11 @@ namespace disk::metrics {
             IsNumericFileDetailPath(path)) {
             return HttpOperation::FileQuery;
         }
+        if (path == "/api/file/move" || path == "/api/file/copy" ||
+            path == "/api/file" || path == "/api/file/delete" ||
+            IsNumericFileRenamePath(path)) {
+            return HttpOperation::FileMutation;
+        }
         if (path == "/api/share" || path.starts_with("/api/share/")) {
             return HttpOperation::Share;
         }
@@ -201,6 +222,7 @@ namespace disk::metrics {
             "metrics",
             "auth",
             "file_query",
+            "file_mutation",
             "upload_init",
             "upload_chunk",
             "upload_complete",
