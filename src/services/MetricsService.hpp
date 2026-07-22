@@ -35,6 +35,7 @@ namespace disk::metrics {
         Trash,
         SystemInfo,
         User,
+        OperationLog,
         UploadInit,
         UploadChunk,
         UploadComplete,

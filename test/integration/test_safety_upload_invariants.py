@@ -1465,6 +1465,71 @@ def test_system_info_log_context_invariants() -> None:
     log_pass("system info HTTP failure completion keeps typed request correlation")
 
 
+def test_operation_log_context_invariants() -> None:
+    """Verify the exact current-user log route uses one bounded operation."""
+    log_section("Operation Log Structured Correlation")
+
+    request_id = f"safety-operation-log-{unique_name()}"
+    response = fetch(
+        "/api/logs?page=1&page_size=1",
+        headers={**auth_headers(TOKEN), "X-Request-Id": request_id},
+    )
+    assert_equal(
+        "operation log query preserves its success envelope",
+        response.status_code == 200 and json_field(response.text, "code") == "0",
+        True,
+    )
+    assert_equal(
+        "operation log query preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal("operation log query identifies the handling instance", bool(instance_id), True)
+    wait_for_correlated_application_log(
+        request_id=request_id,
+        instance_id=instance_id,
+        operation="operation_log",
+        upload_id=None,
+        message_marker="Received operation log list request",
+    )
+    log_pass("operation log controller keeps typed request correlation")
+
+    unauthenticated_request_id = f"safety-operation-log-unauth-{unique_name()}"
+    unauthenticated_response = fetch(
+        "/api/logs",
+        headers={"X-Request-Id": unauthenticated_request_id},
+    )
+    assert_equal(
+        "unauthenticated operation log query is rejected",
+        unauthenticated_response.status_code == 401
+        and json_field(unauthenticated_response.text, "code") != "0",
+        True,
+    )
+    assert_equal(
+        "unauthenticated operation log query preserves caller request ID",
+        header_value(unauthenticated_response.headers, "X-Request-Id"),
+        unauthenticated_request_id,
+    )
+    unauthenticated_instance_id = header_value(
+        unauthenticated_response.headers,
+        "X-Disk-Instance-Id",
+    )
+    assert_equal(
+        "unauthenticated operation log query identifies the handling instance",
+        bool(unauthenticated_instance_id),
+        True,
+    )
+    wait_for_correlated_application_log(
+        request_id=unauthenticated_request_id,
+        instance_id=unauthenticated_instance_id,
+        operation="operation_log",
+        upload_id=None,
+        message_marker="HTTP request completed",
+    )
+    log_pass("operation log HTTP rejection keeps typed request correlation")
+
+
 def test_user_log_context_invariants() -> None:
     """Verify exact user profile paths share one bounded non-ownership operation."""
     log_section("User Structured Log Correlation")
@@ -5530,6 +5595,7 @@ def main() -> None:
     test_folder_log_context_invariants()
     test_trash_log_context_invariants()
     test_system_info_log_context_invariants()
+    test_operation_log_context_invariants()
     test_user_log_context_invariants()
     test_auth_log_context_invariants()
     test_auth_filter_log_context_invariants()

@@ -412,6 +412,25 @@ The system SHALL record and expose user-visible operation logs for key actions.
 - **WHEN** a tracked operation such as login, upload, download, delete, share, restore, or administrator action occurs
 - **THEN** the system SHALL record operation log information sufficient for audit and display
 
+### Requirement: Typed Operation Log Query Correlation
+The exact operation-log list route SHALL use the bounded `operation_log` HTTP operation, and its controller and shared service SHALL accept and propagate caller-owned `LogContext` explicitly by value without changing pagination, database queries, stored audit data, error results, or the public response contract.
+
+#### Scenario: An authenticated user lists operation logs
+- **WHEN** an authenticated request reaches exact path `/api/logs`
+- **THEN** the HTTP completion event, controller events, and any service failure event SHALL retain the same request ID, actual handling instance, and `operation_log` operation, while upload ID, job ID, lease owner, and state version remain null
+
+#### Scenario: Operation-log route classification stays bounded
+- **WHEN** the HTTP classifier observes `/api/logs`, a trailing slash, an additional path segment, or another unregistered logs path
+- **THEN** only exact `/api/logs` SHALL map to `operation_log`, and every other shape SHALL remain `other`
+
+#### Scenario: The operation-log boundary observes sensitive diagnostics
+- **WHEN** the controller or service observes a peer address, authenticated user, pagination value, audit entry, database exception, or error detail
+- **THEN** its application event SHALL use a fixed message without those values, SHALL NOT derive typed ownership fields from them, and SHALL NOT expose authorization values, stored audit details, user agents, IP addresses, SQL, connection details, or exception text
+
+#### Scenario: An operation-log service caller omits correlation
+- **WHEN** a unit, utility, or compatibility caller invokes the query or write entry point without a context
+- **THEN** request and ownership correlation SHALL remain JSON null, the service SHALL NOT consult thread-local state or infer correlation from entry/query values, and constructor initialization SHALL remain a context-free process event
+
 ### Requirement: Request Trace Visibility
 The system SHALL associate requests with trace identifiers for log correlation and response visibility.
 

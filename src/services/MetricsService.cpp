@@ -269,6 +269,9 @@ namespace disk::metrics {
             path == "/api/user/storage") {
             return HttpOperation::User;
         }
+        if (path == "/api/logs") {
+            return HttpOperation::OperationLog;
+        }
         if (path == "/api/share" || path == "/api/share/cancel" ||
             IsSingleSegmentPath(path, "/api/share/") ||
             IsSingleSegmentPath(path, "/api/share/access/") ||
@@ -297,6 +300,7 @@ namespace disk::metrics {
             "trash",
             "system_info",
             "user",
+            "operation_log",
             "upload_init",
             "upload_chunk",
             "upload_complete",

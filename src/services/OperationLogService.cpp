@@ -20,7 +20,10 @@ namespace disk::log {
         Logger::Debug() << "OperationLogService initialization completed";
     }
 
-    auto OperationLogService::Log(const OperationLogEntry& entry) -> drogon::Task<Result<void>> {
+    auto OperationLogService::Log(
+        const OperationLogEntry& entry,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<Result<void>> {
         try {
             drogon_model::disk::OperationLogs log;
             log.setUserId(entry.user_id);
@@ -45,15 +48,20 @@ namespace disk::log {
             co_await mapper.insert(log);
 
             co_return {};
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to record operation log: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to record operation log";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to record operation log")
             );
         }
     }
 
-    auto OperationLogService::GetList(uint64_t user_id, int page, int page_size)
+    auto OperationLogService::GetList(
+        uint64_t user_id,
+        int page,
+        int page_size,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<OperationLogListResponse>> {
 
         OperationLogListResponse response;
@@ -70,9 +78,7 @@ namespace disk::log {
             }
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, action, target_type, target_id, target_name, details, "
-                "ip_address, created_at FROM operation_logs "
-                "WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+                "SELECT id, user_id, action, target_type, target_id, target_name, details, " "ip_address, created_at FROM operation_logs " "WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
                 static_cast<int64_t>(user_id),
                 static_cast<int64_t>(page_size),
                 static_cast<int64_t>(offset)
@@ -99,8 +105,8 @@ namespace disk::log {
             }
 
             co_return response;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to query operation logs: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to query operation logs";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to query operation logs")
             );
@@ -133,4 +139,4 @@ namespace disk::log {
         }
     }
 
-} ///< namespace disk::log
+} // namespace disk::log

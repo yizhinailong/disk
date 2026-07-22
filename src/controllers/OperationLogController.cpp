@@ -9,6 +9,7 @@
 
 #include "OperationLogController.hpp"
 
+#include "controllers/ControllerHelpers.hpp"
 #include "services/ObservedDbClient.hpp"
 #include "utils/Response.hpp"
 
@@ -20,8 +21,10 @@ namespace disk::log {
 
     auto OperationLogController::GetList(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context =
+            disk::controllers::GetRequestLogContext(request, "operation_log");
 
-        Logger::Info() << "Received get operation logs request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received operation log list request";
 
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -55,9 +58,10 @@ namespace disk::log {
             }
         }
 
-        auto result = co_await m_log_service->GetList(user_id, page, page_size);
+        auto result =
+            co_await m_log_service->GetList(user_id, page, page_size, log_context);
         if (!result) {
-            Logger::Error() << "Failed to get operation logs: " << result.error().message;
+            Logger::Error(log_context) << "Failed to get operation logs";
             co_return Response::Error(result.error());
         }
 
@@ -75,4 +79,4 @@ namespace disk::log {
         co_return Response::Success(data);
     }
 
-} ///< namespace disk::log
+} // namespace disk::log

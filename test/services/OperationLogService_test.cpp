@@ -18,6 +18,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 #include <gtest/gtest.h>
 
@@ -33,6 +34,16 @@ namespace disk::log {
             std::ostringstream buffer;
             buffer << input.rdbuf();
             return buffer.str();
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
         }
 
         /// ==================== NormalizeIpAddress 测试 ====================
@@ -107,5 +118,52 @@ namespace disk::log {
             EXPECT_NE(source.find("static_cast<int64_t>(offset)"), std::string::npos);
         }
 
-    } ///< namespace
-} ///< namespace disk::log
+        TEST(OperationLogQueryContractTest, RequestBoundaryUsesExplicitRedactedContext) {
+            const auto metrics_header = ReadSourceFile("src/services/MetricsService.hpp");
+            const auto metrics_source = ReadSourceFile("src/services/MetricsService.cpp");
+            const auto controller = ReadSourceFile("src/controllers/OperationLogController.cpp");
+            const auto service_header = ReadSourceFile("src/services/OperationLogService.hpp");
+            const auto service_source = ReadSourceFile("src/services/OperationLogService.cpp");
+
+            ASSERT_FALSE(metrics_header.empty());
+            ASSERT_FALSE(metrics_source.empty());
+            ASSERT_FALSE(controller.empty());
+            ASSERT_FALSE(service_header.empty());
+            ASSERT_FALSE(service_source.empty());
+
+            EXPECT_NE(metrics_header.find("OperationLog"), std::string::npos);
+            EXPECT_NE(metrics_source.find("path == \"/api/logs\""), std::string::npos);
+            EXPECT_NE(metrics_source.find("\"operation_log\""), std::string::npos);
+            EXPECT_EQ(
+                CountOccurrences(
+                    service_header,
+                    "disk::utils::LogContext log_context = {}"
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    controller,
+                    "GetRequestLogContext(request, \"operation_log\")"
+                ),
+                1U
+            );
+            EXPECT_NE(
+                controller.find("GetList(user_id, page, page_size, log_context)"),
+                std::string::npos
+            );
+            EXPECT_EQ(CountOccurrences(controller, "Logger::Info(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(controller, "Logger::Error(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(service_source, "Logger::Error(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(service_source, "Logger::Debug()"), 1U);
+
+            EXPECT_EQ(controller.find("Logger::Info()"), std::string::npos);
+            EXPECT_EQ(controller.find("Logger::Error()"), std::string::npos);
+            EXPECT_EQ(controller.find("getPeerAddr"), std::string::npos);
+            EXPECT_EQ(controller.find("result.error().message"), std::string::npos);
+            EXPECT_EQ(service_source.find("Logger::Error()"), std::string::npos);
+            EXPECT_EQ(service_source.find("e.base().what()"), std::string::npos);
+        }
+
+    } // namespace
+} // namespace disk::log

@@ -16,6 +16,7 @@
 #include <json/json.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::log {
 
@@ -86,10 +87,18 @@ namespace disk::log {
         explicit OperationLogService(drogon::orm::DbClientPtr db_client);
 
         [[nodiscard]]
-        auto Log(const OperationLogEntry& entry) -> drogon::Task<Result<void>>;
+        auto Log(
+            const OperationLogEntry& entry,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
-        auto GetList(uint64_t user_id, int page, int page_size)
+        auto GetList(
+            uint64_t user_id,
+            int page,
+            int page_size,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<OperationLogListResponse>>;
 
         [[nodiscard]]
@@ -104,4 +113,4 @@ namespace disk::log {
         drogon::orm::DbClientPtr m_db_client;
     };
 
-} ///< namespace disk::log
+} // namespace disk::log
