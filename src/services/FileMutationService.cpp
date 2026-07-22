@@ -80,7 +80,12 @@ namespace disk::file {
                 co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
             }
 
-            auto folder_location_result = co_await m_folder_repository.ResolveOwnedFolderLocation(m_db_client, folder_id, user_id);
+            auto folder_location_result = co_await m_folder_repository.ResolveOwnedFolderLocation(
+                m_db_client,
+                folder_id,
+                user_id,
+                log_context
+            );
             if (!folder_location_result) {
                 co_return std::unexpected(folder_location_result.error());
             }
@@ -133,8 +138,12 @@ namespace disk::file {
             << ", folder_ids.size()=" << request.folder_ids.size()
             << ", target_folder_id=" << request.target_folder_id << ", user_id=" << user_id;
 
-        auto target_location_result =
-            co_await m_folder_repository.ResolveOwnedFolderLocation(m_db_client, request.target_folder_id, user_id);
+        auto target_location_result = co_await m_folder_repository.ResolveOwnedFolderLocation(
+            m_db_client,
+            request.target_folder_id,
+            user_id,
+            log_context
+        );
         if (!target_location_result) {
             Logger::Warn(log_context)
                 << "Move target folder not found or no permission: folder_id="
@@ -442,7 +451,8 @@ namespace disk::file {
         auto target_location_result = co_await utils::ResolveFolderLocation(
             m_db_client,
             request.target_folder_id,
-            user_id
+            user_id,
+            log_context
         );
         if (!target_location_result) {
             Logger::Warn(log_context)
@@ -1189,7 +1199,12 @@ namespace disk::file {
             co_return id_mappings;
         }
 
-        auto target_location_result = co_await utils::ResolveFolderLocation(client, target_folder_id, user_id);
+        auto target_location_result = co_await utils::ResolveFolderLocation(
+            client,
+            target_folder_id,
+            user_id,
+            log_context
+        );
         if (!target_location_result) {
             co_return std::unexpected(target_location_result.error());
         }

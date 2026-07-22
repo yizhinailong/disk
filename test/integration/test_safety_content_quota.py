@@ -14,6 +14,12 @@ import atexit
 import json
 import os
 import sys
+import time
+from pathlib import Path
+
+EVIDENCE_ROOT = Path(os.environ.get("EVIDENCE_DIR", ".sisyphus/evidence"))
+SERVER_LOG_PATH = EVIDENCE_ROOT / "safety-content-quota-server.log"
+os.environ["SERVER_LOG"] = str(SERVER_LOG_PATH)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
@@ -30,6 +36,7 @@ from lib_py import (  # noqa: E402
     execute,
     fetch,
     final_blob_path,
+    header_value,
     json_field,
     local_blob_path,
     log_fail,
@@ -58,9 +65,98 @@ TOKEN = ""
 USER_ID = 0
 
 
-def auth_headers(content_type: str = "application/json") -> dict[str, str]:
+def auth_headers(
+    content_type: str = "application/json",
+    request_id: str | None = None,
+) -> dict[str, str]:
     """Return authorization headers for a test request."""
-    return {"Authorization": f"Bearer {TOKEN}", "Content-Type": content_type}
+    headers = {"Authorization": f"Bearer {TOKEN}", "Content-Type": content_type}
+    if request_id is not None:
+        headers["X-Request-Id"] = request_id
+    return headers
+
+
+def wait_for_persistence_failure_log(
+    *,
+    response,
+    request_id: str,
+    expected_message: str,
+) -> dict[str, object]:
+    """Return one exact shared-persistence event with request-owned correlation."""
+    assert_equal(
+        f"{expected_message} response preserves request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal(f"{expected_message} response identifies instance", bool(instance_id), True)
+
+    deadline = time.monotonic() + 5
+    records: list[dict[str, object]] = []
+    while time.monotonic() < deadline:
+        records.clear()
+        if SERVER_LOG_PATH.is_file():
+            for line in SERVER_LOG_PATH.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ).splitlines():
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(record, dict):
+                    records.append(record)
+
+        matches = [
+            record
+            for record in records
+            if record.get("schema_version") == 1
+            and record.get("source") == "application"
+            and record.get("request_id") == request_id
+            and record.get("instance_id") == instance_id
+            and record.get("operation") == "file_mutation"
+            and record.get("upload_id") is None
+            and record.get("job_id") is None
+            and record.get("lease_owner") is None
+            and record.get("state_version") is None
+            and record.get("message") == expected_message
+        ]
+        if matches:
+            unscoped_duplicates = [
+                record
+                for record in records
+                if record.get("source") == "application"
+                and record.get("request_id") is None
+                and record.get("message") == expected_message
+            ]
+            assert_equal(
+                f"{expected_message} emits no unscoped duplicate",
+                len(unscoped_duplicates),
+                0,
+            )
+            return matches[-1]
+        time.sleep(0.05)
+
+    log_fail(f"{expected_message} keeps structured request correlation")
+    print_summary()
+    raise AssertionError("unreachable")
+
+
+def assert_application_log_excludes(value: str, assertion: str) -> None:
+    """Assert no application-owned structured message contains a detail."""
+    messages: list[str] = []
+    if SERVER_LOG_PATH.is_file():
+        for line in SERVER_LOG_PATH.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict) and record.get("source") == "application":
+                messages.append(str(record.get("message", "")))
+    assert_equal(assertion, any(value in message for message in messages), False)
 
 
 def current_user_id() -> int:
@@ -288,24 +384,24 @@ def delete_folder_to_trash(folder_id: int) -> int:
     return int(row["id"])
 
 
-def delete_file_to_trash_response(file_id: int):
+def delete_file_to_trash_response(file_id: int, request_id: str | None = None):
     """Soft delete a file and return the raw HTTP response."""
     resp = fetch(
         "/api/file",
         method="DELETE",
-        headers=auth_headers(),
+        headers=auth_headers(request_id=request_id),
         json_body={"file_ids": [file_id], "folder_ids": []},
     )
     save_evidence(f"{EVIDENCE_PREFIX}-delete-file-raw-{file_id}.json", resp.text)
     return resp
 
 
-def delete_folder_to_trash_response(folder_id: int):
+def delete_folder_to_trash_response(folder_id: int, request_id: str | None = None):
     """Soft delete a folder and return the raw HTTP response."""
     resp = fetch(
         "/api/file",
         method="DELETE",
-        headers=auth_headers(),
+        headers=auth_headers(request_id=request_id),
         json_body={"file_ids": [], "folder_ids": [folder_id]},
     )
     save_evidence(f"{EVIDENCE_PREFIX}-delete-folder-raw-{folder_id}.json", resp.text)
@@ -1193,14 +1289,24 @@ def test_move_to_trash_trash_insert_failure_preserves_active_state() -> None:
     before_ref = int(content["ref_count"])
     quota_before = user_quota()
     share_id = create_share_fixture([file_id])
+    request_id = f"safety-persistence-trash-insert-{unique_name()}"
     cleanup_trigger = install_trash_insert_failure_trigger(str(original_file["name"]))
 
     try:
-        resp = delete_file_to_trash_response(file_id)
+        resp = delete_file_to_trash_response(file_id, request_id)
     finally:
         cleanup_trigger()
 
     assert_delete_transaction_error("trash insert failure", resp)
+    wait_for_persistence_failure_log(
+        response=resp,
+        request_id=request_id,
+        expected_message="Trash record batch insert failed",
+    )
+    assert_application_log_excludes(
+        "injected trash insert failure",
+        "trash insert helper log excludes database exception text",
+    )
     assert_equal("trash insert failure keeps active file", query_one("SELECT id FROM files WHERE id = %s", (file_id,)) is not None, True)
     assert_db_row_absent(
         "trash insert failure creates no trash row",
@@ -1230,14 +1336,24 @@ def test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cle
     before_ref = int(content["ref_count"])
     quota_before = user_quota()
     share_id = create_share_fixture([file_id])
+    request_id = f"safety-persistence-file-delete-{unique_name()}"
     cleanup_trigger = install_file_delete_failure_trigger(file_id)
 
     try:
-        resp = delete_file_to_trash_response(file_id)
+        resp = delete_file_to_trash_response(file_id, request_id)
     finally:
         cleanup_trigger()
 
     assert_delete_transaction_error("active file delete failure", resp)
+    wait_for_persistence_failure_log(
+        response=resp,
+        request_id=request_id,
+        expected_message="File batch delete failed",
+    )
+    assert_application_log_excludes(
+        "injected file delete failure",
+        "file delete helper log excludes database exception text",
+    )
     assert_equal("active file delete failure keeps active file", query_one("SELECT id FROM files WHERE id = %s", (file_id,)) is not None, True)
     assert_db_row_absent(
         "active file delete failure rolls back trash row",
@@ -1377,14 +1493,24 @@ def test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_shar
     }
     quota_before = user_quota()
     folder_share_id = create_share_fixture(folder_ids=[root_folder_id])
+    request_id = f"safety-persistence-folder-delete-{unique_name()}"
     cleanup_trigger = install_folder_delete_failure_trigger(child_folder_id)
 
     try:
-        resp = delete_folder_to_trash_response(root_folder_id)
+        resp = delete_folder_to_trash_response(root_folder_id, request_id)
     finally:
         cleanup_trigger()
 
     assert_delete_transaction_error("active folder delete failure", resp)
+    wait_for_persistence_failure_log(
+        response=resp,
+        request_id=request_id,
+        expected_message="Folder batch delete failed",
+    )
+    assert_application_log_excludes(
+        "injected folder delete failure",
+        "folder delete helper log excludes database exception text",
+    )
     assert_db_row_absent(
         "active folder delete failure rolls back trash snapshot",
         "SELECT id FROM trash WHERE user_id = %s AND item_type = 'folder' AND item_id = %s",
@@ -1532,6 +1658,7 @@ def main() -> None:
     print("==========================================")
     print()
 
+    SERVER_LOG_PATH.unlink(missing_ok=True)
     ensure_server()
 
     global TOKEN, USER_ID

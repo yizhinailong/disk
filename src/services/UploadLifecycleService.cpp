@@ -561,7 +561,8 @@ namespace disk::upload {
                     auto parent_location_result = co_await disk::file::utils::ResolveFolderLocation(
                         transaction,
                         command.parent_id,
-                        command.user_id
+                        command.user_id,
+                        log_context
                     );
                     if (!parent_location_result) {
                         co_return std::unexpected(parent_location_result.error());
@@ -1322,7 +1323,8 @@ namespace disk::upload {
                 auto parent_location_result = co_await disk::file::utils::ResolveFolderLocation(
                     transaction,
                     upload_task.getValueOfFolderId(),
-                    command.user_id
+                    command.user_id,
+                    log_context
                 );
                 if (!parent_location_result) {
                     co_return std::unexpected(parent_location_result.error());

@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 配额服务日志关联）：完整构建、配额/回收站日志合同聚焦 GoogleTest 6/6、相邻清理/文件变更聚焦 GoogleTest 30/30、直接真实 HTTP safety 集成 790/790 项断言通过；完整 CTest 共 1447 项，1440 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 482.46 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 共享文件持久化日志关联）：完整构建、FolderRepository/真实 content-quota 安全网聚焦 CTest 6/6、直接真实 HTTP/PostgreSQL 安全网 194/194 项断言通过；完整 CTest 共 1448 项，1441 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 471.57 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -787,6 +787,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定共享配
 配额日志只使用固定事件消息，不记录用户 ID、字节数、调整量、SQL、连接信息、业务错误正文或异常正文，也不从配额输入、影响行数、数据库结果、线程局部状态或消息文本推断类型化字段；数据库语句、事务边界、配额错误码和响应语义未改变。同步删除 `FileMutationService` 的两个以及 `TrashService`、`CleanupService` 各一个从未调用的私有配额转发器，避免保留绕过显式上下文的平行路径。`QuotaServiceContractTest` 锁定 13 个入口、18 条事件、内部重载和全部生产调用点；`TrashLogContextContractTest` 不再以已删除 helper 作为源码截取边界，并明确禁止该 helper 回归。
 
 `SafetyUploadInvariantsIntegration` 临时把当前用户 quota 收紧到已用量加预留量，以唯一 request ID 发起真实非去重上传初始化；它核对 HTTP 400、业务码 `50004`、配额层与上传层两条固定 warning 的同一 `upload_init` 关联、四个所有权字段为空、数据库未创建任务或预留，并在 `finally` 中恢复且复核完整 quota。完整构建、Python 语法检查、配额/回收站日志合同聚焦 GoogleTest 6/6、相邻清理/文件变更聚焦 GoogleTest 30/30、直接 safety 集成 790/790 项断言和 OpenSpec 严格校验 24/24 通过。首次完整 CTest 的唯一失败是旧 `TrashLogContextContractTest` 仍以已删除转发器作为源码终点；同步合同后第二次完整 CTest 共 1447 项，1440 通过、7 项环境门控跳过、0 失败，总耗时 482.46 秒。`ContentService`、`FolderRepository`、`FileServiceUtils` 等其他共享数据库 helper 与目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.43 共享文件持久化日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定共享文件持久化边界的显式关联合同。`FolderRepository::ResolveOwnedFolderLocation` 与 `FileServiceUtils` 的 folder-location 转发、trash 批量插入、active file 批量删除、active folder 批量删除共 5 个入口现在按值接收可选 `LogContext`；`TrashService::CreateTrashRecords` 也按值转发原上下文。`UploadLifecycleService` 的 2 个、`FileMutationService` 的 4 个以及 `TrashService` 的 3 个生产调用点均保留请求已有的 request/instance/operation/所有权字段；默认非 HTTP 调用继续是空关联。
+
+4 条直接 application 失败事件固定为 `Folder location lookup failed`、`Trash record batch insert failed`、`File batch delete failed` 和 `Folder batch delete failed`，不记录用户/文件/文件夹 ID、名称、路径、批次正文、SQL、连接信息、异常正文、Authorization/JWT 或存储凭据，也不从参数、数据库行、affected rows、错误或消息推断所有权字段。参数化 SQL、事务连接、受影响行判断、move-to-trash rollback、`Result`/整数返回值及 HTTP 500/`10006`/`Failed to delete items` 公开合同不变。
+
+`FolderRepositoryLogContextContractTest` 锁定 5 个默认入口、Trash 转发、4 条固定事件和全部生产调用点；`test_safety_content_quota.py` 以 3 个不同唯一 request ID 和精确 PostgreSQL trigger 分别制造 trash insert、active file delete 与 active folder delete 失败，解析 `source=application` NDJSON 核对响应同一 request/实际 instance/`file_mutation`、四个空所有权字段、无空 request 重复事件且 application message 不含触发器异常正文，同时保留 active/trash/share/ref_count/quota/Blob 回滚不变量。完整构建、Python 语法检查、聚焦 CTest 6/6、直接安全网 194/194 项断言和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1448 项，1441 通过、7 项环境门控跳过、0 失败，总耗时 471.57 秒。`ContentService` 及其他尚未逐条归属的日志路径、目标 S3/多实例环境门控仍未收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

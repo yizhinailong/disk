@@ -34,10 +34,16 @@ namespace disk::file::utils {
     auto ResolveFolderLocation(
         const drogon::orm::DbClientPtr& client,
         uint64_t folder_id,
-        uint64_t user_id
+        uint64_t user_id,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<FolderLocation>> {
         disk::folder::FolderRepository repository(client);
-        co_return co_await repository.ResolveOwnedFolderLocation(client, folder_id, user_id);
+        co_return co_await repository.ResolveOwnedFolderLocation(
+            client,
+            folder_id,
+            user_id,
+            log_context
+        );
     }
 
     auto QueryOccupiedFolderNames(
@@ -108,7 +114,8 @@ namespace disk::file::utils {
     auto InsertTrashRecords(
         const drogon::orm::DbClientPtr& client,
         const std::vector<TrashInsertItem>& trash_items,
-        uint64_t user_id
+        uint64_t user_id,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<bool> {
         if (trash_items.empty()) {
             co_return true;
@@ -149,8 +156,8 @@ namespace disk::file::utils {
                 }
             );
             co_return true;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Batch trash insert failed: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "Trash record batch insert failed";
             co_return false;
         }
     }
@@ -296,7 +303,8 @@ namespace disk::file::utils {
 
     auto DeleteFilesByIds(
         const drogon::orm::DbClientPtr& client,
-        const std::vector<uint64_t>& file_ids
+        const std::vector<uint64_t>& file_ids,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<int> {
         if (file_ids.empty()) {
             co_return 0;
@@ -308,15 +316,16 @@ namespace disk::file::utils {
                 BatchUtils::BuildSafeNumericInClause(file_ids) + ")"
             );
             co_return static_cast<int>(result.affectedRows());
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Batch file delete failed: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "File batch delete failed";
             co_return 0;
         }
     }
 
     auto DeleteFoldersByIds(
         const drogon::orm::DbClientPtr& client,
-        const std::vector<uint64_t>& folder_ids
+        const std::vector<uint64_t>& folder_ids,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<int> {
         if (folder_ids.empty()) {
             co_return 0;
@@ -328,8 +337,8 @@ namespace disk::file::utils {
                 BatchUtils::BuildSafeNumericInClause(folder_ids) + ")"
             );
             co_return static_cast<int>(result.affectedRows());
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Batch folder delete failed: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "Folder batch delete failed";
             co_return 0;
         }
     }

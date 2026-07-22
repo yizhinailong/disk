@@ -146,6 +146,25 @@ The shared quota service SHALL accept caller-owned `LogContext` explicitly by va
 - **WHEN** a quota service instance is constructed without request-owned work
 - **THEN** its initialization event SHALL remain a context-free process event while all operation events SHALL use the explicit per-call context
 
+### Requirement: Shared File Persistence Correlation
+The folder-location repository and shared file persistence helpers SHALL accept caller-owned `LogContext` explicitly by value for folder-location resolution, trash-record insertion, active-file deletion, and active-folder deletion. Upload lifecycle, file mutation, and trash service callers SHALL pass their already established context through the utility and service forwarding boundaries without changing PostgreSQL statements, transaction ownership, affected-row interpretation, rollback behavior, domain results, or public responses.
+
+#### Scenario: A request reaches a shared file persistence failure
+- **WHEN** a folder lookup, trash insertion, file deletion, or folder deletion encounters a PostgreSQL exception
+- **THEN** the directly owned event SHALL retain the supplied request ID, actual instance, bounded operation, upload ID, job ID, lease owner, and state version exactly as provided across repository, utility, and service boundaries
+
+#### Scenario: A shared persistence helper observes domain and dependency values
+- **WHEN** the helper observes a user, folder, file, item name, path, batch, SQL statement, affected-row count, or database exception
+- **THEN** its event SHALL use a fixed operation-specific message without those values, SQL, connection details, or exception text, and SHALL NOT infer or overwrite any typed correlation field
+
+#### Scenario: A shared persistence caller omits correlation
+- **WHEN** a unit, utility, migration, or compatibility caller invokes one of the shared entry points without `LogContext`
+- **THEN** request and ownership fields SHALL remain JSON null rather than being reconstructed from parameters, database state, thread-local state, or messages
+
+#### Scenario: A move-to-trash transaction fails in a shared helper
+- **WHEN** trash insertion, active-file deletion, or active-folder deletion fails inside the existing move-to-trash transaction
+- **THEN** the transaction SHALL preserve its existing rollback and stable public error semantics while the helper event remains correlated and redacted
+
 ### Requirement: Upload Rate-Limit Filter Correlation
 The route-owned upload rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every request-attribute failure, counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing its init, chunk, complete, and cancel route ownership, user fixed-window key, configured window or threshold, fail-open behavior, or HTTP response.
 

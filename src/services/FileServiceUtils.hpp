@@ -24,6 +24,7 @@
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::storage {
     class IFileStorage;
@@ -85,7 +86,8 @@ namespace disk::file::utils {
     auto ResolveFolderLocation(
         const drogon::orm::DbClientPtr& client,
         uint64_t folder_id,
-        uint64_t user_id
+        uint64_t user_id,
+        disk::utils::LogContext log_context = {}
     ) -> drogon::Task<Result<FolderLocation>>;
 
     auto QueryOccupiedFolderNames(
@@ -105,7 +107,8 @@ namespace disk::file::utils {
     auto InsertTrashRecords(
         const drogon::orm::DbClientPtr& client,
         const std::vector<TrashInsertItem>& trash_items,
-        uint64_t user_id
+        uint64_t user_id,
+        disk::utils::LogContext log_context = {}
     ) -> drogon::Task<bool>;
 
     [[nodiscard]] auto DateToJson(const trantor::Date& date) -> std::string;
@@ -136,12 +139,14 @@ namespace disk::file::utils {
 
     auto DeleteFilesByIds(
         const drogon::orm::DbClientPtr& client,
-        const std::vector<uint64_t>& file_ids
+        const std::vector<uint64_t>& file_ids,
+        disk::utils::LogContext log_context = {}
     ) -> drogon::Task<int>;
 
     auto DeleteFoldersByIds(
         const drogon::orm::DbClientPtr& client,
-        const std::vector<uint64_t>& folder_ids
+        const std::vector<uint64_t>& folder_ids,
+        disk::utils::LogContext log_context = {}
     ) -> drogon::Task<int>;
 
     [[nodiscard]] auto NormalizeFulltextKeyword(std::string_view keyword) -> std::string;

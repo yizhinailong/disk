@@ -120,7 +120,8 @@ namespace disk::folder {
     auto FolderRepository::ResolveOwnedFolderLocation(
         const drogon::orm::DbClientPtr& client,
         uint64_t folder_id,
-        uint64_t user_id
+        uint64_t user_id,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<FolderLocation>> {
         if (folder_id == 0) {
             co_return FolderLocation{};
@@ -138,9 +139,8 @@ namespace disk::folder {
 
             co_return FolderLocation{ .path = result[0]["path"].as<std::string>(),
                                       .depth = result[0]["depth"].as<uint32_t>() };
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Folder location lookup failed: folder_id=" << folder_id << " - "
-                     << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "Folder location lookup failed";
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
         }
     }

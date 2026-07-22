@@ -99,7 +99,8 @@ namespace disk::trash {
         auto CreateTrashRecords(
             const drogon::orm::DbClientPtr& client,
             const std::vector<disk::file::utils::TrashInsertItem>& trash_items,
-            uint64_t user_id
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<bool>;
 
         /**

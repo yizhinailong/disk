@@ -167,9 +167,15 @@ namespace disk::trash {
     auto TrashService::CreateTrashRecords(
         const drogon::orm::DbClientPtr& client,
         const std::vector<disk::file::utils::TrashInsertItem>& trash_items,
-        uint64_t user_id
+        uint64_t user_id,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<bool> {
-        co_return co_await disk::file::utils::InsertTrashRecords(client, trash_items, user_id);
+        co_return co_await disk::file::utils::InsertTrashRecords(
+            client,
+            trash_items,
+            user_id,
+            log_context
+        );
     }
 
     auto TrashService::MoveToTrash(
@@ -306,7 +312,12 @@ namespace disk::trash {
         disk::file::TransactionRunner transaction_runner(m_db_client, log_context);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
-                auto insert_ok = co_await CreateTrashRecords(transaction, trash_items, user_id);
+                auto insert_ok = co_await CreateTrashRecords(
+                    transaction,
+                    trash_items,
+                    user_id,
+                    log_context
+                );
                 if (!insert_ok) {
                     co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
                 }
@@ -321,12 +332,20 @@ namespace disk::trash {
                                            << ", folder_links=" << share_stats.deleted_folder_share_links
                                            << ", cancelled_empty_shares=" << share_stats.cancelled_empty_shares;
 
-                auto deleted_file_rows = co_await disk::file::utils::DeleteFilesByIds(transaction, file_ids_to_delete);
+                auto deleted_file_rows = co_await disk::file::utils::DeleteFilesByIds(
+                    transaction,
+                    file_ids_to_delete,
+                    log_context
+                );
                 if (deleted_file_rows != static_cast<int>(file_ids_to_delete.size())) {
                     co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
                 }
 
-                auto deleted_folder_rows = co_await disk::file::utils::DeleteFoldersByIds(transaction, folder_ids_to_delete);
+                auto deleted_folder_rows = co_await disk::file::utils::DeleteFoldersByIds(
+                    transaction,
+                    folder_ids_to_delete,
+                    log_context
+                );
                 if (deleted_folder_rows != static_cast<int>(folder_ids_to_delete.size())) {
                     co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
                 }

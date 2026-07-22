@@ -21,6 +21,7 @@
 #include "dtos/FolderDto.hpp"
 #include "models/Folders.hpp"
 #include "services/FileServiceUtils.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::folder {
 
@@ -49,7 +50,8 @@ namespace disk::folder {
         auto ResolveOwnedFolderLocation(
             const drogon::orm::DbClientPtr& client,
             uint64_t folder_id,
-            uint64_t user_id
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<FolderLocation>>;
 
         [[nodiscard]]
