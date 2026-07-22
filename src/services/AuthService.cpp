@@ -9,9 +9,8 @@
 
 #include "AuthService.hpp"
 
-#include <json/writer.h>
-
 #include <drogon/utils/coroutine.h>
+#include <json/writer.h>
 
 #include "dtos/AuthDto.hpp"
 #include "models/OperationLogs.hpp"
@@ -44,16 +43,16 @@ namespace disk::auth {
         Logger::Debug() << "AuthService initialization completed";
     }
 
-    auto AuthService::Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>> {
-        Logger::Debug() << "Starting user registration: " << request.username;
+    auto AuthService::Register(
+        RegisterRequest request,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<Result<RegisterResponse>> {
+        Logger::Debug(log_context) << "Starting user registration: " << request.username;
 
         /// 1. 检查用户名和邮箱是否已存在（单次查询）
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT "
-                "  COUNT(CASE WHEN username = $1 THEN 1 END) AS username_count, "
-                "  COUNT(CASE WHEN email = $2 THEN 1 END) AS email_count "
-                "FROM users",
+                "SELECT " "  COUNT(CASE WHEN username = $1 THEN 1 END) AS username_count, " "  COUNT(CASE WHEN email = $2 THEN 1 END) AS email_count " "FROM users",
                 request.username,
                 request.email
             );
@@ -63,34 +62,37 @@ namespace disk::auth {
                 auto email_count = result[0]["email_count"].as<int>();
 
                 if (username_count > 0) {
-                    Logger::Warn() << "Username already exists: " << request.username;
+                    Logger::Warn(log_context)
+                        << "Username already exists: " << request.username;
                     co_return std::unexpected(ErrorInfo(ErrorCode::UsernameExists));
                 }
 
                 if (email_count > 0) {
-                    Logger::Warn() << "Email already exists: " << request.email.substr(0, 3) << "***@***";
+                    Logger::Warn(log_context)
+                        << "Email already exists: " << request.email.substr(0, 3) << "***@***";
                     co_return std::unexpected(ErrorInfo(ErrorCode::EmailExists));
                 }
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Uniqueness check failed: " << request.username << " - " << e.base().what();
+            Logger::Error(log_context)
+                << "Uniqueness check failed: " << request.username << " - " << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Registration failed, please try again later")
             );
         }
 
         /// 2. 加密密码（使用 libsodium Argon2id）
-        Logger::Debug() << "Starting password hash: " << request.username;
+        Logger::Debug(log_context) << "Starting password hash: " << request.username;
         auto hash_result = co_await RunOnAuthCpuPool(
             [password = std::move(request.password)]() {
                 return HashUtil::HashPassword(password);
             }
         );
         if (!hash_result) {
-            Logger::Error() << "Password hash failed: " << request.username;
+            Logger::Error(log_context) << "Password hash failed: " << request.username;
             co_return std::unexpected(hash_result.error());
         }
-        Logger::Debug() << "Password hash completed: " << request.username;
+        Logger::Debug(log_context) << "Password hash completed: " << request.username;
 
         /// 3. 创建用户记录
         Users user;
@@ -107,11 +109,13 @@ namespace disk::auth {
         try {
             CoroMapper<Users> mapper(m_db_client);
             user = co_await mapper.insert(user);
-            Logger::Info() << "User data inserted successfully: " << request.username
-                     << " (ID: " << user.getValueOfId() << ")";
+            Logger::Info(log_context)
+                << "User data inserted successfully: " << request.username
+                << " (ID: " << user.getValueOfId() << ")";
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "User registration database insert failed: " << request.username << " - "
-                      << e.base().what();
+            Logger::Error(log_context)
+                << "User registration database insert failed: " << request.username << " - "
+                << e.base().what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Registration failed, please try again later")
             );
@@ -119,15 +123,20 @@ namespace disk::auth {
 
         /// 5. 返回用户信息
         auto response = UserToResponse(user);
-        Logger::Info() << "User registration process completed: " << response.username
-                 << " (ID: " << response.id << ")";
+        Logger::Info(log_context)
+            << "User registration process completed: " << response.username
+            << " (ID: " << response.id << ")";
         co_return response;
     }
 
-    auto AuthService::Login(LoginRequest request, std::string ip_address)
+    auto AuthService::Login(
+        LoginRequest request,
+        std::string ip_address,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<LoginResponse>> {
 
-        Logger::Debug() << "User login attempt: " << request.account;
+        Logger::Debug(log_context) << "User login attempt: " << request.account;
 
         /// 0. 检查 IP 登录频率限制
         const std::string rate_key =
@@ -141,7 +150,8 @@ namespace disk::auth {
             /// 检查是否超过阈值（5 次）
             if (count > 5) {
                 const std::string ip_only = disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
-                Logger::Warn() << "Login rate limit triggered: ip=" << ip_only << ", attempts=" << count;
+                Logger::Warn(log_context)
+                    << "Login rate limit triggered: ip=" << ip_only << ", attempts=" << count;
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::TooManyRequests,
                     "Too many login attempts, please try again in 5 minutes"
@@ -149,13 +159,14 @@ namespace disk::auth {
             }
         } else {
             /// 失败开放策略：Redis 失败时只记录警告，不阻止登录
-            Logger::Warn() << "Redis rate limit check failed: " << incr_result.error().message;
+            Logger::Warn(log_context)
+                << "Redis rate limit check failed: " << incr_result.error().message;
         }
 
         /// 1. 查找用户（用户名或邮箱）
-        auto user_result = co_await FindUser(request.account);
+        auto user_result = co_await FindUser(request.account, log_context);
         if (!user_result) {
-            Logger::Warn() << "User not found: " << request.account;
+            Logger::Warn(log_context) << "User not found: " << request.account;
             co_return std::unexpected(user_result.error());
         }
 
@@ -164,12 +175,12 @@ namespace disk::auth {
         /// 2. 检查账户状态
         const auto status = user.getValueOfStatus();
         if (status == 0) {
-            Logger::Warn() << "Account disabled: " << request.account;
+            Logger::Warn(log_context) << "Account disabled: " << request.account;
             co_return std::unexpected(ErrorInfo(ErrorCode::AccountDisabled));
         }
 
         if (CheckAccountLocked(user)) {
-            Logger::Warn() << "Account locked: " << request.account;
+            Logger::Warn(log_context) << "Account locked: " << request.account;
             co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
         }
 
@@ -181,8 +192,8 @@ namespace disk::auth {
             }
         );
         if (!password_matches) {
-            Logger::Warn() << "Invalid password: " << request.account;
-            co_await IncrementLoginAttempts(user.getValueOfId());
+            Logger::Warn(log_context) << "Invalid password: " << request.account;
+            co_await IncrementLoginAttempts(user.getValueOfId(), log_context);
             co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
         }
 
@@ -194,11 +205,12 @@ namespace disk::auth {
         auto store_result =
             co_await TokenService::GetInstance()->StoreRefreshToken(user.getValueOfId(), refresh_token);
         if (!store_result.has_value()) {
-            Logger::Warn() << "Failed to store refresh_token in Redis: " << user.getValueOfId();
+            Logger::Warn(log_context)
+                << "Failed to store refresh_token in Redis: " << user.getValueOfId();
         }
 
         /// 6. 更新登录信息
-        co_await UpdateLoginInfo(user.getValueOfId(), ip_address);
+        co_await UpdateLoginInfo(user.getValueOfId(), ip_address, log_context);
 
         /// 7. 构造响应
         LoginResponse response;
@@ -208,24 +220,29 @@ namespace disk::auth {
         response.expires_in = disk::services::TokenService::GetAccessTokenExpireSeconds();
         response.user = UserToResponse(user);
 
-        Logger::Info() << "User login successful: " << request.account << " (ID: " << user.getValueOfId()
-                 << ")";
+        Logger::Info(log_context)
+            << "User login successful: " << request.account << " (ID: " << user.getValueOfId()
+            << ")";
         co_return response;
     }
 
-    auto AuthService::RefreshTokens(RefreshTokenRequest request)
+    auto AuthService::RefreshTokens(
+        RefreshTokenRequest request,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<RefreshTokenResponse>> {
-        Logger::Debug() << "Starting token refresh";
+        Logger::Debug(log_context) << "Starting token refresh";
 
         /// 1. 验证刷新令牌
         auto verify_result = TokenService::GetInstance()->VerifyRefreshToken(request.refresh_token);
         if (!verify_result) {
-            Logger::Warn() << "Refresh token verification failed";
+            Logger::Warn(log_context) << "Refresh token verification failed";
             co_return std::unexpected(verify_result.error());
         }
 
         const auto [user_id, jti] = verify_result.value();
-        Logger::Debug() << "Refresh token verified successfully: user_id=" << user_id << ", jti=" << jti;
+        Logger::Debug(log_context)
+            << "Refresh token verified successfully: user_id=" << user_id << ", jti=" << jti;
 
         /// 2. 查询用户信息
         try {
@@ -233,17 +250,19 @@ namespace disk::auth {
 
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
-            Logger::Debug() << "Found user: " << user.getValueOfUsername();
+            Logger::Debug(log_context) << "Found user: " << user.getValueOfUsername();
 
             /// 3. 检查账户状态
             const auto status = user.getValueOfStatus();
             if (status == 0) {
-                Logger::Warn() << "Account disabled: " << user.getValueOfUsername();
+                Logger::Warn(log_context)
+                    << "Account disabled: " << user.getValueOfUsername();
                 co_return std::unexpected(ErrorInfo(ErrorCode::AccountDisabled));
             }
 
             if (CheckAccountLocked(user)) {
-                Logger::Warn() << "Account locked: " << user.getValueOfUsername();
+                Logger::Warn(log_context)
+                    << "Account locked: " << user.getValueOfUsername();
                 co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
             }
 
@@ -258,7 +277,8 @@ namespace disk::auth {
                 new_refresh_token
             );
             if (!refresh_result) {
-                Logger::Warn() << "Refresh token renewal failed: " << user.getValueOfId();
+                Logger::Warn(log_context)
+                    << "Refresh token renewal failed: " << user.getValueOfId();
                 co_return std::unexpected(refresh_result.error());
             }
 
@@ -268,14 +288,16 @@ namespace disk::auth {
             response.refresh_token = new_refresh_token;
             response.expires_in = disk::services::TokenService::GetAccessTokenExpireSeconds();
 
-            Logger::Info() << "Token refresh successful: user_id=" << user_id;
+            Logger::Info(log_context) << "Token refresh successful: user_id=" << user_id;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "User query failed: " << user_id << " - " << e.base().what();
+            Logger::Error(log_context)
+                << "User query failed: " << user_id << " - " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
         } catch (const std::exception& e) {
-            Logger::Error() << "Token refresh processing failed: " << e.what();
+            Logger::Error(log_context)
+                << "Token refresh processing failed: " << e.what();
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Token refresh failed, please try again later")
             );
@@ -283,15 +305,21 @@ namespace disk::auth {
     }
 
     auto
-    AuthService::Logout(uint64_t user_id, const std::string& access_token, std::string ip_address)
+    AuthService::Logout(
+        uint64_t user_id,
+        const std::string& access_token,
+        std::string ip_address,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
 
-        Logger::Info() << "User logout: user_id=" << user_id << ", ip=" << ip_address;
+        Logger::Info(log_context) << "User logout: user_id=" << user_id << ", ip=" << ip_address;
 
         /// 步骤 1: 使访问令牌失效
         auto invalidate_result = co_await TokenService::GetInstance()->InvalidateAccessToken(access_token);
         if (!invalidate_result.has_value()) {
-            Logger::Warn() << "Access token invalidation failed: user_id=" << user_id;
+            Logger::Warn(log_context)
+                << "Access token invalidation failed: user_id=" << user_id;
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Logout failed, please try again later")
             );
@@ -300,7 +328,8 @@ namespace disk::auth {
         /// 步骤 2: 撤销刷新令牌
         auto revoke_result = co_await TokenService::GetInstance()->RevokeRefreshToken(user_id);
         if (!revoke_result) {
-            Logger::Warn() << "Refresh token revocation failed: user_id=" << user_id;
+            Logger::Warn(log_context)
+                << "Refresh token revocation failed: user_id=" << user_id;
             /// 不中断流程，继续返回成功
         }
 
@@ -322,13 +351,13 @@ namespace disk::auth {
             log.setCreatedAt(trantor::Date::now());
 
             co_await mapper.insert(log);
-            Logger::Debug() << "Logout log recorded: user_id=" << user_id;
+            Logger::Debug(log_context) << "Logout log recorded: user_id=" << user_id;
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Failed to record logout log: " << e.base().what();
+            Logger::Warn(log_context) << "Failed to record logout log: " << e.base().what();
             /// 不中断流程
         }
 
-        Logger::Info() << "User logout successful: user_id=" << user_id;
+        Logger::Info(log_context) << "User logout successful: user_id=" << user_id;
         co_return {};
     }
 
@@ -344,28 +373,28 @@ namespace disk::auth {
         return response;
     }
 
-    auto AuthService::FindUser(std::string account) const -> drogon::Task<Result<Users>> {
+    auto AuthService::FindUser(
+        std::string account,
+        disk::utils::LogContext log_context
+    ) const -> drogon::Task<Result<Users>> {
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, username, email, password_hash, nickname, avatar, "
-                "storage_quota, storage_used, storage_reserved, status, role, "
-                "login_attempts, locked_until, last_login_at, last_login_ip, "
-                "created_at, updated_at "
-                "FROM users WHERE username = $1 OR email = $1 LIMIT 1",
+                "SELECT id, username, email, password_hash, nickname, avatar, " "storage_quota, storage_used, storage_reserved, status, role, " "login_attempts, locked_until, last_login_at, last_login_ip, " "created_at, updated_at " "FROM users WHERE username = $1 OR email = $1 LIMIT 1",
                 account
             );
 
             if (result.empty()) {
-                Logger::Warn() << "User not found: " << account;
+                Logger::Warn(log_context) << "User not found: " << account;
                 co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
             }
 
             Users user(result[0], -1);
-            Logger::Debug() << "Found user: " << account;
+            Logger::Debug(log_context) << "Found user: " << account;
             co_return user;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "User lookup failed: " << account << " - " << e.base().what();
+            Logger::Warn(log_context)
+                << "User lookup failed: " << account << " - " << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
         }
     }
@@ -388,7 +417,11 @@ namespace disk::auth {
         return false;
     }
 
-    auto AuthService::UpdateLoginInfo(uint64_t user_id, std::string ip_address)
+    auto AuthService::UpdateLoginInfo(
+        uint64_t user_id,
+        std::string ip_address,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<void> {
 
         try {
@@ -401,7 +434,7 @@ namespace disk::auth {
             user.setLoginAttempts(0);
 
             co_await mapper.update(user);
-            Logger::Debug() << "Login info updated successfully: " << user_id;
+            Logger::Debug(log_context) << "Login info updated successfully: " << user_id;
 
             /// 清除 IP 频率限制计数器
             const std::string rate_key =
@@ -410,17 +443,23 @@ namespace disk::auth {
             auto delete_result = co_await m_redis_service->Delete(rate_key);
             if (delete_result.has_value()) {
                 const std::string ip_only = disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
-                Logger::Debug() << "Login rate limit counter cleared: ip=" << ip_only;
+                Logger::Debug(log_context)
+                    << "Login rate limit counter cleared: ip=" << ip_only;
             } else {
-                Logger::Warn() << "Failed to clear login rate limit counter: "
-                         << delete_result.error().message;
+                Logger::Warn(log_context)
+                    << "Failed to clear login rate limit counter: "
+                    << delete_result.error().message;
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to update login info: " << user_id << " - " << e.base().what();
+            Logger::Error(log_context)
+                << "Failed to update login info: " << user_id << " - " << e.base().what();
         }
     }
 
-    auto AuthService::IncrementLoginAttempts(uint64_t user_id) -> drogon::Task<void> {
+    auto AuthService::IncrementLoginAttempts(
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<void> {
 
         try {
             CoroMapper<Users> mapper(m_db_client);
@@ -437,17 +476,20 @@ namespace disk::auth {
                 auto locked_until = trantor::Date::now().after(15 * 60);
                 user.setLockedUntil(locked_until);
                 user.setStatus(2);
-                Logger::Warn() << "Account locked: " << user_id << " (unlocks in 15 minutes)";
+                Logger::Warn(log_context)
+                    << "Account locked: " << user_id << " (unlocks in 15 minutes)";
             } else {
                 user.setLoginAttempts(attempts);
-                Logger::Warn() << "Failed login attempts: " << user_id << " = " << attempts;
+                Logger::Warn(log_context)
+                    << "Failed login attempts: " << user_id << " = " << attempts;
             }
 
             co_await mapper.update(user);
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to increment login attempts: " << user_id << " - "
-                      << e.base().what();
+            Logger::Error(log_context)
+                << "Failed to increment login attempts: " << user_id << " - "
+                << e.base().what();
         }
     }
-} ///< namespace disk::auth
+} // namespace disk::auth

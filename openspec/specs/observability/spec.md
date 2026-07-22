@@ -62,6 +62,25 @@ The system SHALL classify only the exact authenticated user-profile, password, a
 - **WHEN** a user path is not exactly `/api/user/profile`, `/api/user/password`, or `/api/user/storage`, including an extra suffix
 - **THEN** the user classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
 
+### Requirement: Typed Authentication Correlation
+The system SHALL classify only the exact register, login, refresh, and logout paths as the bounded `auth` operation and SHALL propagate their correlation explicitly by value across the authentication controller, direct authentication-DTO events, and authentication-service coroutine boundaries.
+
+#### Scenario: Client registers, logs in, refreshes, or logs out
+- **WHEN** a request enters `/api/auth/register`, `/api/auth/login`, `/api/auth/refresh`, or `/api/auth/logout`
+- **THEN** its response, HTTP completion event at the configured level, controller events, direct authentication-DTO events, and authentication-service events SHALL retain the same request ID, actual handling instance, and `auth` operation
+
+#### Scenario: Authentication request has no upload or durable-job ownership
+- **WHEN** an authentication request records an account, user ID, login-attempt count, refresh-token identifier, or operation-log result
+- **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those authentication-domain values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: Authentication credentials remain secret
+- **WHEN** any authentication path succeeds or fails
+- **THEN** application events and typed correlation fields SHALL NOT contain passwords, password hashes, Authorization header values, access tokens, or refresh tokens
+
+#### Scenario: Authentication classification remains bounded
+- **WHEN** an authentication path is not exactly one of the four supported paths, including the collection root, a trailing slash, an extra suffix, or an unknown action
+- **THEN** the authentication classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
+
 ### Requirement: Operation Logs
 The system SHALL record and expose user-visible operation logs for key actions.
 

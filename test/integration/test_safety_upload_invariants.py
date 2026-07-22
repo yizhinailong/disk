@@ -832,6 +832,57 @@ def assert_user_log_context(
     log_pass("user logs keep typed request correlation and null ownership fields")
 
 
+def assert_auth_log_context(
+    *,
+    response,
+    request_id: str,
+    expected_success: bool,
+    message_markers: tuple[str, ...],
+) -> None:
+    """Assert one authentication request keeps its bounded typed correlation."""
+    if expected_success:
+        assert_equal(
+            "authentication request preserves its documented success envelope",
+            response.status_code == 200 and json_field(response.text, "code") == "0",
+            True,
+        )
+    else:
+        assert_equal(
+            "authentication request returns a documented failure",
+            response.status_code >= 400 and json_field(response.text, "code") != "0",
+            True,
+        )
+    assert_equal(
+        "authentication request preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal("authentication request identifies the handling instance", bool(instance_id), True)
+
+    for marker in message_markers:
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="auth",
+            upload_id=None,
+            message_marker=marker,
+        )
+    log_pass("authentication logs keep typed request correlation and null ownership fields")
+
+
+def assert_server_log_excludes_secrets(secrets: tuple[str, ...]) -> None:
+    """Assert raw authentication credentials never reached managed API stdout."""
+    log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+    for secret in secrets:
+        assert_equal(
+            "managed authentication logs exclude a raw credential",
+            bool(secret) and secret not in log_text,
+            True,
+        )
+    log_pass("authentication logs exclude passwords and raw access/refresh tokens")
+
+
 def test_file_query_log_context_invariants() -> None:
     """Verify file list, numeric detail, and search use one bounded query operation."""
     log_section("File Query Structured Log Correlation")
@@ -1254,6 +1305,114 @@ def test_user_log_context_invariants() -> None:
             "Received storage stats request",
             "Get storage stats successful",
         ),
+    )
+
+
+def test_auth_log_context_invariants() -> None:
+    """Verify the four exact authentication paths share one bounded operation."""
+    log_section("Authentication Structured Log Correlation")
+    username = scalar("SELECT username FROM users WHERE id = %s", (USER_ID,))
+    assert_equal("authentication fixture resolves the current username", bool(username), True)
+    register_password = "SafetyRegister123"
+
+    redis_delete_pattern("rate:register:*")
+    register_request_id = f"safety-auth-register-log-{unique_name()}"
+    register_response = fetch(
+        "/api/auth/register",
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Request-Id": register_request_id},
+        json_body={
+            "username": str(username),
+            "email": f"safety-auth-{unique_name()}@example.com",
+            "password": register_password,
+        },
+    )
+    assert_auth_log_context(
+        response=register_response,
+        request_id=register_request_id,
+        expected_success=False,
+        message_markers=(
+            "Received user registration request",
+            "Username already exists",
+            "User registration business logic failed",
+            "HTTP request completed",
+        ),
+    )
+
+    login_request_id = f"safety-auth-login-log-{unique_name()}"
+    login_response = fetch(
+        "/api/auth/login",
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Request-Id": login_request_id},
+        json_body={"account": TEST_USER, "password": TEST_PASS},
+    )
+    access_token = json_field(login_response.text, "data.access_token")
+    refresh_token = json_field(login_response.text, "data.refresh_token")
+    assert_equal("correlated login returns an access token", bool(access_token), True)
+    assert_equal("correlated login returns a refresh token", bool(refresh_token), True)
+    assert_auth_log_context(
+        response=login_response,
+        request_id=login_request_id,
+        expected_success=True,
+        message_markers=(
+            "Received login request",
+            "User login successful",
+            "Login successful",
+        ),
+    )
+
+    refresh_request_id = f"safety-auth-refresh-log-{unique_name()}"
+    refresh_response = fetch(
+        "/api/auth/refresh",
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Request-Id": refresh_request_id},
+        json_body={"refresh_token": refresh_token},
+    )
+    refreshed_access_token = json_field(refresh_response.text, "data.access_token")
+    refreshed_refresh_token = json_field(refresh_response.text, "data.refresh_token")
+    assert_equal("correlated refresh returns an access token", bool(refreshed_access_token), True)
+    assert_equal("correlated refresh returns a refresh token", bool(refreshed_refresh_token), True)
+    assert_auth_log_context(
+        response=refresh_response,
+        request_id=refresh_request_id,
+        expected_success=True,
+        message_markers=(
+            "Received refresh token request",
+            "Token refresh successful",
+            "Refresh token successful",
+        ),
+    )
+
+    logout_request_id = f"safety-auth-logout-log-{unique_name()}"
+    logout_response = fetch(
+        "/api/auth/logout",
+        method="POST",
+        headers={
+            **auth_headers(refreshed_access_token),
+            "X-Request-Id": logout_request_id,
+        },
+    )
+    assert_auth_log_context(
+        response=logout_response,
+        request_id=logout_request_id,
+        expected_success=True,
+        message_markers=(
+            "Received logout request",
+            "User logout:",
+            "User logout successful",
+            "Logout successful",
+        ),
+    )
+
+    assert_server_log_excludes_secrets(
+        (
+            register_password,
+            TEST_PASS,
+            access_token,
+            refresh_token,
+            refreshed_access_token,
+            refreshed_refresh_token,
+        )
     )
 
 
@@ -4595,6 +4754,7 @@ def main() -> None:
     test_trash_log_context_invariants()
     test_system_info_log_context_invariants()
     test_user_log_context_invariants()
+    test_auth_log_context_invariants()
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()

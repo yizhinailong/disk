@@ -191,7 +191,8 @@ namespace disk::metrics {
         if (path == "/metrics") {
             return HttpOperation::Metrics;
         }
-        if (path.starts_with("/api/auth/")) {
+        if (path == "/api/auth/register" || path == "/api/auth/login" ||
+            path == "/api/auth/refresh" || path == "/api/auth/logout") {
             return HttpOperation::Auth;
         }
         if (path == "/api/file/upload/init") {

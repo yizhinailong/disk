@@ -15,7 +15,16 @@ namespace disk::metrics {
         TEST(MetricsServiceTest, ClassifiesOnlyBoundedOperations) {
             EXPECT_EQ(ClassifyHttpOperation("/api/health/ready"), HttpOperation::Health);
             EXPECT_EQ(ClassifyHttpOperation("/metrics"), HttpOperation::Metrics);
+            EXPECT_EQ(ClassifyHttpOperation("/api/auth/register"), HttpOperation::Auth);
             EXPECT_EQ(ClassifyHttpOperation("/api/auth/login"), HttpOperation::Auth);
+            EXPECT_EQ(ClassifyHttpOperation("/api/auth/refresh"), HttpOperation::Auth);
+            EXPECT_EQ(ClassifyHttpOperation("/api/auth/logout"), HttpOperation::Auth);
+            EXPECT_EQ(HttpOperationName(HttpOperation::Auth), "auth");
+            EXPECT_EQ(ClassifyHttpOperation("/api/auth"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/auth/"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/auth/login/extra"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/auth/unknown"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/authentication/login"), HttpOperation::Other);
             EXPECT_EQ(ClassifyHttpOperation("/api/file/list"), HttpOperation::FileQuery);
             EXPECT_EQ(ClassifyHttpOperation("/api/file/123"), HttpOperation::FileQuery);
             EXPECT_EQ(ClassifyHttpOperation("/api/file/search"), HttpOperation::FileQuery);

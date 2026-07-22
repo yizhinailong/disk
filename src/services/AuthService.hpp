@@ -17,6 +17,7 @@
 #include "models/Users.hpp"
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::auth {
 
@@ -45,10 +46,14 @@ namespace disk::auth {
          * - 分配默认存储配额（10GB）
          *
          * @param request 注册请求
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<RegisterResponse>> 成功返回用户信息，失败返回错误
          */
         [[nodiscard]]
-        auto Register(RegisterRequest request) -> drogon::Task<Result<RegisterResponse>>;
+        auto Register(
+            RegisterRequest request,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<RegisterResponse>>;
 
         /**
          * @brief 用户登录
@@ -61,10 +66,15 @@ namespace disk::auth {
          *
          * @param request 登录请求
          * @param ip_address 客户端IP地址
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<LoginResponse>> 成功返回令牌和用户信息，失败返回错误
          */
         [[nodiscard]]
-        auto Login(LoginRequest request, std::string ip_address) -> drogon::Task<Result<LoginResponse>>;
+        auto Login(
+            LoginRequest request,
+            std::string ip_address,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<LoginResponse>>;
 
         /**
          * @brief 刷新令牌
@@ -76,10 +86,14 @@ namespace disk::auth {
          * - 旧 refresh token 会在 Redis 中被新 token 覆盖
          *
          * @param request 刷新令牌请求
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<RefreshTokenResponse>> 成功返回新令牌对，失败返回错误
          */
         [[nodiscard]]
-        auto RefreshTokens(RefreshTokenRequest request) -> drogon::Task<Result<RefreshTokenResponse>>;
+        auto RefreshTokens(
+            RefreshTokenRequest request,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<RefreshTokenResponse>>;
 
         /**
          * @brief 用户登出
@@ -92,10 +106,16 @@ namespace disk::auth {
          * @param user_id 用户 ID
          * @param access_token 访问令牌
          * @param ip_address IP 地址
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto Logout(uint64_t user_id, const std::string& access_token, std::string ip_address)
+        auto Logout(
+            uint64_t user_id,
+            const std::string& access_token,
+            std::string ip_address,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>>;
 
     private:
@@ -105,10 +125,14 @@ namespace disk::auth {
         /**
          * @brief 根据账号（用户名或邮箱）查找用户
          * @param account 账号（用户名或邮箱）
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<drogon_model::disk::Users>> 成功返回用户信息，失败返回 UserNotFound 错误
          */
         [[nodiscard]]
-        auto FindUser(std::string account) const -> drogon::Task<Result<drogon_model::disk::Users>>;
+        auto FindUser(
+            std::string account,
+            disk::utils::LogContext log_context
+        ) const -> drogon::Task<Result<drogon_model::disk::Users>>;
 
         /**
          * @brief 检查账户是否被锁定
@@ -122,20 +146,29 @@ namespace disk::auth {
          * @brief 更新登录信息
          * @param user_id 用户ID
          * @param ip_address IP地址
+         * @param log_context 请求日志上下文
          * @return drogon::Task<void>
          */
-        auto UpdateLoginInfo(uint64_t user_id, std::string ip_address) -> drogon::Task<void>;
+        auto UpdateLoginInfo(
+            uint64_t user_id,
+            std::string ip_address,
+            disk::utils::LogContext log_context
+        ) -> drogon::Task<void>;
 
         /**
          * @brief 增加登录失败次数
          * @param user_id 用户ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<void>
          */
-        auto IncrementLoginAttempts(uint64_t user_id) -> drogon::Task<void>;
+        auto IncrementLoginAttempts(
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) -> drogon::Task<void>;
 
-        drogon::orm::DbClientPtr m_db_client;                          ///< 数据库客户端
+        drogon::orm::DbClientPtr m_db_client;                            ///< 数据库客户端
         std::shared_ptr<disk::services::RedisService> m_redis_service{}; ///< Redis服务
-        static constexpr uint64_t DEFAULT_STORAGE_QUOTA = 10737418240; ///< 默认存储配额 10GB
+        static constexpr uint64_t DEFAULT_STORAGE_QUOTA = 10737418240;   ///< 默认存储配额 10GB
     };
 
-} ///< namespace disk::auth
+} // namespace disk::auth

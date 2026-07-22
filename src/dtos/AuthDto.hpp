@@ -49,49 +49,60 @@ namespace disk::auth {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<RegisterRequest> {
-            Logger::Debug() << "Start parsing register request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<RegisterRequest> {
+            Logger::Debug(log_context) << "Start parsing register request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto username_result = RequireString(json, "username");
-            if (!username_result) return std::unexpected(username_result.error());
+            if (!username_result) {
+                return std::unexpected(username_result.error());
+            }
 
             auto email_result = RequireString(json, "email");
-            if (!email_result) return std::unexpected(email_result.error());
+            if (!email_result) {
+                return std::unexpected(email_result.error());
+            }
 
             auto password_result = RequireString(json, "password");
-            if (!password_result) return std::unexpected(password_result.error());
+            if (!password_result) {
+                return std::unexpected(password_result.error());
+            }
 
             RegisterRequest request;
             request.username = std::move(*username_result);
             request.email = std::move(*email_result);
             request.password = std::move(*password_result);
 
-            Logger::Debug() << "Parsed register request: " << request.username << " <" << request.email
-                      << ">";
+            Logger::Debug(log_context)
+                << "Parsed register request: " << request.username << " <" << request.email << ">";
 
             if (!request.ValidateUsername()) {
-                Logger::Warn() << "Username format error: " << request.username;
+                Logger::Warn(log_context) << "Username format error: " << request.username;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Username format error")
                 );
             }
             if (!request.ValidateEmail()) {
-                Logger::Warn() << "Email format error: " << request.email;
+                Logger::Warn(log_context) << "Email format error: " << request.email;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Email format error")
                 );
             }
             if (!request.ValidatePassword()) {
-                Logger::Warn() << "Password format error: " << request.username;
+                Logger::Warn(log_context) << "Password format error: " << request.username;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Password format error")
                 );
             }
-            Logger::Debug() << "Request parameters validated";
+            Logger::Debug(log_context) << "Request parameters validated";
 
             return request;
         }
@@ -142,37 +153,46 @@ namespace disk::auth {
         std::string password;
 
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<LoginRequest> {
-            Logger::Debug() << "Start parsing login request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<LoginRequest> {
+            Logger::Debug(log_context) << "Start parsing login request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto account_result = RequireString(json, "account");
-            if (!account_result) return std::unexpected(account_result.error());
+            if (!account_result) {
+                return std::unexpected(account_result.error());
+            }
 
             auto password_result = RequireString(json, "password");
-            if (!password_result) return std::unexpected(password_result.error());
+            if (!password_result) {
+                return std::unexpected(password_result.error());
+            }
 
             LoginRequest request;
             request.account = std::move(*account_result);
             request.password = std::move(*password_result);
 
             if (request.account.empty()) {
-                Logger::Warn() << "Account cannot be empty";
+                Logger::Warn(log_context) << "Account cannot be empty";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Account cannot be empty")
                 );
             }
             if (request.password.empty()) {
-                Logger::Warn() << "Password cannot be empty";
+                Logger::Warn(log_context) << "Password cannot be empty";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Password cannot be empty")
                 );
             }
 
-            Logger::Debug() << "Parsed login request: " << request.account;
+            Logger::Debug(log_context) << "Parsed login request: " << request.account;
 
             return request;
         }
@@ -189,20 +209,27 @@ namespace disk::auth {
         std::string refresh_token;
 
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<RefreshTokenRequest> {
-            Logger::Debug() << "Start parsing refresh token request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<RefreshTokenRequest> {
+            Logger::Debug(log_context) << "Start parsing refresh token request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto token_result = RequireString(json, "refresh_token");
-            if (!token_result) return std::unexpected(token_result.error());
+            if (!token_result) {
+                return std::unexpected(token_result.error());
+            }
 
             RefreshTokenRequest request;
             request.refresh_token = std::move(*token_result);
 
-            Logger::Debug() << "Parsed refresh token request";
+            Logger::Debug(log_context) << "Parsed refresh token request";
 
             return request;
         }
@@ -288,4 +315,4 @@ namespace disk::auth {
         }
     };
 
-} ///< namespace disk::auth
+} // namespace disk::auth

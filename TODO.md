@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 用户资料日志关联）：完整构建、聚焦用户分类/上下文/DTO/服务 GoogleTest 34/34、用户资料/密码/存储 API 集成 3/3、真实 HTTP safety 集成 1/1（脚本本次实际 606 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1410 项，1403 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 489.46 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 认证日志关联）：完整构建、聚焦认证分类/上下文/DTO/服务 GoogleTest 53/53、认证流程集成 3/3、真实 HTTP safety 集成 1/1（脚本本次实际 634 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1411 项，1404 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 472.66 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -621,6 +621,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定用户资
 `UserController` 在认证属性读取或 DTO 解析前从请求属性创建显式 `LogContext`，按值传入 `ChangePasswordRequest`、`UpdateProfileRequest` 的直接解析/校验事件和 `UserService` 的资料读取、密码修改、资料更新、存储统计协程。用户、资料、配额和聚合统计值不冒充 `upload_id`、`job_id`、`lease_owner` 或 `state_version`，四个非用户域所有权字段保持 JSON `null`；共享 `DtoBase` 未接收上下文时不从线程或字段重建关联，构造期服务初始化日志继续作为无 HTTP 上下文的进程事件。
 
 `MetricsServiceTest` 锁定三个精确 path 与四个负边界，`UserLogContextContractTest` 锁定 Controller、User DTO 直接事件和四个服务协程的显式传播。`SafetyUploadInvariantsIntegration` 使用四个不同调用方 request ID：资料读取和存储统计读取核对生产 `INFO` Controller/服务链事件，非法资料更新和非法密码修改核对 User DTO/Controller `WARN` 与 HTTP 完成事件，全部验证响应同一 instance、固定 operation 与四个空所有权字段。完整构建、Python 语法检查、聚焦 GoogleTest 34/34、用户 API 集成 3/3、真实 HTTP safety 集成 1/1（脚本本次实际 606 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1410 项，1403 通过、7 项环境门控跳过、0 失败，总耗时 489.46 秒。分享、管理员、认证等其他历史请求域和共享基础设施边界，以及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.22 认证日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定认证请求的类型化日志、分类和脱敏边界。HTTP 指标只将精确的 `/api/auth/register`、`/api/auth/login`、`/api/auth/refresh` 和 `/api/auth/logout` 归一为低基数 `operation=auth`；认证根路径、尾随斜杠、额外后缀、未知认证路由和相似路径保持 `other`。公开 REST 路由、请求体、响应信封、错误码及访问令牌和刷新令牌生命周期语义没有变化。
+
+`AuthController` 在 DTO 解析、认证属性读取或 Authorization 头处理前从请求属性创建显式 `LogContext`，按值传过认证 DTO、`AuthService` 的注册/登录/刷新/登出协程及用户查询、登录状态更新和失败计数辅助协程。认证请求只填充真实 `request_id`、`instance_id` 和固定 operation，`upload_id`、`job_id`、`lease_owner`、`state_version` 保持 JSON `null`；密码、密码哈希、Authorization 头、access token 和 refresh token 均不进入日志。共享 `DtoBase`、`TokenService`、`RedisService` 和过滤器未接收显式调用方上下文时继续保持空上下文，不从线程、令牌、用户或消息文本推断所有权字段；构造期服务初始化日志仍是无 HTTP 上下文的进程事件。
+
+`MetricsServiceTest` 锁定四个精确 path 与五个负边界，`AuthLogContextContractTest` 锁定 Controller、认证 DTO、四个公开服务协程、三个辅助协程的显式上下文传播和敏感值禁记。`SafetyUploadInvariantsIntegration` 使用调用方 request ID 覆盖重复注册失败、登录成功、刷新成功和登出成功，逐行核对响应、Controller/DTO/服务及 HTTP 完成 NDJSON 的 request/instance、固定 operation 和四个空所有权字段，并扫描受管后端 stdout 确认本轮密码及两组 access/refresh token 均未泄漏。完整构建、Python 语法检查、聚焦 GoogleTest 53/53、认证流程集成 3/3、真实 HTTP safety 集成 1/1（脚本本次实际 634 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1411 项，1404 通过、7 项环境门控跳过、0 失败，总耗时 472.66 秒。分享、管理员等其他历史请求域和共享基础设施边界，以及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

@@ -18,6 +18,7 @@ set(TEST_SOURCES
     services/ObservedDbClient_test.cpp
     services/RedisService_test.cpp
     services/LoginRateLimit_test.cpp
+    services/AuthLogContext_test.cpp
     services/ModelDialect_test.cpp
     services/ContentService_test.cpp
     services/QuotaService_test.cpp
