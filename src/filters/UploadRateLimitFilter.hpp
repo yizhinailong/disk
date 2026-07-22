@@ -10,12 +10,18 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
+#include <functional>
+#include <string>
 
 #include <drogon/HttpFilter.h>
 
-#include "services/RedisService.hpp"
+#include "utils/ErrorCode.hpp"
 
 namespace disk::filters {
+
+    using UploadRateLimitCounter =
+        std::function<drogon::Task<Result<int64_t>>(const std::string&, int)>;
 
     /**
      * @brief 上传频率限制过滤器
@@ -34,6 +40,7 @@ namespace disk::filters {
     class UploadRateLimitFilter : public drogon::HttpCoroFilter<UploadRateLimitFilter> {
     public:
         UploadRateLimitFilter();
+        explicit UploadRateLimitFilter(UploadRateLimitCounter counter);
 
         [[nodiscard]]
         auto doFilter(const drogon::HttpRequestPtr& request)
@@ -43,7 +50,7 @@ namespace disk::filters {
         static constexpr int WINDOW_SECONDS = 60;
 
     private:
-        std::shared_ptr<disk::services::RedisService> m_redis_service{};
+        UploadRateLimitCounter m_counter;
 
         [[nodiscard]]
         static auto GetCurrentWindow() -> int64_t {
@@ -59,4 +66,4 @@ namespace disk::filters {
         }
     };
 
-} ///< namespace disk::filters
+} // namespace disk::filters
