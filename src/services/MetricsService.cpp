@@ -609,7 +609,9 @@ namespace disk::metrics {
         }
     }
 
-    auto MetricsService::Render() const -> drogon::Task<std::string> {
+    auto MetricsService::Render(
+        disk::utils::LogContext log_context
+    ) const -> drogon::Task<std::string> {
         auto& registry = MetricsRegistry::GetInstance();
         const auto config = disk::utils::ConfigMgr::GetInstance();
         registry.SetDependencyPoolCapacity(
@@ -672,8 +674,7 @@ namespace disk::metrics {
             }
             database.success = reconciliation_schema_ready;
         } catch (const std::exception&) {
-            Logger::Warn() << "Metrics database snapshot failed: instance_id="
-                           << m_runtime_state->InstanceId();
+            Logger::Warn(log_context) << "Metrics database snapshot failed";
         }
 
         co_return RenderSnapshot(

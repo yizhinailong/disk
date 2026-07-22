@@ -486,6 +486,85 @@ def require_database_failure(
     return elapsed
 
 
+def require_metrics_snapshot_failure(
+    server: ManagedServer,
+    request_id: str,
+) -> None:
+    response = httpx.get(
+        server.base_url + "/metrics",
+        headers={"X-Request-Id": request_id},
+        timeout=10,
+    )
+    require(response.status_code == 200, "failed metrics snapshot changed HTTP status")
+    require(
+        response.headers.get("X-Request-Id") == request_id,
+        "failed metrics snapshot changed the request ID",
+    )
+    instance_id = response.headers.get("X-Disk-Instance-Id")
+    require(instance_id == server.name, "failed metrics snapshot identified the wrong API")
+    require(
+        response.headers.get("Content-Type", "").startswith("text/plain"),
+        "failed metrics snapshot changed the Prometheus content type",
+    )
+    require(
+        "disk_metrics_snapshot_success 0" in response.text,
+        "failed metrics snapshot did not expose its failure gauge",
+    )
+    require(
+        f'disk_process_info{{instance_id="{server.name}",role="api"}} 1'
+        in response.text,
+        "failed metrics snapshot omitted process-local metrics",
+    )
+
+    message = "Metrics database snapshot failed"
+    deadline = time.monotonic() + 5
+    records: list[dict[str, Any]] = []
+    matches: list[dict[str, Any]] = []
+    while time.monotonic() < deadline:
+        if server.log_handle is not None:
+            server.log_handle.flush()
+        records.clear()
+        if server.log_path.is_file():
+            for line in server.log_path.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ).splitlines():
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(record, dict):
+                    records.append(record)
+        matches = [
+            record
+            for record in records
+            if record.get("request_id") == request_id
+            and record.get("message") == message
+        ]
+        if matches:
+            break
+        time.sleep(0.05)
+
+    require(len(matches) == 1, "metrics snapshot failure event was not emitted exactly once")
+    event = matches[0]
+    require(event.get("schema_version") == 1, "metrics failure log schema drifted")
+    require(event.get("source") == "application", "metrics failure log source drifted")
+    require(event.get("level") == "warning", "metrics failure log level drifted")
+    require(event.get("instance_id") == instance_id, "metrics failure log instance drifted")
+    require(event.get("operation") == "metrics", "metrics failure operation drifted")
+    for field in ("upload_id", "job_id", "lease_owner", "state_version"):
+        require(event.get(field) is None, f"metrics failure populated {field}")
+    require(
+        not any(
+            record.get("source") == "application"
+            and record.get("request_id") is None
+            and record.get("message") == message
+            for record in records
+        ),
+        "metrics failure emitted an unscoped duplicate",
+    )
+
+
 def database_unready(base_url: str) -> bool:
     response = httpx.get(base_url + "/api/health/ready", timeout=8)
     if response.status_code != 503:
@@ -650,6 +729,10 @@ def main() -> int:
                     json_body={"nickname": rejected_nickname},
                 )
             )
+            require_metrics_snapshot_failure(
+                api_a,
+                f"metrics-failover-{suffix}",
+            )
             require(
                 primary.scalar(
                     "SELECT nickname FROM users WHERE username = %s",
@@ -731,6 +814,8 @@ def main() -> int:
                     "command_timeouts_controlled": True,
                     "endpoint_recovery_seconds": round(recovery_seconds, 3),
                     "failed_write_not_replayed": True,
+                    "metrics_snapshot_failure_correlated": True,
+                    "metrics_snapshot_failure_degraded": True,
                     "old_primary_fenced": True,
                     "old_primary_sigkilled": True,
                     "passed": True,
@@ -765,7 +850,8 @@ def main() -> int:
         primary = None
         print(
             "PASS: stable PostgreSQL endpoint promotion preserved timeouts, "
-            "reconnection, committed state, and post-promotion writes"
+            "correlated metrics degradation, reconnection, committed state, "
+            "and post-promotion writes"
         )
         return 0
     except BaseException:

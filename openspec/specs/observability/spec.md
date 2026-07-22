@@ -518,6 +518,25 @@ The system SHALL associate requests with trace identifiers for log correlation a
 - **WHEN** the system handles an HTTP request
 - **THEN** it SHALL make the request trace identifier available for logging and response propagation
 
+### Requirement: Typed Metrics Snapshot Failure Correlation
+The exact `/metrics` scrape endpoint SHALL establish the bounded `metrics` operation before querying PostgreSQL and SHALL pass that request correlation explicitly by value to the database-snapshot failure boundary without changing the Prometheus response contract.
+
+#### Scenario: Metrics snapshot query fails
+- **WHEN** a traced `/metrics` request cannot query its PostgreSQL-backed snapshot
+- **THEN** the response and the single directly owned failure event SHALL retain the same request ID and actual handling instance, the event SHALL use `operation=metrics`, and upload ID, job ID, lease owner, and state version SHALL remain null
+
+#### Scenario: Metrics snapshot failure degrades safely
+- **WHEN** the PostgreSQL-backed portion of a scrape is unavailable
+- **THEN** the endpoint SHALL still return HTTP 200 Prometheus text with process-local metrics and `disk_metrics_snapshot_success 0`
+
+#### Scenario: Metrics snapshot failure is recorded
+- **WHEN** the service catches a snapshot query failure
+- **THEN** it SHALL emit one fixed `WARN` application message without SQL, exception text, endpoint, connection detail, credentials, or identifiers embedded in the message, and it SHALL NOT infer typed ownership fields from runtime or database values
+
+#### Scenario: Metrics rendering has no HTTP caller
+- **WHEN** a unit, utility, or compatibility caller renders metrics without supplying correlation
+- **THEN** request and ownership fields SHALL remain JSON null rather than being reconstructed from thread-local state, the runtime instance, query results, or failure text
+
 ### Requirement: Explicit File DTO Correlation
 Every file-domain request DTO that emits a parsing or validation event SHALL accept caller-owned `LogContext` explicitly by value and SHALL use only that supplied context for the event. This SHALL cover upload initialization and completion, file listing and search, owner download metadata and content, rename, move, copy, and soft-delete parsing without changing their existing request or validation contracts.
 

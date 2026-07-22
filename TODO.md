@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 共享内容生命周期日志关联）：完整构建、ContentService/真实 content-quota 安全网聚焦 CTest 5/5、直接真实 HTTP/PostgreSQL 安全网 209/209 项断言通过；完整 CTest 共 1449 项，1442 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 481.12 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 Metrics 快照失败日志关联）：完整构建、Metrics/真实 PostgreSQL 故障切换聚焦 CTest 10/10、直接真实 HTTP/PostgreSQL 主备演练通过；完整 CTest 共 1450 项，1443 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 479.64 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -803,6 +803,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定共享内
 10 条直接操作失败事件现在使用固定消息，不记录 content/file/user ID、MD5/SHA-256、size/delta、storage path、MIME、batch/affected rows、GC payload、SQL、连接信息、业务错误或异常正文、Authorization/JWT 或存储凭据，也不从输入、数据库行、错误或消息推断或覆盖类型化字段。既有参数化 SQL、行锁、ref_count 不变量、reference gate、GC 入队、事务归属、可选值/集合/`Result` 及 HTTP 响应合同不变。
 
 `ContentServiceLogContextContractTest` 锁定 8 个默认入口、4 次内部 gate 传播、10 条固定事件和 11 个生产调用点；`test_safety_content_quota.py` 以精确 PostgreSQL `file_contents` UPDATE trigger 只破坏指定内容的引用递增，以唯一 request ID 发起真实秒传 init，核对 HTTP 500/`10006`/`Failed to update file content reference count`、响应同一 request/实际 instance/`upload_init`、四个空所有权字段、无空 request 重复事件且 application message 不含触发器异常正文，同时确认目标文件和上传任务未创建，ref_count、used/reserved quota、内容行和 Blob 不变。完整构建、Python 语法检查、聚焦 CTest 5/5、直接安全网 209/209 项断言和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1449 项，1442 通过、7 项环境门控跳过、0 失败，总耗时 481.12 秒。其他尚未逐条归属的日志路径及目标 S3/多实例环境门控仍未收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.45 Metrics 快照失败日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定 `/metrics` 数据库快照失败的显式关联合同。`MetricsController` 现在在查询前从既有请求属性建立固定 `operation=metrics` 的 `LogContext`，`MetricsService::Render` 按值接收且为非 HTTP 兼容调用保留默认空上下文。PostgreSQL 快照失败只写固定 `WARN` application 消息 `Metrics database snapshot failed`，不再把实例 ID 拼入 message，也不记录 SQL、异常正文、endpoint、连接信息或凭据；顶层 instance ID 仍由结构化日志器写入，upload/job/lease/version 保持 JSON `null`。Prometheus 文本、查询、进程内指标、HTTP 200 和 `disk_metrics_snapshot_success 0` 降级语义不变。
+
+`MetricsServiceLogContextContractTest` 锁定 Controller 到 Service 的单次传播、一个默认上下文、唯一相关 `WARN`、固定消息以及异常正文/消息内实例 ID 禁止项。增强后的 `test_postgres_failover_semantics.py` 在两个真实 API 经稳定 TCP 端点连接物理主备 PostgreSQL 时暂停转发，以唯一 request ID 抓取 API A：响应保持 200、同 request/实际 instance、Prometheus content type、失败 gauge 和进程指标；受管 stdout NDJSON 恰有一条同 request/instance/`metrics` 的 `warning` application 事件，四个所有权字段为空且没有空 request 重复。`0600` 原子证据 `.sisyphus/evidence/postgres-failover-semantics-summary.json` 的 SHA-256 为 `17c05d6dacb840f7bd5c275a086811e5d1d58be542f8c81b5db9114a62a945c0`，不保存 request ID、业务标识、密码、令牌或连接串。
+
+完整构建、Python 语法检查、Metrics/真实故障切换聚焦 CTest 10/10、直接主备演练和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1450 项，1443 通过、7 项环境门控跳过、0 失败，总耗时 479.64 秒。其他尚未逐条归属的日志路径与目标 MinIO/云 S3、多实例拓扑门禁仍未收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

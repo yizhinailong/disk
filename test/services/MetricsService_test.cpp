@@ -1,8 +1,12 @@
 #include "services/MetricsService.hpp"
 
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <string_view>
 
 #include <gtest/gtest.h>
 #include <trantor/utils/ConcurrentTaskQueue.h>
@@ -12,6 +16,88 @@
 
 namespace disk::metrics {
     namespace {
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto Contains(const std::string& source, std::string_view expected) -> bool {
+            return source.find(expected) != std::string::npos;
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
+        }
+
+        auto ExtractRange(
+            const std::string& source,
+            std::string_view begin_marker,
+            std::string_view end_marker
+        ) -> std::string {
+            const auto begin = source.find(begin_marker);
+            const auto end = source.find(end_marker, begin);
+            if (begin == std::string::npos || end == std::string::npos) {
+                return {};
+            }
+            return source.substr(begin, end - begin);
+        }
+
+        TEST(MetricsServiceLogContextContractTest, ScrapeFailureKeepsExplicitRequestContext) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/MetricsController.cpp");
+            const auto service_header = ReadSourceFile("src/services/MetricsService.hpp");
+            const auto service_source = ReadSourceFile("src/services/MetricsService.cpp");
+            const auto render_source = ExtractRange(
+                service_source,
+                "auto MetricsService::Render(",
+                "    auto MetricsService::RenderSnapshot("
+            );
+
+            ASSERT_FALSE(controller_source.empty());
+            ASSERT_FALSE(service_header.empty());
+            ASSERT_FALSE(render_source.empty());
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    controller_source,
+                    "GetRequestLogContext(request, \"metrics\")"
+                ),
+                1
+            );
+            EXPECT_TRUE(Contains(controller_source, "service.Render(log_context)"));
+            EXPECT_EQ(
+                CountOccurrences(
+                    service_header,
+                    "disk::utils::LogContext log_context = {}"
+                ),
+                1
+            );
+            EXPECT_TRUE(Contains(
+                render_source,
+                "disk::utils::LogContext log_context"
+            ));
+            EXPECT_EQ(CountOccurrences(render_source, "Logger::Warn(log_context)"), 1);
+            EXPECT_TRUE(Contains(
+                render_source,
+                "Logger::Warn(log_context) << \"Metrics database snapshot failed\";"
+            ));
+            EXPECT_FALSE(Contains(render_source, "Logger::Warn()"));
+            EXPECT_FALSE(Contains(render_source, ".what()"));
+            EXPECT_FALSE(Contains(render_source, "instance_id="));
+        }
+
         TEST(MetricsServiceTest, ClassifiesOnlyBoundedOperations) {
             EXPECT_EQ(ClassifyHttpOperation("/api/health/ready"), HttpOperation::Health);
             EXPECT_EQ(ClassifyHttpOperation("/metrics"), HttpOperation::Metrics);

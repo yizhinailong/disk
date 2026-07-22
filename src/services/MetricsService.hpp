@@ -17,6 +17,7 @@
 #include <drogon/orm/DbClient.h>
 
 #include "services/ProcessRuntime.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace trantor {
     class ConcurrentTaskQueue;
@@ -278,7 +279,9 @@ namespace disk::metrics {
             std::shared_ptr<disk::runtime::ProcessRuntimeState> runtime_state
         );
 
-        [[nodiscard]] auto Render() const -> drogon::Task<std::string>;
+        [[nodiscard]] auto Render(
+            disk::utils::LogContext log_context = {}
+        ) const -> drogon::Task<std::string>;
 
         [[nodiscard]] static auto RenderSnapshot(
             const MetricsSnapshot& metrics,
