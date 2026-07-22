@@ -72,6 +72,20 @@ namespace disk::jobs {
             return Json::writeString(builder, value);
         }
 
+        auto SetLogContext(
+            Json::Value& details,
+            const disk::utils::LogContext& log_context
+        ) -> void {
+            details["request_id"] =
+                log_context.request_id.has_value() && !log_context.request_id->empty() ?
+                    Json::Value(*log_context.request_id) :
+                    Json::Value(Json::nullValue);
+            details["operation"] =
+                log_context.operation.has_value() && !log_context.operation->empty() ?
+                    Json::Value(*log_context.operation) :
+                    Json::Value(Json::nullValue);
+        }
+
         [[nodiscard]] auto Bounded(std::string value, size_t maximum) -> std::string {
             if (value.size() > maximum) {
                 value.resize(maximum);
@@ -83,7 +97,8 @@ namespace disk::jobs {
             const drogon::orm::DbClientPtr& client,
             uint64_t job_id,
             const disk::admin::StorageJobReplayRequest& request,
-            const StorageJobAuditContext& audit
+            const StorageJobAuditContext& audit,
+            const disk::utils::LogContext& log_context
         ) -> drogon::Task<Result<disk::admin::StorageJobItem>> {
             const auto select_sql = std::string("SELECT ") + std::string(kJobProjection) +
                                     " FROM storage_jobs WHERE id = $1 FOR UPDATE";
@@ -129,6 +144,7 @@ namespace disk::jobs {
             details["previous_status"] = std::string(StorageJobStatusName(current.status));
             details["previous_attempts"] = current.attempts;
             details["reason"] = request.reason;
+            SetLogContext(details, log_context);
             auto inserted = co_await client->execSqlCoro(
                 "INSERT INTO operation_logs " "(user_id, action, target_type, target_id, target_name, details, ip_address, user_agent) " "VALUES ($1, 'admin.storage_job.replay', 'storage_job', $2, $3, $4::jsonb, $5, NULLIF($6, ''))",
                 static_cast<int64_t>(audit.operator_id),
@@ -152,7 +168,10 @@ namespace disk::jobs {
         }
     }
 
-    auto StorageJobAdminService::List(const disk::admin::StorageJobListRequest& request) const
+    auto StorageJobAdminService::List(
+        const disk::admin::StorageJobListRequest& request,
+        disk::utils::LogContext log_context
+    ) const
         -> drogon::Task<Result<disk::admin::StorageJobListResponse>> {
         try {
             const auto status = ToStorageValue(request.status);
@@ -188,7 +207,8 @@ namespace disk::jobs {
             }
             co_return response;
         } catch (const std::exception& error) {
-            Logger::Error() << "Storage job admin list failed: error=" << error.what();
+            Logger::Error(log_context)
+                << "Storage job admin list failed: error=" << error.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to list storage jobs"
@@ -196,8 +216,12 @@ namespace disk::jobs {
         }
     }
 
-    auto StorageJobAdminService::Get(uint64_t job_id) const
+    auto StorageJobAdminService::Get(
+        uint64_t job_id,
+        disk::utils::LogContext log_context
+    ) const
         -> drogon::Task<Result<disk::admin::StorageJobItem>> {
+        log_context.job_id = job_id;
         try {
             const auto sql = std::string("SELECT ") + std::string(kJobProjection) +
                              " FROM storage_jobs WHERE id = $1";
@@ -210,8 +234,9 @@ namespace disk::jobs {
             }
             co_return ToStorageJobItem(rows[0]);
         } catch (const std::exception& error) {
-            Logger::Error() << "Storage job admin detail failed: job_id=" << job_id
-                            << ", error=" << error.what();
+            Logger::Error(log_context)
+                << "Storage job admin detail failed: job_id=" << job_id
+                << ", error=" << error.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get storage job"
@@ -287,10 +312,12 @@ namespace disk::jobs {
     auto StorageJobAdminService::Replay(
         uint64_t job_id,
         const disk::admin::StorageJobReplayRequest& request,
-        const StorageJobAuditContext& audit
+        const StorageJobAuditContext& audit,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<disk::admin::StorageJobReplayResponse>> {
+        log_context.job_id = job_id;
         if (request.dry_run) {
-            auto job = co_await Get(job_id);
+            auto job = co_await Get(job_id, log_context);
             if (!job) {
                 co_return std::unexpected(job.error());
             }
@@ -318,7 +345,13 @@ namespace disk::jobs {
         );
         auto result = co_await transaction.Run(
             [&](const drogon::orm::DbClientPtr& client) -> drogon::Task<Result<void>> {
-                auto replay = co_await ReplayInTransaction(client, job_id, request, audit);
+                auto replay = co_await ReplayInTransaction(
+                    client,
+                    job_id,
+                    request,
+                    audit,
+                    log_context
+                );
                 if (!replay) {
                     co_return std::unexpected(replay.error());
                 }
@@ -330,8 +363,9 @@ namespace disk::jobs {
             co_return std::unexpected(result.error());
         }
 
-        Logger::Info() << "Storage job dead-letter replayed: job_id=" << job_id
-                       << ", operator_id=" << audit.operator_id;
+        Logger::Info(log_context)
+            << "Storage job dead-letter replayed: job_id=" << job_id
+            << ", operator_id=" << audit.operator_id;
         co_return disk::admin::StorageJobReplayResponse{
             .job = std::move(replayed_job),
             .dry_run = false,

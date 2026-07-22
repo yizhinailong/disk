@@ -131,6 +131,29 @@ The system SHALL classify the core administration routes owned by `AdminControll
 - **WHEN** the manual expired-cleanup route or a storage-job or storage-recovery administration route is handled
 - **THEN** manual cleanup SHALL retain `cleanup`, while storage-job and storage-recovery controllers SHALL remain outside this core `AdminController` propagation requirement and SHALL NOT infer missing correlation from threads, credentials, or domain identifiers
 
+### Requirement: Typed Storage Job Administration Correlation
+The system SHALL propagate storage-job administration request correlation explicitly by value across `StorageJobAdminController`, storage-job administration service coroutines, and the dead-letter replay audit boundary. These routes SHALL retain the existing bounded `admin` operation classification.
+
+#### Scenario: Administrator lists storage jobs
+- **WHEN** an authenticated administrator lists persistent storage jobs
+- **THEN** the response, HTTP completion event at the configured level, controller events, and storage-job administration service errors SHALL retain the same request ID, actual handling instance, and `admin` operation, while job ID, upload ID, lease owner, and state version remain null
+
+#### Scenario: Administrator inspects or replays one storage job
+- **WHEN** an authenticated administrator supplies a valid positive persistent storage-job ID to the detail or replay route
+- **THEN** controller and storage-job administration service events SHALL retain the same request ID, actual handling instance, and `admin` operation and SHALL use that parsed database row ID as `job_id`; upload ID, lease owner, and state version SHALL remain null
+
+#### Scenario: Storage-job path validation fails
+- **WHEN** a detail or replay path does not contain a valid positive storage-job ID
+- **THEN** request-scoped validation and HTTP completion events SHALL keep the response request ID and `admin` operation while job ID remains null, and the system SHALL NOT derive a job ID from raw path text, dedupe keys, aggregate IDs, payloads, or messages
+
+#### Scenario: Administrator commits a dead-letter replay
+- **WHEN** a confirmed non-dry-run replay atomically resets a dead-letter job and writes its operation-log row
+- **THEN** the replay event SHALL retain the request context and parsed persistent job ID, and the JSON audit details SHALL persist the same non-empty request ID and `admin` operation in the replay transaction without recording credentials or storage payload contents
+
+#### Scenario: Upload diagnostics list related jobs
+- **WHEN** upload diagnostics internally call `ListRelatedToUpload` without entering a storage-job administration route
+- **THEN** that helper SHALL remain outside this request-bound propagation requirement and SHALL NOT infer a storage-job request ID or job ID from the upload ID, staging prefix, related rows, or error message
+
 ### Requirement: Operation Logs
 The system SHALL record and expose user-visible operation logs for key actions.
 

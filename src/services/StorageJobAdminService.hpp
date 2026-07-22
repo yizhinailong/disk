@@ -12,6 +12,7 @@
 
 #include "dtos/StorageJobAdminDto.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::jobs {
 
@@ -26,11 +27,17 @@ namespace disk::jobs {
         explicit StorageJobAdminService(drogon::orm::DbClientPtr db_client);
 
         [[nodiscard]]
-        auto List(const disk::admin::StorageJobListRequest& request) const
+        auto List(
+            const disk::admin::StorageJobListRequest& request,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<disk::admin::StorageJobListResponse>>;
 
         [[nodiscard]]
-        auto Get(uint64_t job_id) const
+        auto Get(
+            uint64_t job_id,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<disk::admin::StorageJobItem>>;
 
         [[nodiscard]]
@@ -45,7 +52,8 @@ namespace disk::jobs {
         auto Replay(
             uint64_t job_id,
             const disk::admin::StorageJobReplayRequest& request,
-            const StorageJobAuditContext& audit
+            const StorageJobAuditContext& audit,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<disk::admin::StorageJobReplayResponse>>;
 
     private:

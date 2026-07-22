@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 核心管理员日志关联）：完整构建、管理员 GoogleTest 59/59、真实 HTTP safety 集成 1/1（脚本本次实际 725 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1414 项，1407 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 487.73 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 存储任务管理日志关联）：完整构建、存储任务管理 GoogleTest 9/9、真实 HTTP StorageJobOperations 集成 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1415 项，1408 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 474.54 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -645,6 +645,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定核心管
 八类管理员操作审计现在使用 JSON 序列化器写入结构化 details，并保存调用方同一 `request_id` 与 `operation`；全局存储统计、分享列表和分享详情等读取审计使用已认证管理员的真实 `user_id`，不再写入无效的操作人 0。原本长 33 字符而无法写入 `operation_logs.action VARCHAR(32)` 的可用空间动作已收敛为 `admin.user.available_space_set`，无需数据库迁移。审计仍不记录 Authorization、JWT、密码、分享令牌或密码哈希。真实分享查询同时暴露两处既有 PostgreSQL 语法错误，相关状态刷新已由非法的 `UPDATE shares s SET s.status` 修正为 PostgreSQL 支持的 `UPDATE shares AS s SET status`，列表和详情路径均由源码合同锁定。
 
 `AdminLogContextContractTest` 锁定 13 个 Controller、6 个 DTO、13 个服务协程、八个审计调用点、结构化序列化、真实操作人和 PostgreSQL alias 语法；`SafetyUploadInvariantsIntegration` 使用四个不同调用方 request ID 覆盖非法用户列表状态、管理员修改自身状态、缺失分享详情和成功全局存储统计，逐行核对 DTO/Controller/服务/HTTP NDJSON，并直接查询 `operation_logs` 验证真实管理员 ID、request/operation 关联及敏感值禁记。完整构建、Python 语法检查、管理员 GoogleTest 59/59、真实 HTTP safety 集成 1/1（脚本本次实际 725 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1414 项，1407 通过、7 项环境门控跳过、0 失败，总耗时 487.73 秒。存储任务/恢复管理请求、共享基础设施边界和目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.25 存储任务管理日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定独立的存储任务管理关联边界。`StorageJobAdminController` 的列表、详情和死信重放在解析前创建固定 `operation=admin` 的显式 `LogContext`；列表没有单任务所有权并保持 `job_id=null`，详情与重放只在正整数路径 ID 校验成功后写入真实 `storage_jobs.id`。上下文按值传入 `StorageJobAdminService` 的三个请求协程，既有错误与重放成功事件不再丢失 request/instance/operation/job；upload ID、lease owner 和 state version 保持 JSON `null`，非法路径文本、aggregate ID、dedupe key、payload 和 message 不作为关联推断来源。现有 HTTP 指标分类保持不变，没有引入新的高基数或重复 operation。
+
+确认重放事务现在通过 JSON 序列化器在 `operation_logs.details` 保存调用方同一 `request_id` 与 `operation=admin`，同时保留真实任务 ID、原状态、原尝试次数和规范化原因；dry-run 与冲突仍不写审计，日志和审计不记录管理员 JWT、Authorization、对象存储凭据或任务 payload。上传诊断内部使用的 `ListRelatedToUpload` 不属于存储任务管理 HTTP 链路，本批没有从 upload ID、staging prefix 或返回任务反推上下文；存储恢复管理 Controller 继续作为下一独立边界。
+
+`StorageJobAdminLogContextContractTest` 锁定三个 Controller、三个服务请求协程、单任务 ID 建立点、事务传播、结构化审计和敏感值禁记；现有 StorageJobAdmin DTO 8 项继续覆盖状态/类型/分页、正整数 ID、dry-run 和确认合同。`StorageJobOperationsIntegration` 为列表、详情、dry-run、确认重放和重复冲突分别发送唯一 request ID，逐行核对受管 `ops-api` NDJSON 的 request/instance/admin 与类型化 job 空值/实值，并直接查询 PostgreSQL 确认审计只写一次且保存关联二元组。完整构建、Python 语法检查、存储任务管理 GoogleTest 9/9、真实 HTTP StorageJobOperations 集成 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1415 项，1408 通过、7 项环境门控跳过、0 失败，总耗时 474.54 秒。存储恢复管理请求、共享基础设施边界和目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

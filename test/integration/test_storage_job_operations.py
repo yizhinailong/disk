@@ -13,8 +13,13 @@ import json
 import os
 import shutil
 import sys
+import time
 import uuid
 from pathlib import Path
+
+EVIDENCE_ROOT = Path(os.environ.get("EVIDENCE_DIR", ".sisyphus/evidence"))
+SERVER_LOG_PATH = EVIDENCE_ROOT / "storage-job-operations-server.log"
+os.environ["SERVER_LOG"] = str(SERVER_LOG_PATH)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -155,6 +160,54 @@ def audit_count(action: str, target_name: str) -> int:
     )
 
 
+def require_response_context(response, request_id: str) -> str:
+    require(
+        response.headers.get("x-request-id", "") == request_id,
+        f"response did not preserve request ID {request_id}",
+    )
+    instance_id = response.headers.get("x-disk-instance-id", "")
+    require(instance_id == "ops-api", "response did not identify the storage operations API")
+    return instance_id
+
+
+def wait_for_storage_job_log(
+    *,
+    request_id: str,
+    instance_id: str,
+    job_id: int | None,
+    message_marker: str,
+) -> dict[str, object]:
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if SERVER_LOG_PATH.is_file():
+            for line in SERVER_LOG_PATH.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ).splitlines():
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (
+                    record.get("schema_version") == 1
+                    and record.get("source") == "application"
+                    and record.get("request_id") == request_id
+                    and record.get("instance_id") == instance_id
+                    and record.get("operation") == "admin"
+                    and record.get("upload_id") is None
+                    and record.get("job_id") == job_id
+                    and record.get("lease_owner") is None
+                    and record.get("state_version") is None
+                    and message_marker in str(record.get("message", ""))
+                ):
+                    return record
+        time.sleep(0.05)
+    raise AssertionError(
+        f"storage job log missing request_id={request_id}, job_id={job_id}, "
+        f"message={message_marker}"
+    )
+
+
 def test_metrics() -> None:
     log_info("Checking unauthenticated internal metrics contract")
     response = fetch("/metrics")
@@ -200,25 +253,49 @@ def test_dead_letter_operations(token: str) -> None:
     unauthenticated = fetch("/api/admin/storage-jobs")
     require(unauthenticated.status_code == 401, "storage job list is not admin protected")
 
-    listing = fetch("/api/admin/storage-jobs?page_size=100", headers=headers)
+    list_request_id = f"ops-storage-job-list-{uuid.uuid4().hex}"
+    listing = fetch(
+        "/api/admin/storage-jobs?page_size=100",
+        headers={**headers, "X-Request-Id": list_request_id},
+    )
     require(listing.status_code == 200, f"storage job list returned HTTP {listing.status_code}")
+    list_instance_id = require_response_context(listing, list_request_id)
     items = response_json(listing)["data"]["items"]
     fixture = next((item for item in items if int(item["id"]) == JOB_ID), None)
     require(fixture is not None, "default dead-letter list omitted fixture")
     require("payload" not in fixture, "storage job list leaked payload")
+    wait_for_storage_job_log(
+        request_id=list_request_id,
+        instance_id=list_instance_id,
+        job_id=None,
+        message_marker="Storage job admin list successful",
+    )
 
-    detail = fetch(f"/api/admin/storage-jobs/{JOB_ID}", headers=headers)
+    detail_request_id = f"ops-storage-job-detail-{uuid.uuid4().hex}"
+    detail = fetch(
+        f"/api/admin/storage-jobs/{JOB_ID}",
+        headers={**headers, "X-Request-Id": detail_request_id},
+    )
     require(detail.status_code == 200, f"storage job detail returned HTTP {detail.status_code}")
+    detail_instance_id = require_response_context(detail, detail_request_id)
     detail_data = response_json(detail)["data"]
     require(detail_data["payload"]["content_id"] == "999999999", "detail payload drifted")
+    wait_for_storage_job_log(
+        request_id=detail_request_id,
+        instance_id=detail_instance_id,
+        job_id=JOB_ID,
+        message_marker="Storage job admin detail successful",
+    )
 
+    dry_run_request_id = f"ops-storage-job-dry-run-{uuid.uuid4().hex}"
     dry_run = fetch(
         f"/api/admin/storage-jobs/{JOB_ID}/replay",
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": dry_run_request_id},
         json_body={},
     )
     require(dry_run.status_code == 200, f"dry-run returned HTTP {dry_run.status_code}")
+    dry_run_instance_id = require_response_context(dry_run, dry_run_request_id)
     dry_data = response_json(dry_run)["data"]
     require(dry_data["dry_run"] is True, "dry-run flag is false")
     require(dry_data["eligible"] is True, "dead-letter was not eligible")
@@ -235,11 +312,18 @@ def test_dead_letter_operations(token: str) -> None:
         == 0,
         "dry-run wrote an audit record",
     )
+    wait_for_storage_job_log(
+        request_id=dry_run_request_id,
+        instance_id=dry_run_instance_id,
+        job_id=JOB_ID,
+        message_marker="Storage job replay successful: dry_run=true",
+    )
 
+    replay_request_id = f"ops-storage-job-replay-{uuid.uuid4().hex}"
     replay = fetch(
         f"/api/admin/storage-jobs/{JOB_ID}/replay",
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": replay_request_id},
         json_body={
             "dry_run": False,
             "confirm_job_id": JOB_ID,
@@ -247,6 +331,7 @@ def test_dead_letter_operations(token: str) -> None:
         },
     )
     require(replay.status_code == 200, f"replay returned HTTP {replay.status_code}: {replay.text}")
+    replay_instance_id = require_response_context(replay, replay_request_id)
     replay_data = response_json(replay)["data"]
     require(replay_data["replayed"] is True, "replay response did not confirm mutation")
     require(replay_data["job"]["status"] == "pending", "replay did not return pending state")
@@ -278,11 +363,22 @@ def test_dead_letter_operations(token: str) -> None:
     require(audit is not None and audit["user_id"] is not None, "replay audit is missing operator")
     require(audit["details"]["reason"] == "dependency recovered", "audit reason was not normalized")
     require(audit["details"]["previous_status"] == "dead_letter", "audit lost prior state")
+    require(audit["details"]["request_id"] == replay_request_id, "audit lost request ID")
+    require(audit["details"]["operation"] == "admin", "audit operation drifted")
+    require(audit["details"]["job_id"] == JOB_ID, "audit job ID drifted")
+    require("payload" not in audit["details"], "replay audit stored the task payload")
+    wait_for_storage_job_log(
+        request_id=replay_request_id,
+        instance_id=replay_instance_id,
+        job_id=JOB_ID,
+        message_marker="Storage job dead-letter replayed",
+    )
 
+    conflict_request_id = f"ops-storage-job-conflict-{uuid.uuid4().hex}"
     duplicate = fetch(
         f"/api/admin/storage-jobs/{JOB_ID}/replay",
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": conflict_request_id},
         json_body={
             "dry_run": False,
             "confirm_job_id": JOB_ID,
@@ -290,6 +386,7 @@ def test_dead_letter_operations(token: str) -> None:
         },
     )
     require(duplicate.status_code == 409, "second replay did not report a state conflict")
+    conflict_instance_id = require_response_context(duplicate, conflict_request_id)
     require(
         scalar(
             "SELECT COUNT(*) FROM operation_logs WHERE action = %s AND target_id = %s",
@@ -298,6 +395,14 @@ def test_dead_letter_operations(token: str) -> None:
         == 1,
         "conflicting replay wrote a second audit record",
     )
+    wait_for_storage_job_log(
+        request_id=conflict_request_id,
+        instance_id=conflict_instance_id,
+        job_id=JOB_ID,
+        message_marker="Storage job replay failed",
+    )
+    log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+    require(token not in log_text, "storage job logs exposed the administrator JWT")
     log_pass("Dead-letter list, detail, dry-run, replay, conflict, and audit contracts hold")
 
 
@@ -1037,6 +1142,7 @@ def test_recovery_commands(token: str) -> None:
 def main() -> int:
     os.environ["DISK_PROCESS_ROLE"] = "api"
     os.environ["DISK_INSTANCE_ID"] = "ops-api"
+    SERVER_LOG_PATH.unlink(missing_ok=True)
     ensure_server()
     try:
         token = do_login()
