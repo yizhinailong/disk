@@ -104,6 +104,33 @@ The system SHALL classify only registered non-download share path shapes as the 
 - **WHEN** a path does not match the share collection, one-segment detail, cancel compatibility, access, browse, save, or exact share-download route shapes, including a trailing slash or extra path segment
 - **THEN** the share classifiers SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
 
+### Requirement: Typed Core Administration Correlation
+The system SHALL classify the core administration routes owned by `AdminController` as the fixed low-cardinality `admin` operation and SHALL propagate their correlation explicitly by value across the controller, direct administration-DTO events, administration-service coroutines, and operation-log audit boundary. The exact manual-cleanup route SHALL retain its separate `cleanup` operation.
+
+#### Scenario: Administrator uses a core administration route
+- **WHEN** an authenticated administrator lists, inspects, or changes users, reads storage or system statistics, lists, inspects, or cancels shares, or queries operation logs through a route registered by `AdminController`
+- **THEN** its response, HTTP completion event at the configured level, controller events, direct administration-DTO events, and administration-service events SHALL retain the same request ID, actual handling instance, and `admin` operation
+
+#### Scenario: Core administration writes an audit row
+- **WHEN** a core administration request records a successful user, storage, or share audit event
+- **THEN** its JSON audit details SHALL persist the same request ID and `admin` operation, SHALL use the authenticated administrator as the operator, SHALL remain valid for target names and share codes containing JSON metacharacters, and SHALL use an action name no longer than the existing `operation_logs.action VARCHAR(32)` contract
+
+#### Scenario: Administrator sets user available space
+- **WHEN** an administrator successfully changes another user's available space
+- **THEN** the audit action SHALL be `admin.user.available_space_set`, which fits the existing schema without requiring a database migration
+
+#### Scenario: Core administration has no upload or durable-job ownership
+- **WHEN** a core administration request records administrator, user, share, file, storage, filter, pagination, dependency, or audit identifiers
+- **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those administration-domain values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: Administration credentials remain secret
+- **WHEN** a core administration request succeeds or fails
+- **THEN** application and audit events SHALL NOT contain an Authorization header value, JWT, password, password hash, share token, or storage credential
+
+#### Scenario: Administration subdomain boundaries remain distinct
+- **WHEN** the manual expired-cleanup route or a storage-job or storage-recovery administration route is handled
+- **THEN** manual cleanup SHALL retain `cleanup`, while storage-job and storage-recovery controllers SHALL remain outside this core `AdminController` propagation requirement and SHALL NOT infer missing correlation from threads, credentials, or domain identifiers
+
 ### Requirement: Operation Logs
 The system SHALL record and expose user-visible operation logs for key actions.
 

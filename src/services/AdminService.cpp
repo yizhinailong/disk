@@ -11,13 +11,14 @@
 
 #include <cmath>
 #include <filesystem>
-#include <format>
 #include <limits>
+#include <utility>
 
 #include <drogon/HttpAppFramework.h>
 #include <drogon/nosql/RedisClient.h>
 #include <drogon/orm/CoroMapper.h>
 #include <drogon/orm/Criteria.h>
+#include <json/writer.h>
 
 #include "models/Users.hpp"
 #include "services/ObservedDbClient.hpp"
@@ -31,17 +32,42 @@ namespace disk::services {
     using drogon::orm::Criteria;
     using drogon_model::disk::Users;
 
+    namespace {
+        [[nodiscard]] auto SerializeDetails(const Json::Value& details) -> std::string {
+            Json::StreamWriterBuilder builder;
+            builder["indentation"] = "";
+            return Json::writeString(builder, details);
+        }
+
+        auto SetLogContext(
+            Json::Value& details,
+            const disk::utils::LogContext& log_context
+        ) -> void {
+            details["request_id"] =
+                log_context.request_id.has_value() && !log_context.request_id->empty() ?
+                    Json::Value(*log_context.request_id) :
+                    Json::Value(Json::nullValue);
+            details["operation"] =
+                log_context.operation.has_value() && !log_context.operation->empty() ?
+                    Json::Value(*log_context.operation) :
+                    Json::Value(Json::nullValue);
+        }
+    } // namespace
+
     AdminService::AdminService()
         : m_db_client(disk::metrics::ObserveDbClient(drogon::app().getDbClient())),
           m_start_time(std::chrono::steady_clock::now()) {
         Logger::Debug() << "AdminService initialization completed";
     }
 
-    auto AdminService::ListUsers(const admin::ListUsersRequest& req)
+    auto AdminService::ListUsers(
+        const admin::ListUsersRequest& req,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<admin::UserListResponse>> {
 
-        Logger::Info() << "Admin list users: page=" << req.page
-                       << " page_size=" << req.page_size;
+        Logger::Info(log_context) << "Admin list users: page=" << req.page
+                                  << " page_size=" << req.page_size;
 
         try {
             std::string where_clause = " WHERE 1=1";
@@ -100,11 +126,12 @@ namespace disk::services {
                 response.items.push_back(std::move(user));
             }
 
-            Logger::Info() << "Admin list users successful: total=" << total;
+            Logger::Info(log_context) << "Admin list users successful: total=" << total;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Admin list users database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin list users database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to list users"
@@ -112,10 +139,13 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::GetUserDetail(uint64_t user_id)
+    auto AdminService::GetUserDetail(
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<admin::UserDetailResponse>> {
 
-        Logger::Info() << "Admin get user detail: user_id=" << user_id;
+        Logger::Info(log_context) << "Admin get user detail: user_id=" << user_id;
 
         try {
             CoroMapper<Users> mapper(m_db_client);
@@ -137,19 +167,21 @@ namespace disk::services {
             response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
             response.last_login_at = user.getLastLoginAt() ? user.getValueOfLastLoginAt().toDbStringLocal() : "";
 
-            Logger::Info() << "Admin get user detail successful: user_id=" << user_id;
+            Logger::Info(log_context)
+                << "Admin get user detail successful: user_id=" << user_id;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
             const auto error_msg = std::string(e.base().what());
             if (error_msg.find("condition") != std::string::npos ||
                 error_msg.find("empty") != std::string::npos) {
-                Logger::Warn() << "Admin user not found: user_id=" << user_id;
+                Logger::Warn(log_context) << "Admin user not found: user_id=" << user_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
             }
 
-            Logger::Error() << "Admin get user detail database error: user_id=" << user_id
-                            << " - " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin get user detail database error: user_id=" << user_id
+                << " - " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get user detail"
@@ -157,14 +189,20 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::ChangeUserStatus(uint64_t target_id, int status, uint64_t operator_id)
+    auto AdminService::ChangeUserStatus(
+        uint64_t target_id,
+        int status,
+        uint64_t operator_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
 
-        Logger::Info() << "Admin change user status: target_id=" << target_id
-                       << " status=" << status << " operator_id=" << operator_id;
+        Logger::Info(log_context) << "Admin change user status: target_id=" << target_id
+                                  << " status=" << status << " operator_id=" << operator_id;
 
         if (target_id == operator_id) {
-            Logger::Warn() << "Admin cannot modify self: operator_id=" << operator_id;
+            Logger::Warn(log_context)
+                << "Admin cannot modify self: operator_id=" << operator_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotModifySelf));
         }
 
@@ -178,32 +216,34 @@ namespace disk::services {
             user.setStatus(static_cast<int8_t>(status));
             co_await mapper.update(user);
 
-            auto details = std::format(
-                R"({{"target_id": {}, "status": {}}})",
-                target_id,
-                status
-            );
+            Json::Value details;
+            details["target_id"] = static_cast<Json::UInt64>(target_id);
+            details["status"] = status;
             co_await LogOperation(
                 operator_id,
                 "admin.user.status_change",
                 "user",
                 target_id,
                 user.getValueOfUsername(),
-                details
+                std::move(details),
+                log_context
             );
 
-            Logger::Info() << "Admin change user status successful: target_id=" << target_id;
+            Logger::Info(log_context)
+                << "Admin change user status successful: target_id=" << target_id;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
             const auto error_msg = std::string(e.base().what());
             if (error_msg.find("condition") != std::string::npos ||
                 error_msg.find("empty") != std::string::npos) {
-                Logger::Warn() << "Admin user not found for status change: target_id=" << target_id;
+                Logger::Warn(log_context)
+                    << "Admin user not found for status change: target_id=" << target_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
             }
 
-            Logger::Error() << "Admin change user status database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin change user status database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to change user status"
@@ -211,14 +251,20 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::ChangeUserRole(uint64_t target_id, int role, uint64_t operator_id)
+    auto AdminService::ChangeUserRole(
+        uint64_t target_id,
+        int role,
+        uint64_t operator_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
 
-        Logger::Info() << "Admin change user role: target_id=" << target_id
-                       << " role=" << role << " operator_id=" << operator_id;
+        Logger::Info(log_context) << "Admin change user role: target_id=" << target_id
+                                  << " role=" << role << " operator_id=" << operator_id;
 
         if (target_id == operator_id) {
-            Logger::Warn() << "Admin cannot modify self: operator_id=" << operator_id;
+            Logger::Warn(log_context)
+                << "Admin cannot modify self: operator_id=" << operator_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotModifySelf));
         }
 
@@ -237,12 +283,14 @@ namespace disk::services {
                     if (!count_result.empty()) {
                         int admin_count = count_result[0]["cnt"].as<int>();
                         if (admin_count <= 1) {
-                            Logger::Warn() << "Cannot demote last admin: target_id=" << target_id;
+                            Logger::Warn(log_context)
+                                << "Cannot demote last admin: target_id=" << target_id;
                             co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotDemoteLast));
                         }
                     }
                 } catch (const drogon::orm::DrogonDbException& e) {
-                    Logger::Error() << "Failed to count admins: " << e.base().what();
+                    Logger::Error(log_context)
+                        << "Failed to count admins: " << e.base().what();
                     co_return std::unexpected(ErrorInfo(
                         ErrorCode::InternalError,
                         "Failed to verify admin count"
@@ -253,32 +301,34 @@ namespace disk::services {
             user.setRole(static_cast<int8_t>(role));
             co_await mapper.update(user);
 
-            auto details = std::format(
-                R"({{"target_id": {}, "role": {}}})",
-                target_id,
-                role
-            );
+            Json::Value details;
+            details["target_id"] = static_cast<Json::UInt64>(target_id);
+            details["role"] = role;
             co_await LogOperation(
                 operator_id,
                 "admin.user.role_change",
                 "user",
                 target_id,
                 user.getValueOfUsername(),
-                details
+                std::move(details),
+                log_context
             );
 
-            Logger::Info() << "Admin change user role successful: target_id=" << target_id;
+            Logger::Info(log_context)
+                << "Admin change user role successful: target_id=" << target_id;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
             const auto error_msg = std::string(e.base().what());
             if (error_msg.find("condition") != std::string::npos ||
                 error_msg.find("empty") != std::string::npos) {
-                Logger::Warn() << "Admin user not found for role change: target_id=" << target_id;
+                Logger::Warn(log_context)
+                    << "Admin user not found for role change: target_id=" << target_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
             }
 
-            Logger::Error() << "Admin change user role database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin change user role database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to change user role"
@@ -286,15 +336,22 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::ChangeUserAvailableSpace(uint64_t target_id, uint64_t available_space_g, uint64_t operator_id)
+    auto AdminService::ChangeUserAvailableSpace(
+        uint64_t target_id,
+        uint64_t available_space_g,
+        uint64_t operator_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<admin::UserDetailResponse>> {
 
-        Logger::Info() << "Admin change user available space: target_id=" << target_id
-                       << " available_space_g=" << available_space_g
-                       << " operator_id=" << operator_id;
+        Logger::Info(log_context)
+            << "Admin change user available space: target_id=" << target_id
+            << " available_space_g=" << available_space_g
+            << " operator_id=" << operator_id;
 
         if (target_id == operator_id) {
-            Logger::Warn() << "Admin cannot modify self available space: operator_id=" << operator_id;
+            Logger::Warn(log_context)
+                << "Admin cannot modify self available space: operator_id=" << operator_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotModifySelf));
         }
 
@@ -330,22 +387,21 @@ namespace disk::services {
             user.setStorageQuota(new_storage_quota);
             co_await mapper.update(user);
 
-            auto details = std::format(
-                R"({{"target_id": {}, "available_space_g": {}, "old_storage_quota": {}, "new_storage_quota": {}, "storage_used": {}, "storage_reserved": {}}})",
-                target_id,
-                available_space_g,
-                old_storage_quota,
-                new_storage_quota,
-                storage_used,
-                storage_reserved
-            );
+            Json::Value details;
+            details["target_id"] = static_cast<Json::UInt64>(target_id);
+            details["available_space_g"] = static_cast<Json::UInt64>(available_space_g);
+            details["old_storage_quota"] = static_cast<Json::UInt64>(old_storage_quota);
+            details["new_storage_quota"] = static_cast<Json::UInt64>(new_storage_quota);
+            details["storage_used"] = static_cast<Json::UInt64>(storage_used);
+            details["storage_reserved"] = static_cast<Json::UInt64>(storage_reserved);
             co_await LogOperation(
                 operator_id,
-                "admin.user.available_space_change",
+                "admin.user.available_space_set",
                 "user",
                 target_id,
                 user.getValueOfUsername(),
-                details
+                std::move(details),
+                log_context
             );
 
             admin::UserDetailResponse response;
@@ -362,18 +418,21 @@ namespace disk::services {
             response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
             response.last_login_at = user.getLastLoginAt() ? user.getValueOfLastLoginAt().toDbStringLocal() : "";
 
-            Logger::Info() << "Admin change user available space successful: target_id=" << target_id;
+            Logger::Info(log_context)
+                << "Admin change user available space successful: target_id=" << target_id;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
             const auto error_msg = std::string(e.base().what());
             if (error_msg.find("condition") != std::string::npos ||
                 error_msg.find("empty") != std::string::npos) {
-                Logger::Warn() << "Admin user not found for available space change: target_id=" << target_id;
+                Logger::Warn(log_context)
+                    << "Admin user not found for available space change: target_id=" << target_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
             }
 
-            Logger::Error() << "Admin change user available space database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin change user available space database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to change user available space"
@@ -381,14 +440,19 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::SoftDeleteUser(uint64_t target_id, uint64_t operator_id)
+    auto AdminService::SoftDeleteUser(
+        uint64_t target_id,
+        uint64_t operator_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
 
-        Logger::Info() << "Admin soft delete user: target_id=" << target_id
-                       << " operator_id=" << operator_id;
+        Logger::Info(log_context) << "Admin soft delete user: target_id=" << target_id
+                                  << " operator_id=" << operator_id;
 
         if (target_id == operator_id) {
-            Logger::Warn() << "Admin cannot delete self: operator_id=" << operator_id;
+            Logger::Warn(log_context)
+                << "Admin cannot delete self: operator_id=" << operator_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotModifySelf));
         }
 
@@ -402,32 +466,34 @@ namespace disk::services {
             user.setStatus(static_cast<int8_t>(0));
             co_await mapper.update(user);
 
-            auto details = std::format(
-                R"({{"target_id": {}, "username": "{}"}})",
-                target_id,
-                user.getValueOfUsername()
-            );
+            Json::Value details;
+            details["target_id"] = static_cast<Json::UInt64>(target_id);
+            details["username"] = user.getValueOfUsername();
             co_await LogOperation(
                 operator_id,
                 "admin.user.soft_delete",
                 "user",
                 target_id,
                 user.getValueOfUsername(),
-                details
+                std::move(details),
+                log_context
             );
 
-            Logger::Info() << "Admin soft delete user successful: target_id=" << target_id;
+            Logger::Info(log_context)
+                << "Admin soft delete user successful: target_id=" << target_id;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
             const auto error_msg = std::string(e.base().what());
             if (error_msg.find("condition") != std::string::npos ||
                 error_msg.find("empty") != std::string::npos) {
-                Logger::Warn() << "Admin user not found for soft delete: target_id=" << target_id;
+                Logger::Warn(log_context)
+                    << "Admin user not found for soft delete: target_id=" << target_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
             }
 
-            Logger::Error() << "Admin soft delete user database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin soft delete user database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to soft delete user"
@@ -435,10 +501,13 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::GetGlobalStorageStats()
+    auto AdminService::GetGlobalStorageStats(
+        uint64_t operator_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<admin::StorageStatsResponse>> {
 
-        Logger::Info() << "Admin get global storage stats";
+        Logger::Info(log_context) << "Admin get global storage stats";
 
         try {
             auto user_stats = co_await m_db_client->execSqlCoro(
@@ -460,13 +529,28 @@ namespace disk::services {
             response.total_files = file_stats.empty() ? 0 : file_stats[0]["total_files"].as<int>();
             response.active_shares = share_stats.empty() ? 0 : share_stats[0]["active_shares"].as<int>();
 
-            co_await LogOperation(0, "admin.storage.global_stats", "storage", 0, "全局存储统计", std::format(R"({{"total_users": {}, "total_files": {}, "total_storage_used": {}, "active_shares": {}}})", response.total_users, response.total_files, response.total_storage_used, response.active_shares));
+            Json::Value details;
+            details["total_users"] = response.total_users;
+            details["total_files"] = response.total_files;
+            details["total_storage_used"] =
+                static_cast<Json::UInt64>(response.total_storage_used);
+            details["active_shares"] = response.active_shares;
+            co_await LogOperation(
+                operator_id,
+                "admin.storage.global_stats",
+                "storage",
+                0,
+                "全局存储统计",
+                std::move(details),
+                log_context
+            );
 
-            Logger::Info() << "Admin get global storage stats successful";
+            Logger::Info(log_context) << "Admin get global storage stats successful";
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Admin get global storage stats database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin get global storage stats database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get global storage stats"
@@ -474,15 +558,19 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::ListShares(const admin::ListSharesRequest& req)
+    auto AdminService::ListShares(
+        const admin::ListSharesRequest& req,
+        uint64_t operator_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<admin::ShareListResponse>> {
 
-        Logger::Info() << "Admin list shares: page=" << req.page
-                       << " page_size=" << req.page_size;
+        Logger::Info(log_context) << "Admin list shares: page=" << req.page
+                                  << " page_size=" << req.page_size;
 
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE shares s SET s.status = 0, s.updated_at = NOW() " "WHERE s.status = 1 " "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)"
+                "UPDATE shares AS s SET status = 0, updated_at = NOW() " "WHERE s.status = 1 " "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)"
             );
 
             std::string from_clause = " FROM shares s LEFT JOIN users u ON s.user_id = u.id";
@@ -554,13 +642,26 @@ namespace disk::services {
                 response.items.push_back(std::move(share));
             }
 
-            co_await LogOperation(0, "admin.share.list", "share", 0, "分享列表", std::format(R"({{"page": {}, "page_size": {}, "total": {}}})", req.page, req.page_size, total));
+            Json::Value details;
+            details["page"] = req.page;
+            details["page_size"] = req.page_size;
+            details["total"] = total;
+            co_await LogOperation(
+                operator_id,
+                "admin.share.list",
+                "share",
+                0,
+                "分享列表",
+                std::move(details),
+                log_context
+            );
 
-            Logger::Info() << "Admin list shares successful: total=" << total;
+            Logger::Info(log_context) << "Admin list shares successful: total=" << total;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Admin list shares database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin list shares database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to list shares"
@@ -568,14 +669,18 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::GetShareDetail(uint64_t share_id)
+    auto AdminService::GetShareDetail(
+        uint64_t share_id,
+        uint64_t operator_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<admin::ShareDetailResponse>> {
 
-        Logger::Info() << "Admin get share detail: share_id=" << share_id;
+        Logger::Info(log_context) << "Admin get share detail: share_id=" << share_id;
 
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE shares s SET s.status = 0, s.updated_at = NOW() " "WHERE s.id = $1 AND s.status = 1 " "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)",
+                "UPDATE shares AS s SET status = 0, updated_at = NOW() " "WHERE s.id = $1 AND s.status = 1 " "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)",
                 share_id
             );
 
@@ -585,7 +690,8 @@ namespace disk::services {
             );
 
             if (result.empty()) {
-                Logger::Warn() << "Admin share not found: share_id=" << share_id;
+                Logger::Warn(log_context)
+                    << "Admin share not found: share_id=" << share_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::AdminShareNotFound));
             }
 
@@ -603,14 +709,26 @@ namespace disk::services {
             response.created_at = row["created_at"].as<std::string>();
             response.expires_at = row["expires_at"].isNull() ? "" : row["expires_at"].as<std::string>();
 
-            co_await LogOperation(0, "admin.share.detail", "share", share_id, response.share_code, std::format(R"({{"share_id": {}}})", share_id));
+            Json::Value details;
+            details["share_id"] = static_cast<Json::UInt64>(share_id);
+            co_await LogOperation(
+                operator_id,
+                "admin.share.detail",
+                "share",
+                share_id,
+                response.share_code,
+                std::move(details),
+                log_context
+            );
 
-            Logger::Info() << "Admin get share detail successful: share_id=" << share_id;
+            Logger::Info(log_context)
+                << "Admin get share detail successful: share_id=" << share_id;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Admin get share detail database error: share_id=" << share_id
-                            << " - " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin get share detail database error: share_id=" << share_id
+                << " - " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get share detail"
@@ -618,11 +736,15 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::ForceCancelShare(uint64_t share_id, uint64_t operator_id)
+    auto AdminService::ForceCancelShare(
+        uint64_t share_id,
+        uint64_t operator_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
 
-        Logger::Info() << "Admin force cancel share: share_id=" << share_id
-                       << " operator_id=" << operator_id;
+        Logger::Info(log_context) << "Admin force cancel share: share_id=" << share_id
+                                  << " operator_id=" << operator_id;
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
@@ -631,13 +753,15 @@ namespace disk::services {
             );
 
             if (result.empty()) {
-                Logger::Warn() << "Admin share not found for force cancel: share_id=" << share_id;
+                Logger::Warn(log_context)
+                    << "Admin share not found for force cancel: share_id=" << share_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::AdminShareNotFound));
             }
 
             auto current_status = result[0]["status"].as<int>();
             if (current_status == 0) {
-                Logger::Warn() << "Admin share already cancelled: share_id=" << share_id;
+                Logger::Warn(log_context)
+                    << "Admin share already cancelled: share_id=" << share_id;
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Share already cancelled"
@@ -651,13 +775,28 @@ namespace disk::services {
 
             auto share_code = result[0]["share_code"].as<std::string>();
             auto owner_id = result[0]["user_id"].as<uint64_t>();
-            co_await LogOperation(operator_id, "admin.share.force_cancel", "share", share_id, share_code, std::format(R"({{"share_id": {}, "share_code": "{}", "owner_id": {}, "previous_status": {}}})", share_id, share_code, owner_id, current_status));
+            Json::Value details;
+            details["share_id"] = static_cast<Json::UInt64>(share_id);
+            details["share_code"] = share_code;
+            details["owner_id"] = static_cast<Json::UInt64>(owner_id);
+            details["previous_status"] = current_status;
+            co_await LogOperation(
+                operator_id,
+                "admin.share.force_cancel",
+                "share",
+                share_id,
+                share_code,
+                std::move(details),
+                log_context
+            );
 
-            Logger::Info() << "Admin force cancel share successful: share_id=" << share_id;
+            Logger::Info(log_context)
+                << "Admin force cancel share successful: share_id=" << share_id;
             co_return {};
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Admin force cancel share database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin force cancel share database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to force cancel share"
@@ -665,10 +804,10 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::GetOverviewStats()
+    auto AdminService::GetOverviewStats(disk::utils::LogContext log_context)
         -> drogon::Task<Result<admin::StorageStatsResponse>> {
 
-        Logger::Info() << "admin.stats.overview";
+        Logger::Info(log_context) << "admin.stats.overview";
 
         try {
             auto user_stats = co_await m_db_client->execSqlCoro(
@@ -690,11 +829,12 @@ namespace disk::services {
             response.total_files = file_stats.empty() ? 0 : file_stats[0]["total_files"].as<int>();
             response.active_shares = share_stats.empty() ? 0 : share_stats[0]["active_shares"].as<int>();
 
-            Logger::Info() << "admin.stats.overview successful";
+            Logger::Info(log_context) << "admin.stats.overview successful";
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "admin.stats.overview database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "admin.stats.overview database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get overview stats"
@@ -702,10 +842,10 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::GetSystemStatus()
+    auto AdminService::GetSystemStatus(disk::utils::LogContext log_context)
         -> drogon::Task<Result<admin::SystemStatusResponse>> {
 
-        Logger::Info() << "admin.stats.system";
+        Logger::Info(log_context) << "admin.stats.system";
 
         admin::SystemStatusResponse response;
 
@@ -714,7 +854,8 @@ namespace disk::services {
             co_await m_db_client->execSqlCoro("SELECT 1");
             response.db_connected = true;
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "admin.stats.system Database check failed: " << e.base().what();
+            Logger::Warn(log_context)
+                << "admin.stats.system Database check failed: " << e.base().what();
             response.db_connected = false;
         }
 
@@ -729,10 +870,12 @@ namespace disk::services {
                 response.redis_connected = false;
             }
         } catch (const drogon::nosql::RedisException& e) {
-            Logger::Warn() << "admin.stats.system Redis check failed: " << e.what();
+            Logger::Warn(log_context)
+                << "admin.stats.system Redis check failed: " << e.what();
             response.redis_connected = false;
         } catch (const std::exception& e) {
-            Logger::Warn() << "admin.stats.system Redis check failed: " << e.what();
+            Logger::Warn(log_context)
+                << "admin.stats.system Redis check failed: " << e.what();
             response.redis_connected = false;
         }
 
@@ -744,7 +887,8 @@ namespace disk::services {
             response.disk_free = space_info.available;
             response.disk_used = space_info.capacity - space_info.available;
         } catch (const std::filesystem::filesystem_error& e) {
-            Logger::Warn() << "admin.stats.system disk space check failed: " << e.what();
+            Logger::Warn(log_context)
+                << "admin.stats.system disk space check failed: " << e.what();
             response.disk_total = 0;
             response.disk_used = 0;
             response.disk_free = 0;
@@ -755,15 +899,18 @@ namespace disk::services {
         auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time);
         response.uptime_seconds = static_cast<uint64_t>(uptime.count());
 
-        Logger::Info() << "admin.stats.system successful";
+        Logger::Info(log_context) << "admin.stats.system successful";
         co_return response;
     }
 
-    auto AdminService::GetAdminLogs(const admin::AdminLogListRequest& req)
+    auto AdminService::GetAdminLogs(
+        const admin::AdminLogListRequest& req,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<admin::AdminLogListResponse>> {
 
-        Logger::Info() << "Admin list logs: page=" << req.page
-                       << " page_size=" << req.page_size;
+        Logger::Info(log_context) << "Admin list logs: page=" << req.page
+                                  << " page_size=" << req.page_size;
 
         try {
             static constexpr auto FILTER_SQL = R"SQL(
@@ -839,11 +986,12 @@ namespace disk::services {
                 response.items.push_back(std::move(log));
             }
 
-            Logger::Info() << "Admin list logs successful: total=" << total;
+            Logger::Info(log_context) << "Admin list logs successful: total=" << total;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Admin list logs database error: " << e.base().what();
+            Logger::Error(log_context)
+                << "Admin list logs database error: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to list operation logs"
@@ -851,7 +999,16 @@ namespace disk::services {
         }
     }
 
-    auto AdminService::LogOperation(uint64_t operator_id, const std::string& action, const std::string& target_type, uint64_t target_id, const std::string& target_name, const std::string& details) -> drogon::Task<void> {
+    auto AdminService::LogOperation(
+        uint64_t operator_id,
+        const std::string& action,
+        const std::string& target_type,
+        uint64_t target_id,
+        const std::string& target_name,
+        Json::Value details,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<void> {
+        SetLogContext(details, log_context);
         try {
             co_await m_db_client->execSqlCoro(
                 "INSERT INTO operation_logs (user_id, action, target_type, target_id, target_name, details, ip_address) " "VALUES ($1, $2, $3, $4, $5, $6, 'system')",
@@ -860,11 +1017,12 @@ namespace disk::services {
                 target_type,
                 target_id,
                 target_name,
-                details
+                SerializeDetails(details)
             );
-            Logger::Debug() << "Operation logged: " << action << " by user_id=" << operator_id;
+            Logger::Debug(log_context)
+                << "Operation logged: " << action << " by user_id=" << operator_id;
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to log operation: " << e.base().what();
+            Logger::Error(log_context) << "Failed to log operation: " << e.base().what();
         }
     }
 

@@ -1,0 +1,187 @@
+/**
+ * @file AdminLogContext_test.cpp
+ * @brief Core administration request correlation source contract tests
+ *
+ * @copyright Copyright (c) 2026
+ */
+
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <string_view>
+
+#include <gtest/gtest.h>
+
+namespace disk::admin {
+    namespace {
+
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto Contains(const std::string& source, std::string_view expected) -> bool {
+            return source.find(expected) != std::string::npos;
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
+        }
+
+        auto ExtractRange(
+            const std::string& source,
+            std::string_view begin_marker,
+            std::string_view end_marker
+        ) -> std::string {
+            const auto begin = source.find(begin_marker);
+            const auto end = source.find(end_marker, begin);
+            if (begin == std::string::npos || end == std::string::npos) {
+                return {};
+            }
+            return source.substr(begin, end - begin);
+        }
+
+        auto AllCallsContainContext(
+            const std::string& source,
+            std::string_view call_marker
+        ) -> bool {
+            size_t position = 0;
+            size_t count = 0;
+            while ((position = source.find(call_marker, position)) != std::string::npos) {
+                const auto end = source.find(");", position);
+                if (end == std::string::npos ||
+                    source.substr(position, end - position).find("log_context") ==
+                        std::string::npos) {
+                    return false;
+                }
+                ++count;
+                position = end + 2;
+            }
+            return count > 0;
+        }
+
+        TEST(AdminLogContextContractTest, CoreBoundariesUseExplicitTypedContext) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto service_header = ReadSourceFile("src/services/AdminService.hpp");
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto request_service_body = ExtractRange(
+                service_source,
+                "auto AdminService::ListUsers(",
+                "    auto AdminService::LogOperation("
+            );
+
+            ASSERT_FALSE(controller_source.empty());
+            ASSERT_FALSE(dto_source.empty());
+            ASSERT_FALSE(service_header.empty());
+            ASSERT_FALSE(request_service_body.empty());
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    controller_source,
+                    "GetRequestLogContext(request, \"admin\")"
+                ),
+                13
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    controller_source,
+                    "GetRequestLogContext(request, \"cleanup\")"
+                ),
+                1
+            );
+
+            for (const auto* call_marker : {
+                     "ListUsersRequest::FromRequest(",
+                     "ChangeStatusRequest::FromRequest(",
+                     "ChangeRoleRequest::FromRequest(",
+                     "ChangeAvailableSpaceRequest::FromRequest(",
+                     "ListSharesRequest::FromRequest(",
+                     "AdminLogListRequest::FromRequest(",
+                     "service->ListUsers(",
+                     "service->GetUserDetail(",
+                     "service->ChangeUserStatus(",
+                     "service->ChangeUserRole(",
+                     "service->ChangeUserAvailableSpace(",
+                     "service->SoftDeleteUser(",
+                     "service->GetGlobalStorageStats(",
+                     "service->ListShares(",
+                     "service->GetShareDetail(",
+                     "service->ForceCancelShare(",
+                     "service->GetOverviewStats(",
+                     "service->GetSystemStatus(",
+                     "service->GetAdminLogs(",
+                 }) {
+                EXPECT_TRUE(AllCallsContainContext(controller_source, call_marker))
+                    << call_marker;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(dto_source, "disk::utils::LogContext log_context = {}"),
+                6
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    service_header,
+                    "disk::utils::LogContext log_context = {}"
+                ),
+                13
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    request_service_body,
+                    "disk::utils::LogContext log_context"
+                ),
+                13
+            );
+            EXPECT_EQ(
+                CountOccurrences(request_service_body, "co_await LogOperation("),
+                8
+            );
+            EXPECT_TRUE(AllCallsContainContext(request_service_body, "co_await LogOperation("));
+
+            EXPECT_TRUE(Contains(service_source, "SetLogContext(details, log_context);"));
+            EXPECT_TRUE(Contains(service_source, "SerializeDetails(details)"));
+            EXPECT_TRUE(Contains(service_source, "details[\"request_id\"]"));
+            EXPECT_TRUE(Contains(service_source, "details[\"operation\"]"));
+            EXPECT_FALSE(Contains(service_source, "std::format("));
+            EXPECT_FALSE(Contains(request_service_body, "LogOperation(0"));
+            EXPECT_TRUE(Contains(request_service_body, "admin.user.available_space_set"));
+            EXPECT_FALSE(Contains(request_service_body, "admin.user.available_space_change"));
+            EXPECT_EQ(
+                CountOccurrences(
+                    request_service_body,
+                    "UPDATE shares AS s SET status = 0, updated_at = NOW()"
+                ),
+                2
+            );
+            EXPECT_FALSE(Contains(request_service_body, "SET s.status"));
+
+            for (const auto* body : {
+                     &controller_source,
+                     &dto_source,
+                     &request_service_body,
+                 }) {
+                EXPECT_FALSE(Contains(*body, "Logger::Debug()"));
+                EXPECT_FALSE(Contains(*body, "Logger::Info()"));
+                EXPECT_FALSE(Contains(*body, "Logger::Warn()"));
+                EXPECT_FALSE(Contains(*body, "Logger::Error()"));
+            }
+        }
+
+    } // namespace
+} // namespace disk::admin

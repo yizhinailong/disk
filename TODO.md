@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 分享日志关联）：完整构建、分享 GoogleTest 270/270、分享集成 6/6、真实 HTTP safety 集成 1/1（脚本本次实际 693 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1413 项，1406 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 481.95 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 核心管理员日志关联）：完整构建、管理员 GoogleTest 59/59、真实 HTTP safety 集成 1/1（脚本本次实际 725 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1414 项，1407 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 487.73 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -637,6 +637,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定分享请
 `ShareController` 在 DTO 或请求属性处理前从请求追踪属性创建显式 `LogContext`，按值传过全部九个 Share DTO 解析入口、`ShareService` 的请求协程及所有权、查询、状态、计数和失败访问辅助协程。创建、访问、口令失败、取消和下载审计 details 保存同一 request/operation，审计 fail-open 错误也保留调用方上下文；分享请求不冒充 upload/job/lease/version 所有权。原始 Share Token、`X-Share-Token`/owner Authorization 值、分享密码和密码哈希均不进入应用日志或审计 details；共享 DtoBase、ContentService、RedisService、缓存、事务运行器和过滤器未接收显式上下文时不从线程、凭据或领域 ID 推断关联，构造期 ShareService 日志继续作为无 HTTP 上下文的进程事件。
 
 `MetricsServiceTest` 锁定分享与下载的精确形状及负边界，`ShareLogContextContractTest` 锁定 Controller、DTO、服务辅助协程、审计和敏感值禁记，`ShareAuditServiceTest` 锁定五类审计的关联字段及空上下文 null 语义。`SafetyUploadInvariantsIntegration` 使用不同调用方 request ID 覆盖创建/列表校验失败、缺失详情、缺失批量取消和缺失公开访问，逐行核对响应、Controller/DTO/服务及 HTTP 完成 NDJSON，并查询分享审计和扫描受管日志确认本轮密码与 owner JWT 未泄漏。完整构建、Python 语法检查、分享 GoogleTest 270/270、分享集成 6/6、真实 HTTP safety 集成 1/1（脚本本次实际 693 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1413 项，1406 通过、7 项环境门控跳过、0 失败，总耗时 481.95 秒。管理员等其他历史请求域、共享基础设施边界和目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.24 核心管理员日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定核心管理员请求的类型化日志与审计边界。`AdminController` 的 13 个核心业务处理器在 DTO 解析或服务调用前创建固定 `operation=admin` 的显式 `LogContext`，按值传过 6 个直接记录日志的 Admin DTO 和 `AdminService` 的 13 个公开请求协程；用户、分享、配额和分页标识不冒充 `upload_id`、`job_id`、`lease_owner` 或 `state_version`，四个非管理员所有权字段保持 JSON `null`。手动过期清理继续使用已验收的 `operation=cleanup`，存储任务与恢复管理 Controller 保持独立后续边界，未被本批泛化为核心管理员链路。
+
+八类管理员操作审计现在使用 JSON 序列化器写入结构化 details，并保存调用方同一 `request_id` 与 `operation`；全局存储统计、分享列表和分享详情等读取审计使用已认证管理员的真实 `user_id`，不再写入无效的操作人 0。原本长 33 字符而无法写入 `operation_logs.action VARCHAR(32)` 的可用空间动作已收敛为 `admin.user.available_space_set`，无需数据库迁移。审计仍不记录 Authorization、JWT、密码、分享令牌或密码哈希。真实分享查询同时暴露两处既有 PostgreSQL 语法错误，相关状态刷新已由非法的 `UPDATE shares s SET s.status` 修正为 PostgreSQL 支持的 `UPDATE shares AS s SET status`，列表和详情路径均由源码合同锁定。
+
+`AdminLogContextContractTest` 锁定 13 个 Controller、6 个 DTO、13 个服务协程、八个审计调用点、结构化序列化、真实操作人和 PostgreSQL alias 语法；`SafetyUploadInvariantsIntegration` 使用四个不同调用方 request ID 覆盖非法用户列表状态、管理员修改自身状态、缺失分享详情和成功全局存储统计，逐行核对 DTO/Controller/服务/HTTP NDJSON，并直接查询 `operation_logs` 验证真实管理员 ID、request/operation 关联及敏感值禁记。完整构建、Python 语法检查、管理员 GoogleTest 59/59、真实 HTTP safety 集成 1/1（脚本本次实际 725 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1414 项，1407 通过、7 项环境门控跳过、0 失败，总耗时 487.73 秒。存储任务/恢复管理请求、共享基础设施边界和目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

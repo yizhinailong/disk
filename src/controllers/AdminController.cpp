@@ -19,30 +19,36 @@ namespace disk::controllers {
     auto AdminController::ListUsers(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin list users request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin list users request: " << request->getPeerAddr().toIpPort();
 
-        auto parse_result = admin::ListUsersRequest::FromRequest(request);
+        auto parse_result = admin::ListUsersRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn() << "List users request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "List users request validation failed: " << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->ListUsers(*parse_result);
+        auto result = co_await service->ListUsers(*parse_result, log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to list users: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to list users: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin list users successful";
+        Logger::Info(log_context) << "Admin list users successful";
         co_return Response::Success(result->ToJson());
     }
 
     auto AdminController::GetUserDetail(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin get user detail request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin get user detail request: " << request->getPeerAddr().toIpPort();
 
         if (id.empty()) {
             co_return Response::Error(ErrorInfo(
@@ -62,24 +68,28 @@ namespace disk::controllers {
         }
 
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->GetUserDetail(user_id);
+        auto result = co_await service->GetUserDetail(user_id, log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to get user detail: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to get user detail: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
         Json::Value data;
         data["user"] = result->ToJson();
 
-        Logger::Info() << "Admin get user detail successful: user_id=" << user_id;
+        Logger::Info(log_context)
+            << "Admin get user detail successful: user_id=" << user_id;
         co_return Response::Success(data);
     }
 
     auto AdminController::ChangeUserStatus(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin change user status request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin change user status request: " << request->getPeerAddr().toIpPort();
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -100,30 +110,38 @@ namespace disk::controllers {
             ));
         }
 
-        auto parse_result = admin::ChangeStatusRequest::FromRequest(request);
+        auto parse_result = admin::ChangeStatusRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn() << "Change status request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Change status request validation failed: " << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
         auto service = services::AdminService::GetInstance();
         auto result = co_await service->ChangeUserStatus(
-            target_id, parse_result->status, operator_id
+            target_id,
+            parse_result->status,
+            operator_id,
+            log_context
         );
 
         if (!result) {
-            Logger::Error() << "Failed to change user status: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to change user status: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin change user status successful: target_id=" << target_id;
+        Logger::Info(log_context)
+            << "Admin change user status successful: target_id=" << target_id;
         co_return Response::Success();
     }
 
     auto AdminController::ChangeUserRole(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin change user role request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin change user role request: " << request->getPeerAddr().toIpPort();
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -144,30 +162,39 @@ namespace disk::controllers {
             ));
         }
 
-        auto parse_result = admin::ChangeRoleRequest::FromRequest(request);
+        auto parse_result = admin::ChangeRoleRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn() << "Change role request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Change role request validation failed: " << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
         auto service = services::AdminService::GetInstance();
         auto result = co_await service->ChangeUserRole(
-            target_id, parse_result->role, operator_id
+            target_id,
+            parse_result->role,
+            operator_id,
+            log_context
         );
 
         if (!result) {
-            Logger::Error() << "Failed to change user role: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to change user role: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin change user role successful: target_id=" << target_id;
+        Logger::Info(log_context)
+            << "Admin change user role successful: target_id=" << target_id;
         co_return Response::Success();
     }
 
     auto AdminController::ChangeUserAvailableSpace(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin change user available space request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin change user available space request: "
+            << request->getPeerAddr().toIpPort();
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -188,35 +215,43 @@ namespace disk::controllers {
             ));
         }
 
-        auto parse_result = admin::ChangeAvailableSpaceRequest::FromRequest(request);
+        auto parse_result =
+            admin::ChangeAvailableSpaceRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn() << "Change available space request validation failed: "
-                     << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Change available space request validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
         auto service = services::AdminService::GetInstance();
         auto result = co_await service->ChangeUserAvailableSpace(
-            target_id, parse_result->available_space_g, operator_id
+            target_id,
+            parse_result->available_space_g,
+            operator_id,
+            log_context
         );
 
         if (!result) {
-            Logger::Error() << "Failed to change user available space: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to change user available space: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
         Json::Value data;
         data["user"] = result->ToJson();
 
-        Logger::Info() << "Admin change user available space successful: target_id=" << target_id;
+        Logger::Info(log_context)
+            << "Admin change user available space successful: target_id=" << target_id;
         co_return Response::Success(data);
     }
-
 
     auto AdminController::SoftDeleteUser(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin soft delete user request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin soft delete user request: " << request->getPeerAddr().toIpPort();
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -238,61 +273,78 @@ namespace disk::controllers {
         }
 
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->SoftDeleteUser(target_id, operator_id);
+        auto result =
+            co_await service->SoftDeleteUser(target_id, operator_id, log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to soft delete user: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to soft delete user: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin soft delete user successful: target_id=" << target_id;
+        Logger::Info(log_context)
+            << "Admin soft delete user successful: target_id=" << target_id;
         co_return Response::Success();
     }
 
     auto AdminController::GetGlobalStorageStats(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin get global storage stats request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin get global storage stats request: "
+            << request->getPeerAddr().toIpPort();
 
+        auto operator_id = request->attributes()->get<uint64_t>("user_id");
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->GetGlobalStorageStats();
+        auto result =
+            co_await service->GetGlobalStorageStats(operator_id, log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to get global storage stats: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to get global storage stats: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin get global storage stats successful";
+        Logger::Info(log_context) << "Admin get global storage stats successful";
         co_return Response::Success(result->ToJson());
     }
 
     auto AdminController::ListShares(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin list shares request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin list shares request: " << request->getPeerAddr().toIpPort();
 
-        auto parse_result = admin::ListSharesRequest::FromRequest(request);
+        auto parse_result = admin::ListSharesRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn() << "List shares request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "List shares request validation failed: " << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
+        auto operator_id = request->attributes()->get<uint64_t>("user_id");
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->ListShares(*parse_result);
+        auto result =
+            co_await service->ListShares(*parse_result, operator_id, log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to list shares: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to list shares: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin list shares successful";
+        Logger::Info(log_context) << "Admin list shares successful";
         co_return Response::Success(result->ToJson());
     }
 
     auto AdminController::GetShareDetail(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin get share detail request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin get share detail request: " << request->getPeerAddr().toIpPort();
 
         if (id.empty()) {
             co_return Response::Error(ErrorInfo(
@@ -311,25 +363,31 @@ namespace disk::controllers {
             ));
         }
 
+        auto operator_id = request->attributes()->get<uint64_t>("user_id");
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->GetShareDetail(share_id);
+        auto result =
+            co_await service->GetShareDetail(share_id, operator_id, log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to get share detail: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to get share detail: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
         Json::Value data;
         data["share"] = result->ToJson();
 
-        Logger::Info() << "Admin get share detail successful: share_id=" << share_id;
+        Logger::Info(log_context)
+            << "Admin get share detail successful: share_id=" << share_id;
         co_return Response::Success(data);
     }
 
     auto AdminController::ForceCancelShare(drogon::HttpRequestPtr request, std::string id)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin force cancel share request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin force cancel share request: " << request->getPeerAddr().toIpPort();
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -351,71 +409,84 @@ namespace disk::controllers {
         }
 
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->ForceCancelShare(share_id, operator_id);
+        auto result =
+            co_await service->ForceCancelShare(share_id, operator_id, log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to force cancel share: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to force cancel share: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin force cancel share successful: share_id=" << share_id;
+        Logger::Info(log_context)
+            << "Admin force cancel share successful: share_id=" << share_id;
         co_return Response::Success();
     }
 
     auto AdminController::GetOverviewStats(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin get overview stats request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin get overview stats request: " << request->getPeerAddr().toIpPort();
 
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->GetOverviewStats();
+        auto result = co_await service->GetOverviewStats(log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to get overview stats: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to get overview stats: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin get overview stats successful";
+        Logger::Info(log_context) << "Admin get overview stats successful";
         co_return Response::Success(result->ToJson());
     }
 
     auto AdminController::GetSystemStatus(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin get system status request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin get system status request: " << request->getPeerAddr().toIpPort();
 
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->GetSystemStatus();
+        auto result = co_await service->GetSystemStatus(log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to get system status: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to get system status: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin get system status successful";
+        Logger::Info(log_context) << "Admin get system status successful";
         co_return Response::Success(result->ToJson());
     }
 
     auto AdminController::GetAdminLogs(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
-        Logger::Info() << "Admin list logs request: " << request->getPeerAddr().toIpPort();
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context)
+            << "Admin list logs request: " << request->getPeerAddr().toIpPort();
 
-        auto parse_result = admin::AdminLogListRequest::FromRequest(request);
+        auto parse_result = admin::AdminLogListRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn() << "List logs request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "List logs request validation failed: " << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
 
         auto service = services::AdminService::GetInstance();
-        auto result = co_await service->GetAdminLogs(*parse_result);
+        auto result = co_await service->GetAdminLogs(*parse_result, log_context);
 
         if (!result) {
-            Logger::Error() << "Failed to list logs: " << result.error().message;
+            Logger::Error(log_context)
+                << "Failed to list logs: " << result.error().message;
             co_return Response::Error(result.error());
         }
 
-        Logger::Info() << "Admin list logs successful";
+        Logger::Info(log_context) << "Admin list logs successful";
         co_return Response::Success(result->ToJson());
     }
 
@@ -445,4 +516,4 @@ namespace disk::controllers {
         co_return Response::Success(data);
     }
 
-} ///< namespace disk::controllers
+} // namespace disk::controllers

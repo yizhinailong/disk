@@ -717,7 +717,7 @@ def test_admin_change_user_available_space():
         sys.exit(1)
 
     logs_resp = fetch(
-        "/api/admin/logs?action=admin.user.available_space_change&page_size=5",
+        "/api/admin/logs?action=admin.user.available_space_set&page_size=5",
         method="GET",
         headers=admin_headers,
     )
@@ -731,7 +731,7 @@ def test_admin_change_user_available_space():
     recorded_action = json_field(logs_resp.text, "data.items.0.action")
     recorded_details = json_field(logs_resp.text, "data.items.0.details")
     if (
-        recorded_action == "admin.user.available_space_change"
+        recorded_action == "admin.user.available_space_set"
         and recorded_target == _test_user_id
         and "available_space_g" in recorded_details
     ):

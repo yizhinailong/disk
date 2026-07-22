@@ -25,9 +25,11 @@
 #include <cstdint>
 
 #include <drogon/orm/DbClient.h>
+#include <json/json.h>
 
 #include "dtos/AdminDto.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 #include "utils/Singleton.hpp"
 
 namespace disk::services {
@@ -55,7 +57,10 @@ namespace disk::services {
          * @return drogon::Task<Result<admin::UserListResponse>> 用户列表响应
          */
         [[nodiscard]]
-        auto ListUsers(const admin::ListUsersRequest& req)
+        auto ListUsers(
+            const admin::ListUsersRequest& req,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<admin::UserListResponse>>;
 
         /**
@@ -65,7 +70,10 @@ namespace disk::services {
          * @return drogon::Task<Result<admin::UserDetailResponse>> 用户详情响应
          */
         [[nodiscard]]
-        auto GetUserDetail(uint64_t user_id)
+        auto GetUserDetail(
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<admin::UserDetailResponse>>;
 
         /**
@@ -81,7 +89,12 @@ namespace disk::services {
          * @return drogon::Task<Result<void>>
          */
         [[nodiscard]]
-        auto ChangeUserStatus(uint64_t target_id, int status, uint64_t operator_id)
+        auto ChangeUserStatus(
+            uint64_t target_id,
+            int status,
+            uint64_t operator_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>>;
 
         /**
@@ -98,13 +111,21 @@ namespace disk::services {
          * @return drogon::Task<Result<void>>
          */
         [[nodiscard]]
-        auto ChangeUserRole(uint64_t target_id, int role, uint64_t operator_id)
+        auto ChangeUserRole(
+            uint64_t target_id,
+            int role,
+            uint64_t operator_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>>;
 
+        /**
+         * @brief 修改用户可用空间
+         *
+         * - 记录操作日志 admin.user.available_space_set
+         */
         [[nodiscard]]
-        auto ChangeUserAvailableSpace(uint64_t target_id,
-                                      uint64_t available_space_g,
-                                      uint64_t operator_id)
+        auto ChangeUserAvailableSpace(uint64_t target_id, uint64_t available_space_g, uint64_t operator_id, disk::utils::LogContext log_context = {})
             -> drogon::Task<Result<admin::UserDetailResponse>>;
 
         /**
@@ -120,7 +141,11 @@ namespace disk::services {
          * @return drogon::Task<Result<void>>
          */
         [[nodiscard]]
-        auto SoftDeleteUser(uint64_t target_id, uint64_t operator_id)
+        auto SoftDeleteUser(
+            uint64_t target_id,
+            uint64_t operator_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>>;
 
         /**
@@ -129,7 +154,10 @@ namespace disk::services {
          * @return drogon::Task<Result<admin::StorageStatsResponse>>
          */
         [[nodiscard]]
-        auto GetGlobalStorageStats()
+        auto GetGlobalStorageStats(
+            uint64_t operator_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<admin::StorageStatsResponse>>;
 
         /**
@@ -146,7 +174,11 @@ namespace disk::services {
          * @return drogon::Task<Result<admin::ShareListResponse>> 分享列表响应
          */
         [[nodiscard]]
-        auto ListShares(const admin::ListSharesRequest& req)
+        auto ListShares(
+            const admin::ListSharesRequest& req,
+            uint64_t operator_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<admin::ShareListResponse>>;
 
         /**
@@ -161,7 +193,11 @@ namespace disk::services {
          * @return drogon::Task<Result<admin::ShareDetailResponse>> 分享详情响应
          */
         [[nodiscard]]
-        auto GetShareDetail(uint64_t share_id)
+        auto GetShareDetail(
+            uint64_t share_id,
+            uint64_t operator_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<admin::ShareDetailResponse>>;
 
         /**
@@ -173,7 +209,7 @@ namespace disk::services {
          * @return drogon::Task<Result<admin::StorageStatsResponse>>
          */
         [[nodiscard]]
-        auto GetOverviewStats()
+        auto GetOverviewStats(disk::utils::LogContext log_context = {})
             -> drogon::Task<Result<admin::StorageStatsResponse>>;
 
         /**
@@ -185,7 +221,7 @@ namespace disk::services {
          * @return drogon::Task<Result<admin::SystemStatusResponse>>
          */
         [[nodiscard]]
-        auto GetSystemStatus()
+        auto GetSystemStatus(disk::utils::LogContext log_context = {})
             -> drogon::Task<Result<admin::SystemStatusResponse>>;
 
         /**
@@ -201,7 +237,10 @@ namespace disk::services {
          * @return drogon::Task<Result<admin::AdminLogListResponse>> 日志列表响应
          */
         [[nodiscard]]
-        auto GetAdminLogs(const admin::AdminLogListRequest& req)
+        auto GetAdminLogs(
+            const admin::AdminLogListRequest& req,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<admin::AdminLogListResponse>>;
 
         /**
@@ -218,7 +257,11 @@ namespace disk::services {
          * @return drogon::Task<Result<void>>
          */
         [[nodiscard]]
-        auto ForceCancelShare(uint64_t share_id, uint64_t operator_id)
+        auto ForceCancelShare(
+            uint64_t share_id,
+            uint64_t operator_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>>;
 
     private:
@@ -233,18 +276,14 @@ namespace disk::services {
          * @param operator_id 操作者 ID
          * @param action 操作动作
          * @param target_id 目标 ID
-         * @param details 详细信息（JSON 字符串）
+         * @param details 结构化详细信息
+         * @param log_context 请求日志上下文
          * @return drogon::Task<void>
          */
-        auto LogOperation(uint64_t operator_id,
-                          const std::string& action,
-                          const std::string& target_type,
-                          uint64_t target_id,
-                          const std::string& target_name,
-                          const std::string& details) -> drogon::Task<void>;
+        auto LogOperation(uint64_t operator_id, const std::string& action, const std::string& target_type, uint64_t target_id, const std::string& target_name, Json::Value details, disk::utils::LogContext log_context) -> drogon::Task<void>;
 
-        drogon::orm::DbClientPtr m_db_client; ///< 数据库客户端
+        drogon::orm::DbClientPtr m_db_client;               ///< 数据库客户端
         std::chrono::steady_clock::time_point m_start_time; ///< 服务启动时间
     };
 
-} ///< namespace disk::services
+} // namespace disk::services

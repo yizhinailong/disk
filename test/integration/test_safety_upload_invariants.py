@@ -957,6 +957,86 @@ def assert_share_audit_correlation(
     log_pass(f"{action} audit keeps typed request correlation without credentials")
 
 
+def assert_admin_log_context(
+    *,
+    response,
+    request_id: str,
+    expected_success: bool,
+    message_markers: tuple[str, ...],
+) -> None:
+    """Assert one core administration request keeps typed correlation."""
+    if expected_success:
+        assert_equal(
+            "administration request preserves its documented success envelope",
+            response.status_code == 200 and json_field(response.text, "code") == "0",
+            True,
+        )
+    else:
+        assert_equal(
+            "administration request returns a documented failure",
+            response.status_code >= 400 and json_field(response.text, "code") != "0",
+            True,
+        )
+    assert_equal(
+        "administration request preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal("administration request identifies the handling instance", bool(instance_id), True)
+
+    for marker in message_markers:
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="admin",
+            upload_id=None,
+            message_marker=marker,
+        )
+    log_pass("administration logs keep typed request correlation and null ownership fields")
+
+
+def assert_admin_audit_correlation(*, action: str, request_id: str) -> None:
+    """Assert one administrator audit row uses the actor and request context."""
+    row = query_one(
+        """
+        SELECT user_id, details
+        FROM operation_logs
+        WHERE action = %s AND details ->> 'request_id' = %s
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (action, request_id),
+    )
+    assert_equal(f"{action} administration audit row exists", row is not None, True)
+    assert_equal(
+        f"{action} administration audit uses the authenticated actor",
+        int(row["user_id"]) if row is not None else 0,
+        USER_ID,
+    )
+    details = row["details"] if row is not None else {}
+    if isinstance(details, str):
+        details = json.loads(details)
+
+    assert_equal(f"{action} audit preserves request ID", details.get("request_id"), request_id)
+    assert_equal(f"{action} audit preserves operation", details.get("operation"), "admin")
+    for forbidden_key in (
+        "authorization",
+        "jwt",
+        "password",
+        "password_hash",
+        "share_token",
+        "storage_credential",
+    ):
+        assert_equal(f"{action} audit excludes {forbidden_key}", forbidden_key not in details, True)
+    assert_equal(
+        f"{action} audit excludes the raw administrator token",
+        TOKEN not in json.dumps(details, default=str),
+        True,
+    )
+    log_pass(f"{action} audit keeps the actor and typed request correlation")
+
+
 def assert_server_log_excludes_secrets(secrets: tuple[str, ...]) -> None:
     """Assert raw authentication credentials never reached managed API stdout."""
     log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
@@ -1645,6 +1725,99 @@ def test_share_log_context_invariants() -> None:
         )
         redis_delete_pattern(f"rate:share_password:{access_code}:*")
         redis_delete_pattern("rate:share_access:*")
+
+
+def test_admin_log_context_invariants() -> None:
+    """Verify core administration requests and audits retain one request context."""
+    log_section("Core Administration Structured Log Correlation")
+
+    invalid_list_request_id = f"safety-admin-list-log-{unique_name()}"
+    invalid_list_response = fetch(
+        "/api/admin/users?status=unsupported",
+        headers={**auth_headers(TOKEN), "X-Request-Id": invalid_list_request_id},
+    )
+    assert_admin_log_context(
+        response=invalid_list_response,
+        request_id=invalid_list_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin list users request:",
+            "Parameter 'status' invalid format:",
+            "List users request validation failed:",
+            "HTTP request completed",
+        ),
+    )
+
+    self_status_request_id = f"safety-admin-self-status-log-{unique_name()}"
+    self_status_response = fetch(
+        f"/api/admin/users/{USER_ID}/status",
+        method="PUT",
+        headers={**auth_headers(TOKEN), "X-Request-Id": self_status_request_id},
+        json_body={"status": 1},
+    )
+    assert_admin_log_context(
+        response=self_status_response,
+        request_id=self_status_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin change user status request:",
+            "Admin change user status: target_id=",
+            "Admin cannot modify self:",
+            "Failed to change user status:",
+            "HTTP request completed",
+        ),
+    )
+
+    missing_share_id = int(
+        scalar("SELECT COALESCE(MAX(id), 0) + 1000000 FROM shares") or 1000000
+    )
+    missing_share_request_id = f"safety-admin-missing-share-log-{unique_name()}"
+    missing_share_response = fetch(
+        f"/api/admin/shares/{missing_share_id}",
+        headers={**auth_headers(TOKEN), "X-Request-Id": missing_share_request_id},
+    )
+    assert_admin_log_context(
+        response=missing_share_response,
+        request_id=missing_share_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin get share detail request:",
+            "Admin get share detail: share_id=",
+            "Admin share not found:",
+            "Failed to get share detail:",
+            "HTTP request completed",
+        ),
+    )
+
+    storage_request_id = f"safety-admin-storage-log-{unique_name()}"
+    try:
+        storage_response = fetch(
+            "/api/admin/storage/stats",
+            headers={**auth_headers(TOKEN), "X-Request-Id": storage_request_id},
+        )
+        assert_admin_log_context(
+            response=storage_response,
+            request_id=storage_request_id,
+            expected_success=True,
+            message_markers=(
+                "Admin get global storage stats request:",
+                "Admin get global storage stats successful",
+            ),
+        )
+        assert_admin_audit_correlation(
+            action="admin.storage.global_stats",
+            request_id=storage_request_id,
+        )
+
+        log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+        assert_equal("administration logs exclude the raw JWT", TOKEN not in log_text, True)
+        log_pass("administration logs and audits exclude authentication credentials")
+    finally:
+        execute(
+            "DELETE FROM operation_logs "
+            "WHERE action = %s AND details ->> 'request_id' = %s",
+            ("admin.storage.global_stats", storage_request_id),
+        )
 
 
 def run_expired_cleanup(
@@ -4987,6 +5160,7 @@ def main() -> None:
     test_user_log_context_invariants()
     test_auth_log_context_invariants()
     test_share_log_context_invariants()
+    test_admin_log_context_invariants()
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()
