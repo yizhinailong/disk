@@ -81,6 +81,7 @@ def wait_for_persistence_failure_log(
     response,
     request_id: str,
     expected_message: str,
+    expected_operation: str = "file_mutation",
 ) -> dict[str, object]:
     """Return one exact shared-persistence event with request-owned correlation."""
     assert_equal(
@@ -114,7 +115,7 @@ def wait_for_persistence_failure_log(
             and record.get("source") == "application"
             and record.get("request_id") == request_id
             and record.get("instance_id") == instance_id
-            and record.get("operation") == "file_mutation"
+            and record.get("operation") == expected_operation
             and record.get("upload_id") is None
             and record.get("job_id") is None
             and record.get("lease_owner") is None
@@ -489,6 +490,29 @@ def install_folder_delete_failure_trigger(folder_id: int):
     return lambda: drop_failure_trigger("folders", trigger_name, function_name)
 
 
+def install_content_ref_increment_failure_trigger(content_id: int):
+    """Install a trigger that fails reference increments for one content row."""
+    function_name = safe_test_identifier("fail_content_ref_increment_fn")
+    trigger_name = safe_test_identifier("fail_content_ref_increment_trg")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.id = {int(content_id)} AND NEW.ref_count > OLD.ref_count THEN
+                RAISE EXCEPTION 'injected content ref increment failure for %', NEW.id;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON file_contents '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("file_contents", trigger_name, function_name)
+
+
 def install_copy_file_insert_failure_trigger(target_folder_id: int, file_name: str):
     """Install a trigger that fails copied file insertion for one target/name."""
     function_name = safe_test_identifier("fail_copy_file_insert_fn")
@@ -704,6 +728,122 @@ def test_instant_upload_dedup_ref_count() -> None:
     assert_equal("instant upload hash matches existing content", file_hash, first_file["name"] and md5_bytes(payload))
     same_hash_rows = int(scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0)
     assert_equal("instant upload creates no duplicate content row", same_hash_rows, 1)
+
+
+def test_instant_upload_content_ref_increment_failure_rolls_back() -> None:
+    """Verify content reference update failure rolls back an instant upload."""
+    log_section("Instant Upload Content Ref Increment Failure Rolls Back")
+    payload = f"instant-ref-increment-failure-{unique_name()}".encode()
+    source_file_id = upload_file(f"safety_instant_ref_source_{unique_name()}.bin", payload)
+    source_file = file_row(source_file_id)
+    content_id = int(source_file["content_id"])
+    content_before = content_row(content_id)
+    blob_path = local_blob_path(str(content_before["storage_path"]))
+    before_ref = int(content_before["ref_count"])
+    quota_before = user_quota()
+    file_hash = md5_bytes(payload)
+    target_name = f"safety_instant_ref_target_{unique_name()}.bin"
+    request_id = f"safety-content-ref-increment-{unique_name()}"
+    before_target_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = 0 AND name = %s",
+            (USER_ID, target_name),
+        ) or 0
+    )
+    before_task_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM upload_tasks WHERE user_id = %s AND file_hash = %s",
+            (USER_ID, file_hash),
+        ) or 0
+    )
+    before_content_count = int(
+        scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0
+    )
+    cleanup_trigger = install_content_ref_increment_failure_trigger(content_id)
+
+    try:
+        resp = fetch(
+            "/api/file/upload/init",
+            method="POST",
+            headers=auth_headers(request_id=request_id),
+            json_body={
+                "filename": target_name,
+                "file_size": len(payload),
+                "file_hash": file_hash,
+                "parent_id": 0,
+            },
+        )
+        save_evidence(f"{EVIDENCE_PREFIX}-instant-ref-increment-failure.json", resp.text)
+    finally:
+        cleanup_trigger()
+
+    assert_equal("content ref increment failure returns HTTP 500", resp.status_code, 500)
+    assert_equal(
+        "content ref increment failure returns InternalError code",
+        json_field(resp.text, "code"),
+        "10006",
+    )
+    assert_equal(
+        "content ref increment failure returns stable message",
+        json_field(resp.text, "message"),
+        "Failed to update file content reference count",
+    )
+    wait_for_persistence_failure_log(
+        response=resp,
+        request_id=request_id,
+        expected_message="File content reference increment failed",
+        expected_operation="upload_init",
+    )
+    assert_application_log_excludes(
+        "injected content ref increment failure",
+        "content reference log excludes database exception text",
+    )
+
+    after_target_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = 0 AND name = %s",
+            (USER_ID, target_name),
+        ) or 0
+    )
+    after_task_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM upload_tasks WHERE user_id = %s AND file_hash = %s",
+            (USER_ID, file_hash),
+        ) or 0
+    )
+    after_content_count = int(
+        scalar("SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s", (file_hash,)) or 0
+    )
+    quota_after = user_quota()
+
+    assert_equal("content ref increment fixture starts without target file", before_target_count, 0)
+    assert_equal("content ref increment failure creates no target file", after_target_count, 0)
+    assert_equal(
+        "content ref increment failure creates no upload task",
+        after_task_count,
+        before_task_count,
+    )
+    assert_equal(
+        "content ref increment failure keeps ref_count",
+        int(content_row(content_id)["ref_count"]),
+        before_ref,
+    )
+    assert_equal(
+        "content ref increment failure keeps storage_used",
+        quota_after["storage_used"],
+        quota_before["storage_used"],
+    )
+    assert_equal(
+        "content ref increment failure keeps storage_reserved",
+        quota_after["storage_reserved"],
+        quota_before["storage_reserved"],
+    )
+    assert_equal(
+        "content ref increment failure creates no duplicate content row",
+        after_content_count,
+        before_content_count,
+    )
+    assert_path_exists("content ref increment failure keeps existing blob", blob_path)
 
 
 def test_instant_upload_quota_rejection_no_side_effects() -> None:
@@ -1669,6 +1809,7 @@ def main() -> None:
     log_info(f"Using user_id={USER_ID}, base_url={BASE_URL}")
 
     test_instant_upload_dedup_ref_count()
+    test_instant_upload_content_ref_increment_failure_rolls_back()
     test_completion_dedup_race_ref_count_and_accounting_current_rule()
     test_commit_under_reservation_retains_recovery_artifacts()
     test_copy_ref_count_and_quota()

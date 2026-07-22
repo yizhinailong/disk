@@ -667,7 +667,11 @@ namespace disk::file {
 
                 bool content_query_failed = false;
                 try {
-                    existing_content_ids = co_await content_service.FindExistingIds(m_db_client, content_ids);
+                    existing_content_ids = co_await content_service.FindExistingIds(
+                        m_db_client,
+                        content_ids,
+                        log_context
+                    );
                 } catch (const drogon::orm::DrogonDbException& e) {
                     Logger::Warn(log_context)
                         << "File content batch query failed in copy, skipping chunk: "
@@ -731,7 +735,8 @@ namespace disk::file {
                     auto increment_result = co_await content_service.IncrementRefCountsChecked(
                         transaction,
                         valid_content_ref_increment,
-                        existing_content_ids
+                        existing_content_ids,
+                        log_context
                     );
                     if (!increment_result) {
                         co_return std::unexpected(increment_result.error());
@@ -911,7 +916,11 @@ namespace disk::file {
 
                     bool content_query_failed = false;
                     try {
-                        existing_content_ids = co_await content_service.FindExistingIds(m_db_client, content_ids);
+                        existing_content_ids = co_await content_service.FindExistingIds(
+                            m_db_client,
+                            content_ids,
+                            log_context
+                        );
                     } catch (const drogon::orm::DrogonDbException& e) {
                         Logger::Warn(log_context) << "Folder copy content query failed, skipping folder_id=" << folder_id
                                                   << ": " << e.base().what();
@@ -963,7 +972,8 @@ namespace disk::file {
                         auto increment_result = co_await content_service.IncrementRefCountsChecked(
                             transaction,
                             content_ref_increment,
-                            existing_content_ids
+                            existing_content_ids,
+                            log_context
                         );
                         if (!increment_result) {
                             co_return std::unexpected(increment_result.error());

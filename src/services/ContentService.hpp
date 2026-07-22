@@ -56,45 +56,57 @@ namespace disk::content {
         auto operator=(ContentService&&) -> ContentService& = default;
 
         [[nodiscard]]
-        auto FindByMd5(const std::string& hash_md5) const
+        auto FindByMd5(
+            const std::string& hash_md5,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<std::optional<ContentMetadata>>;
 
         [[nodiscard]]
-        auto FindByMd5(const drogon::orm::DbClientPtr& client, const std::string& hash_md5) const
+        auto FindByMd5(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& hash_md5,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<std::optional<ContentMetadata>>;
 
         [[nodiscard]]
         auto FindExistingIds(
             const drogon::orm::DbClientPtr& client,
-            const std::vector<uint64_t>& content_ids
+            const std::vector<uint64_t>& content_ids,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<std::unordered_set<uint64_t>>;
 
         [[nodiscard]]
         auto AcquireReference(
             const drogon::orm::DbClientPtr& client,
             const NewContent& content,
-            std::optional<uint64_t> expected_existing_content_id = std::nullopt
+            std::optional<uint64_t> expected_existing_content_id = std::nullopt,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<ContentMetadata>>;
 
         [[nodiscard]]
         auto IncrementRefCount(
             const drogon::orm::DbClientPtr& client,
             uint64_t content_id,
-            uint64_t increment = 1
+            uint64_t increment = 1,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
         auto IncrementRefCounts(
             const drogon::orm::DbClientPtr& client,
             const std::unordered_map<uint64_t, uint64_t>& increments,
-            const std::unordered_set<uint64_t>& existing_content_ids
+            const std::unordered_set<uint64_t>& existing_content_ids,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<std::unordered_set<uint64_t>>;
 
         [[nodiscard]]
         auto IncrementRefCountsChecked(
             const drogon::orm::DbClientPtr& client,
             const std::unordered_map<uint64_t, uint64_t>& increments,
-            const std::unordered_set<uint64_t>& existing_content_ids
+            const std::unordered_set<uint64_t>& existing_content_ids,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<std::unordered_set<uint64_t>>>;
 
         [[nodiscard]]
@@ -108,7 +120,8 @@ namespace disk::content {
         [[nodiscard]]
         auto CheckReferenceGate(
             const drogon::orm::DbClientPtr& client,
-            uint64_t content_id
+            uint64_t content_id,
+            disk::utils::LogContext log_context
         ) const -> drogon::Task<Result<void>>;
 
         drogon::orm::DbClientPtr m_db_client;

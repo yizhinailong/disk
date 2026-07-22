@@ -1241,7 +1241,9 @@ namespace disk::share {
                     if (source_file.getContentId()) {
                         auto increment_result = co_await content_service.IncrementRefCount(
                             transaction,
-                            *source_file.getContentId()
+                            *source_file.getContentId(),
+                            1,
+                            log_context
                         );
                         if (!increment_result) {
                             throw std::runtime_error(increment_result.error().message);
@@ -1338,7 +1340,9 @@ namespace disk::share {
                         if (source_file.getContentId()) {
                             auto increment_result = co_await content_service.IncrementRefCount(
                                 transaction,
-                                *source_file.getContentId()
+                                *source_file.getContentId(),
+                                1,
+                                log_context
                             );
                             if (!increment_result) {
                                 throw std::runtime_error(increment_result.error().message);

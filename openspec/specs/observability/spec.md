@@ -165,6 +165,29 @@ The folder-location repository and shared file persistence helpers SHALL accept 
 - **WHEN** trash insertion, active-file deletion, or active-folder deletion fails inside the existing move-to-trash transaction
 - **THEN** the transaction SHALL preserve its existing rollback and stable public error semantics while the helper event remains correlated and redacted
 
+### Requirement: Shared Content Lifecycle Correlation
+The shared content service SHALL accept caller-owned `LogContext` explicitly by value for standalone and transaction-client MD5 lookup, existing-ID lookup, reference acquisition, single and batch reference increments, reference decrement with Blob-GC enqueue, and the internal Blob-GC reference gate. Upload lifecycle, file mutation, sharing, and trash callers SHALL pass their already established context without changing PostgreSQL statements, row locking, reference-count invariants, garbage-collection admission, transaction ownership, `Result` or optional values, or public responses.
+
+#### Scenario: A request or durable job reaches content lifecycle persistence
+- **WHEN** an upload, copy, shared-item save, trash deletion, cleanup request, or claimed expiration job enters the content service
+- **THEN** every directly owned operation event SHALL retain the supplied request ID, actual instance, bounded operation, upload ID, job ID, lease owner, and state version exactly as provided across public overloads and the internal reference gate
+
+#### Scenario: Content lifecycle observes domain and dependency values
+- **WHEN** the service observes a content ID, hash, size, path, MIME type, delta, batch, affected-row count, domain error, SQL failure, database exception, or garbage-collection payload
+- **THEN** its application event SHALL use a fixed operation-specific message without those values, SQL, connection details, exception text, authorization material, or storage credentials, and SHALL NOT infer or overwrite any typed correlation field
+
+#### Scenario: A content caller omits correlation
+- **WHEN** a unit, utility, migration, or compatibility caller invokes a public content entry point without `LogContext`
+- **THEN** request and ownership fields SHALL remain JSON null rather than being reconstructed from content metadata, database state, thread-local state, errors, or messages
+
+#### Scenario: Content service initializes
+- **WHEN** a content service instance is constructed without request-owned work
+- **THEN** its initialization event SHALL remain a context-free process event while operation events use only the explicit per-call context
+
+#### Scenario: Content persistence rejects or fails a reference change
+- **WHEN** reference acquisition, increment, decrement, affected-row verification, or the Blob-GC gate rejects or fails inside an existing transaction
+- **THEN** the service SHALL preserve its current rollback, conflict/internal-error, optional/set, and enqueue semantics while its directly owned event remains correlated and redacted
+
 ### Requirement: Upload Rate-Limit Filter Correlation
 The route-owned upload rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every request-attribute failure, counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing its init, chunk, complete, and cancel route ownership, user fixed-window key, configured window or threshold, fail-open behavior, or HTTP response.
 

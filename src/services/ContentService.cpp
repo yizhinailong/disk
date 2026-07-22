@@ -66,14 +66,18 @@ namespace disk::content {
         Logger::Debug() << "ContentService initialization completed";
     }
 
-    auto ContentService::FindByMd5(const std::string& hash_md5) const
+    auto ContentService::FindByMd5(
+        const std::string& hash_md5,
+        disk::utils::LogContext log_context
+    ) const
         -> drogon::Task<std::optional<ContentMetadata>> {
-        co_return co_await FindByMd5(m_db_client, hash_md5);
+        co_return co_await FindByMd5(m_db_client, hash_md5, log_context);
     }
 
     auto ContentService::FindByMd5(
         const drogon::orm::DbClientPtr& client,
-        const std::string& hash_md5
+        const std::string& hash_md5,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<std::optional<ContentMetadata>> {
         try {
             CoroMapper<FileContents> mapper(client);
@@ -83,15 +87,16 @@ namespace disk::content {
             co_return ToMetadata(content);
         } catch (const drogon::orm::UnexpectedRows&) {
             co_return std::nullopt;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Failed to find file content by md5: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "File content lookup failed";
             co_return std::nullopt;
         }
     }
 
     auto ContentService::FindExistingIds(
         const drogon::orm::DbClientPtr& client,
-        const std::vector<uint64_t>& content_ids
+        const std::vector<uint64_t>& content_ids,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<std::unordered_set<uint64_t>> {
         std::unordered_set<uint64_t> existing_ids;
         if (content_ids.empty()) {
@@ -107,8 +112,8 @@ namespace disk::content {
             for (const auto& row : rows) {
                 existing_ids.insert(row["id"].as<uint64_t>());
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "File content batch id lookup failed: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "File content batch ID lookup failed";
         }
 
         co_return existing_ids;
@@ -117,7 +122,8 @@ namespace disk::content {
     auto ContentService::AcquireReference(
         const drogon::orm::DbClientPtr& client,
         const NewContent& content,
-        std::optional<uint64_t> expected_existing_content_id
+        std::optional<uint64_t> expected_existing_content_id,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<ContentMetadata>> {
         try {
             auto existing = co_await client->execSqlCoro(
@@ -143,7 +149,8 @@ namespace disk::content {
                 }
                 auto gate_result = co_await CheckReferenceGate(
                     client,
-                    existing[0]["id"].as<uint64_t>()
+                    existing[0]["id"].as<uint64_t>(),
+                    log_context
                 );
                 if (!gate_result) {
                     co_return std::unexpected(gate_result.error());
@@ -174,16 +181,15 @@ namespace disk::content {
                 ));
             }
             if (existing.empty()) {
-                auto gate_result = co_await CheckReferenceGate(client, metadata.id);
+                auto gate_result = co_await CheckReferenceGate(client, metadata.id, log_context);
                 if (!gate_result) {
                     co_return std::unexpected(gate_result.error());
                 }
             }
 
             co_return metadata;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to atomically acquire file content reference: "
-                            << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "File content reference acquisition failed";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to acquire file content reference")
             );
@@ -193,7 +199,8 @@ namespace disk::content {
     auto ContentService::IncrementRefCount(
         const drogon::orm::DbClientPtr& client,
         uint64_t content_id,
-        uint64_t increment
+        uint64_t increment,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<void>> {
         if (increment == 0) {
             co_return {};
@@ -211,7 +218,7 @@ namespace disk::content {
                 ));
             }
 
-            auto gate_result = co_await CheckReferenceGate(client, content_id);
+            auto gate_result = co_await CheckReferenceGate(client, content_id, log_context);
             if (!gate_result) {
                 co_return std::unexpected(gate_result.error());
             }
@@ -228,9 +235,8 @@ namespace disk::content {
                 ));
             }
             co_return {};
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to increment file content ref_count: content_id="
-                            << content_id << " - " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "File content reference increment failed";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to update file content reference count")
             );
@@ -240,11 +246,17 @@ namespace disk::content {
     auto ContentService::IncrementRefCounts(
         const drogon::orm::DbClientPtr& client,
         const std::unordered_map<uint64_t, uint64_t>& increments,
-        const std::unordered_set<uint64_t>& existing_content_ids
+        const std::unordered_set<uint64_t>& existing_content_ids,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<std::unordered_set<uint64_t>> {
-        auto result = co_await IncrementRefCountsChecked(client, increments, existing_content_ids);
+        auto result = co_await IncrementRefCountsChecked(
+            client,
+            increments,
+            existing_content_ids,
+            log_context
+        );
         if (!result) {
-            Logger::Warn() << "File content batch ref_count increment failed: " << result.error().message;
+            Logger::Warn(log_context) << "File content batch reference increment rejected";
             co_return std::unordered_set<uint64_t>{};
         }
         co_return result.value();
@@ -253,7 +265,8 @@ namespace disk::content {
     auto ContentService::IncrementRefCountsChecked(
         const drogon::orm::DbClientPtr& client,
         const std::unordered_map<uint64_t, uint64_t>& increments,
-        const std::unordered_set<uint64_t>& existing_content_ids
+        const std::unordered_set<uint64_t>& existing_content_ids,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<std::unordered_set<uint64_t>>> {
         std::string update_sql = "UPDATE file_contents SET ref_count = ref_count + CASE id";
         std::vector<uint64_t> valid_content_ids;
@@ -292,7 +305,7 @@ namespace disk::content {
                 ));
             }
             for (const auto content_id : valid_content_ids) {
-                auto gate_result = co_await CheckReferenceGate(client, content_id);
+                auto gate_result = co_await CheckReferenceGate(client, content_id, log_context);
                 if (!gate_result) {
                     co_return std::unexpected(gate_result.error());
                 }
@@ -300,8 +313,8 @@ namespace disk::content {
 
             auto result = co_await client->execSqlCoro(update_sql);
             if (result.affectedRows() != valid_content_ids.size()) {
-                Logger::Warn() << "File content batch ref_count increment affected unexpected rows: expected="
-                               << valid_content_ids.size() << ", actual=" << result.affectedRows();
+                Logger::Warn(log_context)
+                    << "File content batch reference increment row mismatch";
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to update file content reference counts")
                 );
@@ -309,8 +322,8 @@ namespace disk::content {
             for (const auto id : valid_content_ids) {
                 incremented_ids.insert(id);
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "File content batch ref_count increment failed: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "File content batch reference increment failed";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to update file content reference counts")
             );
@@ -386,15 +399,14 @@ namespace disk::content {
             }
 
             co_return zero_ref_contents.size();
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context)
-                << "File content decrement and Blob GC enqueue failed: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "File content decrement and Blob GC enqueue failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to update file content references"
             ));
-        } catch (const std::exception& e) {
-            Logger::Warn(log_context) << "Blob GC enqueue failed: " << e.what();
+        } catch (const std::exception&) {
+            Logger::Warn(log_context) << "Blob GC enqueue failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to enqueue Blob garbage collection"
@@ -404,7 +416,8 @@ namespace disk::content {
 
     auto ContentService::CheckReferenceGate(
         const drogon::orm::DbClientPtr& client,
-        uint64_t content_id
+        uint64_t content_id,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<void>> {
         try {
             disk::jobs::StorageJobRepository repository(m_db_client);
@@ -416,9 +429,8 @@ namespace disk::content {
                 ));
             }
             co_return {};
-        } catch (const std::exception& e) {
-            Logger::Warn() << "Blob GC reference gate failed: content_id=" << content_id
-                           << " - " << e.what();
+        } catch (const std::exception&) {
+            Logger::Warn(log_context) << "Blob GC reference gate failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to verify file content lifecycle"

@@ -499,7 +499,7 @@ namespace disk::upload {
         }
 
         disk::content::ContentService content_service(m_db_client);
-        auto existing_content = co_await content_service.FindByMd5(command.file_hash);
+        auto existing_content = co_await content_service.FindByMd5(command.file_hash, log_context);
         auto existing_task_id = co_await upload_task_repository.FindInProgressIdByUserAndHash(
             command.user_id,
             command.file_hash
@@ -550,7 +550,9 @@ namespace disk::upload {
 
                     auto increment_result = co_await content_service.IncrementRefCount(
                         transaction,
-                        content_id
+                        content_id,
+                        1,
+                        log_context
                     );
                     if (!increment_result) {
                         Logger::Warn(log_context)
@@ -1114,7 +1116,7 @@ namespace disk::upload {
         auto lookup_result = co_await [this, &final_hash, &upload_task, &command, &log_context]() -> drogon::Task<FinalizeLookupResult> {
             FinalizeLookupResult lookup;
             disk::content::ContentService content_service(m_db_client);
-            auto existing_content = co_await content_service.FindByMd5(final_hash);
+            auto existing_content = co_await content_service.FindByMd5(final_hash, log_context);
             if (existing_content.has_value()) {
                 lookup.existing_content = std::move(existing_content.value());
             }
@@ -1313,7 +1315,8 @@ namespace disk::upload {
                                                .size = static_cast<uint64_t>(upload_task.getValueOfFileSize()),
                                                .storage_path = final_storage_path.string(),
                                                .mime_type = "" },
-                    finalize_storage_decision.existing_content_id
+                    finalize_storage_decision.existing_content_id,
+                    log_context
                 );
                 if (!content_result) {
                     co_return std::unexpected(content_result.error());

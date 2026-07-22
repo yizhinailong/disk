@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 共享文件持久化日志关联）：完整构建、FolderRepository/真实 content-quota 安全网聚焦 CTest 6/6、直接真实 HTTP/PostgreSQL 安全网 194/194 项断言通过；完整 CTest 共 1448 项，1441 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 471.57 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 共享内容生命周期日志关联）：完整构建、ContentService/真实 content-quota 安全网聚焦 CTest 5/5、直接真实 HTTP/PostgreSQL 安全网 209/209 项断言通过；完整 CTest 共 1449 项，1442 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 481.12 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -795,6 +795,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定共享文
 4 条直接 application 失败事件固定为 `Folder location lookup failed`、`Trash record batch insert failed`、`File batch delete failed` 和 `Folder batch delete failed`，不记录用户/文件/文件夹 ID、名称、路径、批次正文、SQL、连接信息、异常正文、Authorization/JWT 或存储凭据，也不从参数、数据库行、affected rows、错误或消息推断所有权字段。参数化 SQL、事务连接、受影响行判断、move-to-trash rollback、`Result`/整数返回值及 HTTP 500/`10006`/`Failed to delete items` 公开合同不变。
 
 `FolderRepositoryLogContextContractTest` 锁定 5 个默认入口、Trash 转发、4 条固定事件和全部生产调用点；`test_safety_content_quota.py` 以 3 个不同唯一 request ID 和精确 PostgreSQL trigger 分别制造 trash insert、active file delete 与 active folder delete 失败，解析 `source=application` NDJSON 核对响应同一 request/实际 instance/`file_mutation`、四个空所有权字段、无空 request 重复事件且 application message 不含触发器异常正文，同时保留 active/trash/share/ref_count/quota/Blob 回滚不变量。完整构建、Python 语法检查、聚焦 CTest 6/6、直接安全网 194/194 项断言和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1448 项，1441 通过、7 项环境门控跳过、0 失败，总耗时 471.57 秒。`ContentService` 及其他尚未逐条归属的日志路径、目标 S3/多实例环境门控仍未收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.44 共享内容生命周期日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定共享内容生命周期边界的显式关联合同。`ContentService` 的两个 MD5 查找、已有 ID 批查、引用获取、单条递增、两个批量递增以及递减/Blob GC 入队共 8 个公开入口现在按值接收可选 `LogContext`，内部 reference gate 只接收显式上下文；默认单测、迁移、工具和兼容调用继续保持空关联，构造期初始化继续是无请求归属的进程事件。`UploadLifecycleService` 的 4 个、`FileMutationService` 的 4 个、`ShareService` 的 2 个和 `TrashService` 的 1 个生产调用点均原样传入已有 request/instance/operation/所有权字段。
+
+10 条直接操作失败事件现在使用固定消息，不记录 content/file/user ID、MD5/SHA-256、size/delta、storage path、MIME、batch/affected rows、GC payload、SQL、连接信息、业务错误或异常正文、Authorization/JWT 或存储凭据，也不从输入、数据库行、错误或消息推断或覆盖类型化字段。既有参数化 SQL、行锁、ref_count 不变量、reference gate、GC 入队、事务归属、可选值/集合/`Result` 及 HTTP 响应合同不变。
+
+`ContentServiceLogContextContractTest` 锁定 8 个默认入口、4 次内部 gate 传播、10 条固定事件和 11 个生产调用点；`test_safety_content_quota.py` 以精确 PostgreSQL `file_contents` UPDATE trigger 只破坏指定内容的引用递增，以唯一 request ID 发起真实秒传 init，核对 HTTP 500/`10006`/`Failed to update file content reference count`、响应同一 request/实际 instance/`upload_init`、四个空所有权字段、无空 request 重复事件且 application message 不含触发器异常正文，同时确认目标文件和上传任务未创建，ref_count、used/reserved quota、内容行和 Blob 不变。完整构建、Python 语法检查、聚焦 CTest 5/5、直接安全网 209/209 项断言和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1449 项，1442 通过、7 项环境门控跳过、0 失败，总耗时 481.12 秒。其他尚未逐条归属的日志路径及目标 S3/多实例环境门控仍未收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 
