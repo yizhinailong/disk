@@ -14,6 +14,7 @@ Covers:
   4. Get breadcrumb — verify path order (root → parent → child)
   5. Non-existent folder ID — expect rejection (404)
   6. Invalid folder name — expect rejection
+  7. Folder create rate limit — expect correlated 429 without mutation
 
 Prerequisites:
   - Server running on localhost:8080
@@ -24,9 +25,18 @@ Usage:
   uv run test/integration/test_folder_lifecycle.py
 """
 
+import base64
 import json
 import os
 import sys
+import time
+import uuid
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE_ROOT = Path(os.environ.get("EVIDENCE_DIR", REPO_ROOT / ".sisyphus/evidence"))
+SERVER_LOG_PATH = EVIDENCE_ROOT / "folder-lifecycle-server.log"
+os.environ["SERVER_LOG"] = str(SERVER_LOG_PATH)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
@@ -41,6 +51,9 @@ from lib_py import (
     do_login,
     json_field,
     fetch,
+    header_value,
+    redis_delete_pattern,
+    redis_set_value,
     unique_name,
 )
 
@@ -63,6 +76,78 @@ MOVE_TARGET_FOLDER_NAME = f"TstMoveTarget_{unique_name()}"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
+
+def configured_folder_rate_value(key: str, fallback: int) -> int:
+    """Read one positive folder rate-limit value from the active config."""
+    config_path = Path(os.environ.get("DISK_CONFIG_FILE", REPO_ROOT / "config.json"))
+    if not config_path.is_absolute():
+        config_path = REPO_ROOT / config_path
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        value = int(config.get("custom_config", {}).get("disk", {}).get(key, fallback))
+        return value if value > 0 else fallback
+    except Exception:
+        return fallback
+
+
+def access_token_subject(token: str) -> int:
+    """Read the trusted local access token subject for test-key ownership."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError("access token is not a compact JWT")
+    payload_segment = parts[1] + "=" * (-len(parts[1]) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
+    if payload.get("iss") != "disk" or payload.get("type") != "access":
+        raise ValueError("token payload is not a disk access token")
+    subject = str(payload.get("sub", ""))
+    if not subject.isdigit() or int(subject) <= 0:
+        raise ValueError("access token subject is not a positive user ID")
+    return int(subject)
+
+
+def wait_for_folder_rate_log(request_id: str, instance_id: str):
+    """Return the correlated folder mutation warning from managed stdout."""
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if SERVER_LOG_PATH.is_file():
+            for line in SERVER_LOG_PATH.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ).splitlines():
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (
+                    isinstance(record, dict)
+                    and record.get("schema_version") == 1
+                    and record.get("source") == "application"
+                    and record.get("level") == "warning"
+                    and record.get("request_id") == request_id
+                    and record.get("instance_id") == instance_id
+                    and record.get("operation") == "folder_mutation"
+                    and record.get("upload_id") is None
+                    and record.get("job_id") is None
+                    and record.get("lease_owner") is None
+                    and record.get("state_version") is None
+                    and "Folder rate limit:" in str(record.get("message", ""))
+                ):
+                    return record
+        time.sleep(0.05)
+    return None
+
+
+def folder_tree_contains_name(body: str, expected_name: str) -> bool:
+    """Search a folder tree response recursively for one exact name."""
+    data = json.loads(body)
+    pending = list(data.get("data", {}).get("children", []))
+    while pending:
+        node = pending.pop()
+        if node.get("name") == expected_name:
+            return True
+        pending.extend(node.get("children", []))
+    return False
 
 
 def create_folder(token: str, name: str, parent_id: int) -> tuple[int, str]:
@@ -359,7 +444,114 @@ def test_invalid_folder_name() -> None:
         sys.exit(1)
 
 
-# ─── Test 7: Rename folder updates tree and breadcrumb ───────────────────────
+# ─── Test 7: Folder rate-limit rejection ────────────────────────────────────
+
+
+def test_folder_rate_limit_correlation() -> None:
+    log_info("Testing folder rate-limit rejection correlation...")
+
+    try:
+        user_id = access_token_subject(TOKEN)
+    except (ValueError, json.JSONDecodeError) as error:
+        log_fail(f"Folder rate-limit token subject is unavailable: {error}")
+        sys.exit(1)
+
+    limit = configured_folder_rate_value("folder_rate_limit_per_minute", 100)
+    window_seconds = configured_folder_rate_value(
+        "folder_rate_limit_window_seconds",
+        60,
+    )
+    now = time.time()
+    window_start = (int(now) // window_seconds) * window_seconds
+    seconds_until_reset = window_start + window_seconds - now
+    if seconds_until_reset < 2:
+        time.sleep(seconds_until_reset + 0.05)
+        now = time.time()
+        window_start = (int(now) // window_seconds) * window_seconds
+
+    rate_key = f"rate:folder:{user_id}:{window_start}"
+    request_id = f"folder-rate-limit-{uuid.uuid4()}"
+    probe_name = f"FolderRateProbe_{uuid.uuid4().hex}"
+    ok = True
+    try:
+        redis_set_value(
+            rate_key,
+            str(limit),
+            max(1, window_start + window_seconds - int(time.time())),
+        )
+        response = fetch(
+            "/api/folder/create",
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+                "Content-Type": "application/json",
+                "X-Request-Id": request_id,
+            },
+            json_body={"name": probe_name, "parent_id": 0},
+        )
+        save_evidence("folder_rate_limit_response.json", response.text)
+
+        if response.status_code == 429 and json_field(response.text, "code") == "10005":
+            log_pass("Folder rate-limit returned HTTP 429 and code 10005")
+        else:
+            log_fail(
+                "Folder rate-limit response drifted: "
+                f"HTTP {response.status_code}, code={json_field(response.text, 'code')}"
+            )
+            ok = False
+
+        expected_headers = {
+            "X-RateLimit-Limit": str(limit),
+            "X-RateLimit-Remaining": "0",
+            "X-Request-Id": request_id,
+        }
+        for header_name, expected_value in expected_headers.items():
+            actual_value = header_value(response.headers, header_name)
+            if actual_value == expected_value:
+                log_pass(f"Folder rate-limit {header_name} is exact")
+            else:
+                log_fail(
+                    f"Folder rate-limit expected {header_name}={expected_value!r}, "
+                    f"got {actual_value!r}"
+                )
+                ok = False
+        for header_name in ("X-RateLimit-Reset", "Retry-After"):
+            if header_value(response.headers, header_name):
+                log_pass(f"Folder rate-limit {header_name} is present")
+            else:
+                log_fail(f"Folder rate-limit {header_name} is missing")
+                ok = False
+
+        instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+        if instance_id and wait_for_folder_rate_log(request_id, instance_id) is not None:
+            log_pass("Folder rate-limit warning preserves bounded correlation")
+        else:
+            log_fail("Folder rate-limit warning did not preserve bounded correlation")
+            ok = False
+
+        log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+        if any(value and value in log_text for value in (TEST_PASS, TOKEN, probe_name)):
+            log_fail("Folder rate-limit log contains credentials or request body data")
+            ok = False
+        else:
+            log_pass("Folder rate-limit log excludes credentials and request body data")
+    finally:
+        redis_delete_pattern(f"rate:folder:{user_id}:*")
+
+    tree_status, tree_body = get_tree(TOKEN, 0)
+    if tree_status == 200 and not folder_tree_contains_name(tree_body, probe_name):
+        log_pass("Folder rate-limit rejection created no folder")
+    else:
+        log_fail("Folder rate-limit rejection changed the folder tree")
+        ok = False
+
+    if ok:
+        log_pass("Folder rate-limit correlation and side-effect contract preserved")
+    else:
+        sys.exit(1)
+
+
+# ─── Test 8: Rename folder updates tree and breadcrumb ───────────────────────
 
 
 def test_rename_parent_folder() -> None:
@@ -410,7 +602,7 @@ def test_renamed_folder_breadcrumb() -> None:
     save_evidence("renamed_folder_breadcrumb_response.json", body)
 
 
-# ─── Test 8: Move folder subtree ──────────────────────────────────────────────
+# ─── Test 9: Move folder subtree ──────────────────────────────────────────────
 
 
 def test_create_move_target_folder() -> None:
@@ -523,6 +715,7 @@ def main() -> None:
     print("==========================================")
     print()
 
+    SERVER_LOG_PATH.unlink(missing_ok=True)
     ensure_server()
 
     log_info(f"Parent: {PARENT_FOLDER_NAME}")
@@ -535,6 +728,7 @@ def main() -> None:
     test_breadcrumb_order()
     test_nonexistent_folder_breadcrumb()
     test_invalid_folder_name()
+    test_folder_rate_limit_correlation()
     test_rename_parent_folder()
     test_renamed_folder_breadcrumb()
     test_create_move_target_folder()
