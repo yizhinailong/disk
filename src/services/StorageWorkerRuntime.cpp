@@ -11,10 +11,9 @@ namespace disk::jobs {
         std::string instance_id,
         RunCallback run_callback,
         StorageWorkerRuntimeOptions options
-    ) : m_instance_id(std::move(instance_id)),
-        m_run_callback(std::move(run_callback)),
+    ) : m_run_callback(std::move(run_callback)),
         m_options(options) {
-        if (m_instance_id.empty() || m_instance_id.size() > 128) {
+        if (instance_id.empty() || instance_id.size() > 128) {
             throw std::invalid_argument(
                 "Storage worker runtime instance ID must contain 1 to 128 characters"
             );
@@ -56,8 +55,8 @@ namespace disk::jobs {
             }
         });
 
-        Logger::Info() << "Storage worker runtime started: instance_id=" << m_instance_id
-                       << ", poll_interval_ms=" << m_options.poll_interval_ms;
+        Logger::Info(utils::LogContext{ .operation = "storage_worker_runtime" })
+            << "Storage worker runtime started: poll_interval_ms=" << m_options.poll_interval_ms;
     }
 
     auto StorageWorkerRuntime::BeginDrain() -> void {
@@ -69,8 +68,8 @@ namespace disk::jobs {
         if (m_loop != nullptr && timer != trantor::InvalidTimerId) {
             m_loop->queueInLoop([loop = m_loop, timer]() { loop->invalidateTimer(timer); });
         }
-        Logger::Info() << "Storage worker runtime draining: instance_id=" << m_instance_id
-                       << ", in_flight=" << m_poll_inflight.load();
+        Logger::Info(utils::LogContext{ .operation = "storage_worker_runtime" })
+            << "Storage worker runtime draining: in_flight=" << m_poll_inflight.load();
     }
 
     auto StorageWorkerRuntime::PollOnce() -> drogon::Task<bool> {
@@ -86,22 +85,22 @@ namespace disk::jobs {
             try {
                 auto result = co_await m_run_callback();
                 if (!result) {
-                    Logger::Error() << "Storage worker poll failed: instance_id=" << m_instance_id
-                                    << ", error=" << result.error().message;
+                    Logger::Error(utils::LogContext{ .operation = "storage_worker_poll" })
+                        << "Storage worker poll failed";
                     break;
                 }
                 if (result->claimed == 0) {
                     break;
                 }
-                Logger::Info() << "Storage worker poll completed: instance_id=" << m_instance_id
-                               << ", claimed=" << result->claimed
-                               << ", succeeded=" << result->succeeded
-                               << ", retried=" << result->retried
-                               << ", dead_lettered=" << result->dead_lettered
-                               << ", ownership_lost=" << result->ownership_lost;
-            } catch (const std::exception& error) {
-                Logger::Error() << "Storage worker poll threw: instance_id=" << m_instance_id
-                                << ", error=" << error.what();
+                Logger::Info(utils::LogContext{ .operation = "storage_worker_poll" })
+                    << "Storage worker poll completed: claimed=" << result->claimed
+                    << ", succeeded=" << result->succeeded
+                    << ", retried=" << result->retried
+                    << ", dead_lettered=" << result->dead_lettered
+                    << ", ownership_lost=" << result->ownership_lost;
+            } catch (const std::exception&) {
+                Logger::Error(utils::LogContext{ .operation = "storage_worker_poll" })
+                    << "Storage worker poll threw";
                 break;
             }
         }

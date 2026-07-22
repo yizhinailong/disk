@@ -661,6 +661,14 @@ The system SHALL derive durable Worker correlation only from claimed PostgreSQL 
 - **WHEN** the Worker persists a succeeded, retry, or dead-letter result, or can no longer confirm continued ownership
 - **THEN** the execution-completed event SHALL retain the persistent job ID and instance but SHALL use a null lease owner
 
+#### Scenario: Worker runtime has no claimed job
+- **WHEN** a Worker runtime starts, drains, or reports an aggregate poll result outside an individual claimed-job boundary
+- **THEN** the event SHALL use the actual process instance, SHALL use `storage_worker_runtime` for lifecycle events or `storage_worker_poll` for poll events, and SHALL keep request ID, upload ID, job ID, lease owner, and state version null
+
+#### Scenario: Worker runtime poll fails
+- **WHEN** the Worker callback returns a domain failure or throws an exception
+- **THEN** the runtime SHALL emit a fixed failure event with `storage_worker_poll` correlation and SHALL NOT record the domain error message, exception text, database details, endpoint, credentials, or identifiers inferred from message text
+
 ### Requirement: Typed Download Correlation
 The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.
 

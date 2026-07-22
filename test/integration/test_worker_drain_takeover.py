@@ -111,6 +111,38 @@ def find_worker_job_event(
     return None
 
 
+def find_worker_runtime_event(
+    server: ManagedServer,
+    *,
+    instance_id: str,
+    operation: str,
+    message_marker: str,
+) -> dict[str, Any] | None:
+    """Find one schema-v1 Worker runtime event without task ownership."""
+    for line in read_log(server).splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(record, dict):
+            continue
+        if (
+            record.get("schema_version") == 1
+            and record.get("source") == "application"
+            and record.get("instance_id") == instance_id
+            and record.get("request_id") is None
+            and record.get("operation") == operation
+            and record.get("upload_id") is None
+            and record.get("job_id") is None
+            and record.get("lease_owner") is None
+            and record.get("state_version") is None
+            and message_marker in str(record.get("message", ""))
+            and "instance_id=" not in str(record.get("message", ""))
+        ):
+            return record
+    return None
+
+
 def worker_config(
     database_name: str,
     port: int,
@@ -496,10 +528,26 @@ def main() -> int:
                 f"job_id={sentinel['job_id']}" not in log_after_exit,
                 "Worker A touched the post-signal sentinel",
             )
+            runtime_start_event = find_worker_runtime_event(
+                worker_a,
+                instance_id=WORKER_A,
+                operation="storage_worker_runtime",
+                message_marker="Storage worker runtime started",
+            )
             require(
-                "Storage worker runtime draining" in log_after_exit
+                runtime_start_event is not None,
+                "Worker A runtime start event lacks typed process correlation",
+            )
+            runtime_drain_event = find_worker_runtime_event(
+                worker_a,
+                instance_id=WORKER_A,
+                operation="storage_worker_runtime",
+                message_marker="Storage worker runtime draining",
+            )
+            require(
+                runtime_drain_event is not None
                 and "Process drain deadline reached" in log_after_exit,
-                "Worker A did not log its bounded drain deadline",
+                "Worker A did not log its typed bounded drain deadline",
             )
 
             after_exit = job_snapshot(database_name, target["job_id"])
@@ -707,6 +755,8 @@ def main() -> int:
                     "accepting_metric": 0,
                     "drain_timeout_seconds": DRAIN_SECONDS,
                     "drain_deadline_reached": True,
+                    "runtime_start_context": True,
+                    "runtime_drain_context": True,
                     "retiring_exit_code": return_code,
                     "new_claims_after_signal": 0,
                     "new_seed_cycles_after_signal": 0,

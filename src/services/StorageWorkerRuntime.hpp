@@ -47,7 +47,6 @@ namespace disk::jobs {
     private:
         auto TriggerPoll() -> void;
 
-        std::string m_instance_id;
         RunCallback m_run_callback;
         StorageWorkerRuntimeOptions m_options;
         trantor::EventLoop* m_loop{};
