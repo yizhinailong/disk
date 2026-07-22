@@ -903,7 +903,7 @@ def main() -> int:
     require(latest_verification is not None, "TODO latest verification summary is missing or malformed")
     total, passed_count, skipped_count = map(int, latest_verification.groups())
     require(
-        (total, passed_count, skipped_count) == (1416, 1409, 7),
+        (total, passed_count, skipped_count) == (1417, 1410, 7),
         "TODO latest CTest inventory drifted without an explicit contract update",
     )
     require(total == passed_count + skipped_count, "TODO latest CTest totals do not reconcile")

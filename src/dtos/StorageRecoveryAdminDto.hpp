@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdint>
 #include <initializer_list>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -36,7 +37,7 @@ namespace disk::admin {
         public:
             [[nodiscard]]
             static auto Body(const drogon::HttpRequestPtr& request)
-                -> Result<const Json::Value*> {
+                -> Result<std::shared_ptr<const Json::Value>> {
                 auto body = RequireJsonBody(request);
                 if (!body) {
                     return std::unexpected(body.error());

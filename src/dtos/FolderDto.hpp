@@ -30,6 +30,7 @@
 
 #include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 #include "utils/NameValidation.hpp"
 
 namespace disk::folder {

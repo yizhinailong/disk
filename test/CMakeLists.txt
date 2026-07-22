@@ -5,6 +5,7 @@ include(GoogleTest)
 set(TEST_SOURCES
     main.cpp
     utils/ConfigMgr_test.cpp
+    utils/DtoBase_test.cpp
     utils/FileHashUtil_test.cpp
     utils/LogHelper_test.cpp
     utils/NameValidation_test.cpp

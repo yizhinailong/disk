@@ -52,6 +52,7 @@
 #include "storage/BlobDescriptor.hpp"
 #include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 #include "utils/NameValidation.hpp"
 #include "utils/Response.hpp"
 

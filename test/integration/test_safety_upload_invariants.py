@@ -661,6 +661,31 @@ def wait_for_correlated_application_log(
     raise AssertionError("unreachable")
 
 
+def assert_no_unscoped_application_log(message: str) -> None:
+    """Assert a shared validation layer did not emit an uncorrelated duplicate."""
+    records: list[dict[str, object]] = []
+    if SERVER_LOG_PATH.is_file():
+        for line in SERVER_LOG_PATH.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict):
+                records.append(record)
+
+    duplicates = [
+        record
+        for record in records
+        if record.get("source") == "application"
+        and record.get("request_id") is None
+        and record.get("message") == message
+    ]
+    assert_equal("shared DTO validation emits no unscoped duplicate", len(duplicates), 0)
+
+
 def assert_file_query_log_context(
     *,
     response,
@@ -1317,7 +1342,7 @@ def test_trash_log_context_invariants() -> None:
     )
     for marker in (
         "Received batch restore request",
-        "Batch restore request parameter validation failed",
+        "Batch restore request parameter validation failed: Parameter 'trash_ids' cannot be empty array",
         "HTTP request completed",
     ):
         wait_for_correlated_application_log(
@@ -1327,6 +1352,7 @@ def test_trash_log_context_invariants() -> None:
             upload_id=None,
             message_marker=marker,
         )
+    assert_no_unscoped_application_log("Parameter 'trash_ids' cannot be empty array")
     log_pass("trash HTTP failure completion keeps typed request correlation")
 
 

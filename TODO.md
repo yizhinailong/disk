@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 存储恢复管理日志关联）：完整构建、存储恢复管理 GoogleTest 8/8、真实 HTTP StorageJobOperations 集成 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1416 项，1409 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 472.80 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 共享 DTO 纯验证）：完整构建、共享 DTO GoogleTest 1/1、DTO 相关 GoogleTest 22/22、真实 HTTP safety 集成 1/1（脚本内 724 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1417 项，1410 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 470.38 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -661,6 +661,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定租约释
 三个确认执行事务均在既有 `operation_logs.details` 中保存调用方同一 `request_id` 与 `operation=admin`，同时保留规范化原因和既有业务详情；dry-run 与冲突仍不写审计。日志和审计不记录 Authorization、管理员 JWT、对象存储凭据、对象 key/prefix、任意 cursor 或任务 payload。既有 MetricsService 对 `/api/admin/*` 的低基数分类保持不变；共享 `DtoBase`、`TransactionRunner` 等基础设施未从线程、断言或领域文本反推恢复上下文。
 
 `StorageRecoveryAdminLogContextContractTest` 锁定三个 Controller、三个服务协程、实际响应字段来源、事务审计传播、禁止断言值推断及敏感值禁记；现有恢复 DTO 7 项继续覆盖 dry-run、精确确认、固定 scope 和稳定响应。`StorageJobOperationsIntegration` 为租约 dry-run/陈旧 owner 冲突/确认释放/重复冲突、cleanup 创建/重启/DeadLetter，以及四个固定对账 scope 的 dry-run/入队/重复冲突分别发送唯一 request ID，逐行核对受管 `ops-api` NDJSON，并直接查询 PostgreSQL 审计关联二元组。完整构建、Python 语法检查、存储恢复管理 GoogleTest 8/8、真实 HTTP StorageJobOperations 集成 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1416 项，1409 通过、7 项环境门控跳过、0 失败，总耗时 472.80 秒。共享基础设施边界和目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.27 共享 DTO 纯验证记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定共享 DTO 的无日志副作用合同。`DtoBase` 的无效 JSON、必填/可选标量、正整数路径/查询值和 ID 数组共 14 类 helper 继续返回既有错误码、规范化消息与解析结果，不接收或推断 `LogContext`；原有 31 处无上下文 `Logger::Warn()` 和 `LogHelper.hpp` 依赖已删除。`RequireJsonBody` 使用与 Drogon 相同的 `collectComments=false` 和运行时 stack limit 静默解析 JsonCpp，并以调用栈内受所有权保护的只读 JSON 返回结果，避免框架 `getJsonObject()` 在语法错误时额外产生 `request_id=null` 的 `LOG_DEBUG`。仍直接记录领域事件的具体 DTO 改为显式包含 `LogHelper.hpp`，不再通过共享基类取得日志声明；公开 REST 请求、响应信封、错误码和合法 JSON 语义没有变化。
+
+新增 `DtoBaseTest.ValidationErrorsArePureResults` 覆盖全部 14 类 helper 的错误码与精确消息，源码合同禁止 `Logger::`/`LogHelper.hpp` 回归，并将应用与 Drogon 框架日志同时接入内存 sink 验证无效输入产生零事件。现有 DTO 相关 GoogleTest 22/22 回归通过。`SafetyUploadInvariantsIntegration` 以唯一 `X-Request-Id` 发送空 `trash_ids` 恢复请求，确认 Trash DTO/Controller/HTTP 边界仍记录同一 request/实际 instance 的完整失败事件，同时受管 stdout 不存在共享 helper 过去写出的同消息空 request 重复事件。
+
+完整构建、Python 语法检查、共享 DTO GoogleTest 1/1、DTO 相关 GoogleTest 22/22、真实 HTTP safety 集成 1/1（脚本本次实际 724 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1417 项，1410 通过、7 项环境门控跳过、0 失败，总耗时 470.38 秒。具体 DTO 的既有直接日志、`TransactionRunner`、Redis、认证/限流过滤器等其他共享基础设施边界，以及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

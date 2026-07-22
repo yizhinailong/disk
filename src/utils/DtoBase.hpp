@@ -15,15 +15,18 @@
 #pragma once
 
 #include <climits>
+#include <concepts>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#include <drogon/HttpAppFramework.h>
 #include <drogon/HttpRequest.h>
 #include <json/json.h>
-#include "utils/LogHelper.hpp"
 
 #include "utils/ErrorCode.hpp"
 
@@ -36,29 +39,43 @@ protected:
 
     /// 提取 JSON body，无效时返回错误
     [[nodiscard]]
-    static auto RequireJsonBody(const drogon::HttpRequestPtr& req) -> Result<const Json::Value*> {
-        auto json_ptr = req->getJsonObject();
-        if (!json_ptr) {
-            Logger::Warn() << "Request body is not valid JSON";
+    static auto RequireJsonBody(const drogon::HttpRequestPtr& req)
+        -> Result<std::shared_ptr<const Json::Value>> {
+        const auto body = req->getBody();
+        const auto& content_type = req->getHeader("content-type");
+        if (body.empty() ||
+            (req->getContentType() != drogon::CT_APPLICATION_JSON &&
+             content_type.find("application/json") == std::string::npos)) {
             return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
             );
         }
-        return json_ptr.get();
+
+        // Drogon logs parser errors before request-aware validation can own the diagnostic.
+        Json::CharReaderBuilder builder;
+        builder["collectComments"] = false;
+        builder["stackLimit"] = static_cast<Json::UInt>(drogon::app().getJsonParserStackLimit());
+        auto json = std::make_shared<Json::Value>();
+        std::string errors;
+        const auto reader = std::unique_ptr<Json::CharReader>(builder.newCharReader());
+        if (!reader->parse(body.data(), body.data() + body.size(), json.get(), &errors)) {
+            return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Request body is not valid JSON")
+            );
+        }
+        return std::shared_ptr<const Json::Value>(std::move(json));
     }
 
     /// 必填 string 字段：检查 isMember + isString
     [[nodiscard]]
     static auto RequireString(const Json::Value& json, const char* key) -> Result<std::string> {
         if (!json.isMember(key)) {
-            Logger::Warn() << "Missing required parameter: " << key;
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Missing required parameter: ") + key
             ));
         }
         if (!json[key].isString()) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected string";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' type error: expected string"
@@ -71,14 +88,12 @@ protected:
     [[nodiscard]]
     static auto RequireUInt64(const Json::Value& json, const char* key) -> Result<uint64_t> {
         if (!json.isMember(key)) {
-            Logger::Warn() << "Missing required parameter: " << key;
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Missing required parameter: ") + key
             ));
         }
         if (!json[key].isIntegral() || json[key].isInt64() && json[key].asInt64() < 0) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected unsigned integer";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' type error: expected unsigned integer"
@@ -91,14 +106,12 @@ protected:
     [[nodiscard]]
     static auto RequireInt(const Json::Value& json, const char* key) -> Result<int> {
         if (!json.isMember(key)) {
-            Logger::Warn() << "Missing required parameter: " << key;
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Missing required parameter: ") + key
             ));
         }
         if (!json[key].isIntegral()) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected integer";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' type error: expected integer"
@@ -111,14 +124,12 @@ protected:
     [[nodiscard]]
     static auto RequireBool(const Json::Value& json, const char* key) -> Result<bool> {
         if (!json.isMember(key)) {
-            Logger::Warn() << "Missing required parameter: " << key;
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Missing required parameter: ") + key
             ));
         }
         if (!json[key].isBool()) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected boolean";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' type error: expected boolean"
@@ -135,7 +146,6 @@ protected:
             return std::optional<std::string>(std::nullopt);
         }
         if (!json[key].isString()) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected string";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' type error: expected string"
@@ -152,7 +162,6 @@ protected:
             return std::optional<uint64_t>(std::nullopt);
         }
         if (!json[key].isIntegral() || json[key].isInt64() && json[key].asInt64() < 0) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected unsigned integer";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' type error: expected unsigned integer"
@@ -169,7 +178,6 @@ protected:
             return std::optional<int>(std::nullopt);
         }
         if (!json[key].isIntegral()) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected integer";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' type error: expected integer"
@@ -186,7 +194,6 @@ protected:
             return std::optional<bool>(std::nullopt);
         }
         if (!json[key].isBool()) {
-            Logger::Warn() << "Parameter '" << key << "' type error: expected boolean";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' type error: expected boolean"
@@ -200,7 +207,6 @@ protected:
     static auto ParsePositiveUInt64(const std::string& str, const char* param_name)
         -> Result<uint64_t> {
         if (str.empty()) {
-            Logger::Warn() << "Parameter '" << param_name << "' is empty";
             return std::unexpected(ErrorInfo(
                 ErrorCode::InvalidParameter,
                 std::string("Parameter '") + param_name + "' is empty"
@@ -210,14 +216,12 @@ protected:
             size_t pos = 0;
             auto value = std::stoull(str, &pos);
             if (pos != str.length()) {
-                Logger::Warn() << "Parameter '" << param_name << "' invalid format: " << str;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     std::string("Parameter '") + param_name + "' invalid format"
                 ));
             }
             if (value == 0) {
-                Logger::Warn() << "Parameter '" << param_name << "' must be a positive integer";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     std::string("Parameter '") + param_name + "' must be a positive integer"
@@ -225,7 +229,6 @@ protected:
             }
             return value;
         } catch (const std::exception&) {
-            Logger::Warn() << "Parameter '" << param_name << "' invalid format: " << str;
             return std::unexpected(ErrorInfo(
                 ErrorCode::InvalidParameter,
                 std::string("Parameter '") + param_name + "' invalid format"
@@ -249,14 +252,12 @@ protected:
             size_t pos = 0;
             auto value = std::stoi(str, &pos);
             if (pos != str.length()) {
-                Logger::Warn() << "Parameter '" << key << "' invalid format: " << str;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     std::string("Parameter '") + key + "' invalid format"
                 ));
             }
             if (value < min || value > max) {
-                Logger::Warn() << "Parameter '" << key << "' invalid value: " << str;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     std::string("Parameter '") + key + "' must be an integer between " +
@@ -265,7 +266,6 @@ protected:
             }
             return value;
         } catch (const std::exception&) {
-            Logger::Warn() << "Parameter '" << key << "' invalid format: " << str;
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' invalid format"
@@ -285,7 +285,6 @@ protected:
             size_t pos = 0;
             auto value = std::stoull(str, &pos);
             if (pos != str.length()) {
-                Logger::Warn() << "Parameter '" << key << "' invalid format: " << str;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     std::string("Parameter '") + key + "' invalid format"
@@ -293,7 +292,6 @@ protected:
             }
             return value;
         } catch (const std::exception&) {
-            Logger::Warn() << "Parameter '" << key << "' invalid format: " << str;
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + key + "' invalid format"
@@ -309,7 +307,6 @@ protected:
             return std::vector<uint64_t>{};
         }
         if (!json[field].isArray()) {
-            Logger::Warn() << "Parameter '" << field << "' type error: expected array";
             return std::unexpected(ErrorInfo(
                 ErrorCode::InvalidParameter,
                 std::string("Parameter '") + field + "' type error: expected array"
@@ -320,7 +317,6 @@ protected:
         ids.reserve(arr.size());
         for (Json::ArrayIndex i = 0; i < arr.size(); ++i) {
             if (!arr[i].isIntegral()) {
-                Logger::Warn() << "Element in parameter '" << field << "' type error: expected integer";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     std::string("Element in parameter '") + field +
@@ -329,8 +325,6 @@ protected:
             }
             auto id = arr[i].asUInt64();
             if (id == 0) {
-                Logger::Warn() << "Element in parameter '" << field
-                         << "' must be a positive integer";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     std::string("Element in parameter '") + field +
@@ -351,14 +345,12 @@ protected:
         size_t max_size = 100
     ) -> Result<std::vector<uint64_t>> {
         if (!json.isMember(field)) {
-            Logger::Warn() << "Missing required parameter: " << field;
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Missing required parameter: ") + field
             ));
         }
         if (!json[field].isArray()) {
-            Logger::Warn() << "Parameter '" << field << "' type error: expected array";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + field + "' type error: expected array"
@@ -366,15 +358,12 @@ protected:
         }
         const auto& arr = json[field];
         if (arr.size() < min_size) {
-            Logger::Warn() << "Parameter '" << field << "' cannot be empty array";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + field + "' cannot be empty array"
             ));
         }
         if (arr.size() > max_size) {
-            Logger::Warn() << "Parameter '" << field << "' exceeds maximum length limit (" << max_size
-                     << ")";
             return std::unexpected(ErrorInfo(
                 ErrorCode::ValidationFailed,
                 std::string("Parameter '") + field + "' supports at most " +
@@ -385,8 +374,6 @@ protected:
         ids.reserve(arr.size());
         for (Json::ArrayIndex i = 0; i < arr.size(); ++i) {
             if (!arr[i].isIntegral()) {
-                Logger::Warn() << "Parameter '" << field << "[" << i
-                         << "]' type error: expected positive integer";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     std::string("Parameter '") + field + "[" + std::to_string(i) +
@@ -395,8 +382,6 @@ protected:
             }
             auto id = arr[i].asUInt64();
             if (id == 0) {
-                Logger::Warn() << "Parameter '" << field << "[" << i
-                         << "]' must be a positive integer";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     std::string("Parameter '") + field + "[" + std::to_string(i) +

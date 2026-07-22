@@ -181,6 +181,25 @@ The system SHALL propagate storage-recovery administration request correlation e
 - **WHEN** a storage-recovery command succeeds or fails
 - **THEN** application and audit events SHALL NOT contain Authorization header values, administrator JWTs, object-storage credentials, object keys or prefixes, arbitrary cursors, or storage-job payloads
 
+### Requirement: Side-Effect-Free Shared DTO Validation
+The shared `DtoBase` parsing helpers SHALL be deterministic validation utilities that report failures only through their existing `Result<T>` contracts. They SHALL NOT emit application or framework logs, infer request correlation, or retain caller input.
+
+#### Scenario: Shared validation rejects input
+- **WHEN** a `DtoBase` helper rejects an invalid JSON body, required or optional field, path identifier, query value, or identifier array
+- **THEN** it SHALL return the existing error code and normalized error message without emitting a log event or changing the parsing result contract
+
+#### Scenario: Request-bound DTO validation fails
+- **WHEN** a request DTO receives an error from a shared helper
+- **THEN** the DTO, controller, or HTTP completion boundary that already owns the explicit request context MAY record the failure, and `DtoBase` SHALL NOT create a duplicate event with null request correlation
+
+#### Scenario: Invalid input contains arbitrary text
+- **WHEN** a shared path or query parser receives an arbitrary malformed value
+- **THEN** `DtoBase` SHALL NOT write that value, its field name, or its failure message to logs; the returned normalized `ErrorInfo` remains the only shared-layer output
+
+#### Scenario: Validation runs outside HTTP handling
+- **WHEN** a shared helper is used without an HTTP request context
+- **THEN** it SHALL remain side-effect free and SHALL NOT reconstruct request, operation, upload, job, lease, or state-version correlation from fields, values, threads, or messages
+
 ### Requirement: Operation Logs
 The system SHALL record and expose user-visible operation logs for key actions.
 

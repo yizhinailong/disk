@@ -46,6 +46,7 @@
 #include "storage/BlobDescriptor.hpp"
 #include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::share {
 
