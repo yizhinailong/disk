@@ -155,10 +155,23 @@ namespace disk::file {
     public:
         explicit TransactionRunner(
             drogon::orm::DbClientPtr db_client,
-            ErrorInfo default_error = ErrorInfo(ErrorCode::InternalError)
+            ErrorInfo default_error = ErrorInfo(ErrorCode::InternalError),
+            disk::utils::LogContext log_context = {}
         )
             : m_db_client(std::move(db_client)),
-              m_default_error(std::move(default_error)) {
+              m_default_error(std::move(default_error)),
+              m_log_context(std::move(log_context)) {
+        }
+
+        explicit TransactionRunner(
+            drogon::orm::DbClientPtr db_client,
+            disk::utils::LogContext log_context
+        )
+            : TransactionRunner(
+                  std::move(db_client),
+                  ErrorInfo(ErrorCode::InternalError),
+                  std::move(log_context)
+              ) {
         }
 
         template <typename Func>
@@ -171,24 +184,24 @@ namespace disk::file {
                 auto result = co_await std::forward<Func>(func)(transaction_client);
                 transaction_client.reset();
                 if (!result) {
-                    rollbackQuietly(transaction);
+                    rollbackQuietly(transaction, m_log_context);
                     co_return std::unexpected(result.error());
                 }
 
-                auto commit_result = co_await Commit(transaction);
+                auto commit_result = co_await Commit(transaction, m_log_context);
                 if (!commit_result) {
-                    rollbackQuietly(transaction);
-                    Logger::Error() << "Database transaction commit failed";
+                    rollbackQuietly(transaction, m_log_context);
+                    Logger::Error(m_log_context) << "Database transaction commit failed";
                     co_return std::unexpected(m_default_error);
                 }
                 co_return {};
             } catch (const drogon::orm::DrogonDbException& e) {
-                rollbackQuietly(transaction);
-                Logger::Error() << "Database transaction failed: " << e.base().what();
+                rollbackQuietly(transaction, m_log_context);
+                Logger::Error(m_log_context) << "Database transaction failed: " << e.base().what();
                 co_return std::unexpected(m_default_error);
             } catch (const std::exception& e) {
-                rollbackQuietly(transaction);
-                Logger::Error() << "Database transaction failed: " << e.what();
+                rollbackQuietly(transaction, m_log_context);
+                Logger::Error(m_log_context) << "Database transaction failed: " << e.what();
                 co_return std::unexpected(m_default_error);
             }
         }
@@ -200,7 +213,10 @@ namespace disk::file {
         }
 
         [[nodiscard]]
-        static auto Commit(std::shared_ptr<drogon::orm::Transaction>& transaction)
+        static auto Commit(
+            std::shared_ptr<drogon::orm::Transaction>& transaction,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>> {
             if (!transaction) {
                 co_return std::unexpected(ErrorInfo(
@@ -219,8 +235,9 @@ namespace disk::file {
             }
 
             if (transaction.use_count() != 1) {
-                Logger::Error() << "Database transaction has outstanding owners at commit: count="
-                                << transaction.use_count();
+                Logger::Error(log_context)
+                    << "Database transaction has outstanding owners at commit: count="
+                    << transaction.use_count();
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
                     "Database transaction cannot be committed"
@@ -239,7 +256,10 @@ namespace disk::file {
         }
 
     private:
-        static auto rollbackQuietly(const std::shared_ptr<drogon::orm::Transaction>& transaction) -> void {
+        static auto rollbackQuietly(
+            const std::shared_ptr<drogon::orm::Transaction>& transaction,
+            const disk::utils::LogContext& log_context
+        ) -> void {
             if (!transaction) {
                 return;
             }
@@ -247,12 +267,13 @@ namespace disk::file {
             try {
                 transaction->rollback();
             } catch (const std::exception& e) {
-                Logger::Error() << "Transaction rollback failed: " << e.what();
+                Logger::Error(log_context) << "Transaction rollback failed: " << e.what();
             }
         }
 
         drogon::orm::DbClientPtr m_db_client;
         ErrorInfo m_default_error;
+        disk::utils::LogContext m_log_context;
     };
 
 } // namespace disk::file

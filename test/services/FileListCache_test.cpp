@@ -135,24 +135,30 @@ namespace disk::file {
             const auto folder = ReadSourceFile("src/services/FolderService.cpp");
             const auto share = ReadSourceFile("src/services/ShareService.cpp");
 
-            const auto folder_commit = folder.find("TransactionRunner::Commit(txn)");
+            const auto folder_commit = folder.find("TransactionRunner::Commit(");
+            const auto folder_commit_context = folder.find("log_context", folder_commit);
             const auto folder_invalidation = folder.find(
                 "FileListCache::Invalidate(m_redis_service, user_id)",
                 folder_commit
             );
             ASSERT_NE(folder_commit, std::string::npos);
+            ASSERT_NE(folder_commit_context, std::string::npos);
             ASSERT_NE(folder_invalidation, std::string::npos);
+            EXPECT_LT(folder_commit_context, folder_invalidation);
             EXPECT_LT(folder_commit, folder_invalidation);
 
             const auto save_to_drive = share.find("auto ShareService::SaveToDrive(");
-            const auto share_commit = share.find("TransactionRunner::Commit(transaction)", save_to_drive);
+            const auto share_commit = share.find("TransactionRunner::Commit(", save_to_drive);
+            const auto share_commit_context = share.find("log_context", share_commit);
             const auto share_invalidation = share.find(
                 "FileListCache::Invalidate(m_redis_service, target_user_id)",
                 save_to_drive
             );
             ASSERT_NE(save_to_drive, std::string::npos);
             ASSERT_NE(share_commit, std::string::npos);
+            ASSERT_NE(share_commit_context, std::string::npos);
             ASSERT_NE(share_invalidation, std::string::npos);
+            EXPECT_LT(share_commit_context, share_invalidation);
             EXPECT_LT(share_commit, share_invalidation);
         }
 

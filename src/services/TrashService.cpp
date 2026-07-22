@@ -303,7 +303,7 @@ namespace disk::trash {
             ));
         }
 
-        disk::file::TransactionRunner transaction_runner(m_db_client);
+        disk::file::TransactionRunner transaction_runner(m_db_client, log_context);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
                 auto insert_ok = co_await CreateTrashRecords(transaction, trash_items, user_id);
@@ -1542,7 +1542,10 @@ namespace disk::trash {
             }
 
             result.deleted_count = static_cast<int>(trash_ids.size());
-            auto commit_result = co_await disk::file::TransactionRunner::Commit(transaction);
+            auto commit_result = co_await disk::file::TransactionRunner::Commit(
+                transaction,
+                log_context
+            );
             if (!commit_result) {
                 throw std::runtime_error("Trash permanent-delete transaction commit failed");
             }

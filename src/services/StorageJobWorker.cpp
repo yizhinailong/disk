@@ -523,7 +523,10 @@ namespace disk::jobs {
                     RollbackQuietly(transaction, log_context);
                     co_return RetryableFailure("blob_gc ownership changed before commit");
                 }
-                auto commit_result = co_await disk::file::TransactionRunner::Commit(transaction);
+                auto commit_result = co_await disk::file::TransactionRunner::Commit(
+                    transaction,
+                    log_context
+                );
                 if (!commit_result) {
                     co_return RetryableFailure("blob_gc transaction commit failed");
                 }

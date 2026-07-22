@@ -341,7 +341,8 @@ namespace disk::jobs {
         disk::admin::StorageJobItem replayed_job;
         disk::file::TransactionRunner transaction(
             m_db_client,
-            ErrorInfo(ErrorCode::InternalError, "Failed to replay storage job")
+            ErrorInfo(ErrorCode::InternalError, "Failed to replay storage job"),
+            log_context
         );
         auto result = co_await transaction.Run(
             [&](const drogon::orm::DbClientPtr& client) -> drogon::Task<Result<void>> {

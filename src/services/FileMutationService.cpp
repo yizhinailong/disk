@@ -157,7 +157,8 @@ namespace disk::file {
 
         TransactionRunner transaction_runner(
             m_db_client,
-            ErrorInfo(ErrorCode::InternalError, "Failed to move items")
+            ErrorInfo(ErrorCode::InternalError, "Failed to move items"),
+            log_context
         );
         auto transaction_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
@@ -515,7 +516,7 @@ namespace disk::file {
             total_copy_size += plan_it->second.item_size;
         }
 
-        TransactionRunner transaction_runner(m_db_client);
+        TransactionRunner transaction_runner(m_db_client, log_context);
         disk::quota::QuotaService quota_service(m_db_client);
         disk::content::ContentService content_service(m_db_client);
 

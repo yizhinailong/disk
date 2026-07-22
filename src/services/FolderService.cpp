@@ -267,7 +267,10 @@ namespace disk::folder {
                 );
             }
 
-            auto commit_result = co_await disk::file::TransactionRunner::Commit(txn);
+            auto commit_result = co_await disk::file::TransactionRunner::Commit(
+                txn,
+                log_context
+            );
             if (!commit_result) {
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to rename folder")

@@ -520,7 +520,8 @@ namespace disk::upload {
             drogon_model::disk::Files file;
             disk::file::TransactionRunner transaction_runner(
                 m_db_client,
-                ErrorInfo(ErrorCode::InternalError, "Failed to create file record")
+                ErrorInfo(ErrorCode::InternalError, "Failed to create file record"),
+                log_context
             );
             auto tx_result = co_await transaction_runner.Run(
                 [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
@@ -1262,7 +1263,7 @@ namespace disk::upload {
         bool db_operation_failed = false;
         uint64_t completed_state_version = state_version;
         UploadCompleteStageTimer commit_timer(disk::metrics::UploadCompleteStage::Commit);
-        disk::file::TransactionRunner transaction_runner(m_db_client);
+        disk::file::TransactionRunner transaction_runner(m_db_client, log_context);
         disk::jobs::StorageJobRepository storage_job_repository(m_db_client);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
@@ -1470,7 +1471,7 @@ namespace disk::upload {
 
         disk::file::UploadTaskRepository upload_task_repository(m_db_client);
         disk::jobs::StorageJobRepository storage_job_repository(m_db_client);
-        disk::file::TransactionRunner transaction_runner(m_db_client);
+        disk::file::TransactionRunner transaction_runner(m_db_client, log_context);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
                 auto cancelled_record = co_await upload_task_repository.MarkCancelledIfInProgressReturning(
@@ -1584,7 +1585,7 @@ namespace disk::upload {
 
         disk::file::UploadTaskRepository upload_task_repository(m_db_client);
         disk::jobs::StorageJobRepository storage_job_repository(m_db_client);
-        disk::file::TransactionRunner transaction_runner(m_db_client);
+        disk::file::TransactionRunner transaction_runner(m_db_client, log_context);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
                 auto expired_record = co_await upload_task_repository.MarkExpiredIfInProgressReturning(

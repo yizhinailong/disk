@@ -200,6 +200,21 @@ The shared `DtoBase` parsing helpers SHALL be deterministic validation utilities
 - **WHEN** a shared helper is used without an HTTP request context
 - **THEN** it SHALL remain side-effect free and SHALL NOT reconstruct request, operation, upload, job, lease, or state-version correlation from fields, values, threads, or messages
 
+### Requirement: Explicit Transaction Boundary Correlation
+The shared `TransactionRunner` SHALL accept caller-owned `LogContext` explicitly by value and retain it for every transaction failure event without changing the existing callback-error, exception, rollback, or commit result mapping.
+
+#### Scenario: Managed transaction fails
+- **WHEN** a managed transaction encounters a database or standard exception, a failed commit callback, or a rollback exception
+- **THEN** every event emitted by the runner SHALL retain the caller-supplied request, operation, upload, job, lease-owner, and state-version values exactly
+
+#### Scenario: Caller commits a manually managed transaction
+- **WHEN** a service passes an explicit context to the standalone commit helper and commit is rejected because the transaction has persistent outstanding owners
+- **THEN** the rejection event SHALL retain that context without deriving correlation from the owner count, transaction object, SQL, or error message
+
+#### Scenario: Transaction has no caller context
+- **WHEN** a non-request caller uses the compatibility default without supplying a context
+- **THEN** unavailable correlation fields SHALL remain null, and the runner SHALL NOT consult thread-local state or infer identifiers from callback arguments, exceptions, or transaction state
+
 ### Requirement: Operation Logs
 The system SHALL record and expose user-visible operation logs for key actions.
 

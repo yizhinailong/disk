@@ -661,8 +661,13 @@ def wait_for_correlated_application_log(
     raise AssertionError("unreachable")
 
 
-def assert_no_unscoped_application_log(message: str) -> None:
-    """Assert a shared validation layer did not emit an uncorrelated duplicate."""
+def assert_no_unscoped_application_log(
+    message: str,
+    *,
+    exact: bool = True,
+    assertion: str = "shared DTO validation emits no unscoped duplicate",
+) -> None:
+    """Assert an application boundary did not emit an uncorrelated duplicate."""
     records: list[dict[str, object]] = []
     if SERVER_LOG_PATH.is_file():
         for line in SERVER_LOG_PATH.read_text(
@@ -681,9 +686,13 @@ def assert_no_unscoped_application_log(message: str) -> None:
         for record in records
         if record.get("source") == "application"
         and record.get("request_id") is None
-        and record.get("message") == message
+        and (
+            record.get("message") == message
+            if exact
+            else message in str(record.get("message", ""))
+        )
     ]
-    assert_equal("shared DTO validation emits no unscoped duplicate", len(duplicates), 0)
+    assert_equal(assertion, len(duplicates), 0)
 
 
 def assert_file_query_log_context(
@@ -5121,11 +5130,13 @@ def test_complete_upload_db_failure_after_promotion_retains_final_blob() -> None
         """
     )
 
+    request_id = f"safety-transaction-{unique_name()}"
+    instance_id = ""
     try:
         resp = fetch(
             "/api/file/upload/complete",
             method="POST",
-            headers=auth_headers(TOKEN),
+            headers={**auth_headers(TOKEN), "X-Request-Id": request_id},
             json_body={"upload_id": upload_id},
         )
         save_evidence(f"{EVIDENCE_PREFIX}-{upload_id}-complete-db-failure.json", resp.text)
@@ -5135,12 +5146,43 @@ def test_complete_upload_db_failure_after_promotion_retains_final_blob() -> None
             print_summary()
 
         log_pass("complete upload failed after files insert trigger")
+        assert_equal(
+            "failed transaction response preserves caller request ID",
+            header_value(resp.headers, "X-Request-Id"),
+            request_id,
+        )
+        instance_id = header_value(resp.headers, "X-Disk-Instance-Id")
+        assert_equal(
+            "failed transaction response identifies the handling instance",
+            bool(instance_id),
+            True,
+        )
     finally:
         execute("DROP TRIGGER IF EXISTS safety_upload_file_insert_fail ON files")
         execute("DROP FUNCTION IF EXISTS fail_safety_upload_file_insert()")
 
     task = assert_upload_task(upload_id, 4)
     assert_equal("failed finalization keeps reserved_bytes", int(task["reserved_bytes"]), len(payload))
+    assert_equal(
+        "failed transaction lease owner matches the handling instance",
+        str(task["lease_owner"]),
+        instance_id,
+    )
+    wait_for_correlated_application_log(
+        request_id=request_id,
+        instance_id=instance_id,
+        operation="upload_complete",
+        upload_id=upload_id,
+        message_marker="intentional safety upload finalization failure",
+        lease_owner=str(task["lease_owner"]),
+        state_version=int(task["state_version"]),
+    )
+    assert_no_unscoped_application_log(
+        "intentional safety upload finalization failure",
+        exact=False,
+        assertion="transaction failure emits no unscoped duplicate",
+    )
+    log_pass("transaction failure log matches response and persisted upload ownership")
     assert_chunk_row_count(upload_id, 1)
     assert_db_row_absent(
         "failed finalization creates no logical file row",

@@ -339,7 +339,8 @@ namespace disk::recovery {
         disk::admin::UploadLeaseReleaseResponse response;
         disk::file::TransactionRunner transaction(
             m_db_client,
-            ErrorInfo(ErrorCode::InternalError, "Failed to release upload lease")
+            ErrorInfo(ErrorCode::InternalError, "Failed to release upload lease"),
+            log_context
         );
         auto result = co_await transaction.Run(
             [&](const drogon::orm::DbClientPtr& client) -> drogon::Task<Result<void>> {
@@ -437,7 +438,8 @@ namespace disk::recovery {
         disk::admin::UploadCleanupRebuildResponse response;
         disk::file::TransactionRunner transaction(
             m_db_client,
-            ErrorInfo(ErrorCode::InternalError, "Failed to rebuild upload cleanup task")
+            ErrorInfo(ErrorCode::InternalError, "Failed to rebuild upload cleanup task"),
+            log_context
         );
         auto result = co_await transaction.Run(
             [&](const drogon::orm::DbClientPtr& client) -> drogon::Task<Result<void>> {
@@ -553,7 +555,8 @@ namespace disk::recovery {
         disk::admin::StorageReconciliationEnqueueResponse response;
         disk::file::TransactionRunner transaction(
             m_db_client,
-            ErrorInfo(ErrorCode::InternalError, "Failed to enqueue storage reconciliation")
+            ErrorInfo(ErrorCode::InternalError, "Failed to enqueue storage reconciliation"),
+            log_context
         );
         auto result = co_await transaction.Run(
             [&](const drogon::orm::DbClientPtr& client) -> drogon::Task<Result<void>> {

@@ -251,7 +251,10 @@ namespace disk::share {
         }
 
         // Commit and release the transaction connection before the fail-open audit insert.
-        auto commit_result = co_await disk::file::TransactionRunner::Commit(transaction);
+        auto commit_result = co_await disk::file::TransactionRunner::Commit(
+            transaction,
+            log_context
+        );
         if (!commit_result) {
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to create share"));
         }
@@ -1385,7 +1388,10 @@ namespace disk::share {
                 );
             }
 
-            auto save_commit_result = co_await disk::file::TransactionRunner::Commit(transaction);
+            auto save_commit_result = co_await disk::file::TransactionRunner::Commit(
+                transaction,
+                log_context
+            );
             if (!save_commit_result) {
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to save share items")
