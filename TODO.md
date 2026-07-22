@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 文件变更日志关联）：完整构建、聚焦文件变更分类/上下文/移动事务合同 GTest 4/4、真实 HTTP safety 集成 1/1（脚本内 546 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1406 项，1399 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 471.79 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 文件夹日志关联）：完整构建、聚焦文件夹分类/上下文/DTO CTest 42/42、文件夹生命周期集成 1/1、真实 HTTP safety 集成 1/1（脚本本次实际 564 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1407 项，1400 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 471.65 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -589,6 +589,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定文件变
 `FileController` 在 DTO 或路径参数解析前从请求属性创建显式 `LogContext`，按值传过 `FileMutationService` 的 rename、move、copy、delete 及其复制辅助协程；delete 继续将同一上下文传入唯一的 `TrashService::MoveToTrash` 子流程。文件、文件夹、内容、用户、配额和缓存标识只保留在业务参数或消息中，不冒充 `upload_id`、`job_id`、`lease_owner` 或 `state_version`，这四个非变更所有权字段保持 JSON `null`。
 
 `MetricsServiceTest` 锁定五个变更路径与查询/上传/下载/非数字路径的精确分类，`FileMutationLogContextContractTest` 锁定 Controller、变更服务和移入回收站代码区段的显式上下文传播。`SafetyUploadInvariantsIntegration` 使用四个不同的调用方 request ID，分别触发不存在文件的数字 rename、不存在目标目录的 move/copy 和不存在文件的软删除，逐行核对 Controller、变更服务、回收站子流程及 HTTP 完成 NDJSON 的 request/instance、固定 operation 与四个空所有权字段。完整构建、Python 语法检查、聚焦 GTest 4/4、真实 HTTP safety 集成 1/1（脚本内 546 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1406 项，1399 通过、7 项环境门控跳过、0 失败，总耗时 471.79 秒。共享 DTO、Repository、Quota/Content/Cache 边界及目录/分享/管理员等其他历史请求域和目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.18 文件夹日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定文件夹请求的类型化日志与分类边界。HTTP 指标只将精确的 `/api/folder/tree` 和单段无符号十进制 breadcrumb 路径归为低基数 `operation=folder_query`，将精确的 `/api/folder/create` 和单段无符号十进制 rename 路径归为 `operation=folder_mutation`；非数字 ID、额外路径后缀和未知文件夹路径保持 `other`。公开 REST 路由、请求参数、请求体、响应信封和错误码没有变化。
+
+`FolderController` 在 DTO 或路径参数解析前从请求属性创建显式 `LogContext`，按值传过直接记录日志的文件夹 DTO、`FolderService` 及其父目录校验、重名检查、计数更新和所有权校验辅助协程；Controller、DTO 和服务的既有请求级事件均使用同一 request/instance/operation，rename 与 breadcrumb 的缺失目标路径也有可关联的服务层告警。文件夹、用户、路径、事务和缓存标识不冒充 `upload_id`、`job_id`、`lease_owner` 或 `state_version`，这四个非文件夹所有权字段保持 JSON `null`；构造期初始化日志继续作为无 HTTP 上下文的进程事件。
+
+`MetricsServiceTest` 锁定查询/变更路径及负边界，`FolderLogContextContractTest` 锁定 Controller、直接 DTO 日志、服务和辅助协程的显式传播，DTO 用例继续回归请求合同。`SafetyUploadInvariantsIntegration` 使用四个不同的调用方 request ID，分别触发缺失父目录的 tree、缺失目标的 breadcrumb、缺失父目录的 create 和缺失目标的 rename，逐行核对响应、Controller、DTO/服务及 HTTP 完成 NDJSON 的 request/instance、固定 operation 与四个空所有权字段。完整构建、Python 语法检查、聚焦 CTest 42/42、文件夹生命周期集成 1/1、真实 HTTP safety 集成 1/1（脚本本次实际 564 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1407 项，1400 通过、7 项环境门控跳过、0 失败，总耗时 471.65 秒。共享 `DtoBase`、Repository、`TransactionRunner`、Cache 边界，分享/管理员等其他历史请求域，以及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

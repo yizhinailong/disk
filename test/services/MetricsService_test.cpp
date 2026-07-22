@@ -34,6 +34,36 @@ namespace disk::metrics {
             EXPECT_EQ(HttpOperationName(HttpOperation::FileMutation), "file_mutation");
             EXPECT_EQ(ClassifyHttpOperation("/api/file/not-a-number/rename"), HttpOperation::Other);
             EXPECT_EQ(ClassifyHttpOperation("/api/file/123/rename/extra"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/folder/tree"), HttpOperation::FolderQuery);
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/folder/123/breadcrumb"),
+                HttpOperation::FolderQuery
+            );
+            EXPECT_EQ(HttpOperationName(HttpOperation::FolderQuery), "folder_query");
+            EXPECT_EQ(ClassifyHttpOperation("/api/folder/create"), HttpOperation::FolderMutation);
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/folder/123/rename"),
+                HttpOperation::FolderMutation
+            );
+            EXPECT_EQ(HttpOperationName(HttpOperation::FolderMutation), "folder_mutation");
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/folder/not-a-number/breadcrumb"),
+                HttpOperation::Other
+            );
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/folder/123/breadcrumb/extra"),
+                HttpOperation::Other
+            );
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/folder/not-a-number/rename"),
+                HttpOperation::Other
+            );
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/folder/123/rename/extra"),
+                HttpOperation::Other
+            );
+            EXPECT_EQ(ClassifyHttpOperation("/api/folder/tree/extra"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/folder/create/extra"), HttpOperation::Other);
             EXPECT_EQ(ClassifyHttpOperation("/api/share/secret-id"), HttpOperation::Share);
             EXPECT_EQ(
                 ClassifyHttpOperation("/api/admin/maintenance/cleanup/expired"),

@@ -21,6 +21,7 @@
 #include "services/FolderRepository.hpp"
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::folder {
 
@@ -57,14 +58,24 @@ namespace disk::folder {
          *
          * @param request 创建文件夹请求
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<CreateFolderResponse>> 成功返回文件夹信息，失败返回错误
          */
         [[nodiscard]]
-        auto CreateFolder(CreateFolderRequest request, uint64_t user_id)
+        auto CreateFolder(
+            CreateFolderRequest request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<CreateFolderResponse>>;
 
         [[nodiscard]]
-        auto Rename(uint64_t folder_id, std::string new_name, uint64_t user_id)
+        auto Rename(
+            uint64_t folder_id,
+            std::string new_name,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<RenameFolderResponse>>;
 
         /**
@@ -78,10 +89,16 @@ namespace disk::folder {
          * @param user_id 用户 ID
          * @param parent_id 起始文件夹 ID（0 表示根目录）
          * @param depth 深度限制（-1 表示无限）
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<FolderTreeNode>> 成功返回文件夹树，失败返回错误
          */
         [[nodiscard]]
-        auto GetFolderTree(uint64_t user_id, uint64_t parent_id, int depth)
+        auto GetFolderTree(
+            uint64_t user_id,
+            uint64_t parent_id,
+            int depth,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<FolderTreeNode>>;
 
         /**
@@ -97,10 +114,15 @@ namespace disk::folder {
          *
          * @param folder_id 文件夹 ID（0 表示根目录）
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<BreadcrumbResponse>> 成功返回面包屑路径，失败返回错误
          */
         [[nodiscard]]
-        auto GetBreadcrumb(uint64_t folder_id, uint64_t user_id)
+        auto GetBreadcrumb(
+            uint64_t folder_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<BreadcrumbResponse>>;
 
     private:
@@ -109,10 +131,15 @@ namespace disk::folder {
          *
          * @param parent_id 父文件夹 ID
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<drogon_model::disk::Folders>> 成功返回父文件夹，失败返回错误
          */
         [[nodiscard]]
-        auto FindAndValidateParent(uint64_t parent_id, uint64_t user_id) const
+        auto FindAndValidateParent(
+            uint64_t parent_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<Result<drogon_model::disk::Folders>>;
 
         /**
@@ -121,29 +148,44 @@ namespace disk::folder {
          * @param name 文件夹名称
          * @param parent_id 父文件夹 ID
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<bool> 是否存在同名文件夹
          */
         [[nodiscard]]
-        auto IsFolderNameExists(const std::string& name, uint64_t parent_id, uint64_t user_id) const
+        auto IsFolderNameExists(
+            const std::string& name,
+            uint64_t parent_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<bool>;
 
         /**
          * @brief 更新父文件夹的 item_count
          *
          * @param parent_id 父文件夹 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<void>
          */
-        auto IncrementParentItemCount(uint64_t parent_id) -> drogon::Task<void>;
+        auto IncrementParentItemCount(
+            uint64_t parent_id,
+            disk::utils::LogContext log_context
+        ) -> drogon::Task<void>;
 
         /**
          * @brief 验证父文件夹归属
          *
          * @param parent_id 父文件夹 ID
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<void>> 成功返回空，失败返回错误
          */
         [[nodiscard]]
-        auto ValidateParentOwnership(uint64_t parent_id, uint64_t user_id) const
+        auto ValidateParentOwnership(
+            uint64_t parent_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<Result<void>>;
 
         /**

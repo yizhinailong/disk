@@ -54,21 +54,30 @@ namespace disk::folder {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CreateFolderRequest> {
-            Logger::Debug() << "Start parsing create folder request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<CreateFolderRequest> {
+            Logger::Debug(log_context) << "Start parsing create folder request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto name_result = RequireString(json, "name");
-            if (!name_result) return std::unexpected(name_result.error());
+            if (!name_result) {
+                return std::unexpected(name_result.error());
+            }
 
             CreateFolderRequest request;
             request.name = std::move(*name_result);
 
             auto parent_id_result = OptionalUInt64(json, "parent_id");
-            if (!parent_id_result) return std::unexpected(parent_id_result.error());
+            if (!parent_id_result) {
+                return std::unexpected(parent_id_result.error());
+            }
             if (parent_id_result->has_value()) {
                 request.parent_id = **parent_id_result;
             }
@@ -76,12 +85,12 @@ namespace disk::folder {
             /// 规则 6：去除首尾空格
             request.TrimName();
 
-            Logger::Debug() << "Parsed create folder request: name=\"" << request.name
-                      << "\", parent_id=" << request.parent_id;
+            Logger::Debug(log_context) << "Parsed create folder request: name=\"" << request.name
+                                       << "\", parent_id=" << request.parent_id;
 
             /// 规则 1：长度验证 (1-255)
             if (!request.ValidateLength()) {
-                Logger::Warn() << "Invalid folder name length: " << request.name.length();
+                Logger::Warn(log_context) << "Invalid folder name length: " << request.name.length();
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Folder name length must be between 1-255 characters"
@@ -90,7 +99,7 @@ namespace disk::folder {
 
             /// 规则 2：禁止字符验证
             if (!request.ValidateForbiddenChars()) {
-                Logger::Warn() << "Folder name contains forbidden characters: " << request.name;
+                Logger::Warn(log_context) << "Folder name contains forbidden characters: " << request.name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Folder name contains forbidden characters: / \\ : * ? \" < > | or control " "characters"
@@ -99,7 +108,7 @@ namespace disk::folder {
 
             /// 规则 3：保留名称验证
             if (!request.ValidateReservedNames()) {
-                Logger::Warn() << "Folder name is a reserved name: " << request.name;
+                Logger::Warn(log_context) << "Folder name is a reserved name: " << request.name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Folder name cannot be reserved name \".\" or \"..\""
@@ -108,7 +117,7 @@ namespace disk::folder {
 
             /// 规则 4：隐藏文件夹验证
             if (!request.ValidateNotHidden()) {
-                Logger::Warn() << "Folder name starts with a dot (hidden folder): " << request.name;
+                Logger::Warn(log_context) << "Folder name starts with a dot (hidden folder): " << request.name;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidFilename, "Folder name cannot start with \".\"")
                 );
@@ -116,15 +125,15 @@ namespace disk::folder {
 
             /// 规则 5：字符集验证（合法 UTF-8，且不含控制字符）
             if (!request.ValidateCharset()) {
-                Logger::Warn() << "Folder name contains invalid UTF-8 or control characters: "
-                         << request.name;
+                Logger::Warn(log_context) << "Folder name contains invalid UTF-8 or control characters: "
+                                          << request.name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Folder name must be valid UTF-8 and cannot contain control characters"
                 ));
             }
 
-            Logger::Debug() << "Request parameter validation passed";
+            Logger::Debug(log_context) << "Request parameter validation passed";
             return request;
         }
 
@@ -195,8 +204,10 @@ namespace disk::folder {
         [[nodiscard]]
         static auto FromPathAndRequest(
             const std::string& folder_id_str,
-            const drogon::HttpRequestPtr& req
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
         ) -> Result<RenameFolderRequest> {
+            Logger::Debug(log_context) << "Start parsing rename folder request parameters";
             if (folder_id_str.empty()) {
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: folder_id")
@@ -226,11 +237,15 @@ namespace disk::folder {
             }
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto new_name_result = RequireString(json, "new_name");
-            if (!new_name_result) return std::unexpected(new_name_result.error());
+            if (!new_name_result) {
+                return std::unexpected(new_name_result.error());
+            }
 
             RenameFolderRequest request;
             request.folder_id = folder_id;
@@ -376,14 +391,19 @@ namespace disk::folder {
 
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<FolderTreeRequest> {
-            Logger::Debug() << "Start parsing folder tree request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<FolderTreeRequest> {
+            Logger::Debug(log_context) << "Start parsing folder tree request parameters";
 
             FolderTreeRequest request;
 
             /// 解析可选参数 parent_id
             auto parent_id_result = QueryUInt64(req, "parent_id");
-            if (!parent_id_result) return std::unexpected(parent_id_result.error());
+            if (!parent_id_result) {
+                return std::unexpected(parent_id_result.error());
+            }
             if (parent_id_result->has_value()) {
                 request.parent_id = **parent_id_result;
             }
@@ -395,7 +415,7 @@ namespace disk::folder {
                     size_t pos = 0;
                     auto value = std::stoi(depth_str, &pos);
                     if (pos != depth_str.length()) {
-                        Logger::Warn() << "Parameter 'depth' invalid format: " << depth_str;
+                        Logger::Warn(log_context) << "Parameter 'depth' invalid format: " << depth_str;
                         return std::unexpected(ErrorInfo(
                             ErrorCode::ValidationFailed,
                             "Parameter 'depth' invalid format"
@@ -403,7 +423,7 @@ namespace disk::folder {
                     }
                     request.depth = value;
                 } catch (const std::exception& e) {
-                    Logger::Warn() << "Parameter 'depth' invalid format: " << depth_str;
+                    Logger::Warn(log_context) << "Parameter 'depth' invalid format: " << depth_str;
                     return std::unexpected(
                         ErrorInfo(ErrorCode::ValidationFailed, "Parameter 'depth' invalid format")
                     );
@@ -412,15 +432,15 @@ namespace disk::folder {
 
             /// 验证 depth >= -1
             if (request.depth < -1) {
-                Logger::Warn() << "Parameter 'depth' cannot be less than -1: " << request.depth;
+                Logger::Warn(log_context) << "Parameter 'depth' cannot be less than -1: " << request.depth;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Parameter 'depth' cannot be less than -1"
                 ));
             }
 
-            Logger::Debug() << "Parsed folder tree request: parent_id=" << request.parent_id
-                      << ", depth=" << request.depth;
+            Logger::Debug(log_context) << "Parsed folder tree request: parent_id=" << request.parent_id
+                                       << ", depth=" << request.depth;
 
             return request;
         }

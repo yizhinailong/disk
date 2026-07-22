@@ -30,6 +30,8 @@ namespace disk::metrics {
         Auth,
         FileQuery,
         FileMutation,
+        FolderQuery,
+        FolderMutation,
         UploadInit,
         UploadChunk,
         UploadComplete,

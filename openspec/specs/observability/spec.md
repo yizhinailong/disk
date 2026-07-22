@@ -72,6 +72,21 @@ The system SHALL classify numeric file rename, drive move, drive copy, and file 
 - **WHEN** the request targets file query, upload, download, a nonnumeric rename path, or an unrecognized file-domain path
 - **THEN** the file-mutation classifier SHALL NOT absorb it, and the route SHALL retain its existing bounded operation classification
 
+### Requirement: Typed Folder Correlation
+The system SHALL classify exact folder-tree and numeric breadcrumb requests as the bounded `folder_query` operation, SHALL classify exact folder-create and numeric folder-rename requests as the bounded `folder_mutation` operation, and SHALL propagate their correlation explicitly by value across controller, folder-DTO, and folder-service boundaries.
+
+#### Scenario: User queries or mutates folders
+- **WHEN** an authenticated request enters folder tree, numeric breadcrumb, folder create, or numeric folder rename
+- **THEN** its response, HTTP completion event, controller events, direct folder-DTO events, and folder-service events SHALL retain the same request ID, actual handling instance, and matching `folder_query` or `folder_mutation` operation
+
+#### Scenario: Folder request has no upload or durable-job ownership
+- **WHEN** a folder request records folder, parent, user, path, transaction, or cache identifiers
+- **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those folder values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: Folder classification remains bounded
+- **WHEN** a folder path has a nonnumeric ID, an extra suffix, or is not one of the four recognized routes
+- **THEN** the folder classifiers SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
+
 ### Requirement: Typed Upload Completion Correlation
 The system SHALL propagate upload-completion correlation explicitly across controller, service, lifecycle, database, and storage coroutine boundaries without thread-local request state or message parsing.
 

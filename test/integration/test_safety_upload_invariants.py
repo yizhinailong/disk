@@ -723,6 +723,38 @@ def assert_file_mutation_log_context(
     log_pass("file mutation logs keep typed request correlation and null ownership fields")
 
 
+def assert_folder_log_context(
+    *,
+    response,
+    request_id: str,
+    operation: str,
+    message_markers: tuple[str, ...],
+) -> None:
+    """Assert one failed folder request keeps its bounded typed correlation."""
+    assert_equal(
+        "folder request returns a documented failure",
+        response.status_code >= 400 and json_field(response.text, "code") != "0",
+        True,
+    )
+    assert_equal(
+        "folder request preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal("folder request identifies the handling instance", bool(instance_id), True)
+
+    for marker in (*message_markers, "HTTP request completed"):
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation=operation,
+            upload_id=None,
+            message_marker=marker,
+        )
+    log_pass("folder logs keep typed request correlation and null ownership fields")
+
+
 def test_file_query_log_context_invariants() -> None:
     """Verify file list, numeric detail, and search use one bounded query operation."""
     log_section("File Query Structured Log Correlation")
@@ -835,6 +867,76 @@ def test_file_mutation_log_context_invariants() -> None:
             "File not found or delete failed, skipping",
             "Move-to-trash failed",
             "Delete file failed",
+        ),
+    )
+
+
+def test_folder_log_context_invariants() -> None:
+    """Verify folder query and mutation routes use two bounded operations."""
+    log_section("Folder Structured Log Correlation")
+    missing_id = 999_999_999_999
+
+    tree_request_id = f"safety-folder-tree-log-{unique_name()}"
+    tree_response = fetch(
+        f"/api/folder/tree?parent_id={missing_id}&depth=1",
+        headers={**auth_headers(TOKEN), "X-Request-Id": tree_request_id},
+    )
+    assert_folder_log_context(
+        response=tree_response,
+        request_id=tree_request_id,
+        operation="folder_query",
+        message_markers=(
+            "Parent folder does not exist or belongs to another user",
+            "Get folder tree failed",
+        ),
+    )
+
+    breadcrumb_request_id = f"safety-folder-breadcrumb-log-{unique_name()}"
+    breadcrumb_response = fetch(
+        f"/api/folder/{missing_id}/breadcrumb",
+        headers={**auth_headers(TOKEN), "X-Request-Id": breadcrumb_request_id},
+    )
+    assert_folder_log_context(
+        response=breadcrumb_response,
+        request_id=breadcrumb_request_id,
+        operation="folder_query",
+        message_markers=(
+            "Breadcrumb folder not found or no permission",
+            "Get breadcrumb failed",
+        ),
+    )
+
+    create_request_id = f"safety-folder-create-log-{unique_name()}"
+    create_response = fetch(
+        "/api/folder/create",
+        method="POST",
+        headers={**auth_headers(TOKEN), "X-Request-Id": create_request_id},
+        json_body={"name": f"missing-parent-{unique_name()}", "parent_id": missing_id},
+    )
+    assert_folder_log_context(
+        response=create_response,
+        request_id=create_request_id,
+        operation="folder_mutation",
+        message_markers=(
+            "Parent folder does not exist or belongs to another user",
+            "Create folder failed",
+        ),
+    )
+
+    rename_request_id = f"safety-folder-rename-log-{unique_name()}"
+    rename_response = fetch(
+        f"/api/folder/{missing_id}/rename",
+        method="PUT",
+        headers={**auth_headers(TOKEN), "X-Request-Id": rename_request_id},
+        json_body={"new_name": f"missing-renamed-{unique_name()}"},
+    )
+    assert_folder_log_context(
+        response=rename_response,
+        request_id=rename_request_id,
+        operation="folder_mutation",
+        message_markers=(
+            "Folder not found or no permission",
+            "Rename folder failed",
         ),
     )
 
@@ -4173,6 +4275,7 @@ def main() -> None:
     test_init_and_chunk_log_context_invariants()
     test_file_query_log_context_invariants()
     test_file_mutation_log_context_invariants()
+    test_folder_log_context_invariants()
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()

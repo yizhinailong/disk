@@ -167,6 +167,21 @@ namespace disk::metrics {
                 path.size() - prefix.size() - suffix.size()
             ));
         }
+
+        [[nodiscard]] auto IsNumericFolderActionPath(
+            std::string_view path,
+            std::string_view suffix
+        ) noexcept -> bool {
+            constexpr std::string_view prefix = "/api/folder/";
+            if (!path.starts_with(prefix) || !path.ends_with(suffix) ||
+                path.size() <= prefix.size() + suffix.size()) {
+                return false;
+            }
+            return IsUnsignedDecimalSegment(path.substr(
+                prefix.size(),
+                path.size() - prefix.size() - suffix.size()
+            ));
+        }
     } // namespace
 
     auto ClassifyHttpOperation(std::string_view path) noexcept -> HttpOperation {
@@ -204,6 +219,14 @@ namespace disk::metrics {
             IsNumericFileRenamePath(path)) {
             return HttpOperation::FileMutation;
         }
+        if (path == "/api/folder/tree" ||
+            IsNumericFolderActionPath(path, "/breadcrumb")) {
+            return HttpOperation::FolderQuery;
+        }
+        if (path == "/api/folder/create" ||
+            IsNumericFolderActionPath(path, "/rename")) {
+            return HttpOperation::FolderMutation;
+        }
         if (path == "/api/share" || path.starts_with("/api/share/")) {
             return HttpOperation::Share;
         }
@@ -223,6 +246,8 @@ namespace disk::metrics {
             "auth",
             "file_query",
             "file_mutation",
+            "folder_query",
+            "folder_mutation",
             "upload_init",
             "upload_chunk",
             "upload_complete",
