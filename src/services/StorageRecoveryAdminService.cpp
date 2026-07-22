@@ -35,6 +35,20 @@ namespace disk::recovery {
             return Json::writeString(builder, value);
         }
 
+        auto SetLogContext(
+            Json::Value& details,
+            const disk::utils::LogContext& log_context
+        ) -> void {
+            details["request_id"] =
+                log_context.request_id.has_value() && !log_context.request_id->empty() ?
+                    Json::Value(*log_context.request_id) :
+                    Json::Value(Json::nullValue);
+            details["operation"] =
+                log_context.operation.has_value() && !log_context.operation->empty() ?
+                    Json::Value(*log_context.operation) :
+                    Json::Value(Json::nullValue);
+        }
+
         [[nodiscard]] auto Bounded(std::string value, size_t maximum) -> std::string {
             if (value.size() > maximum) {
                 value.resize(maximum);
@@ -48,8 +62,10 @@ namespace disk::recovery {
             std::string_view action,
             std::string_view target_type,
             std::string_view target_name,
-            const Json::Value& details
+            Json::Value details,
+            const disk::utils::LogContext& log_context
         ) -> drogon::Task<void> {
+            SetLogContext(details, log_context);
             co_await client->execSqlCoro(
                 "INSERT INTO operation_logs " "(user_id, action, target_type, target_id, target_name, details, " "ip_address, user_agent) " "VALUES ($1, $2, $3, NULL, $4, $5::jsonb, $6, NULLIF($7, ''))",
                 static_cast<int64_t>(audit.operator_id),
@@ -278,8 +294,10 @@ namespace disk::recovery {
 
     auto StorageRecoveryAdminService::ReleaseUploadLease(
         const disk::admin::UploadLeaseReleaseRequest& request,
-        const RecoveryAuditContext& audit
+        const RecoveryAuditContext& audit,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<disk::admin::UploadLeaseReleaseResponse>> {
+        log_context.upload_id = request.upload_id;
         if (request.dry_run) {
             try {
                 auto rows = co_await m_db_client->execSqlCoro(
@@ -292,10 +310,15 @@ namespace disk::recovery {
                         "Upload task not found"
                     ));
                 }
-                co_return LeaseResponseFromRow(rows[0], request);
+                auto response = LeaseResponseFromRow(rows[0], request);
+                log_context.state_version = response.state_version;
+                log_context.lease_owner = response.lease_owner;
+                Logger::Info(log_context) << "Upload lease release dry-run inspected";
+                co_return response;
             } catch (const std::exception& error) {
-                Logger::Error() << "Upload lease release dry-run failed: upload_id="
-                                << request.upload_id << ", error=" << error.what();
+                Logger::Error(log_context)
+                    << "Upload lease release dry-run failed: upload_id="
+                    << request.upload_id << ", error=" << error.what();
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
                     "Failed to inspect upload lease"
@@ -346,13 +369,17 @@ namespace disk::recovery {
                     Json::UInt64(request.expected_state_version.value());
                 details["new_state_version"] = Json::UInt64(response.state_version);
                 details["reason"] = request.reason;
+                auto audit_log_context = log_context;
+                audit_log_context.state_version = response.state_version;
+                audit_log_context.lease_owner = response.lease_owner;
                 co_await RecordAudit(
                     client,
                     audit,
                     "admin.upload.lease_release",
                     "upload",
                     request.upload_id,
-                    details
+                    details,
+                    audit_log_context
                 );
                 co_return {};
             }
@@ -361,26 +388,36 @@ namespace disk::recovery {
             co_return std::unexpected(result.error());
         }
 
-        Logger::Info() << "Upload lease released by administrator: upload_id="
-                       << request.upload_id << ", operator_id=" << audit.operator_id
-                       << ", state_version=" << response.state_version;
+        log_context.state_version = response.state_version;
+        log_context.lease_owner = response.lease_owner;
+        Logger::Info(log_context)
+            << "Upload lease released by administrator: upload_id="
+            << request.upload_id << ", operator_id=" << audit.operator_id
+            << ", state_version=" << response.state_version;
         co_return response;
     }
 
     auto StorageRecoveryAdminService::RebuildUploadCleanup(
         const disk::admin::UploadCleanupRebuildRequest& request,
-        const RecoveryAuditContext& audit
+        const RecoveryAuditContext& audit,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<disk::admin::UploadCleanupRebuildResponse>> {
+        log_context.upload_id = request.upload_id;
         if (request.dry_run) {
             try {
                 auto plan = co_await LoadCleanupPlan(m_db_client, request, false);
                 if (!plan) {
                     co_return std::unexpected(plan.error());
                 }
-                co_return std::move(plan->response);
+                auto response = std::move(plan->response);
+                log_context.state_version = response.state_version;
+                log_context.job_id = response.job_id;
+                Logger::Info(log_context) << "Upload cleanup rebuild dry-run inspected";
+                co_return response;
             } catch (const std::exception& error) {
-                Logger::Error() << "Upload cleanup rebuild dry-run failed: upload_id="
-                                << request.upload_id << ", error=" << error.what();
+                Logger::Error(log_context)
+                    << "Upload cleanup rebuild dry-run failed: upload_id="
+                    << request.upload_id << ", error=" << error.what();
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
                     "Failed to inspect upload cleanup task"
@@ -447,13 +484,17 @@ namespace disk::recovery {
                 details["planned_action"] = response.planned_action;
                 details["job_id"] = Json::UInt64(response.job_id.value());
                 details["reason"] = request.reason;
+                auto audit_log_context = log_context;
+                audit_log_context.state_version = response.state_version;
+                audit_log_context.job_id = response.job_id;
                 co_await RecordAudit(
                     client,
                     audit,
                     "admin.upload.cleanup_rebuild",
                     "upload",
                     request.upload_id,
-                    details
+                    details,
+                    audit_log_context
                 );
                 co_return {};
             }
@@ -462,30 +503,39 @@ namespace disk::recovery {
             co_return std::unexpected(result.error());
         }
 
-        Logger::Info() << "Upload cleanup task rebuilt by administrator: upload_id="
-                       << request.upload_id << ", job_id=" << response.job_id.value()
-                       << ", operator_id=" << audit.operator_id;
+        log_context.state_version = response.state_version;
+        log_context.job_id = response.job_id;
+        Logger::Info(log_context)
+            << "Upload cleanup task rebuilt by administrator: upload_id="
+            << request.upload_id << ", job_id=" << response.job_id.value()
+            << ", operator_id=" << audit.operator_id;
         co_return response;
     }
 
     auto StorageRecoveryAdminService::EnqueueReconciliation(
         const disk::admin::StorageReconciliationEnqueueRequest& request,
-        const RecoveryAuditContext& audit
+        const RecoveryAuditContext& audit,
+        disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<disk::admin::StorageReconciliationEnqueueResponse>> {
         disk::jobs::NewStorageJob job;
         try {
             job = FirstReconciliationJob(request);
             if (request.dry_run) {
-                co_return co_await LoadReconciliationResponse(
+                auto response = co_await LoadReconciliationResponse(
                     m_db_client,
                     request,
                     job,
                     false
                 );
+                log_context.job_id = response.job_id;
+                Logger::Info(log_context)
+                    << "Storage reconciliation enqueue dry-run inspected";
+                co_return response;
             }
         } catch (const std::exception& error) {
-            Logger::Error() << "Storage reconciliation enqueue inspection failed: scan_id="
-                            << request.scan_id << ", error=" << error.what();
+            Logger::Error(log_context)
+                << "Storage reconciliation enqueue inspection failed: scan_id="
+                << request.scan_id << ", error=" << error.what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to inspect storage reconciliation task"
@@ -549,13 +599,16 @@ namespace disk::recovery {
                 details["job_id"] = Json::UInt64(response.job_id.value());
                 details["page_size"] = Json::UInt64(response.page_size);
                 details["reason"] = request.reason;
+                auto audit_log_context = log_context;
+                audit_log_context.job_id = response.job_id;
                 co_await RecordAudit(
                     client,
                     audit,
                     "admin.storage.reconcile",
                     "reconciliation",
                     request.scan_id,
-                    details
+                    details,
+                    audit_log_context
                 );
                 co_return {};
             }
@@ -564,11 +617,13 @@ namespace disk::recovery {
             co_return std::unexpected(result.error());
         }
 
-        Logger::Info() << "Storage reconciliation enqueued by administrator: scan_id="
-                       << request.scan_id << ", scope="
-                       << disk::reconciliation::ToStorageValue(request.scope)
-                       << ", job_id=" << response.job_id.value()
-                       << ", operator_id=" << audit.operator_id;
+        log_context.job_id = response.job_id;
+        Logger::Info(log_context)
+            << "Storage reconciliation enqueued by administrator: scan_id="
+            << request.scan_id << ", scope="
+            << disk::reconciliation::ToStorageValue(request.scope)
+            << ", job_id=" << response.job_id.value()
+            << ", operator_id=" << audit.operator_id;
         co_return response;
     }
 

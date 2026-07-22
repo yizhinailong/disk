@@ -12,6 +12,7 @@
 
 #include "dtos/StorageRecoveryAdminDto.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::recovery {
 
@@ -28,19 +29,22 @@ namespace disk::recovery {
         [[nodiscard]]
         auto ReleaseUploadLease(
             const disk::admin::UploadLeaseReleaseRequest& request,
-            const RecoveryAuditContext& audit
+            const RecoveryAuditContext& audit,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<disk::admin::UploadLeaseReleaseResponse>>;
 
         [[nodiscard]]
         auto RebuildUploadCleanup(
             const disk::admin::UploadCleanupRebuildRequest& request,
-            const RecoveryAuditContext& audit
+            const RecoveryAuditContext& audit,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<disk::admin::UploadCleanupRebuildResponse>>;
 
         [[nodiscard]]
         auto EnqueueReconciliation(
             const disk::admin::StorageReconciliationEnqueueRequest& request,
-            const RecoveryAuditContext& audit
+            const RecoveryAuditContext& audit,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<disk::admin::StorageReconciliationEnqueueResponse>>;
 
     private:

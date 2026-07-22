@@ -154,6 +154,33 @@ The system SHALL propagate storage-job administration request correlation explic
 - **WHEN** upload diagnostics internally call `ListRelatedToUpload` without entering a storage-job administration route
 - **THEN** that helper SHALL remain outside this request-bound propagation requirement and SHALL NOT infer a storage-job request ID or job ID from the upload ID, staging prefix, related rows, or error message
 
+### Requirement: Typed Storage Recovery Administration Correlation
+The system SHALL propagate storage-recovery administration request correlation explicitly by value across `StorageRecoveryAdminController`, storage-recovery service coroutines, and each transactional audit boundary. These routes SHALL retain the existing bounded `admin` operation classification.
+
+#### Scenario: Administrator inspects or releases an upload lease
+- **WHEN** an authenticated administrator submits a valid upload ID to the lease-release route
+- **THEN** the response, HTTP completion event at the configured level, controller events, and service events SHALL retain the same request ID, actual handling instance, and `admin` operation; request-owned events after validation SHALL use the validated upload ID, and events after a successful database read or mutation SHALL add only the returned state version and lease owner
+
+#### Scenario: Administrator inspects or rebuilds upload cleanup
+- **WHEN** an authenticated administrator submits a valid upload ID to the cleanup-rebuild route
+- **THEN** request-owned events after validation SHALL use that upload ID, events after loading the upload row SHALL add its returned state version, and events after observing or creating a persistent cleanup job SHALL add only its returned positive job ID
+
+#### Scenario: Administrator inspects or enqueues reconciliation
+- **WHEN** an authenticated administrator submits a valid scan ID and fixed reconciliation scope
+- **THEN** request and inspection events SHALL keep upload ID, lease owner, state version, and job ID null until a persistent storage-job row is actually observed or created; a resulting event MAY add that row's positive job ID, while scan ID, scope, dedupe key, page size, and cursor values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: Recovery input is only a caller assertion
+- **WHEN** a recovery request supplies `expected_state_version`, `expected_lease_owner`, a confirmation ID, or a raw path value that has not passed validation
+- **THEN** the system SHALL NOT use those values as observed state version, lease owner, upload ID, or job ID; unavailable typed fields SHALL remain null on validation and conflict events
+
+#### Scenario: Administrator commits a recovery command
+- **WHEN** lease release, cleanup rebuild, or reconciliation enqueue atomically commits its mutation and operation-log row
+- **THEN** JSON audit details SHALL persist the same non-empty request ID and `admin` operation together with the command's existing bounded business details, while dry-run and conflict paths SHALL NOT write an audit row
+
+#### Scenario: Recovery diagnostics remain secret
+- **WHEN** a storage-recovery command succeeds or fails
+- **THEN** application and audit events SHALL NOT contain Authorization header values, administrator JWTs, object-storage credentials, object keys or prefixes, arbitrary cursors, or storage-job payloads
+
 ### Requirement: Operation Logs
 The system SHALL record and expose user-visible operation logs for key actions.
 

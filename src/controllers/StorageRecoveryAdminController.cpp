@@ -5,6 +5,7 @@
 
 #include "controllers/StorageRecoveryAdminController.hpp"
 
+#include "controllers/ControllerHelpers.hpp"
 #include "dtos/StorageRecoveryAdminDto.hpp"
 #include "services/ObservedDbClient.hpp"
 #include "services/StorageRecoveryAdminService.hpp"
@@ -32,54 +33,109 @@ namespace disk::controllers {
         drogon::HttpRequestPtr request,
         std::string upload_id
     ) -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context) << "Upload lease release request";
+
         auto parsed = disk::admin::UploadLeaseReleaseRequest::FromRequest(
             request,
             upload_id
         );
         if (!parsed) {
+            Logger::Warn(log_context)
+                << "Upload lease release validation failed: " << parsed.error().message;
             co_return Response::Error(parsed.error());
         }
+        log_context.upload_id = parsed->upload_id;
+
         auto result = co_await BuildService().ReleaseUploadLease(
             parsed.value(),
-            BuildAuditContext(request)
+            BuildAuditContext(request),
+            log_context
         );
-        co_return result ? Response::Success(result->ToJson()) : Response::Error(result.error());
+        if (!result) {
+            Logger::Warn(log_context)
+                << "Upload lease release failed: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        log_context.state_version = result->state_version;
+        log_context.lease_owner = result->lease_owner;
+        Logger::Info(log_context)
+            << "Upload lease release successful: dry_run="
+            << (result->dry_run ? "true" : "false");
+        co_return Response::Success(result->ToJson());
     }
 
     auto StorageRecoveryAdminController::RebuildUploadCleanup(
         drogon::HttpRequestPtr request,
         std::string upload_id
     ) -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context) << "Upload cleanup rebuild request";
+
         auto parsed = disk::admin::UploadCleanupRebuildRequest::FromRequest(
             request,
             upload_id
         );
         if (!parsed) {
+            Logger::Warn(log_context)
+                << "Upload cleanup rebuild validation failed: " << parsed.error().message;
             co_return Response::Error(parsed.error());
         }
+        log_context.upload_id = parsed->upload_id;
+
         auto result = co_await BuildService().RebuildUploadCleanup(
             parsed.value(),
-            BuildAuditContext(request)
+            BuildAuditContext(request),
+            log_context
         );
-        co_return result ? Response::Success(result->ToJson()) : Response::Error(result.error());
+        if (!result) {
+            Logger::Warn(log_context)
+                << "Upload cleanup rebuild failed: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        log_context.state_version = result->state_version;
+        log_context.job_id = result->job_id;
+        Logger::Info(log_context)
+            << "Upload cleanup rebuild successful: dry_run="
+            << (result->dry_run ? "true" : "false");
+        co_return Response::Success(result->ToJson());
     }
 
     auto StorageRecoveryAdminController::EnqueueReconciliation(
         drogon::HttpRequestPtr request,
         std::string scan_id
     ) -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = GetRequestLogContext(request, "admin");
+        Logger::Info(log_context) << "Storage reconciliation enqueue request";
+
         auto parsed = disk::admin::StorageReconciliationEnqueueRequest::FromRequest(
             request,
             scan_id
         );
         if (!parsed) {
+            Logger::Warn(log_context)
+                << "Storage reconciliation enqueue validation failed: "
+                << parsed.error().message;
             co_return Response::Error(parsed.error());
         }
         auto result = co_await BuildService().EnqueueReconciliation(
             parsed.value(),
-            BuildAuditContext(request)
+            BuildAuditContext(request),
+            log_context
         );
-        co_return result ? Response::Success(result->ToJson()) : Response::Error(result.error());
+        if (!result) {
+            Logger::Warn(log_context)
+                << "Storage reconciliation enqueue failed: " << result.error().message;
+            co_return Response::Error(result.error());
+        }
+
+        log_context.job_id = result->job_id;
+        Logger::Info(log_context)
+            << "Storage reconciliation enqueue successful: dry_run="
+            << (result->dry_run ? "true" : "false");
+        co_return Response::Success(result->ToJson());
     }
 
 } // namespace disk::controllers

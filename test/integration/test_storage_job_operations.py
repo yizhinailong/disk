@@ -170,12 +170,15 @@ def require_response_context(response, request_id: str) -> str:
     return instance_id
 
 
-def wait_for_storage_job_log(
+def wait_for_admin_log(
     *,
     request_id: str,
     instance_id: str,
-    job_id: int | None,
     message_marker: str,
+    upload_id: str | None = None,
+    job_id: int | None = None,
+    lease_owner: str | None = None,
+    state_version: int | None = None,
 ) -> dict[str, object]:
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
@@ -194,16 +197,17 @@ def wait_for_storage_job_log(
                     and record.get("request_id") == request_id
                     and record.get("instance_id") == instance_id
                     and record.get("operation") == "admin"
-                    and record.get("upload_id") is None
+                    and record.get("upload_id") == upload_id
                     and record.get("job_id") == job_id
-                    and record.get("lease_owner") is None
-                    and record.get("state_version") is None
+                    and record.get("lease_owner") == lease_owner
+                    and record.get("state_version") == state_version
                     and message_marker in str(record.get("message", ""))
                 ):
                     return record
         time.sleep(0.05)
     raise AssertionError(
-        f"storage job log missing request_id={request_id}, job_id={job_id}, "
+        f"admin log missing request_id={request_id}, upload_id={upload_id}, "
+        f"job_id={job_id}, lease_owner={lease_owner}, state_version={state_version}, "
         f"message={message_marker}"
     )
 
@@ -264,7 +268,7 @@ def test_dead_letter_operations(token: str) -> None:
     fixture = next((item for item in items if int(item["id"]) == JOB_ID), None)
     require(fixture is not None, "default dead-letter list omitted fixture")
     require("payload" not in fixture, "storage job list leaked payload")
-    wait_for_storage_job_log(
+    wait_for_admin_log(
         request_id=list_request_id,
         instance_id=list_instance_id,
         job_id=None,
@@ -280,7 +284,7 @@ def test_dead_letter_operations(token: str) -> None:
     detail_instance_id = require_response_context(detail, detail_request_id)
     detail_data = response_json(detail)["data"]
     require(detail_data["payload"]["content_id"] == "999999999", "detail payload drifted")
-    wait_for_storage_job_log(
+    wait_for_admin_log(
         request_id=detail_request_id,
         instance_id=detail_instance_id,
         job_id=JOB_ID,
@@ -312,7 +316,7 @@ def test_dead_letter_operations(token: str) -> None:
         == 0,
         "dry-run wrote an audit record",
     )
-    wait_for_storage_job_log(
+    wait_for_admin_log(
         request_id=dry_run_request_id,
         instance_id=dry_run_instance_id,
         job_id=JOB_ID,
@@ -367,7 +371,7 @@ def test_dead_letter_operations(token: str) -> None:
     require(audit["details"]["operation"] == "admin", "audit operation drifted")
     require(audit["details"]["job_id"] == JOB_ID, "audit job ID drifted")
     require("payload" not in audit["details"], "replay audit stored the task payload")
-    wait_for_storage_job_log(
+    wait_for_admin_log(
         request_id=replay_request_id,
         instance_id=replay_instance_id,
         job_id=JOB_ID,
@@ -395,7 +399,7 @@ def test_dead_letter_operations(token: str) -> None:
         == 1,
         "conflicting replay wrote a second audit record",
     )
-    wait_for_storage_job_log(
+    wait_for_admin_log(
         request_id=conflict_request_id,
         instance_id=conflict_instance_id,
         job_id=JOB_ID,
@@ -656,16 +660,18 @@ def test_upload_lease_release(token: str) -> int:
     unauthenticated = fetch(path, method="POST", json_body={})
     require(unauthenticated.status_code == 401, "lease release is not admin protected")
 
+    dry_run_request_id = f"ops-lease-dry-run-{uuid.uuid4().hex}"
     dry_run = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": dry_run_request_id},
         json_body={
             "expected_state_version": original_version,
             "expected_lease_owner": original_owner,
         },
     )
     require(dry_run.status_code == 200, f"lease dry-run failed: {dry_run.text}")
+    dry_run_instance_id = require_response_context(dry_run, dry_run_request_id)
     dry_data = response_json(dry_run)["data"]
     require(dry_data["dry_run"] is True, "lease dry-run flag drifted")
     require(dry_data["eligible"] is True, "live matching lease was not eligible")
@@ -683,11 +689,20 @@ def test_upload_lease_release(token: str) -> int:
         audit_count("admin.upload.lease_release", upload_id) == 0,
         "lease dry-run wrote an audit record",
     )
+    wait_for_admin_log(
+        request_id=dry_run_request_id,
+        instance_id=dry_run_instance_id,
+        message_marker="Upload lease release successful: dry_run=true",
+        upload_id=upload_id,
+        lease_owner=original_owner,
+        state_version=original_version,
+    )
 
+    stale_owner_request_id = f"ops-lease-stale-owner-{uuid.uuid4().hex}"
     stale_owner = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": stale_owner_request_id},
         json_body={
             "dry_run": False,
             "confirm_upload_id": upload_id,
@@ -697,6 +712,7 @@ def test_upload_lease_release(token: str) -> int:
         },
     )
     require(stale_owner.status_code == 409, "owner mismatch did not return HTTP 409")
+    stale_owner_instance_id = require_response_context(stale_owner, stale_owner_request_id)
     require(
         scalar(
             "SELECT state_version FROM upload_tasks WHERE id = %s",
@@ -709,11 +725,18 @@ def test_upload_lease_release(token: str) -> int:
         audit_count("admin.upload.lease_release", upload_id) == 0,
         "owner mismatch wrote an audit record",
     )
+    wait_for_admin_log(
+        request_id=stale_owner_request_id,
+        instance_id=stale_owner_instance_id,
+        message_marker="Upload lease release failed",
+        upload_id=upload_id,
+    )
 
+    released_request_id = f"ops-lease-release-{uuid.uuid4().hex}"
     released = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": released_request_id},
         json_body={
             "dry_run": False,
             "confirm_upload_id": upload_id,
@@ -723,6 +746,7 @@ def test_upload_lease_release(token: str) -> int:
         },
     )
     require(released.status_code == 200, f"lease release failed: {released.text}")
+    released_instance_id = require_response_context(released, released_request_id)
     released_data = response_json(released)["data"]
     released_version = original_version + 1
     require(released_data["released"] is True, "lease release did not report mutation")
@@ -774,11 +798,22 @@ def test_upload_lease_release(token: str) -> int:
         and audit["details"]["new_state_version"] == released_version,
         "lease audit lost CAS versions",
     )
+    require(audit["details"]["request_id"] == released_request_id, "lease audit lost request ID")
+    require(audit["details"]["operation"] == "admin", "lease audit operation drifted")
+    wait_for_admin_log(
+        request_id=released_request_id,
+        instance_id=released_instance_id,
+        message_marker="Upload lease release successful: dry_run=false",
+        upload_id=upload_id,
+        lease_owner=original_owner,
+        state_version=released_version,
+    )
 
+    repeated_request_id = f"ops-lease-repeat-{uuid.uuid4().hex}"
     repeated = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": repeated_request_id},
         json_body={
             "dry_run": False,
             "confirm_upload_id": upload_id,
@@ -788,10 +823,17 @@ def test_upload_lease_release(token: str) -> int:
         },
     )
     require(repeated.status_code == 409, "expired lease accepted a repeated release")
+    repeated_instance_id = require_response_context(repeated, repeated_request_id)
 
     require(
         audit_count("admin.upload.lease_release", upload_id) == 1,
         "lease release wrote an unexpected number of audit records",
+    )
+    wait_for_admin_log(
+        request_id=repeated_request_id,
+        instance_id=repeated_instance_id,
+        message_marker="Upload lease release failed",
+        upload_id=upload_id,
     )
     log_pass("Lease release enforces dry-run, owner/version CAS, fencing, and atomic audit")
     return released_version
@@ -828,13 +870,15 @@ def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
         (f"staging-cleanup:{upload_id}",),
     )
 
+    dry_run_request_id = f"ops-cleanup-dry-run-{uuid.uuid4().hex}"
     dry_run = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": dry_run_request_id},
         json_body={"expected_state_version": terminal_version},
     )
     require(dry_run.status_code == 200, f"cleanup dry-run failed: {dry_run.text}")
+    dry_run_instance_id = require_response_context(dry_run, dry_run_request_id)
     dry_data = response_json(dry_run)["data"]
     require(dry_data["eligible"] is True, "missing terminal cleanup was not eligible")
     require(dry_data["planned_action"] == "create", "missing cleanup plan did not select create")
@@ -851,11 +895,19 @@ def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
         audit_count("admin.upload.cleanup_rebuild", upload_id) == 0,
         "cleanup dry-run wrote an audit record",
     )
+    wait_for_admin_log(
+        request_id=dry_run_request_id,
+        instance_id=dry_run_instance_id,
+        message_marker="Upload cleanup rebuild successful: dry_run=true",
+        upload_id=upload_id,
+        state_version=terminal_version,
+    )
 
+    created_request_id = f"ops-cleanup-create-{uuid.uuid4().hex}"
     created = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": created_request_id},
         json_body={
             "dry_run": False,
             "confirm_upload_id": upload_id,
@@ -864,6 +916,7 @@ def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
         },
     )
     require(created.status_code == 200, f"cleanup rebuild failed: {created.text}")
+    created_instance_id = require_response_context(created, created_request_id)
     created_data = response_json(created)["data"]
     require(created_data["rebuilt"] is True, "cleanup creation did not report mutation")
     require(created_data["planned_action"] == "create", "cleanup creation action drifted")
@@ -907,6 +960,19 @@ def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
         first_audit["details"]["reason"] == "terminal upload retained staging",
         "cleanup audit reason drifted",
     )
+    require(
+        first_audit["details"]["request_id"] == created_request_id,
+        "cleanup create audit lost request ID",
+    )
+    require(first_audit["details"]["operation"] == "admin", "cleanup audit operation drifted")
+    wait_for_admin_log(
+        request_id=created_request_id,
+        instance_id=created_instance_id,
+        message_marker="Upload cleanup rebuild successful: dry_run=false",
+        upload_id=upload_id,
+        job_id=cleanup_job_id,
+        state_version=terminal_version,
+    )
 
     execute(
         """
@@ -917,10 +983,11 @@ def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
         """,
         (cleanup_job_id,),
     )
+    rearmed_request_id = f"ops-cleanup-rearm-{uuid.uuid4().hex}"
     rearmed = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": rearmed_request_id},
         json_body={
             "dry_run": False,
             "confirm_upload_id": upload_id,
@@ -929,6 +996,7 @@ def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
         },
     )
     require(rearmed.status_code == 200, f"cleanup rearm failed: {rearmed.text}")
+    rearmed_instance_id = require_response_context(rearmed, rearmed_request_id)
     rearmed_data = response_json(rearmed)["data"]
     require(rearmed_data["job_id"] == cleanup_job_id, "cleanup rearm replaced job history")
     require(rearmed_data["job_status"] == "pending", "rearmed cleanup is not pending")
@@ -952,6 +1020,28 @@ def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
         audit_count("admin.upload.cleanup_rebuild", upload_id) == 2,
         "cleanup create and rearm did not each write one audit",
     )
+    rearm_audit = query_one(
+        """
+        SELECT details FROM operation_logs
+        WHERE action = 'admin.upload.cleanup_rebuild' AND target_name = %s
+        ORDER BY id DESC LIMIT 1
+        """,
+        (upload_id,),
+    )
+    require(rearm_audit is not None, "cleanup rearm audit is missing")
+    require(
+        rearm_audit["details"]["request_id"] == rearmed_request_id,
+        "cleanup rearm audit lost request ID",
+    )
+    require(rearm_audit["details"]["operation"] == "admin", "cleanup rearm operation drifted")
+    wait_for_admin_log(
+        request_id=rearmed_request_id,
+        instance_id=rearmed_instance_id,
+        message_marker="Upload cleanup rebuild successful: dry_run=false",
+        upload_id=upload_id,
+        job_id=cleanup_job_id,
+        state_version=terminal_version,
+    )
 
     execute(
         """
@@ -962,22 +1052,36 @@ def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
         """,
         (cleanup_job_id,),
     )
+    dead_letter_dry_run_request_id = f"ops-cleanup-dead-letter-dry-run-{uuid.uuid4().hex}"
     dead_letter_dry_run = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": dead_letter_dry_run_request_id},
         json_body={"expected_state_version": terminal_version},
     )
     require(dead_letter_dry_run.status_code == 200, "DeadLetter cleanup dry-run failed")
+    dead_letter_dry_run_instance_id = require_response_context(
+        dead_letter_dry_run,
+        dead_letter_dry_run_request_id,
+    )
     dead_letter_data = response_json(dead_letter_dry_run)["data"]
     require(dead_letter_data["eligible"] is False, "DeadLetter cleanup was rebuildable")
     require(dead_letter_data["planned_action"] == "none", "DeadLetter cleanup selected an action")
     require(dead_letter_data["job_status"] == "dead_letter", "DeadLetter status drifted")
+    wait_for_admin_log(
+        request_id=dead_letter_dry_run_request_id,
+        instance_id=dead_letter_dry_run_instance_id,
+        message_marker="Upload cleanup rebuild successful: dry_run=true",
+        upload_id=upload_id,
+        job_id=cleanup_job_id,
+        state_version=terminal_version,
+    )
 
+    dead_letter_rebuild_request_id = f"ops-cleanup-dead-letter-conflict-{uuid.uuid4().hex}"
     dead_letter_rebuild = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": dead_letter_rebuild_request_id},
         json_body={
             "dry_run": False,
             "confirm_upload_id": upload_id,
@@ -986,9 +1090,19 @@ def test_upload_cleanup_rebuild(token: str, released_version: int) -> None:
         },
     )
     require(dead_letter_rebuild.status_code == 409, "DeadLetter cleanup rebuild did not conflict")
+    dead_letter_rebuild_instance_id = require_response_context(
+        dead_letter_rebuild,
+        dead_letter_rebuild_request_id,
+    )
     require(
         audit_count("admin.upload.cleanup_rebuild", upload_id) == 2,
         "rejected DeadLetter cleanup rebuild wrote an audit",
+    )
+    wait_for_admin_log(
+        request_id=dead_letter_rebuild_request_id,
+        instance_id=dead_letter_rebuild_instance_id,
+        message_marker="Upload cleanup rebuild failed",
+        upload_id=upload_id,
     )
     log_pass("Cleanup rebuild creates canonical jobs, rearms Succeeded, and rejects DeadLetter")
 
@@ -1024,13 +1138,15 @@ def test_storage_reconciliation_enqueue(token: str) -> None:
     }
     jobs_by_scope: dict[str, int] = {}
     for scope, page_size in scope_limits.items():
+        dry_run_request_id = f"ops-reconcile-{scope}-dry-run-{uuid.uuid4().hex}"
         dry_run = fetch(
             path,
             method="POST",
-            headers=headers,
+            headers={**headers, "X-Request-Id": dry_run_request_id},
             json_body={"scope": scope},
         )
         require(dry_run.status_code == 200, f"{scope} reconciliation dry-run failed: {dry_run.text}")
+        dry_run_instance_id = require_response_context(dry_run, dry_run_request_id)
         dry_data = response_json(dry_run)["data"]
         require(dry_data["eligible"] is True, f"new {scope} scan was not eligible")
         require(dry_data["enqueued"] is False, f"{scope} dry-run reported enqueue")
@@ -1045,11 +1161,17 @@ def test_storage_reconciliation_enqueue(token: str) -> None:
             == len(jobs_by_scope),
             f"{scope} dry-run created a job",
         )
+        wait_for_admin_log(
+            request_id=dry_run_request_id,
+            instance_id=dry_run_instance_id,
+            message_marker="Storage reconciliation enqueue successful: dry_run=true",
+        )
 
+        enqueue_request_id = f"ops-reconcile-{scope}-enqueue-{uuid.uuid4().hex}"
         enqueued = fetch(
             path,
             method="POST",
-            headers=headers,
+            headers={**headers, "X-Request-Id": enqueue_request_id},
             json_body={
                 "scope": scope,
                 "dry_run": False,
@@ -1058,6 +1180,7 @@ def test_storage_reconciliation_enqueue(token: str) -> None:
             },
         )
         require(enqueued.status_code == 200, f"{scope} reconciliation enqueue failed: {enqueued.text}")
+        enqueue_instance_id = require_response_context(enqueued, enqueue_request_id)
         enqueued_data = response_json(enqueued)["data"]
         require(enqueued_data["enqueued"] is True, f"{scope} enqueue did not report mutation")
         require(enqueued_data["job_status"] == "pending", f"{scope} job is not Pending")
@@ -1105,11 +1228,23 @@ def test_storage_reconciliation_enqueue(token: str) -> None:
             audit["details"]["reason"] == f"verify {scope} after storage incident",
             f"{scope} audit reason was not normalized",
         )
+        require(
+            audit["details"]["request_id"] == enqueue_request_id,
+            f"{scope} audit lost request ID",
+        )
+        require(audit["details"]["operation"] == "admin", f"{scope} audit operation drifted")
+        wait_for_admin_log(
+            request_id=enqueue_request_id,
+            instance_id=enqueue_instance_id,
+            message_marker="Storage reconciliation enqueue successful: dry_run=false",
+            job_id=job_id,
+        )
 
+    duplicate_request_id = f"ops-reconcile-duplicate-{uuid.uuid4().hex}"
     duplicate = fetch(
         path,
         method="POST",
-        headers=headers,
+        headers={**headers, "X-Request-Id": duplicate_request_id},
         json_body={
             "scope": "staging",
             "dry_run": False,
@@ -1118,6 +1253,7 @@ def test_storage_reconciliation_enqueue(token: str) -> None:
         },
     )
     require(duplicate.status_code == 409, "duplicate scan scope did not return HTTP 409")
+    duplicate_instance_id = require_response_context(duplicate, duplicate_request_id)
     require(
         audit_count("admin.storage.reconcile", scan_id) == len(scope_limits),
         "duplicate scan scope wrote an extra audit",
@@ -1129,6 +1265,11 @@ def test_storage_reconciliation_enqueue(token: str) -> None:
         )
         == 0,
         "duplicate scan scope reset existing history",
+    )
+    wait_for_admin_log(
+        request_id=duplicate_request_id,
+        instance_id=duplicate_instance_id,
+        message_marker="Storage reconciliation enqueue failed",
     )
     log_pass("All fixed reconciliation scopes enqueue bounded first pages with atomic audits")
 
@@ -1151,6 +1292,8 @@ def main() -> int:
         test_dead_letter_operations(token)
         test_upload_diagnostics(token)
         test_recovery_commands(token)
+        log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+        require(token not in log_text, "storage administration logs exposed the administrator JWT")
         return 0
     finally:
         cleanup_fixture()

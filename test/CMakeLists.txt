@@ -46,6 +46,7 @@ set(TEST_SOURCES
     services/ScheduledTasks_test.cpp
     services/StorageJobContract_test.cpp
     services/StorageJobAdminLogContext_test.cpp
+    services/StorageRecoveryAdminLogContext_test.cpp
     services/StorageJobRepository_test.cpp
     services/StorageJobWorker_test.cpp
     services/StorageWorkerRuntime_test.cpp
