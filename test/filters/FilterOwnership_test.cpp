@@ -248,7 +248,6 @@ TEST(FilterOwnershipTest, ShareRateLimitersHaveExactRouteOwnershipAndOrder) {
 
 TEST(FilterOwnershipTest, RateLimitFiltersFailOpenOnRedisFailure) {
     const std::vector<std::string_view> filter_files{
-        "DownloadRateLimitFilter.cpp",
         "FolderRateLimitFilter.cpp",
         "AdminRateLimitFilter.cpp",
     };
@@ -265,6 +264,19 @@ TEST(FilterOwnershipTest, RateLimitFiltersFailOpenOnRedisFailure) {
             }
         )) << filter_file;
     }
+
+    const auto download_filter =
+        ReadTextFile(SourceRoot() / "src" / "filters" / "DownloadRateLimitFilter.cpp");
+    EXPECT_TRUE(ContainsAllInOrder(
+        download_filter,
+        {
+            "auto incr_result = co_await m_counter",
+            "if (!incr_result)",
+            "Logger::Error(log_context)",
+            "Redis IncrWithExpire failed:",
+            "co_return nullptr;",
+        }
+    ));
 
     const auto upload_filter =
         ReadTextFile(SourceRoot() / "src" / "filters" / "UploadRateLimitFilter.cpp");

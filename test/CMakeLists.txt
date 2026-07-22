@@ -75,6 +75,7 @@ set(TEST_SOURCES
     filters/RegisterRateLimit_test.cpp
     filters/RequestTraceFilter_test.cpp
     filters/UploadRateLimitLogContext_test.cpp
+    filters/DownloadRateLimitLogContext_test.cpp
     filters/DownloadRateLimit_test.cpp
     filters/AdminRateLimit_test.cpp
     filters/FolderRateLimit_test.cpp

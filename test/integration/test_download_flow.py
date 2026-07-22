@@ -11,6 +11,7 @@ Covers:
   - File download: 200 (full), 206 (partial Range), 416 (unsatisfiable Range)
   - Share download: 200, 206, 416 (same assertions)
   - Missing/size-mismatched final Blob: 500/50011 plus reconciliation finding
+  - Owner download rate limit: 429/10005 plus response/log correlation
 
 Prerequisites:
   - Server running on localhost:8080
@@ -28,8 +29,10 @@ import os
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_ROOT = Path(os.environ.get("EVIDENCE_DIR", ".sisyphus/evidence"))
 SERVER_LOG_PATH = EVIDENCE_ROOT / "download-flow-server.log"
 os.environ["SERVER_LOG"] = str(SERVER_LOG_PATH)
@@ -56,6 +59,8 @@ from lib_py import (
     assert_json_field,
     query_one,
     local_blob_path,
+    redis_delete_pattern,
+    redis_set_value,
 )
 
 import atexit
@@ -77,6 +82,19 @@ SHARE_ID = ""
 SHARE_TOKEN = ""
 SHARE_FILE_ID = ""
 SHARE_ACCESS_BODY = ""
+
+
+def configured_download_rate_value(key, fallback):
+    """Read one positive owner-download rate-limit value from active config."""
+    config_path = Path(os.environ.get("DISK_CONFIG_FILE", REPO_ROOT / "config.json"))
+    if not config_path.is_absolute():
+        config_path = REPO_ROOT / config_path
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        value = int(config.get("custom_config", {}).get("disk", {}).get(key, fallback))
+        return value if value > 0 else fallback
+    except Exception:
+        return fallback
 
 
 def file_download_metadata():
@@ -711,6 +729,118 @@ def test_file_download_not_found():
         log_pass("file-404: missing private download maps to error envelope")
 
 
+def test_owner_download_rate_limit_correlation():
+    log_step("Test: owner download rate-limit 429 preserves request correlation")
+
+    user = query_one(
+        "SELECT id FROM users WHERE username = %s OR email = %s ORDER BY id LIMIT 1",
+        (TEST_USER, TEST_USER),
+    )
+    if user is None:
+        log_fail("owner-rate-limit: authenticated user row is missing")
+        return
+
+    limit = configured_download_rate_value("download_rate_limit_per_minute", 60)
+    window_seconds = configured_download_rate_value(
+        "download_rate_limit_window_seconds",
+        60,
+    )
+    now = time.time()
+    window_start = (int(now) // window_seconds) * window_seconds
+    seconds_until_reset = window_start + window_seconds - now
+    if seconds_until_reset < 2:
+        time.sleep(seconds_until_reset + 0.05)
+        now = time.time()
+        window_start = (int(now) // window_seconds) * window_seconds
+
+    user_id = int(user["id"])
+    rate_key = f"rate:download:{user_id}:{window_start}"
+    request_id = f"download-rate-limit-{uuid.uuid4()}"
+    raw_range = "bytes=17-23"
+    metadata_before = file_download_metadata()
+
+    try:
+        redis_set_value(
+            rate_key,
+            str(limit),
+            max(1, window_start + window_seconds - int(time.time())),
+        )
+        resp = fetch(
+            f"/api/file/download/{FILE_ID}",
+            method="GET",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+                "Range": raw_range,
+                "X-Request-Id": request_id,
+            },
+        )
+        metadata_after = file_download_metadata()
+        save_evidence(f"{EVIDENCE_PREFIX}-owner-rate-limit.json", resp.text)
+
+        ok = True
+        assert_status("owner-rate-limit", resp.status_code, 429) or (ok := False)
+        assert_json_field(
+            "owner-rate-limit-code",
+            resp.text,
+            "code",
+            "10005",
+        ) or (ok := False)
+        expected_headers = {
+            "X-RateLimit-Limit": str(limit),
+            "X-RateLimit-Remaining": "0",
+            "X-Request-Id": request_id,
+        }
+        for header_name, expected_value in expected_headers.items():
+            actual_value = header_value(resp.headers, header_name)
+            if actual_value == expected_value:
+                log_pass(f"owner-rate-limit: {header_name} is exact")
+            else:
+                log_fail(
+                    f"owner-rate-limit: expected {header_name}={expected_value!r}, "
+                    f"got {actual_value!r}"
+                )
+                ok = False
+        for header_name in ("X-RateLimit-Reset", "Retry-After"):
+            if header_value(resp.headers, header_name):
+                log_pass(f"owner-rate-limit: {header_name} is present")
+            else:
+                log_fail(f"owner-rate-limit: {header_name} is missing")
+                ok = False
+        assert_file_metadata_unchanged(
+            "owner-rate-limit",
+            metadata_before,
+            metadata_after,
+        ) or (ok := False)
+
+        instance_id = header_value(resp.headers, "X-Disk-Instance-Id")
+        if instance_id:
+            rate_log = wait_for_correlated_download_log(
+                request_id,
+                instance_id,
+                "Download rate limit:",
+            )
+            if rate_log.get("level") == "warning":
+                log_pass("owner-rate-limit: warning preserves bounded correlation")
+            else:
+                log_fail("owner-rate-limit: rejection log is not warning level")
+                ok = False
+        else:
+            log_fail("owner-rate-limit: response lacks handling instance")
+            ok = False
+
+        log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+        if any(value and value in log_text for value in (TEST_PASS, TOKEN, raw_range)):
+            log_fail("owner-rate-limit: managed log contains credentials or Range")
+            ok = False
+        else:
+            log_pass("owner-rate-limit: managed log excludes credentials and Range")
+
+        if ok:
+            log_pass("owner-rate-limit: 429 correlation and side-effect contract preserved")
+    finally:
+        redis_delete_pattern(f"rate:download:{user_id}:*")
+
+
 def test_missing_final_blob_error_mapping_and_side_effects():
     log_step("Test: missing final blob maps to 50011 and records reconciliation")
 
@@ -1085,6 +1215,7 @@ def main():
     test_file_download_206()
     test_file_download_416()
     test_file_download_not_found()
+    test_owner_download_rate_limit_correlation()
     test_missing_final_blob_error_mapping_and_side_effects()
     test_final_blob_size_mismatch_records_reconciliation()
 

@@ -96,6 +96,21 @@ The route-owned upload rate-limit filter SHALL build explicit request correlatio
 - **WHEN** a direct caller omits the request trace attribute or a request supplies an Authorization value, upload parameters, metadata, or chunk content
 - **THEN** the event SHALL retain the bounded route operation with explicit JSON null request correlation when needed and SHALL NOT contain the Authorization value, access token, password, upload request body, file content, or storage credential
 
+### Requirement: Owner Download Rate-Limit Filter Correlation
+The route-owned owner-download rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing its download-info and download-content route ownership, user fixed-window key, configured window or threshold, fail-open behavior, HTTP response, or download metadata side effects.
+
+#### Scenario: Owner download rate-limit filter handles traced routes
+- **WHEN** the filter emits an event for an owner download-info or download-content request whose trace attribute has been established
+- **THEN** the event SHALL retain the same request ID, actual handling instance, and bounded `download` operation as the HTTP completion event
+
+#### Scenario: Owner download rate-limit filter observes identity and counter values
+- **WHEN** the filter observes a user ID, path, file path parameter, counter key, count, window, threshold, or dependency result before the file controller validates a business file ID
+- **THEN** it SHALL NOT derive upload ID, job ID, lease owner, or state version from that value, and those fields SHALL remain null
+
+#### Scenario: Owner download rate-limit filter handles credentials or missing trace state
+- **WHEN** a direct caller omits the request trace attribute or a request supplies an Authorization value, access token, Range header, or download parameters
+- **THEN** the event SHALL retain the bounded `download` operation with explicit JSON null request correlation when needed and SHALL NOT contain the Authorization value, access token, Range value, password, file content, or storage credential
+
 ### Requirement: Register Rate-Limit Filter Correlation
 The register rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing the exact-path scope, normalized-IP key, configured window or threshold, fail-open behavior, or HTTP response.
 
