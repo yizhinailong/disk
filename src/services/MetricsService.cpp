@@ -182,6 +182,37 @@ namespace disk::metrics {
                 path.size() - prefix.size() - suffix.size()
             ));
         }
+
+        [[nodiscard]] auto IsSingleSegmentPath(
+            std::string_view path,
+            std::string_view prefix
+        ) noexcept -> bool {
+            if (!path.starts_with(prefix)) {
+                return false;
+            }
+            const auto segment = path.substr(prefix.size());
+            return !segment.empty() && segment.find('/') == std::string_view::npos;
+        }
+
+        [[nodiscard]] auto IsShareDownloadPath(std::string_view path) noexcept -> bool {
+            constexpr std::string_view prefix = "/api/share/download/";
+            if (!path.starts_with(prefix)) {
+                return false;
+            }
+
+            const auto remainder = path.substr(prefix.size());
+            const auto share_separator = remainder.find('/');
+            if (share_separator == std::string_view::npos || share_separator == 0) {
+                return false;
+            }
+
+            const auto file_and_suffix = remainder.substr(share_separator + 1);
+            const auto file_separator = file_and_suffix.find('/');
+            if (file_separator == std::string_view::npos) {
+                return !file_and_suffix.empty();
+            }
+            return file_separator > 0 && file_and_suffix.substr(file_separator) == "/info";
+        }
     } // namespace
 
     auto ClassifyHttpOperation(std::string_view path) noexcept -> HttpOperation {
@@ -207,8 +238,7 @@ namespace disk::metrics {
         if (path.starts_with("/api/file/upload/")) {
             return HttpOperation::UploadCancel;
         }
-        if (path.starts_with("/api/file/download/") ||
-            path.starts_with("/api/share/download/")) {
+        if (path.starts_with("/api/file/download/") || IsShareDownloadPath(path)) {
             return HttpOperation::Download;
         }
         if (path == "/api/file/list" || path == "/api/file/search" ||
@@ -239,7 +269,11 @@ namespace disk::metrics {
             path == "/api/user/storage") {
             return HttpOperation::User;
         }
-        if (path == "/api/share" || path.starts_with("/api/share/")) {
+        if (path == "/api/share" || path == "/api/share/cancel" ||
+            IsSingleSegmentPath(path, "/api/share/") ||
+            IsSingleSegmentPath(path, "/api/share/access/") ||
+            IsSingleSegmentPath(path, "/api/share/browse/") ||
+            IsSingleSegmentPath(path, "/api/share/save/")) {
             return HttpOperation::Share;
         }
         if (path == "/api/admin/maintenance/cleanup/expired") {

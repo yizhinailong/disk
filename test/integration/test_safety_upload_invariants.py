@@ -871,6 +871,92 @@ def assert_auth_log_context(
     log_pass("authentication logs keep typed request correlation and null ownership fields")
 
 
+def assert_share_log_context(
+    *,
+    response,
+    request_id: str,
+    expected_success: bool,
+    message_markers: tuple[str, ...],
+) -> None:
+    """Assert one share request keeps its bounded typed correlation."""
+    if expected_success:
+        assert_equal(
+            "share request preserves its documented success envelope",
+            response.status_code == 200 and json_field(response.text, "code") == "0",
+            True,
+        )
+    else:
+        assert_equal(
+            "share request returns a documented failure",
+            response.status_code >= 400 and json_field(response.text, "code") != "0",
+            True,
+        )
+    assert_equal(
+        "share request preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal("share request identifies the handling instance", bool(instance_id), True)
+
+    for marker in message_markers:
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="share",
+            upload_id=None,
+            message_marker=marker,
+        )
+    log_pass("share logs keep typed request correlation and null ownership fields")
+
+
+def assert_share_audit_correlation(
+    *,
+    action: str,
+    share_code: str,
+    request_id: str,
+    forbidden_values: tuple[str, ...],
+) -> None:
+    """Assert one share audit row persists bounded correlation without credentials."""
+    row = query_one(
+        """
+        SELECT details
+        FROM operation_logs
+        WHERE action = %s AND target_type = 'share' AND target_name = %s
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (action, share_code),
+    )
+    assert_equal(f"{action} audit row exists", row is not None, True)
+    details = row["details"] if row is not None else {}
+    if isinstance(details, str):
+        details = json.loads(details)
+
+    assert_equal(f"{action} audit preserves request ID", details.get("request_id"), request_id)
+    assert_equal(f"{action} audit preserves operation", details.get("operation"), "share")
+    for forbidden_key in (
+        "password",
+        "password_hash",
+        "share_token",
+        "authorization",
+        "x-share-token",
+    ):
+        assert_equal(
+            f"{action} audit excludes {forbidden_key}",
+            forbidden_key not in details,
+            True,
+        )
+    serialized_details = json.dumps(details, default=str)
+    for forbidden_value in forbidden_values:
+        assert_equal(
+            f"{action} audit excludes a raw credential",
+            bool(forbidden_value) and forbidden_value not in serialized_details,
+            True,
+        )
+    log_pass(f"{action} audit keeps typed request correlation without credentials")
+
+
 def assert_server_log_excludes_secrets(secrets: tuple[str, ...]) -> None:
     """Assert raw authentication credentials never reached managed API stdout."""
     log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
@@ -1414,6 +1500,151 @@ def test_auth_log_context_invariants() -> None:
             refreshed_refresh_token,
         )
     )
+
+
+def test_share_log_context_invariants() -> None:
+    """Verify registered non-download share paths use one bounded operation."""
+    log_section("Share Structured Log Correlation")
+    create_password = f"C{unique_name()[-6:]}"
+    access_password = f"A{unique_name()[-6:]}"
+    detail_code = f"detail{unique_name()}"
+    cancel_code = f"cancel{unique_name()}"
+    access_code = f"access{unique_name()}"
+
+    redis_delete_pattern("rate:share_access:*")
+    try:
+        create_request_id = f"safety-share-create-log-{unique_name()}"
+        create_response = fetch(
+            "/api/share",
+            method="POST",
+            headers={**auth_headers(TOKEN), "X-Request-Id": create_request_id},
+            json_body={
+                "file_ids": [],
+                "folder_ids": [],
+                "password": create_password,
+            },
+        )
+        assert_share_log_context(
+            response=create_response,
+            request_id=create_request_id,
+            expected_success=False,
+            message_markers=(
+                "Received create share request",
+                "Create share request must contain file_ids or folder_ids",
+                "Create share request parameter validation failed",
+                "HTTP request completed",
+            ),
+        )
+
+        list_request_id = f"safety-share-list-log-{unique_name()}"
+        list_response = fetch(
+            "/api/share?status=unsupported",
+            headers={**auth_headers(TOKEN), "X-Request-Id": list_request_id},
+        )
+        assert_share_log_context(
+            response=list_response,
+            request_id=list_request_id,
+            expected_success=False,
+            message_markers=(
+                "Received get share list request",
+                "Parameter 'status' invalid value",
+                "Share list request parameter validation failed",
+                "HTTP request completed",
+            ),
+        )
+
+        detail_request_id = f"safety-share-detail-log-{unique_name()}"
+        detail_response = fetch(
+            f"/api/share/{detail_code}",
+            headers={**auth_headers(TOKEN), "X-Request-Id": detail_request_id},
+        )
+        assert_share_log_context(
+            response=detail_response,
+            request_id=detail_request_id,
+            expected_success=False,
+            message_markers=(
+                "Received get share details request",
+                "Get share details failed",
+                "HTTP request completed",
+            ),
+        )
+
+        cancel_request_id = f"safety-share-cancel-log-{unique_name()}"
+        cancel_response = fetch(
+            "/api/share",
+            method="DELETE",
+            headers={**auth_headers(TOKEN), "X-Request-Id": cancel_request_id},
+            json_body={"share_ids": [cancel_code]},
+        )
+        assert_share_log_context(
+            response=cancel_response,
+            request_id=cancel_request_id,
+            expected_success=True,
+            message_markers=(
+                "Received batch cancel shares request",
+                "Batch cancel shares: user_id=",
+                "Batch cancel shares completed",
+            ),
+        )
+        assert_equal(
+            "missing share cancellation remains an item-level failure",
+            json_field(cancel_response.text, "data.results.0.status"),
+            "failed",
+        )
+        assert_share_audit_correlation(
+            action="share_cancel",
+            share_code=cancel_code,
+            request_id=cancel_request_id,
+            forbidden_values=(create_password, access_password, TOKEN),
+        )
+
+        access_request_id = f"safety-share-access-log-{unique_name()}"
+        access_response = fetch(
+            f"/api/share/access/{access_code}",
+            method="POST",
+            headers={"Content-Type": "application/json", "X-Request-Id": access_request_id},
+            json_body={"password": access_password},
+        )
+        assert_share_log_context(
+            response=access_response,
+            request_id=access_request_id,
+            expected_success=False,
+            message_markers=(
+                "Received verify share access request",
+                "Verifying share access",
+                "Verify share access failed",
+                "HTTP request completed",
+            ),
+        )
+        assert_share_audit_correlation(
+            action="share_pwd_fail",
+            share_code=access_code,
+            request_id=access_request_id,
+            forbidden_values=(create_password, access_password, TOKEN),
+        )
+        assert_share_audit_correlation(
+            action="share_access",
+            share_code=access_code,
+            request_id=access_request_id,
+            forbidden_values=(create_password, access_password, TOKEN),
+        )
+
+        log_text = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+        for secret in (create_password, access_password, TOKEN):
+            assert_equal(
+                "managed share logs exclude a raw credential",
+                bool(secret) and secret not in log_text,
+                True,
+            )
+        log_pass("share logs exclude passwords, password hashes, and owner authorization values")
+    finally:
+        execute(
+            "DELETE FROM operation_logs "
+            "WHERE target_type = 'share' AND target_name IN (%s, %s)",
+            (cancel_code, access_code),
+        )
+        redis_delete_pattern(f"rate:share_password:{access_code}:*")
+        redis_delete_pattern("rate:share_access:*")
 
 
 def run_expired_cleanup(
@@ -4755,6 +4986,7 @@ def main() -> None:
     test_system_info_log_context_invariants()
     test_user_log_context_invariants()
     test_auth_log_context_invariants()
+    test_share_log_context_invariants()
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()

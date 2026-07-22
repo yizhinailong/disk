@@ -95,7 +95,44 @@ namespace disk::metrics {
             EXPECT_EQ(ClassifyHttpOperation("/api/user/profile/extra"), HttpOperation::Other);
             EXPECT_EQ(ClassifyHttpOperation("/api/user/unknown"), HttpOperation::Other);
             EXPECT_EQ(ClassifyHttpOperation("/api/users/profile"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/share"), HttpOperation::Share);
             EXPECT_EQ(ClassifyHttpOperation("/api/share/secret-id"), HttpOperation::Share);
+            EXPECT_EQ(ClassifyHttpOperation("/api/share/cancel"), HttpOperation::Share);
+            EXPECT_EQ(ClassifyHttpOperation("/api/share/access/secret-id"), HttpOperation::Share);
+            EXPECT_EQ(ClassifyHttpOperation("/api/share/browse/secret-id"), HttpOperation::Share);
+            EXPECT_EQ(ClassifyHttpOperation("/api/share/save/secret-id"), HttpOperation::Share);
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/share/download/secret-id/77"),
+                HttpOperation::Download
+            );
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/share/download/secret-id/77/info"),
+                HttpOperation::Download
+            );
+
+            EXPECT_EQ(ClassifyHttpOperation("/api/share/"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/share/secret-id/extra"), HttpOperation::Other);
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/share/access/secret-id/extra"),
+                HttpOperation::Other
+            );
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/share/browse/secret-id/extra"),
+                HttpOperation::Other
+            );
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/share/save/secret-id/extra"),
+                HttpOperation::Other
+            );
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/share/download/secret-id"),
+                HttpOperation::Other
+            );
+            EXPECT_EQ(
+                ClassifyHttpOperation("/api/share/download/secret-id/77/extra"),
+                HttpOperation::Other
+            );
+            EXPECT_EQ(ClassifyHttpOperation("/api/shares/secret-id"), HttpOperation::Other);
             EXPECT_EQ(
                 ClassifyHttpOperation("/api/admin/maintenance/cleanup/expired"),
                 HttpOperation::Cleanup

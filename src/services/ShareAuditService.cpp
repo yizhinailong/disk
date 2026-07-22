@@ -42,6 +42,18 @@ namespace disk::share {
                 details[key].append(static_cast<Json::UInt64>(id));
             }
         }
+
+        auto SetLogContext(Json::Value& details, const disk::utils::LogContext& log_context)
+            -> void {
+            details["request_id"] =
+                log_context.request_id.has_value() && !log_context.request_id->empty() ?
+                    Json::Value(*log_context.request_id) :
+                    Json::Value(Json::nullValue);
+            details["operation"] =
+                log_context.operation.has_value() && !log_context.operation->empty() ?
+                    Json::Value(*log_context.operation) :
+                    Json::Value(Json::nullValue);
+        }
     } // namespace
 
     auto ShareCreateAuditEvent::ToDetails() const -> Json::Value {
@@ -57,6 +69,7 @@ namespace disk::share {
         }
         details["success"] = true;
         details["result"] = "success";
+        SetLogContext(details, log_context);
         return details;
     }
 
@@ -65,6 +78,7 @@ namespace disk::share {
         details["share_code"] = share_code;
         details["success"] = success;
         details["result"] = result;
+        SetLogContext(details, log_context);
         return details;
     }
 
@@ -76,6 +90,7 @@ namespace disk::share {
         details["rate_limited"] = rate_limited;
         details["success"] = false;
         details["result"] = rate_limited ? "rate_limited" : "validation_failed";
+        SetLogContext(details, log_context);
         return details;
     }
 
@@ -87,14 +102,7 @@ namespace disk::share {
         details["http_status"] = http_status;
         details["success"] = success;
         details["result"] = result;
-        details["request_id"] =
-            log_context.request_id.has_value() && !log_context.request_id->empty() ?
-                Json::Value(*log_context.request_id) :
-                Json::Value(Json::nullValue);
-        details["operation"] =
-            log_context.operation.has_value() && !log_context.operation->empty() ?
-                Json::Value(*log_context.operation) :
-                Json::Value(Json::nullValue);
+        SetLogContext(details, log_context);
         return details;
     }
 
@@ -104,6 +112,7 @@ namespace disk::share {
         details["cancelled_by"] = static_cast<Json::UInt64>(actor_user_id);
         details["success"] = success;
         details["result"] = result;
+        SetLogContext(details, log_context);
         return details;
     }
 
@@ -120,7 +129,7 @@ namespace disk::share {
             event.share_code,
             event.ToDetails(),
             event.context,
-            {}
+            event.log_context
         );
     }
 
@@ -133,7 +142,7 @@ namespace disk::share {
             event.share_code,
             event.ToDetails(),
             event.context,
-            {}
+            event.log_context
         );
     }
 
@@ -147,7 +156,7 @@ namespace disk::share {
             event.share_code,
             event.ToDetails(),
             event.context,
-            {}
+            event.log_context
         );
     }
 
@@ -173,7 +182,7 @@ namespace disk::share {
             event.share_code,
             event.ToDetails(),
             event.context,
-            {}
+            event.log_context
         );
     }
 

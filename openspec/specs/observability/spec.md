@@ -81,6 +81,29 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **WHEN** an authentication path is not exactly one of the four supported paths, including the collection root, a trailing slash, an extra suffix, or an unknown action
 - **THEN** the authentication classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
 
+### Requirement: Typed Share Correlation
+The system SHALL classify only registered non-download share path shapes as the bounded `share` operation and SHALL propagate their correlation explicitly by value across the share controller, direct share-DTO events, share-service helper coroutines, and share-audit boundary. Share download metadata and content routes SHALL retain the separate bounded `download` operation.
+
+#### Scenario: Owner or visitor manages or consumes a share
+- **WHEN** a request creates, lists, inspects, updates, cancels, accesses, browses, or saves a share through a registered non-download share path
+- **THEN** its response, HTTP completion event at the configured level, controller events, direct share-DTO events, and share-service events SHALL retain the same request ID, actual handling instance, and `share` operation; any resulting share-audit details SHALL persist the same request ID and `share` operation
+
+#### Scenario: Share download remains a download operation
+- **WHEN** a request enters `/api/share/download/{share_id}/{file_id}` or `/api/share/download/{share_id}/{file_id}/info`
+- **THEN** its existing controller, direct share-download DTO, service, response, integrity, and statistics events SHALL retain the same request ID, actual handling instance, and `download` operation rather than being reclassified as `share`; any resulting share-download audit details SHALL persist the same request ID and `download` operation
+
+#### Scenario: Share request has no upload or durable-job ownership
+- **WHEN** a share request records a share code, internal share ID, file, folder, user, permission, password-attempt count, view count, cache value, or audit result
+- **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those share-domain values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: Share credentials remain secret
+- **WHEN** any share path succeeds or fails
+- **THEN** application and audit events SHALL NOT contain a raw Share Token, `X-Share-Token` or owner Authorization header value, share password, or password hash
+
+#### Scenario: Share classification remains bounded
+- **WHEN** a path does not match the share collection, one-segment detail, cancel compatibility, access, browse, save, or exact share-download route shapes, including a trailing slash or extra path segment
+- **THEN** the share classifiers SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
+
 ### Requirement: Operation Logs
 The system SHALL record and expose user-visible operation logs for key actions.
 

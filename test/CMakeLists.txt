@@ -41,6 +41,7 @@ set(TEST_SOURCES
     services/ShareServiceBatch_test.cpp
     services/ShareServiceQuery_test.cpp
     services/ShareAuditService_test.cpp
+    services/ShareLogContext_test.cpp
     services/ScheduledTasks_test.cpp
     services/StorageJobContract_test.cpp
     services/StorageJobRepository_test.cpp

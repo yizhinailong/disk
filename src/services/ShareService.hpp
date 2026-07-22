@@ -114,7 +114,8 @@ namespace disk::share {
         auto Create(
             CreateShareRequest request,
             uint64_t user_id,
-            const ShareAuditContext& audit_context
+            const ShareAuditContext& audit_context,
+            disk::utils::LogContext log_context = {}
         )
             -> drogon::Task<Result<CreateShareResponse>>;
 
@@ -131,7 +132,11 @@ namespace disk::share {
          * @return drogon::Task<Result<ShareListResponse>> 成功返回分享列表，失败返回错误
          */
         [[nodiscard]]
-        auto List(const ShareListRequest& request, uint64_t user_id)
+        auto List(
+            const ShareListRequest& request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<ShareListResponse>>;
 
         /**
@@ -147,7 +152,11 @@ namespace disk::share {
          * @return drogon::Task<Result<ShareDetailResponse>> 成功返回分享详情，失败返回错误
          */
         [[nodiscard]]
-        auto Detail(const ShareDetailRequest& request, uint64_t user_id)
+        auto Detail(
+            const ShareDetailRequest& request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<ShareDetailResponse>>;
 
         /**
@@ -164,7 +173,11 @@ namespace disk::share {
          * @return drogon::Task<Result<UpdateShareResponse>> 成功返回更新后的分享信息，失败返回错误
          */
         [[nodiscard]]
-        auto Update(const UpdateShareRequest& request, uint64_t user_id)
+        auto Update(
+            const UpdateShareRequest& request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<UpdateShareResponse>>;
 
         /**
@@ -184,7 +197,8 @@ namespace disk::share {
         auto Cancel(
             const CancelShareRequest& request,
             uint64_t user_id,
-            const ShareAuditContext& audit_context
+            const ShareAuditContext& audit_context,
+            disk::utils::LogContext log_context = {}
         )
             -> drogon::Task<Result<CancelShareResponse>>;
 
@@ -204,7 +218,11 @@ namespace disk::share {
          * @return drogon::Task<Result<AccessShareResponse>> 成功返回分享令牌，失败返回错误
          */
         [[nodiscard]]
-        auto Access(const AccessShareRequest& request, const ShareAuditContext& audit_context)
+        auto Access(
+            const AccessShareRequest& request,
+            const ShareAuditContext& audit_context,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<AccessShareResponse>>;
 
         /**
@@ -221,7 +239,11 @@ namespace disk::share {
          * @return drogon::Task<Result<BrowseShareResponse>> 成功返回浏览结果，失败返回错误
          */
         [[nodiscard]]
-        auto Browse(const BrowseShareRequest& request, uint64_t share_id)
+        auto Browse(
+            const BrowseShareRequest& request,
+            uint64_t share_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<BrowseShareResponse>>;
 
         /**
@@ -246,7 +268,12 @@ namespace disk::share {
             -> drogon::Task<Result<DownloadInfo>>;
 
         [[nodiscard]]
-        auto SaveToDrive(const SaveShareItemsRequest& request, uint64_t share_id, uint64_t target_user_id)
+        auto SaveToDrive(
+            const SaveShareItemsRequest& request,
+            uint64_t share_id,
+            uint64_t target_user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<SaveShareItemsResponse>>;
 
         /**
@@ -256,7 +283,10 @@ namespace disk::share {
          * @return drogon::Task<Result<drogon_model::disk::Shares>> 成功返回分享模型，失败返回错误
          */
         [[nodiscard]]
-        auto FindShareByCode(const std::string& share_code) const
+        auto FindShareByCode(
+            const std::string& share_code,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<drogon_model::disk::Shares>>;
 
         /**
@@ -285,11 +315,19 @@ namespace disk::share {
          * @return drogon::Task<Result<std::vector<drogon_model::disk::Files>>> 成功返回文件列表
          */
         [[nodiscard]]
-        auto ValidateFileOwnership(const std::vector<uint64_t>& file_ids, uint64_t user_id) const
+        auto ValidateFileOwnership(
+            const std::vector<uint64_t>& file_ids,
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<Result<std::vector<drogon_model::disk::Files>>>;
 
         [[nodiscard]]
-        auto ValidateFolderOwnership(const std::vector<uint64_t>& folder_ids, uint64_t user_id) const
+        auto ValidateFolderOwnership(
+            const std::vector<uint64_t>& folder_ids,
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<Result<std::vector<drogon_model::disk::Folders>>>;
 
         /**
@@ -299,7 +337,11 @@ namespace disk::share {
          * @return drogon::Task<Result<drogon_model::disk::Shares>> 成功返回分享模型
          */
         [[nodiscard]]
-        auto ValidateShareOwnership(const std::string& share_code, uint64_t user_id) const
+        auto ValidateShareOwnership(
+            const std::string& share_code,
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<Result<drogon_model::disk::Shares>>;
 
         /**
@@ -308,10 +350,14 @@ namespace disk::share {
          * @return drogon::Task<std::vector<ShareFile>> 文件列表
          */
         [[nodiscard]]
-        auto GetShareFiles(uint64_t share_id) const -> drogon::Task<std::vector<ShareFile>>;
+        auto GetShareFiles(uint64_t share_id, disk::utils::LogContext log_context) const
+            -> drogon::Task<std::vector<ShareFile>>;
 
         [[nodiscard]]
-        auto GetShareFilesBatch(const std::vector<uint64_t>& share_ids) const
+        auto GetShareFilesBatch(
+            const std::vector<uint64_t>& share_ids,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<std::unordered_map<uint64_t, std::vector<ShareFile>>>;
 
         /**
@@ -331,7 +377,8 @@ namespace disk::share {
         static auto IsShareActive(const drogon_model::disk::Shares& share) -> bool;
 
         [[nodiscard]]
-        auto ValidateShareActive(uint64_t share_id) const -> drogon::Task<Result<void>>;
+        auto ValidateShareActive(uint64_t share_id, disk::utils::LogContext log_context) const
+            -> drogon::Task<Result<void>>;
 
         /**
          * @brief 验证分享密码
@@ -348,7 +395,8 @@ namespace disk::share {
          * @param share_id 分享内部ID
          * @return drogon::Task<void>
          */
-        auto IncrementViewCount(uint64_t share_id) -> drogon::Task<void>;
+        auto IncrementViewCount(uint64_t share_id, disk::utils::LogContext log_context)
+            -> drogon::Task<void>;
 
         auto IncrementDownloadCount(
             uint64_t share_id,
@@ -365,7 +413,8 @@ namespace disk::share {
          * @param share_id 分享内部ID
          * @return drogon::Task<void>
          */
-        auto UpdateTimestamp(uint64_t share_id) -> drogon::Task<void>;
+        auto UpdateTimestamp(uint64_t share_id, disk::utils::LogContext log_context)
+            -> drogon::Task<void>;
 
         /**
          * @brief 获取状态过滤条件
@@ -404,14 +453,19 @@ namespace disk::share {
         };
 
         [[nodiscard]]
-        auto HandleFailedShareAccess(const std::string& share_code, const std::string& ip_address) const
+        auto HandleFailedShareAccess(
+            const std::string& share_code,
+            const std::string& ip_address,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<FailedShareAccessResult>;
 
         auto RecordFailedShareAccess(
             std::optional<uint64_t> share_id,
             const std::string& share_code,
             const FailedShareAccessResult& failure,
-            const ShareAuditContext& audit_context
+            const ShareAuditContext& audit_context,
+            disk::utils::LogContext log_context
         ) const -> drogon::Task<void>;
 
     private:

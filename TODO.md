@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 认证日志关联）：完整构建、聚焦认证分类/上下文/DTO/服务 GoogleTest 53/53、认证流程集成 3/3、真实 HTTP safety 集成 1/1（脚本本次实际 634 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1411 项，1404 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 472.66 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 分享日志关联）：完整构建、分享 GoogleTest 270/270、分享集成 6/6、真实 HTTP safety 集成 1/1（脚本本次实际 693 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1413 项，1406 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 481.95 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -629,6 +629,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定认证请
 `AuthController` 在 DTO 解析、认证属性读取或 Authorization 头处理前从请求属性创建显式 `LogContext`，按值传过认证 DTO、`AuthService` 的注册/登录/刷新/登出协程及用户查询、登录状态更新和失败计数辅助协程。认证请求只填充真实 `request_id`、`instance_id` 和固定 operation，`upload_id`、`job_id`、`lease_owner`、`state_version` 保持 JSON `null`；密码、密码哈希、Authorization 头、access token 和 refresh token 均不进入日志。共享 `DtoBase`、`TokenService`、`RedisService` 和过滤器未接收显式调用方上下文时继续保持空上下文，不从线程、令牌、用户或消息文本推断所有权字段；构造期服务初始化日志仍是无 HTTP 上下文的进程事件。
 
 `MetricsServiceTest` 锁定四个精确 path 与五个负边界，`AuthLogContextContractTest` 锁定 Controller、认证 DTO、四个公开服务协程、三个辅助协程的显式上下文传播和敏感值禁记。`SafetyUploadInvariantsIntegration` 使用调用方 request ID 覆盖重复注册失败、登录成功、刷新成功和登出成功，逐行核对响应、Controller/DTO/服务及 HTTP 完成 NDJSON 的 request/instance、固定 operation 和四个空所有权字段，并扫描受管后端 stdout 确认本轮密码及两组 access/refresh token 均未泄漏。完整构建、Python 语法检查、聚焦 GoogleTest 53/53、认证流程集成 3/3、真实 HTTP safety 集成 1/1（脚本本次实际 634 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1411 项，1404 通过、7 项环境门控跳过、0 失败，总耗时 472.66 秒。分享、管理员等其他历史请求域和共享基础设施边界，以及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.23 分享日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定分享请求的类型化日志、分类、审计和脱敏边界。HTTP 指标将 `/api/share`、单段详情、cancel 兼容入口以及带单个非空分享码段的 access/browse/save 注册形状归一为低基数 `operation=share`；分享下载信息和内容的精确注册形状继续使用 `operation=download`。尾随斜杠、额外路径段、缺失下载文件段和相似前缀保持 `other`，公开 REST 路由、鉴权、请求/响应信封、错误码、限流及分享令牌生命周期语义没有变化。
+
+`ShareController` 在 DTO 或请求属性处理前从请求追踪属性创建显式 `LogContext`，按值传过全部九个 Share DTO 解析入口、`ShareService` 的请求协程及所有权、查询、状态、计数和失败访问辅助协程。创建、访问、口令失败、取消和下载审计 details 保存同一 request/operation，审计 fail-open 错误也保留调用方上下文；分享请求不冒充 upload/job/lease/version 所有权。原始 Share Token、`X-Share-Token`/owner Authorization 值、分享密码和密码哈希均不进入应用日志或审计 details；共享 DtoBase、ContentService、RedisService、缓存、事务运行器和过滤器未接收显式上下文时不从线程、凭据或领域 ID 推断关联，构造期 ShareService 日志继续作为无 HTTP 上下文的进程事件。
+
+`MetricsServiceTest` 锁定分享与下载的精确形状及负边界，`ShareLogContextContractTest` 锁定 Controller、DTO、服务辅助协程、审计和敏感值禁记，`ShareAuditServiceTest` 锁定五类审计的关联字段及空上下文 null 语义。`SafetyUploadInvariantsIntegration` 使用不同调用方 request ID 覆盖创建/列表校验失败、缺失详情、缺失批量取消和缺失公开访问，逐行核对响应、Controller/DTO/服务及 HTTP 完成 NDJSON，并查询分享审计和扫描受管日志确认本轮密码与 owner JWT 未泄漏。完整构建、Python 语法检查、分享 GoogleTest 270/270、分享集成 6/6、真实 HTTP safety 集成 1/1（脚本本次实际 693 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1413 项，1406 通过、7 项环境门控跳过、0 失败，总耗时 481.95 秒。管理员等其他历史请求域、共享基础设施边界和目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

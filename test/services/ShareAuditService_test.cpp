@@ -24,6 +24,18 @@ namespace disk::share {
             }
         }
 
+        auto ShareLogContext() -> disk::utils::LogContext {
+            disk::utils::LogContext log_context;
+            log_context.request_id = "share-audit-request";
+            log_context.operation = "share";
+            return log_context;
+        }
+
+        auto ExpectShareCorrelation(const Json::Value& details) -> void {
+            EXPECT_EQ(details["request_id"].asString(), "share-audit-request");
+            EXPECT_EQ(details["operation"].asString(), "share");
+        }
+
         TEST(ShareAuditServiceTest, CreateDetailsUseStableTypedFields) {
             const auto details = ShareCreateAuditEvent{
                 .actor_user_id = 7,
@@ -34,6 +46,7 @@ namespace disk::share {
                 .permission = "download",
                 .expires_at = std::nullopt,
                 .context = { .ip_address = "127.0.0.1", .user_agent = "audit-test" },
+                .log_context = ShareLogContext(),
             }
                                      .ToDetails();
 
@@ -45,6 +58,7 @@ namespace disk::share {
             EXPECT_TRUE(details["expires_at"].isNull());
             EXPECT_TRUE(details["success"].asBool());
             EXPECT_EQ(details["result"].asString(), "success");
+            ExpectShareCorrelation(details);
             ExpectNoCredentialFields(details);
         }
 
@@ -55,11 +69,13 @@ namespace disk::share {
                 .success = false,
                 .result = "validation_failed",
                 .context = { .ip_address = "127.0.0.1", .user_agent = "audit-test" },
+                .log_context = ShareLogContext(),
             }
                                      .ToDetails();
 
             EXPECT_FALSE(details["success"].asBool());
             EXPECT_EQ(details["result"].asString(), "validation_failed");
+            ExpectShareCorrelation(details);
             ExpectNoCredentialFields(details);
         }
 
@@ -71,6 +87,7 @@ namespace disk::share {
                 .counter_available = true,
                 .rate_limited = true,
                 .context = {},
+                .log_context = ShareLogContext(),
             }
                                      .ToDetails();
 
@@ -79,6 +96,7 @@ namespace disk::share {
             EXPECT_TRUE(details["rate_limited"].asBool());
             EXPECT_FALSE(details["success"].asBool());
             EXPECT_EQ(details["result"].asString(), "rate_limited");
+            ExpectShareCorrelation(details);
             ExpectNoCredentialFields(details);
         }
 
@@ -121,13 +139,22 @@ namespace disk::share {
                 .success = false,
                 .result = "share_not_found",
                 .context = {},
+                .log_context = ShareLogContext(),
             }
                                      .ToDetails();
 
             EXPECT_EQ(details["cancelled_by"].asUInt64(), 7U);
             EXPECT_FALSE(details["success"].asBool());
             EXPECT_EQ(details["result"].asString(), "share_not_found");
+            ExpectShareCorrelation(details);
             ExpectNoCredentialFields(details);
+        }
+
+        TEST(ShareAuditServiceTest, MissingCorrelationUsesExplicitNulls) {
+            const auto details = ShareAccessAuditEvent{}.ToDetails();
+
+            EXPECT_TRUE(details["request_id"].isNull());
+            EXPECT_TRUE(details["operation"].isNull());
         }
 
     } // namespace

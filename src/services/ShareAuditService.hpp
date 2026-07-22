@@ -35,6 +35,7 @@ namespace disk::share {
         std::string permission;
         std::optional<std::string> expires_at;
         ShareAuditContext context;
+        disk::utils::LogContext log_context;
 
         [[nodiscard]]
         auto ToDetails() const -> Json::Value;
@@ -46,6 +47,7 @@ namespace disk::share {
         bool success{ false };
         std::string result;
         ShareAuditContext context;
+        disk::utils::LogContext log_context;
 
         [[nodiscard]]
         auto ToDetails() const -> Json::Value;
@@ -58,6 +60,7 @@ namespace disk::share {
         bool counter_available{ false };
         bool rate_limited{ false };
         ShareAuditContext context;
+        disk::utils::LogContext log_context;
 
         [[nodiscard]]
         auto ToDetails() const -> Json::Value;
@@ -85,6 +88,7 @@ namespace disk::share {
         bool success{ false };
         std::string result;
         ShareAuditContext context;
+        disk::utils::LogContext log_context;
 
         [[nodiscard]]
         auto ToDetails() const -> Json::Value;

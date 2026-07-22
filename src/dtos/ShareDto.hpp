@@ -187,25 +187,35 @@ namespace disk::share {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CreateShareRequest> {
-            Logger::Debug() << "Start parsing create share request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<CreateShareRequest> {
+            Logger::Debug(log_context) << "Start parsing create share request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             CreateShareRequest request;
 
             auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
-            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            if (!file_ids_result) {
+                return std::unexpected(file_ids_result.error());
+            }
             request.file_ids = std::move(*file_ids_result);
 
             auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
-            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            if (!folder_ids_result) {
+                return std::unexpected(folder_ids_result.error());
+            }
             request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
-                Logger::Warn() << "Create share request must contain file_ids or folder_ids";
+                Logger::Warn(log_context)
+                    << "Create share request must contain file_ids or folder_ids";
                 const auto error_code = json.isMember("file_ids") || json.isMember("folder_ids") ? ErrorCode::InvalidParameter : ErrorCode::ValidationFailed;
                 return std::unexpected(ErrorInfo(
                     error_code,
@@ -216,7 +226,8 @@ namespace disk::share {
             /// 解析可选参数 expire_days
             if (json.isMember("expire_days")) {
                 if (!json["expire_days"].isIntegral()) {
-                    Logger::Warn() << "Parameter 'expire_days' type error: expected integer";
+                    Logger::Warn(log_context)
+                        << "Parameter 'expire_days' type error: expected integer";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'expire_days' type error: expected integer"
@@ -224,8 +235,8 @@ namespace disk::share {
                 }
                 request.expire_days = json["expire_days"].asInt();
                 if (request.expire_days < 0) {
-                    Logger::Warn() << "Parameter 'expire_days' cannot be negative: "
-                             << request.expire_days;
+                    Logger::Warn(log_context)
+                        << "Parameter 'expire_days' cannot be negative: " << request.expire_days;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'expire_days' cannot be negative"
@@ -236,7 +247,8 @@ namespace disk::share {
             /// 解析可选参数 password
             if (json.isMember("password")) {
                 if (!json["password"].isString()) {
-                    Logger::Warn() << "Parameter 'password' type error: expected string";
+                    Logger::Warn(log_context)
+                        << "Parameter 'password' type error: expected string";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'password' type error: expected string"
@@ -245,8 +257,9 @@ namespace disk::share {
                 std::string pwd = json["password"].asString();
                 if (!pwd.empty()) {
                     if (pwd.length() < 4 || pwd.length() > 8) {
-                        Logger::Warn() << "Access password length must be between 4-8 characters: "
-                                 << pwd.length();
+                        Logger::Warn(log_context)
+                            << "Access password length must be between 4-8 characters: "
+                            << pwd.length();
                         return std::unexpected(ErrorInfo(
                             ErrorCode::ValidationFailed,
                             "Access password length must be between 4-8 characters"
@@ -259,7 +272,8 @@ namespace disk::share {
             /// 解析可选参数 permission
             if (json.isMember("permission")) {
                 if (!json["permission"].isString()) {
-                    Logger::Warn() << "Parameter 'permission' type error: expected string";
+                    Logger::Warn(log_context)
+                        << "Parameter 'permission' type error: expected string";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'permission' type error: expected string"
@@ -268,7 +282,8 @@ namespace disk::share {
                 std::string perm_str = json["permission"].asString();
                 auto perm_opt = StringToSharePermission(perm_str);
                 if (!perm_opt) {
-                    Logger::Warn() << "Parameter 'permission' invalid value: " << perm_str;
+                    Logger::Warn(log_context)
+                        << "Parameter 'permission' invalid value: " << perm_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'permission' invalid value, must be view or download"
@@ -277,11 +292,12 @@ namespace disk::share {
                 request.permission = *perm_opt;
             }
 
-            Logger::Debug() << "Parsed create share request: file_ids.size()=" << request.file_ids.size()
-                      << ", folder_ids.size()=" << request.folder_ids.size()
-                      << ", expire_days=" << request.expire_days
-                      << ", has_password=" << request.password.has_value()
-                      << ", permission=" << SharePermissionToString(request.permission);
+            Logger::Debug(log_context)
+                << "Parsed create share request: file_ids.size()=" << request.file_ids.size()
+                << ", folder_ids.size()=" << request.folder_ids.size()
+                << ", expire_days=" << request.expire_days
+                << ", has_password=" << request.password.has_value()
+                << ", permission=" << SharePermissionToString(request.permission);
 
             return request;
         }
@@ -335,8 +351,11 @@ namespace disk::share {
 
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<ShareListRequest> {
-            Logger::Debug() << "Start parsing share list request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<ShareListRequest> {
+            Logger::Debug(log_context) << "Start parsing share list request parameters";
 
             ShareListRequest request;
 
@@ -350,7 +369,8 @@ namespace disk::share {
             auto status_str = req->getParameter("status");
             if (!status_str.empty()) {
                 if (valid_statuses.find(status_str) == valid_statuses.end()) {
-                    Logger::Warn() << "Parameter 'status' invalid value: " << status_str;
+                    Logger::Warn(log_context)
+                        << "Parameter 'status' invalid value: " << status_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'status' invalid value, must be all/active/expired/cancelled"
@@ -361,20 +381,24 @@ namespace disk::share {
 
             /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page");
-            if (!page_result) return std::unexpected(page_result.error());
+            if (!page_result) {
+                return std::unexpected(page_result.error());
+            }
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
             /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
-            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (!page_size_result) {
+                return std::unexpected(page_size_result.error());
+            }
             if (page_size_result->has_value()) {
                 request.page_size = **page_size_result;
             }
 
-            Logger::Debug() << "Parsed share list request: status=" << request.status
-                      << ", page=" << request.page << ", page_size=" << request.page_size;
+            Logger::Debug(log_context) << "Parsed share list request: status=" << request.status
+                                       << ", page=" << request.page << ", page_size=" << request.page_size;
 
             return request;
         }
@@ -454,11 +478,14 @@ namespace disk::share {
 
         /// 从路径参数解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromPath(const std::string& share_id_str) -> Result<ShareDetailRequest> {
-            Logger::Debug() << "Start parsing share detail request parameters";
+        static auto FromPath(
+            const std::string& share_id_str,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<ShareDetailRequest> {
+            Logger::Debug(log_context) << "Start parsing share detail request parameters";
 
             if (share_id_str.empty()) {
-                Logger::Warn() << "Missing required parameter: share_id";
+                Logger::Warn(log_context) << "Missing required parameter: share_id";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: share_id")
                 );
@@ -467,7 +494,8 @@ namespace disk::share {
             ShareDetailRequest request;
             request.share_id = share_id_str;
 
-            Logger::Debug() << "Parsed share detail request: share_id=" << request.share_id;
+            Logger::Debug(log_context)
+                << "Parsed share detail request: share_id=" << request.share_id;
 
             return request;
         }
@@ -529,20 +557,27 @@ namespace disk::share {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req, const std::string& share_id_str)
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            const std::string& share_id_str,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<UpdateShareRequest> {
-            Logger::Debug() << "Start parsing update share settings request parameters";
+            Logger::Debug(log_context)
+                << "Start parsing update share settings request parameters";
 
             /// 验证路径参数 share_id
             if (share_id_str.empty()) {
-                Logger::Warn() << "Missing required parameter: share_id";
+                Logger::Warn(log_context) << "Missing required parameter: share_id";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: share_id")
                 );
             }
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             UpdateShareRequest request;
@@ -551,7 +586,8 @@ namespace disk::share {
             /// 解析可选参数 expire_days
             if (json.isMember("expire_days")) {
                 if (!json["expire_days"].isIntegral()) {
-                    Logger::Warn() << "Parameter 'expire_days' type error: expected integer";
+                    Logger::Warn(log_context)
+                        << "Parameter 'expire_days' type error: expected integer";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'expire_days' type error: expected integer"
@@ -559,7 +595,8 @@ namespace disk::share {
                 }
                 int expire_days = json["expire_days"].asInt();
                 if (expire_days < 0) {
-                    Logger::Warn() << "Parameter 'expire_days' cannot be negative: " << expire_days;
+                    Logger::Warn(log_context)
+                        << "Parameter 'expire_days' cannot be negative: " << expire_days;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'expire_days' cannot be negative"
@@ -571,7 +608,8 @@ namespace disk::share {
             /// 解析可选参数 password
             if (json.isMember("password")) {
                 if (!json["password"].isString()) {
-                    Logger::Warn() << "Parameter 'password' type error: expected string";
+                    Logger::Warn(log_context)
+                        << "Parameter 'password' type error: expected string";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'password' type error: expected string"
@@ -580,8 +618,8 @@ namespace disk::share {
                 std::string pwd = json["password"].asString();
                 /// 空字符串表示移除密码，非空时验证长度
                 if (!pwd.empty() && (pwd.length() < 4 || pwd.length() > 8)) {
-                    Logger::Warn() << "Access password length must be between 4-8 characters: "
-                             << pwd.length();
+                    Logger::Warn(log_context)
+                        << "Access password length must be between 4-8 characters: " << pwd.length();
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Access password length must be between 4-8 characters"
@@ -593,7 +631,8 @@ namespace disk::share {
             /// 解析可选参数 permission
             if (json.isMember("permission")) {
                 if (!json["permission"].isString()) {
-                    Logger::Warn() << "Parameter 'permission' type error: expected string";
+                    Logger::Warn(log_context)
+                        << "Parameter 'permission' type error: expected string";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'permission' type error: expected string"
@@ -602,7 +641,8 @@ namespace disk::share {
                 std::string perm_str = json["permission"].asString();
                 auto perm_opt = StringToSharePermission(perm_str);
                 if (!perm_opt) {
-                    Logger::Warn() << "Parameter 'permission' invalid value: " << perm_str;
+                    Logger::Warn(log_context)
+                        << "Parameter 'permission' invalid value: " << perm_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'permission' invalid value, must be view or download"
@@ -611,15 +651,16 @@ namespace disk::share {
                 request.permission = *perm_opt;
             }
 
-            Logger::Debug() << "Parsed update share settings request: share_id=" << request.share_id
-                      << ", expire_days="
-                      << (request.expire_days.has_value() ? std::to_string(*request.expire_days) :
-                                                            "null")
-                      << ", password=" << (request.password.has_value() ? "set" : "null")
-                      << ", permission="
-                      << (request.permission.has_value() ?
-                              SharePermissionToString(*request.permission) :
-                              "null");
+            Logger::Debug(log_context)
+                << "Parsed update share settings request: share_id=" << request.share_id
+                << ", expire_days="
+                << (request.expire_days.has_value() ? std::to_string(*request.expire_days) :
+                                                      "null")
+                << ", password=" << (request.password.has_value() ? "set" : "null")
+                << ", permission="
+                << (request.permission.has_value() ?
+                        SharePermissionToString(*request.permission) :
+                        "null");
 
             return request;
         }
@@ -665,23 +706,29 @@ namespace disk::share {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CancelShareRequest> {
-            Logger::Debug() << "Start parsing cancel share request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<CancelShareRequest> {
+            Logger::Debug(log_context) << "Start parsing cancel share request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             /// 检查必填字段 share_ids
             if (!json.isMember("share_ids")) {
-                Logger::Warn() << "Missing required parameter: share_ids";
+                Logger::Warn(log_context) << "Missing required parameter: share_ids";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: share_ids")
                 );
             }
 
             if (!json["share_ids"].isArray()) {
-                Logger::Warn() << "Parameter 'share_ids' type error: expected array";
+                Logger::Warn(log_context)
+                    << "Parameter 'share_ids' type error: expected array";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "Parameter 'share_ids' type error: expected array"
@@ -693,7 +740,8 @@ namespace disk::share {
             /// 解析 share_ids
             const auto& share_ids_array = json["share_ids"];
             if (share_ids_array.empty()) {
-                Logger::Warn() << "Parameter 'share_ids' cannot be empty array";
+                Logger::Warn(log_context)
+                    << "Parameter 'share_ids' cannot be empty array";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "Parameter 'share_ids' cannot be empty array"
@@ -702,7 +750,8 @@ namespace disk::share {
 
             for (const auto& item : share_ids_array) {
                 if (!item.isString()) {
-                    Logger::Warn() << "Element type error in parameter 'share_ids': expected string";
+                    Logger::Warn(log_context)
+                        << "Element type error in parameter 'share_ids': expected string";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::InvalidParameter,
                         "Element type error in parameter 'share_ids': expected string"
@@ -710,7 +759,8 @@ namespace disk::share {
                 }
                 std::string share_id = item.asString();
                 if (share_id.empty()) {
-                    Logger::Warn() << "Element in parameter 'share_ids' cannot be empty string";
+                    Logger::Warn(log_context)
+                        << "Element in parameter 'share_ids' cannot be empty string";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::InvalidParameter,
                         "Element in parameter 'share_ids' cannot be empty string"
@@ -719,8 +769,8 @@ namespace disk::share {
                 request.share_ids.push_back(share_id);
             }
 
-            Logger::Debug() << "Parsed cancel share request: share_ids.size()="
-                      << request.share_ids.size();
+            Logger::Debug(log_context)
+                << "Parsed cancel share request: share_ids.size()=" << request.share_ids.size();
 
             return request;
         }
@@ -821,13 +871,18 @@ namespace disk::share {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req, const std::string& share_id_str)
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            const std::string& share_id_str,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<AccessShareRequest> {
-            Logger::Debug() << "Start parsing access share verification request parameters";
+            Logger::Debug(log_context)
+                << "Start parsing access share verification request parameters";
 
             /// 验证路径参数 share_id
             if (share_id_str.empty()) {
-                Logger::Warn() << "Missing required parameter: share_id";
+                Logger::Warn(log_context) << "Missing required parameter: share_id";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: share_id")
                 );
@@ -844,7 +899,8 @@ namespace disk::share {
                 /// 解析可选参数 password
                 if (json.isMember("password")) {
                     if (!json["password"].isString()) {
-                        Logger::Warn() << "Parameter 'password' type error: expected string";
+                        Logger::Warn(log_context)
+                            << "Parameter 'password' type error: expected string";
                         return std::unexpected(ErrorInfo(
                             ErrorCode::ValidationFailed,
                             "Parameter 'password' type error: expected string"
@@ -857,8 +913,9 @@ namespace disk::share {
                 }
             }
 
-            Logger::Debug() << "Parsed access share verification request: share_id=" << request.share_id
-                      << ", has_password=" << request.password.has_value();
+            Logger::Debug(log_context)
+                << "Parsed access share verification request: share_id=" << request.share_id
+                << ", has_password=" << request.password.has_value();
 
             return request;
         }
@@ -906,13 +963,18 @@ namespace disk::share {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req, const std::string& share_id_str)
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            const std::string& share_id_str,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<BrowseShareRequest> {
-            Logger::Debug() << "Start parsing browse share content request parameters";
+            Logger::Debug(log_context)
+                << "Start parsing browse share content request parameters";
 
             /// 验证路径参数 share_id
             if (share_id_str.empty()) {
-                Logger::Warn() << "Missing required parameter: share_id";
+                Logger::Warn(log_context) << "Missing required parameter: share_id";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: share_id")
                 );
@@ -923,13 +985,16 @@ namespace disk::share {
 
             /// 解析可选参数 folder_id
             auto folder_id_result = QueryUInt64(req, "folder_id");
-            if (!folder_id_result) return std::unexpected(folder_id_result.error());
+            if (!folder_id_result) {
+                return std::unexpected(folder_id_result.error());
+            }
             request.folder_id = *folder_id_result;
 
-            Logger::Debug() << "Parsed browse share content request: share_id=" << request.share_id
-                      << ", folder_id="
-                      << (request.folder_id.has_value() ? std::to_string(*request.folder_id) :
-                                                          "null");
+            Logger::Debug(log_context)
+                << "Parsed browse share content request: share_id=" << request.share_id
+                << ", folder_id="
+                << (request.folder_id.has_value() ? std::to_string(*request.folder_id) :
+                                                    "null");
 
             return request;
         }
@@ -1021,13 +1086,18 @@ namespace disk::share {
 
         /// 从路径参数解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromPath(const std::string& share_id_str, const std::string& file_id_str)
+        static auto FromPath(
+            const std::string& share_id_str,
+            const std::string& file_id_str,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<DownloadShareRequest> {
-            Logger::Debug() << "Start parsing download share file request parameters";
+            Logger::Debug(log_context)
+                << "Start parsing download share file request parameters";
 
             /// 验证路径参数 share_id
             if (share_id_str.empty()) {
-                Logger::Warn() << "Missing required parameter: share_id";
+                Logger::Warn(log_context) << "Missing required parameter: share_id";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: share_id")
                 );
@@ -1035,7 +1105,7 @@ namespace disk::share {
 
             /// 验证路径参数 file_id
             if (file_id_str.empty()) {
-                Logger::Warn() << "Missing required parameter: file_id";
+                Logger::Warn(log_context) << "Missing required parameter: file_id";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: file_id")
                 );
@@ -1043,7 +1113,8 @@ namespace disk::share {
 
             /// 检查是否为负数（stoull 会将负数回绕）
             if (file_id_str[0] == '-') {
-                Logger::Warn() << "Parameter 'file_id' invalid format or value: " << file_id_str;
+                Logger::Warn(log_context)
+                    << "Parameter 'file_id' invalid format or value: " << file_id_str;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "Parameter 'file_id' must be a positive integer"
@@ -1055,14 +1126,16 @@ namespace disk::share {
                 size_t pos = 0;
                 file_id = std::stoull(file_id_str, &pos);
                 if (pos != file_id_str.length() || file_id == 0) {
-                    Logger::Warn() << "Parameter 'file_id' invalid format or value: " << file_id_str;
+                    Logger::Warn(log_context)
+                        << "Parameter 'file_id' invalid format or value: " << file_id_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::InvalidParameter,
                         "Parameter 'file_id' must be a positive integer"
                     ));
                 }
             } catch (const std::exception& e) {
-                Logger::Warn() << "Parameter 'file_id' invalid format: " << file_id_str;
+                Logger::Warn(log_context)
+                    << "Parameter 'file_id' invalid format: " << file_id_str;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidParameter, "Parameter 'file_id' invalid format")
                 );
@@ -1072,8 +1145,9 @@ namespace disk::share {
             request.share_id = share_id_str;
             request.file_id = file_id;
 
-            Logger::Debug() << "Parsed download share file request: share_id=" << request.share_id
-                      << ", file_id=" << request.file_id;
+            Logger::Debug(log_context)
+                << "Parsed download share file request: share_id=" << request.share_id
+                << ", file_id=" << request.file_id;
 
             return request;
         }
@@ -1088,34 +1162,45 @@ namespace disk::share {
         uint64_t target_folder_id{ 0 };
 
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req, const std::string& share_id_str)
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            const std::string& share_id_str,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<SaveShareItemsRequest> {
-            Logger::Debug() << "Start parsing save share items request parameters";
+            Logger::Debug(log_context) << "Start parsing save share items request parameters";
 
             if (share_id_str.empty()) {
-                Logger::Warn() << "Missing required parameter: share_id";
+                Logger::Warn(log_context) << "Missing required parameter: share_id";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidParameter, "Missing required parameter: share_id")
                 );
             }
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             SaveShareItemsRequest request;
             request.share_id = share_id_str;
 
             auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
-            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            if (!file_ids_result) {
+                return std::unexpected(file_ids_result.error());
+            }
             request.file_ids = std::move(*file_ids_result);
 
             auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
-            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            if (!folder_ids_result) {
+                return std::unexpected(folder_ids_result.error());
+            }
             request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
-                Logger::Warn() << "Save share request must contain file_ids or folder_ids";
+                Logger::Warn(log_context)
+                    << "Save share request must contain file_ids or folder_ids";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "Save share request must contain file_ids or folder_ids"
@@ -1124,7 +1209,8 @@ namespace disk::share {
 
             if (json.isMember("target_folder_id")) {
                 if (!json["target_folder_id"].isIntegral()) {
-                    Logger::Warn() << "Parameter 'target_folder_id' type error: expected integer";
+                    Logger::Warn(log_context)
+                        << "Parameter 'target_folder_id' type error: expected integer";
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'target_folder_id' type error: expected integer"
@@ -1133,10 +1219,11 @@ namespace disk::share {
                 request.target_folder_id = json["target_folder_id"].asUInt64();
             }
 
-            Logger::Debug() << "Parsed save share request: share_id=" << request.share_id
-                      << ", file_ids.size()=" << request.file_ids.size()
-                      << ", folder_ids.size()=" << request.folder_ids.size()
-                      << ", target_folder_id=" << request.target_folder_id;
+            Logger::Debug(log_context)
+                << "Parsed save share request: share_id=" << request.share_id
+                << ", file_ids.size()=" << request.file_ids.size()
+                << ", folder_ids.size()=" << request.folder_ids.size()
+                << ", target_folder_id=" << request.target_folder_id;
 
             return request;
         }
@@ -1175,4 +1262,4 @@ namespace disk::share {
         bool supports_range{ true };
     };
 
-    } ///< namespace disk::share
+} // namespace disk::share
