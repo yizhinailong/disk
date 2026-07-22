@@ -108,6 +108,10 @@ namespace disk::auth {
                      "co_await FindUser(",
                      "co_await IncrementLoginAttempts(",
                      "co_await UpdateLoginInfo(",
+                     "TokenService::GetInstance()->GenerateTokens(",
+                     "TokenService::GetInstance()->VerifyRefreshToken(",
+                     "TokenService::GetInstance()->RefreshRefreshToken(",
+                     "TokenService::GetInstance()->InvalidateAccessToken(",
                  }) {
                 EXPECT_TRUE(CallContainsContext(service_request_body, call_marker));
             }

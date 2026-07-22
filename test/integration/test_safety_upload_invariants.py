@@ -1714,6 +1714,7 @@ def test_auth_log_context_invariants() -> None:
         expected_success=True,
         message_markers=(
             "Received refresh token request",
+            "[auth_cpu_pool] op=jwt_refresh_verify",
             "Token refresh successful",
             "Refresh token successful",
         ),
@@ -1733,6 +1734,7 @@ def test_auth_log_context_invariants() -> None:
         request_id=logout_request_id,
         expected_success=True,
         message_markers=(
+            "[auth_cpu_pool] op=jwt_verify",
             "Received logout request",
             "User logout:",
             "User logout successful",
@@ -1757,10 +1759,14 @@ def test_auth_filter_log_context_invariants() -> None:
     """Verify JWT, share-token, and administrator filters retain request context."""
     log_section("Authentication Filter Structured Log Correlation")
 
+    malformed_access_token = f"malformed-owner-token-{unique_name()}"
     jwt_request_id = f"safety-jwt-filter-log-{unique_name()}"
     jwt_response = fetch(
         "/api/file/list",
-        headers={"X-Request-Id": jwt_request_id},
+        headers={
+            "Authorization": f"Bearer {malformed_access_token}",
+            "X-Request-Id": jwt_request_id,
+        },
     )
     assert_auth_filter_rejection_log_context(
         response=jwt_response,
@@ -1768,11 +1774,24 @@ def test_auth_filter_log_context_invariants() -> None:
         operation="file_query",
         message_marker="[jwt_auth_filter]",
     )
+    jwt_instance_id = header_value(jwt_response.headers, "X-Disk-Instance-Id")
+    wait_for_correlated_application_log(
+        request_id=jwt_request_id,
+        instance_id=jwt_instance_id,
+        operation="file_query",
+        upload_id=None,
+        message_marker="JWT parsing failed:",
+    )
+    log_pass("access-token parser rejection keeps caller request correlation")
 
+    malformed_share_token = f"malformed-visitor-token-{unique_name()}"
     share_request_id = f"safety-share-filter-log-{unique_name()}"
     share_response = fetch(
         f"/api/share/browse/missing-{unique_name()}",
-        headers={"X-Request-Id": share_request_id},
+        headers={
+            "X-Request-Id": share_request_id,
+            "X-Share-Token": malformed_share_token,
+        },
     )
     assert_auth_filter_rejection_log_context(
         response=share_response,
@@ -1780,6 +1799,15 @@ def test_auth_filter_log_context_invariants() -> None:
         operation="share",
         message_marker="[share_auth_filter]",
     )
+    share_instance_id = header_value(share_response.headers, "X-Disk-Instance-Id")
+    wait_for_correlated_application_log(
+        request_id=share_request_id,
+        instance_id=share_instance_id,
+        operation="share",
+        upload_id=None,
+        message_marker="Share token parsing failed:",
+    )
+    log_pass("share-token parser rejection keeps caller request correlation")
 
     username = unique_name("filteruser")
     email = f"{username}@example.com"
@@ -1828,7 +1856,15 @@ def test_auth_filter_log_context_invariants() -> None:
             operation="admin",
             message_marker="[admin_auth_filter]",
         )
-        assert_server_log_excludes_secrets((password, access_token, refresh_token))
+        assert_server_log_excludes_secrets(
+            (
+                malformed_access_token,
+                malformed_share_token,
+                password,
+                access_token,
+                refresh_token,
+            )
+        )
     finally:
         if user_id is not None:
             redis_delete_pattern(f"refresh_token:{user_id}")

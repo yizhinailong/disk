@@ -842,7 +842,8 @@ namespace disk::share {
             m_jwt_secret,
             share.getValueOfShareCode(),
             share.getValueOfId(),
-            share.getValueOfPermission()
+            share.getValueOfPermission(),
+            log_context
         );
         if (!token_result) {
             co_await m_audit_service.RecordAccess(ShareAccessAuditEvent{

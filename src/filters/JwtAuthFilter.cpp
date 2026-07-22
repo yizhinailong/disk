@@ -58,8 +58,8 @@ namespace disk::filters {
         const auto token = auth_header.substr(7);
         auto token_service = TokenService::GetInstance();
 
-        auto verify_result = co_await RunOnAuthCpuPool([token_service, token]() {
-            return token_service->VerifyAccessToken(token);
+        auto verify_result = co_await RunOnAuthCpuPool([token_service, token, log_context]() {
+            return token_service->VerifyAccessToken(token, log_context);
         });
         if (!verify_result) {
             auto end = std::chrono::steady_clock::now();

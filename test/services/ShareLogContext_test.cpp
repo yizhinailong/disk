@@ -138,6 +138,7 @@ namespace disk::share {
                      "co_await RecordFailedShareAccess(",
                      "co_await IncrementViewCount(",
                      "co_await GetShareFiles(",
+                     "TokenService::GenerateShareToken(",
                      "co_await ValidateShareActive(",
                      "co_await UpdateFileDownloadMetadata(",
                      "co_await IncrementDownloadCount(",

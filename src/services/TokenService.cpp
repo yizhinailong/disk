@@ -95,7 +95,6 @@ namespace disk::services {
         : m_jwt_secret(),
           m_jwt_verifier(BuildJwtVerifier("")),
           m_share_jwt_verifier(BuildShareJwtVerifier("")),
-          m_redis_client(nullptr),
           m_redis_service(RedisService::GetInstance()) {
         Logger::Debug() << "TokenService initialization completed";
     }
@@ -119,7 +118,13 @@ namespace disk::services {
             .with_issuer("disk_share");
     }
 
-    auto TokenService::GenerateTokens(uint64_t user_id, const std::string& username, int role, int status) const
+    auto TokenService::GenerateTokens(
+        uint64_t user_id,
+        const std::string& username,
+        int role,
+        int status,
+        disk::utils::LogContext log_context
+    ) const
         -> std::pair<std::string, std::string> {
 
         const auto now = std::chrono::system_clock::now();
@@ -157,24 +162,29 @@ namespace disk::services {
                 .set_issued_at(now)
                 .set_expires_at(now + std::chrono::seconds(GetRefreshTokenExpireSeconds()))
                 .sign(jwt::algorithm::hs256{ m_jwt_secret });
-        Logger::Debug() << "Generating token pair: user_id=" << user_id << ", access_jti=" << access_jti
-                        << ", refresh_jti=" << refresh_jti;
+        Logger::Debug(log_context)
+            << "Generating token pair: user_id=" << user_id << ", access_jti=" << access_jti
+            << ", refresh_jti=" << refresh_jti;
         return { access_token, refresh_token };
     }
 
-    auto TokenService::VerifyAccessToken(const std::string& token) const
+    auto TokenService::VerifyAccessToken(
+        const std::string& token,
+        disk::utils::LogContext log_context
+    ) const
         -> Result<AccessTokenClaims> {
 
         g_pool_metrics.OnSubmit();
         const auto start = std::chrono::steady_clock::now();
 
-        auto cleanup = [start]() {
+        auto cleanup = [start, log_context]() {
             g_pool_metrics.OnComplete();
             const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
                                         std::chrono::steady_clock::now() - start
             )
                                         .count();
-            Logger::Info() << "[auth_cpu_pool] op=jwt_verify duration_us=" << elapsed_us;
+            Logger::Info(log_context)
+                << "[auth_cpu_pool] op=jwt_verify duration_us=" << elapsed_us;
         };
 
         try {
@@ -206,38 +216,43 @@ namespace disk::services {
 
             cleanup();
 
-            Logger::Trace() << "JWT verification successful: user_id=" << user_id
-                            << ", username=" << username << ", jti=" << jti
-                            << ", role=" << token_role << ", status=" << token_status;
+            Logger::Trace(log_context)
+                << "JWT verification successful: user_id=" << user_id
+                << ", username=" << username << ", jti=" << jti
+                << ", role=" << token_role << ", status=" << token_status;
             return AccessTokenClaims{ .user_id = user_id, .username = username, .jti = jti, .role = token_role, .status = token_status };
 
         } catch (const jwt::error::token_verification_exception& e) {
             cleanup();
-            Logger::Warn() << "JWT verification failed: " << e.what();
+            Logger::Warn(log_context) << "JWT verification failed: " << e.what();
             if (std::string(e.what()).find("expired") != std::string::npos) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::InvalidToken));
         } catch (const std::exception& e) {
             cleanup();
-            Logger::Warn() << "JWT parsing failed: " << e.what();
+            Logger::Warn(log_context) << "JWT parsing failed: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
 
-    auto TokenService::VerifyRefreshToken(const std::string& token) const
+    auto TokenService::VerifyRefreshToken(
+        const std::string& token,
+        disk::utils::LogContext log_context
+    ) const
         -> Result<std::pair<uint64_t, std::string>> {
 
         g_pool_metrics.OnSubmit();
         const auto start = std::chrono::steady_clock::now();
 
-        auto cleanup = [start]() {
+        auto cleanup = [start, log_context]() {
             g_pool_metrics.OnComplete();
             const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
                                         std::chrono::steady_clock::now() - start
             )
                                         .count();
-            Logger::Info() << "[auth_cpu_pool] op=jwt_refresh_verify duration_us=" << elapsed_us;
+            Logger::Info(log_context)
+                << "[auth_cpu_pool] op=jwt_refresh_verify duration_us=" << elapsed_us;
         };
 
         try {
@@ -258,20 +273,21 @@ namespace disk::services {
 
             cleanup();
 
-            Logger::Trace() << "Refresh token verification successful: user_id=" << user_id
-                            << ", jti=" << jti;
+            Logger::Trace(log_context)
+                << "Refresh token verification successful: user_id=" << user_id
+                << ", jti=" << jti;
             return std::make_pair(user_id, jti);
 
         } catch (const jwt::error::token_verification_exception& e) {
             cleanup();
-            Logger::Warn() << "Refresh token verification failed: " << e.what();
+            Logger::Warn(log_context) << "Refresh token verification failed: " << e.what();
             if (std::string(e.what()).find("expired") != std::string::npos) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::InvalidRefreshToken));
         } catch (const std::exception& e) {
             cleanup();
-            Logger::Warn() << "Refresh token parsing failed: " << e.what();
+            Logger::Warn(log_context) << "Refresh token parsing failed: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -292,7 +308,8 @@ namespace disk::services {
     auto TokenService::RefreshRefreshToken(
         uint64_t user_id,
         const std::string& old_token,
-        const std::string& new_token
+        const std::string& new_token,
+        disk::utils::LogContext log_context
     ) -> drogon::Task<Result<void>> {
         const auto key = disk::redis::RedisKeyPrefix::BuildRefreshTokenKey(user_id);
 
@@ -317,22 +334,26 @@ namespace disk::services {
         );
 
         if (!cas_result) {
-            Logger::Error() << "Redis CAS operation failed: user_id=" << user_id;
+            Logger::Error(log_context) << "Redis CAS operation failed: user_id=" << user_id;
             co_return std::unexpected(cas_result.error());
         }
 
         if (!cas_result.value()) {
-            Logger::Warn() << "Refresh token already used or refreshed (CAS failed): user_id=" << user_id;
+            Logger::Warn(log_context)
+                << "Refresh token already used or refreshed (CAS failed): user_id=" << user_id;
             co_return std::unexpected(ErrorInfo(disk::error::Code::RefreshTokenAlreadyUsed));
         }
 
-        Logger::Debug() << "Refresh token rotated successfully: user_id=" << user_id;
+        Logger::Debug(log_context) << "Refresh token rotated successfully: user_id=" << user_id;
         co_return {};
     }
 
-    auto TokenService::InvalidateAccessToken(const std::string& token)
+    auto TokenService::InvalidateAccessToken(
+        const std::string& token,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<void>> {
-        auto jti_result = ExtractJti(token);
+        auto jti_result = ExtractJti(token, log_context);
         if (!jti_result) {
             co_return std::unexpected(jti_result.error());
         }
@@ -486,7 +507,10 @@ namespace disk::services {
                         << " share_size=" << share_remaining;
     }
 
-    auto TokenService::ExtractJti(const std::string& token) const -> Result<std::string> {
+    auto TokenService::ExtractJti(
+        const std::string& token,
+        disk::utils::LogContext log_context
+    ) const -> Result<std::string> {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
         try {
@@ -498,34 +522,13 @@ namespace disk::services {
                 return jti.as_string();
             }
 
-            Logger::Warn() << "Token missing JTI claim";
+            Logger::Warn(log_context) << "Token missing JTI claim";
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         } catch (const jwt::error::token_verification_exception& e) {
-            Logger::Warn() << "Failed to extract JTI: " << e.what();
+            Logger::Warn(log_context) << "Failed to extract JTI: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         } catch (const std::exception& e) {
-            Logger::Warn() << "Failed to extract JTI: " << e.what();
-            return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
-        }
-    }
-
-    auto TokenService::CalculateRemainingTtl(const std::string& token) const -> Result<int> {
-        using traits = jwt::traits::open_source_parsers_jsoncpp;
-
-        try {
-            auto decoded = jwt::decode<traits>(token);
-            auto exp = decoded.get_expires_at();
-            auto now = std::chrono::system_clock::now();
-
-            auto remaining = std::chrono::duration_cast<std::chrono::seconds>(exp - now).count();
-
-            if (remaining <= 0) {
-                return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
-            }
-
-            return static_cast<int>(remaining);
-        } catch (const std::exception& e) {
-            Logger::Warn() << "Failed to calculate TTL: " << e.what();
+            Logger::Warn(log_context) << "Failed to extract JTI: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -536,7 +539,8 @@ namespace disk::services {
         const std::string& jwt_secret,
         const std::string& share_code,
         uint64_t share_id,
-        const std::string& permission
+        const std::string& permission,
+        disk::utils::LogContext log_context
     ) -> Result<std::string> {
         using traits = jwt::traits::open_source_parsers_jsoncpp;
 
@@ -567,18 +571,22 @@ namespace disk::services {
                     .set_expires_at(now + std::chrono::seconds(GetShareTokenExpireSeconds()))
                     .sign(jwt::algorithm::hs256{ jwt_secret });
 
-            Logger::Debug() << "Generated share token: share_code=" << share_code
-                            << ", share_id=" << share_id;
+            Logger::Debug(log_context) << "Generated share token: share_code=" << share_code
+                                       << ", share_id=" << share_id;
             return token;
         } catch (const std::exception& e) {
-            Logger::Error() << "Failed to generate share token: " << e.what();
+            Logger::Error(log_context) << "Failed to generate share token: " << e.what();
             return std::unexpected(
                 ErrorInfo(disk::error::Code::InternalError, "Token generation failed")
             );
         }
     }
 
-    auto TokenService::VerifyShareToken(const std::string& jwt_secret, const std::string& token)
+    auto TokenService::VerifyShareToken(
+        const std::string& jwt_secret,
+        const std::string& token,
+        disk::utils::LogContext log_context
+    )
         -> Result<ShareTokenClaims> {
         if (token.empty()) {
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed, "Token is empty"));
@@ -621,8 +629,9 @@ namespace disk::services {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
             }
 
-            Logger::Debug() << "Share token verification successful: share_code=" << share_code
-                            << ", share_id=" << share_id;
+            Logger::Debug(log_context)
+                << "Share token verification successful: share_code=" << share_code
+                << ", share_id=" << share_id;
             return ShareTokenClaims{
                 .share_code = share_code,
                 .share_id = share_id,
@@ -634,13 +643,13 @@ namespace disk::services {
             };
 
         } catch (const jwt::error::token_verification_exception& e) {
-            Logger::Warn() << "Share token verification failed: " << e.what();
+            Logger::Warn(log_context) << "Share token verification failed: " << e.what();
             if (std::string(e.what()).find("expired") != std::string::npos) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         } catch (const std::exception& e) {
-            Logger::Warn() << "Share token parsing failed: " << e.what();
+            Logger::Warn(log_context) << "Share token parsing failed: " << e.what();
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -655,9 +664,13 @@ namespace disk::services {
 
     /// ==================== Share Token Redis 异步方法 ====================
 
-    auto TokenService::VerifyShareTokenWithRedis(const std::string& share_code, const std::string& token)
+    auto TokenService::VerifyShareTokenWithRedis(
+        const std::string& share_code,
+        const std::string& token,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<ShareTokenClaims>> {
-        auto verify_result = VerifyShareToken(m_jwt_secret, token);
+        auto verify_result = VerifyShareToken(m_jwt_secret, token, log_context);
         if (!verify_result) {
             co_return std::unexpected(verify_result.error());
         }
@@ -672,7 +685,7 @@ namespace disk::services {
             co_return std::unexpected(revoked.error());
         }
         if (revoked.value()) {
-            Logger::Warn() << "Share token has been revoked: share_code=" << share_code;
+            Logger::Warn(log_context) << "Share token has been revoked: share_code=" << share_code;
             co_return std::unexpected(ErrorInfo(disk::error::Code::TokenRevoked));
         }
 

@@ -52,6 +52,7 @@ set(TEST_SOURCES
     services/StorageJobWorker_test.cpp
     services/StorageWorkerRuntime_test.cpp
     services/StorageReconciliationService_test.cpp
+    services/TokenServiceLogContext_test.cpp
     services/TokenService_test.cpp
     services/TokenServiceRevocation_test.cpp
     services/TrashService_test.cpp

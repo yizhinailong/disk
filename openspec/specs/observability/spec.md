@@ -81,6 +81,29 @@ The JWT authentication, share-token authentication, and administrator-authorizat
 - **WHEN** JWT or share-token authentication succeeds or fails
 - **THEN** filter events and typed correlation fields SHALL NOT contain raw Authorization or `X-Share-Token` header values, access tokens, refresh tokens, share tokens, passwords, password hashes, or storage credentials
 
+### Requirement: Token Service Correlation
+The shared token service SHALL accept explicit correlation by value for request-reachable access-token, refresh-token, and share-token generation, verification, rotation, revocation parsing, and revoked-token rejection events. Authentication services and JWT/share authentication filters SHALL pass their already established request context without changing token claims, signatures, TTLs, Redis keys, CAS behavior, revocation behavior, error mapping, or public responses.
+
+#### Scenario: Token service handles an authenticated request
+- **WHEN** access or refresh token work is initiated by login, refresh, logout, or JWT authentication
+- **THEN** every directly owned request event SHALL retain the caller's request ID, actual handling instance, and bounded HTTP operation across the authentication CPU-pool boundary when applicable
+
+#### Scenario: Token service handles a share request
+- **WHEN** share access generates a token or share authentication verifies or rejects a token
+- **THEN** every directly owned request event SHALL retain the caller's request ID, actual handling instance, and bounded `share` or `download` operation supplied by the calling route
+
+#### Scenario: Token service observes token-domain values
+- **WHEN** the service observes a user ID, username, token JTI, share code, internal share ID, permission, Redis result, duration, or parsing result
+- **THEN** it SHALL NOT derive upload ID, job ID, lease owner, or state version from that value, and those fields SHALL remain as supplied by the caller
+
+#### Scenario: Token service handles credentials or a context-free caller
+- **WHEN** token work receives a JWT secret, access token, refresh token, share token, Authorization value, or `X-Share-Token` value, or a unit/utility caller omits explicit correlation
+- **THEN** application events SHALL NOT contain those credential values, and the compatibility call SHALL use explicit JSON null correlation rather than thread-local or token-derived state
+
+#### Scenario: Token service emits process events
+- **WHEN** token-singleton initialization, authentication CPU-pool creation, cache-maintenance timer startup, metrics timer startup, periodic pool metrics, or cache eviction emits a process event
+- **THEN** request ID, operation, upload ID, job ID, lease owner, and state version SHALL remain JSON null because no HTTP request owns that event
+
 ### Requirement: Upload Rate-Limit Filter Correlation
 The route-owned upload rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every request-attribute failure, counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing its init, chunk, complete, and cancel route ownership, user fixed-window key, configured window or threshold, fail-open behavior, or HTTP response.
 

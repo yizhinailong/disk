@@ -18,13 +18,13 @@
 #include <unordered_map>
 #include <utility>
 
-#include <drogon/nosql/RedisClient.h>
 #include <gtest/gtest_prod.h>
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
 
 #include "services/RedisService.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 #include "utils/Singleton.hpp"
 
 namespace trantor {
@@ -113,7 +113,13 @@ namespace disk::services {
          * @return pair<access_token, refresh_token>
          */
         [[nodiscard]]
-        auto GenerateTokens(uint64_t user_id, const std::string& username, int role = 0, int status = 1) const -> std::pair<std::string, std::string>;
+        auto GenerateTokens(
+            uint64_t user_id,
+            const std::string& username,
+            int role = 0,
+            int status = 1,
+            disk::utils::LogContext log_context = {}
+        ) const -> std::pair<std::string, std::string>;
 
         /**
          * @brief 获取访问令牌过期时间（秒）
@@ -157,7 +163,10 @@ namespace disk::services {
          * @return Result<AccessTokenClaims> 验证成功返回声明信息（含jti），失败返回错误
          */
         [[nodiscard]]
-        auto VerifyAccessToken(const std::string& token) const -> Result<AccessTokenClaims>;
+        auto VerifyAccessToken(
+            const std::string& token,
+            disk::utils::LogContext log_context = {}
+        ) const -> Result<AccessTokenClaims>;
 
         /**
          * @brief 验证刷新令牌
@@ -165,7 +174,10 @@ namespace disk::services {
          * @return Result<pair<user_id, jti>> 验证成功返回用户ID和JTI，失败返回错误
          */
         [[nodiscard]]
-        auto VerifyRefreshToken(const std::string& token) const -> Result<std::pair<uint64_t, std::string>>;
+        auto VerifyRefreshToken(
+            const std::string& token,
+            disk::utils::LogContext log_context = {}
+        ) const -> Result<std::pair<uint64_t, std::string>>;
 
         /**
          * @brief 存储 refresh_token 到 Redis
@@ -187,7 +199,12 @@ namespace disk::services {
          * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto RefreshRefreshToken(uint64_t user_id, const std::string& old_token, const std::string& new_token)
+        auto RefreshRefreshToken(
+            uint64_t user_id,
+            const std::string& old_token,
+            const std::string& new_token,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<void>>;
 
         /**
@@ -196,7 +213,10 @@ namespace disk::services {
          * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
         [[nodiscard]]
-        auto InvalidateAccessToken(const std::string& token) -> drogon::Task<Result<void>>;
+        auto InvalidateAccessToken(
+            const std::string& token,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<void>>;
 
         /**
          * @brief 撤销刷新令牌
@@ -267,7 +287,8 @@ namespace disk::services {
             const std::string& jwt_secret,
             const std::string& share_code,
             uint64_t share_id,
-            const std::string& permission
+            const std::string& permission,
+            disk::utils::LogContext log_context = {}
         ) -> Result<std::string>;
 
         /**
@@ -280,7 +301,8 @@ namespace disk::services {
         [[nodiscard]]
         static auto VerifyShareToken(
             const std::string& jwt_secret,
-            const std::string& token
+            const std::string& token,
+            disk::utils::LogContext log_context = {}
         ) -> Result<ShareTokenClaims>;
 
         /**
@@ -311,7 +333,11 @@ namespace disk::services {
          * @return drogon::Task<Result<ShareTokenClaims>> 成功返回声明信息，失败返回错误
          */
         [[nodiscard]]
-        auto VerifyShareTokenWithRedis(const std::string& share_code, const std::string& token)
+        auto VerifyShareTokenWithRedis(
+            const std::string& share_code,
+            const std::string& token,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<ShareTokenClaims>>;
 
         /**
@@ -382,15 +408,10 @@ namespace disk::services {
          * @return Result<std::string> 成功返回 JTI，失败返回错误
          */
         [[nodiscard]]
-        auto ExtractJti(const std::string& token) const -> Result<std::string>;
-
-        /**
-         * @brief 计算令牌剩余 TTL（秒）
-         * @param token JWT 令牌
-         * @return Result<int> 成功返回剩余秒数，失败返回错误
-         */
-        [[nodiscard]]
-        auto CalculateRemainingTtl(const std::string& token) const -> Result<int>;
+        auto ExtractJti(
+            const std::string& token,
+            disk::utils::LogContext log_context
+        ) const -> Result<std::string>;
 
         static constexpr int CACHE_MAINTENANCE_INTERVAL_SECONDS = 60;
 
@@ -487,7 +508,6 @@ namespace disk::services {
         std::string m_jwt_secret;
         JwtVerifier m_jwt_verifier;
         JwtVerifier m_share_jwt_verifier;
-        drogon::nosql::RedisClientPtr m_redis_client;
         std::shared_ptr<RedisService> m_redis_service{};
         mutable std::shared_mutex m_cache_mutex;
         mutable ExpiryCache<std::string, RevocationCacheEntry> m_revocation_cache;

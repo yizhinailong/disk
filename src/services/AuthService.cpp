@@ -198,8 +198,13 @@ namespace disk::auth {
         }
 
         /// 4. 生成令牌
-        auto [access_token, refresh_token] =
-            TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername(), user.getValueOfRole(), user.getValueOfStatus());
+        auto [access_token, refresh_token] = TokenService::GetInstance()->GenerateTokens(
+            user.getValueOfId(),
+            user.getValueOfUsername(),
+            user.getValueOfRole(),
+            user.getValueOfStatus(),
+            log_context
+        );
 
         /// 5. 存储 refresh_token 到 Redis
         auto store_result =
@@ -234,7 +239,10 @@ namespace disk::auth {
         Logger::Debug(log_context) << "Starting token refresh";
 
         /// 1. 验证刷新令牌
-        auto verify_result = TokenService::GetInstance()->VerifyRefreshToken(request.refresh_token);
+        auto verify_result = TokenService::GetInstance()->VerifyRefreshToken(
+            request.refresh_token,
+            log_context
+        );
         if (!verify_result) {
             Logger::Warn(log_context) << "Refresh token verification failed";
             co_return std::unexpected(verify_result.error());
@@ -267,14 +275,20 @@ namespace disk::auth {
             }
 
             /// 4. 生成新的令牌对
-            auto [access_token, new_refresh_token] =
-                TokenService::GetInstance()->GenerateTokens(user.getValueOfId(), user.getValueOfUsername(), user.getValueOfRole(), user.getValueOfStatus());
+            auto [access_token, new_refresh_token] = TokenService::GetInstance()->GenerateTokens(
+                user.getValueOfId(),
+                user.getValueOfUsername(),
+                user.getValueOfRole(),
+                user.getValueOfStatus(),
+                log_context
+            );
 
             /// 5. 刷新 Redis 中的 token（原子操作）
             auto refresh_result = co_await TokenService::GetInstance()->RefreshRefreshToken(
                 user.getValueOfId(),
                 request.refresh_token,
-                new_refresh_token
+                new_refresh_token,
+                log_context
             );
             if (!refresh_result) {
                 Logger::Warn(log_context)
@@ -316,7 +330,10 @@ namespace disk::auth {
         Logger::Info(log_context) << "User logout: user_id=" << user_id << ", ip=" << ip_address;
 
         /// 步骤 1: 使访问令牌失效
-        auto invalidate_result = co_await TokenService::GetInstance()->InvalidateAccessToken(access_token);
+        auto invalidate_result = co_await TokenService::GetInstance()->InvalidateAccessToken(
+            access_token,
+            log_context
+        );
         if (!invalidate_result.has_value()) {
             Logger::Warn(log_context)
                 << "Access token invalidation failed: user_id=" << user_id;
