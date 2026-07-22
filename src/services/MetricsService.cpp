@@ -227,6 +227,10 @@ namespace disk::metrics {
             IsNumericFolderActionPath(path, "/rename")) {
             return HttpOperation::FolderMutation;
         }
+        if (path == "/api/trash" || path == "/api/trash/restore" ||
+            path == "/api/trash/delete" || path == "/api/trash/all") {
+            return HttpOperation::Trash;
+        }
         if (path == "/api/share" || path.starts_with("/api/share/")) {
             return HttpOperation::Share;
         }
@@ -248,6 +252,7 @@ namespace disk::metrics {
             "file_mutation",
             "folder_query",
             "folder_mutation",
+            "trash",
             "upload_init",
             "upload_chunk",
             "upload_complete",

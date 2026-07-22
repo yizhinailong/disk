@@ -87,6 +87,25 @@ The system SHALL classify exact folder-tree and numeric breadcrumb requests as t
 - **WHEN** a folder path has a nonnumeric ID, an extra suffix, or is not one of the four recognized routes
 - **THEN** the folder classifiers SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
 
+### Requirement: Typed Trash Correlation
+The system SHALL classify the exact trash-list, restore, permanent-delete compatibility, and empty-all paths as the single bounded `trash` operation because list and permanent delete share `/api/trash`, and SHALL propagate their correlation explicitly by value across controller, trash-DTO, and trash-service boundaries.
+
+#### Scenario: User reads or mutates trash
+- **WHEN** an authenticated request enters trash list, batch restore, either permanent-delete compatibility route, or empty-all
+- **THEN** its response, controller events, direct trash-DTO events when present, and trash-service events SHALL retain the same request ID, actual handling instance, and `trash` operation
+
+#### Scenario: Trash HTTP completion is emitted
+- **WHEN** a trash response emits its HTTP completion event at the configured log level
+- **THEN** that event SHALL retain the response request ID, actual handling instance, and `trash` operation; successful completion remains `DEBUG` while non-2xx completion remains `WARN`
+
+#### Scenario: Trash request has no upload or durable-job ownership
+- **WHEN** a trash request records trash, user, file, folder, content, path, quota, transaction, or cache identifiers
+- **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those trash-domain values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: Trash classification remains bounded
+- **WHEN** a trash path has an extra suffix or is not one of `/api/trash`, `/api/trash/restore`, `/api/trash/delete`, and `/api/trash/all`
+- **THEN** the trash classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
+
 ### Requirement: Typed Upload Completion Correlation
 The system SHALL propagate upload-completion correlation explicitly across controller, service, lifecycle, database, and storage coroutine boundaries without thread-local request state or message parsing.
 

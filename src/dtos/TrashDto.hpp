@@ -30,6 +30,7 @@
 
 #include "utils/DtoBase.hpp"
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::trash {
 
@@ -49,25 +50,32 @@ namespace disk::trash {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<TrashListRequest> {
-            Logger::Debug() << "Start parsing trash list request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<TrashListRequest> {
+            Logger::Debug(log_context) << "Start parsing trash list request parameters";
 
             TrashListRequest request;
 
             auto page_result = QueryPositiveInt(req, "page", 1);
-            if (!page_result) return std::unexpected(page_result.error());
+            if (!page_result) {
+                return std::unexpected(page_result.error());
+            }
             if (page_result->has_value()) {
                 request.page = **page_result;
             }
 
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
-            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (!page_size_result) {
+                return std::unexpected(page_size_result.error());
+            }
             if (page_size_result->has_value()) {
                 request.page_size = **page_size_result;
             }
 
-            Logger::Debug() << "Parsed trash list request: page=" << request.page
-                      << ", page_size=" << request.page_size;
+            Logger::Debug(log_context) << "Parsed trash list request: page=" << request.page
+                                       << ", page_size=" << request.page_size;
 
             return request;
         }
@@ -86,20 +94,28 @@ namespace disk::trash {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<TrashBatchRequest> {
-            Logger::Debug() << "Start parsing batch operation request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<TrashBatchRequest> {
+            Logger::Debug(log_context) << "Start parsing batch operation request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto ids_result = RequirePositiveIdArray(json, "trash_ids");
-            if (!ids_result) return std::unexpected(ids_result.error());
+            if (!ids_result) {
+                return std::unexpected(ids_result.error());
+            }
 
             TrashBatchRequest request;
             request.trash_ids = std::move(*ids_result);
 
-            Logger::Debug() << "Parsed batch operation request: " << request.trash_ids.size() << " IDs";
+            Logger::Debug(log_context)
+                << "Parsed batch operation request: " << request.trash_ids.size() << " IDs";
 
             return request;
         }
@@ -283,4 +299,4 @@ namespace disk::trash {
         }
     };
 
-} ///< namespace disk::trash
+} // namespace disk::trash

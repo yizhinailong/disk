@@ -143,20 +143,28 @@ namespace disk::trash {
          * @param user_id 用户 ID
          * @param page 页码（从 1 开始）
          * @param page_size 每页数量
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<std::vector<TrashItemResponse>>> 成功返回项目列表，失败返回错误
          */
         [[nodiscard]]
-        auto List(uint64_t user_id, int page, int page_size)
+        auto List(
+            uint64_t user_id,
+            int page,
+            int page_size,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<std::vector<TrashItemResponse>>>;
 
         /**
          * @brief 统计用户回收站项目总数
          *
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<int>> 成功返回总数，失败返回错误
          */
         [[nodiscard]]
-        auto Count(uint64_t user_id) -> drogon::Task<Result<int>>;
+        auto Count(uint64_t user_id, disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<int>>;
 
         /**
          * @brief 批量恢复回收站项目
@@ -170,10 +178,15 @@ namespace disk::trash {
          *
          * @param user_id 用户 ID
          * @param trash_ids 回收站项目 ID 列表
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<BatchRestoreResponse>> 成功返回批量恢复结果，失败返回错误
          */
         [[nodiscard]]
-        auto Restore(uint64_t user_id, const std::vector<uint64_t>& trash_ids)
+        auto Restore(
+            uint64_t user_id,
+            const std::vector<uint64_t>& trash_ids,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<BatchRestoreResponse>>;
 
         /**
@@ -188,10 +201,15 @@ namespace disk::trash {
          *
          * @param user_id 用户 ID
          * @param trash_ids 回收站项目 ID 列表
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<BatchDeleteResponse>> 成功返回批量删除结果，失败返回错误
          */
         [[nodiscard]]
-        auto Delete(uint64_t user_id, const std::vector<uint64_t>& trash_ids)
+        auto Delete(
+            uint64_t user_id,
+            const std::vector<uint64_t>& trash_ids,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<BatchDeleteResponse>>;
 
         /**
@@ -204,10 +222,12 @@ namespace disk::trash {
          * - 返回删除数量和释放空间
          *
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<DeleteAllResponse>> 成功返回清空结果，失败返回错误
          */
         [[nodiscard]]
-        auto DeleteAll(uint64_t user_id) -> drogon::Task<Result<DeleteAllResponse>>;
+        auto DeleteAll(uint64_t user_id, disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<DeleteAllResponse>>;
 
     private:
         struct PermanentDeleteResult {
@@ -247,6 +267,7 @@ namespace disk::trash {
          * @param name 原始文件名
          * @param user_id 用户 ID
          * @param is_file 是否为文件（true: 文件，false: 文件夹）
+         * @param log_context 请求日志上下文
          * @return drogon::Task<std::string> 唯一文件名
          */
         [[nodiscard]]
@@ -254,7 +275,8 @@ namespace disk::trash {
             uint64_t folder_id,
             const std::string& name,
             uint64_t user_id,
-            bool is_file
+            bool is_file,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<std::string>;
 
         /**
@@ -263,10 +285,16 @@ namespace disk::trash {
          * @param folder_id 文件夹 ID
          * @param filename 文件名
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<bool> 存在返回 true
          */
         [[nodiscard]]
-        auto IsFilenameExists(uint64_t folder_id, const std::string& filename, uint64_t user_id) const
+        auto IsFilenameExists(
+            uint64_t folder_id,
+            const std::string& filename,
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<bool>;
 
         /**
@@ -275,10 +303,16 @@ namespace disk::trash {
          * @param folder_id 父文件夹 ID
          * @param foldername 文件夹名
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<bool> 存在返回 true
          */
         [[nodiscard]]
-        auto IsFolderNameExists(uint64_t folder_id, const std::string& foldername, uint64_t user_id) const
+        auto IsFolderNameExists(
+            uint64_t folder_id,
+            const std::string& foldername,
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const
             -> drogon::Task<bool>;
 
         /**
@@ -286,10 +320,15 @@ namespace disk::trash {
          *
          * @param folder_id 文件夹 ID
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<bool> 存在且属于用户返回 true
          */
         [[nodiscard]]
-        auto IsFolderExists(uint64_t folder_id, uint64_t user_id) const -> drogon::Task<bool>;
+        auto IsFolderExists(
+            uint64_t folder_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const -> drogon::Task<bool>;
 
         /**
          * @brief 更新用户存储使用量
@@ -306,10 +345,21 @@ namespace disk::trash {
          * @param trash_id 回收站项目 ID
          * @param user_id 用户 ID
          * @param result 输出参数：操作结果
+         * @param log_context 请求日志上下文
          * @return drogon::Task<void>
          */
-        auto RestoreFile(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<void>;
-        auto RestoreFile(const TrashLifecycleRecord& trash_item, uint64_t user_id, BatchResultItem& result)
+        auto RestoreFile(
+            uint64_t trash_id,
+            uint64_t user_id,
+            BatchResultItem& result,
+            disk::utils::LogContext log_context
+        ) -> drogon::Task<void>;
+        auto RestoreFile(
+            const TrashLifecycleRecord& trash_item,
+            uint64_t user_id,
+            BatchResultItem& result,
+            disk::utils::LogContext log_context
+        )
             -> drogon::Task<void>;
 
         /**
@@ -318,13 +368,20 @@ namespace disk::trash {
          * @param trash_id 回收站项目 ID
          * @param user_id 用户 ID
          * @param result 输出参数：操作结果
+         * @param log_context 请求日志上下文
          * @return drogon::Task<void>
          */
-        auto RestoreFolder(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<void>;
+        auto RestoreFolder(
+            uint64_t trash_id,
+            uint64_t user_id,
+            BatchResultItem& result,
+            disk::utils::LogContext log_context
+        ) -> drogon::Task<void>;
         auto RestoreFolder(
             const TrashLifecycleRecord& trash_item,
             uint64_t user_id,
-            BatchResultItem& result
+            BatchResultItem& result,
+            disk::utils::LogContext log_context
         ) -> drogon::Task<void>;
 
         /**
@@ -333,10 +390,21 @@ namespace disk::trash {
          * @param trash_id 回收站项目 ID
          * @param user_id 用户 ID
          * @param result 输出参数：操作结果
+         * @param log_context 请求日志上下文
          * @return drogon::Task<uint64_t> 返回释放的空间大小
          */
-        auto DeleteFile(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<uint64_t>;
-        auto DeleteFile(const TrashLifecycleRecord& trash_item, uint64_t user_id, BatchResultItem& result)
+        auto DeleteFile(
+            uint64_t trash_id,
+            uint64_t user_id,
+            BatchResultItem& result,
+            disk::utils::LogContext log_context
+        ) -> drogon::Task<uint64_t>;
+        auto DeleteFile(
+            const TrashLifecycleRecord& trash_item,
+            uint64_t user_id,
+            BatchResultItem& result,
+            disk::utils::LogContext log_context
+        )
             -> drogon::Task<uint64_t>;
 
         /**
@@ -345,10 +413,21 @@ namespace disk::trash {
          * @param trash_id 回收站项目 ID
          * @param user_id 用户 ID
          * @param result 输出参数：操作结果
+         * @param log_context 请求日志上下文
          * @return drogon::Task<uint64_t> 返回释放的空间大小
          */
-        auto DeleteFolder(uint64_t trash_id, uint64_t user_id, BatchResultItem& result) -> drogon::Task<uint64_t>;
-        auto DeleteFolder(const TrashLifecycleRecord& trash_item, uint64_t user_id, BatchResultItem& result)
+        auto DeleteFolder(
+            uint64_t trash_id,
+            uint64_t user_id,
+            BatchResultItem& result,
+            disk::utils::LogContext log_context
+        ) -> drogon::Task<uint64_t>;
+        auto DeleteFolder(
+            const TrashLifecycleRecord& trash_item,
+            uint64_t user_id,
+            BatchResultItem& result,
+            disk::utils::LogContext log_context
+        )
             -> drogon::Task<uint64_t>;
 
         /**

@@ -30,6 +30,7 @@ set(TEST_SOURCES
     services/FileRepository_test.cpp
     services/FolderRepository_test.cpp
     services/FolderLogContext_test.cpp
+    services/TrashLogContext_test.cpp
     services/FileListCache_test.cpp
     services/FileMutationServiceMove_test.cpp
     services/FileServiceAtomicity_test.cpp

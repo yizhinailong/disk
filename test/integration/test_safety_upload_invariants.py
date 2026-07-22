@@ -755,6 +755,44 @@ def assert_folder_log_context(
     log_pass("folder logs keep typed request correlation and null ownership fields")
 
 
+def assert_trash_log_context(
+    *,
+    response,
+    request_id: str,
+    message_markers: tuple[str, ...],
+    expected_item_status: str | None = None,
+) -> None:
+    """Assert one 2xx trash request keeps bounded application correlation."""
+    assert_equal(
+        "trash request preserves its documented success envelope",
+        response.status_code == 200 and json_field(response.text, "code") == "0",
+        True,
+    )
+    if expected_item_status is not None:
+        assert_equal(
+            "missing trash item is reported inside the batch result",
+            json_field(response.text, "data.results.0.status"),
+            expected_item_status,
+        )
+    assert_equal(
+        "trash request preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal("trash request identifies the handling instance", bool(instance_id), True)
+
+    for marker in message_markers:
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="trash",
+            upload_id=None,
+            message_marker=marker,
+        )
+    log_pass("trash logs keep typed request correlation and null ownership fields")
+
+
 def test_file_query_log_context_invariants() -> None:
     """Verify file list, numeric detail, and search use one bounded query operation."""
     log_section("File Query Structured Log Correlation")
@@ -939,6 +977,101 @@ def test_folder_log_context_invariants() -> None:
             "Rename folder failed",
         ),
     )
+
+
+def test_trash_log_context_invariants() -> None:
+    """Verify exact trash paths share one bounded non-ownership operation."""
+    log_section("Trash Structured Log Correlation")
+    missing_id = 999_999_999_999
+
+    list_request_id = f"safety-trash-list-log-{unique_name()}"
+    list_response = fetch(
+        "/api/trash?page=1&page_size=1",
+        headers={**auth_headers(TOKEN), "X-Request-Id": list_request_id},
+    )
+    assert_trash_log_context(
+        response=list_response,
+        request_id=list_request_id,
+        message_markers=(
+            "Received get trash list request",
+            "Fetching trash list",
+        ),
+    )
+
+    restore_request_id = f"safety-trash-restore-log-{unique_name()}"
+    restore_response = fetch(
+        "/api/trash/restore",
+        method="POST",
+        headers={**auth_headers(TOKEN), "X-Request-Id": restore_request_id},
+        json_body={"trash_ids": [missing_id]},
+    )
+    assert_trash_log_context(
+        response=restore_response,
+        request_id=restore_request_id,
+        expected_item_status="failed",
+        message_markers=(
+            "Received batch restore request",
+            "Batch restoring trash items",
+        ),
+    )
+
+    delete_request_id = f"safety-trash-delete-log-{unique_name()}"
+    delete_response = fetch(
+        "/api/trash/delete",
+        method="POST",
+        headers={**auth_headers(TOKEN), "X-Request-Id": delete_request_id},
+        json_body={"trash_ids": [missing_id]},
+    )
+    assert_trash_log_context(
+        response=delete_response,
+        request_id=delete_request_id,
+        expected_item_status="failed",
+        message_markers=(
+            "Received batch permanent delete request",
+            "Batch permanently deleting trash items",
+        ),
+    )
+
+    invalid_restore_request_id = f"safety-trash-invalid-restore-log-{unique_name()}"
+    invalid_restore_response = fetch(
+        "/api/trash/restore",
+        method="POST",
+        headers={**auth_headers(TOKEN), "X-Request-Id": invalid_restore_request_id},
+        json_body={"trash_ids": []},
+    )
+    assert_equal(
+        "invalid trash restore is rejected",
+        invalid_restore_response.status_code >= 400
+        and json_field(invalid_restore_response.text, "code") != "0",
+        True,
+    )
+    assert_equal(
+        "invalid trash restore preserves caller request ID",
+        header_value(invalid_restore_response.headers, "X-Request-Id"),
+        invalid_restore_request_id,
+    )
+    invalid_restore_instance_id = header_value(
+        invalid_restore_response.headers,
+        "X-Disk-Instance-Id",
+    )
+    assert_equal(
+        "invalid trash restore identifies the handling instance",
+        bool(invalid_restore_instance_id),
+        True,
+    )
+    for marker in (
+        "Received batch restore request",
+        "Batch restore request parameter validation failed",
+        "HTTP request completed",
+    ):
+        wait_for_correlated_application_log(
+            request_id=invalid_restore_request_id,
+            instance_id=invalid_restore_instance_id,
+            operation="trash",
+            upload_id=None,
+            message_marker=marker,
+        )
+    log_pass("trash HTTP failure completion keeps typed request correlation")
 
 
 def run_expired_cleanup(
@@ -4276,6 +4409,7 @@ def main() -> None:
     test_file_query_log_context_invariants()
     test_file_mutation_log_context_invariants()
     test_folder_log_context_invariants()
+    test_trash_log_context_invariants()
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()
