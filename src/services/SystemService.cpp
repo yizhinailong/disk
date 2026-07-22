@@ -32,8 +32,11 @@ namespace disk::system {
         Logger::Debug() << "SystemService initialization completed";
     }
 
-    auto SystemService::GetInfo(uint64_t user_id) -> drogon::Task<Result<SystemInfo>> {
-        StageTimer timer("system_get_info");
+    auto SystemService::GetInfo(
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    ) -> drogon::Task<Result<SystemInfo>> {
+        StageTimer timer("system_get_info", log_context);
 
         SystemInfo info;
         info.version = "1.0.0";
@@ -49,7 +52,7 @@ namespace disk::system {
         info.connections = co_await GetConnectionStats();
 
         /// 获取存储统计
-        info.storage = co_await GetStorageStats();
+        info.storage = co_await GetStorageStats(log_context);
 
         co_return info;
     }
@@ -68,7 +71,8 @@ namespace disk::system {
         co_return stats;
     }
 
-    auto SystemService::GetStorageStats() -> drogon::Task<StorageStats> {
+    auto SystemService::GetStorageStats(disk::utils::LogContext log_context)
+        -> drogon::Task<StorageStats> {
         StorageStats stats;
 
         try {
@@ -100,7 +104,7 @@ namespace disk::system {
                 stats.total_folders = folders_result[0]["count"].as<int64_t>();
             }
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error() << "Failed to get storage stats: " << e.base().what();
+            Logger::Error(log_context) << "Failed to get storage stats: " << e.base().what();
         }
 
         co_return stats;
@@ -110,4 +114,4 @@ namespace disk::system {
         return std::string(__DATE__) + " " + std::string(__TIME__);
     }
 
-} ///< namespace disk::system
+} // namespace disk::system

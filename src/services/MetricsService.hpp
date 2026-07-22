@@ -33,6 +33,7 @@ namespace disk::metrics {
         FolderQuery,
         FolderMutation,
         Trash,
+        SystemInfo,
         UploadInit,
         UploadChunk,
         UploadComplete,

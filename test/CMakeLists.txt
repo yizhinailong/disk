@@ -54,6 +54,7 @@ set(TEST_SOURCES
     services/UserService_test.cpp
     services/CleanupService_test.cpp
     services/SystemService_test.cpp
+    services/SystemLogContext_test.cpp
     services/OperationLogJsonDetails_test.cpp
     services/OperationLogService_test.cpp
     services/ProcessRuntime_test.cpp

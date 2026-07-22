@@ -15,6 +15,7 @@
 
 #include <chrono>
 #include <string>
+#include <utility>
 
 #include "utils/LogHelper.hpp"
 
@@ -37,16 +38,22 @@ namespace disk::utils {
         /**
          * @brief 构造计时器
          * @param stage_name 阶段名称，用于日志标识
+         * @param log_context 调用方显式提供的类型化日志上下文
          */
-        explicit StageTimer(std::string stage_name) noexcept
+        explicit StageTimer(
+            std::string stage_name,
+            LogContext log_context = {}
+        ) noexcept
             : m_stage_name(std::move(stage_name)),
+              m_log_context(std::move(log_context)),
               m_start(std::chrono::steady_clock::now()) {}
 
         ~StageTimer() {
             const auto end = std::chrono::steady_clock::now();
             const auto duration_ms =
                 std::chrono::duration_cast<std::chrono::milliseconds>(end - m_start).count();
-            Logger::Info() << "[stage_timer] " << m_stage_name << " duration_ms=" << duration_ms;
+            Logger::Info(m_log_context)
+                << "[stage_timer] " << m_stage_name << " duration_ms=" << duration_ms;
         }
 
         StageTimer(const StageTimer&) = delete;
@@ -56,7 +63,8 @@ namespace disk::utils {
 
     private:
         std::string m_stage_name;
+        LogContext m_log_context;
         std::chrono::steady_clock::time_point m_start;
     };
 
-} ///< namespace disk::utils
+} // namespace disk::utils

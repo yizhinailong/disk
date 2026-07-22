@@ -15,10 +15,10 @@
 
 #include <drogon/nosql/RedisClient.h>
 #include <drogon/orm/DbClient.h>
-
 #include <json/json.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::system {
 
@@ -85,14 +85,17 @@ namespace disk::system {
         );
 
         [[nodiscard]]
-        auto GetInfo(uint64_t user_id) -> drogon::Task<Result<SystemInfo>>;
+        auto GetInfo(
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<Result<SystemInfo>>;
 
     private:
         [[nodiscard]]
         auto GetConnectionStats() -> drogon::Task<ConnectionStats>;
 
         [[nodiscard]]
-        auto GetStorageStats() -> drogon::Task<StorageStats>;
+        auto GetStorageStats(disk::utils::LogContext log_context) -> drogon::Task<StorageStats>;
 
         static auto GetBuildTime() -> std::string;
 
@@ -101,4 +104,4 @@ namespace disk::system {
         std::chrono::steady_clock::time_point m_start_time;
     };
 
-} ///< namespace disk::system
+} // namespace disk::system

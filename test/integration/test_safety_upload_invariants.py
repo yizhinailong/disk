@@ -1074,6 +1074,75 @@ def test_trash_log_context_invariants() -> None:
     log_pass("trash HTTP failure completion keeps typed request correlation")
 
 
+def test_system_info_log_context_invariants() -> None:
+    """Verify exact system info requests use one bounded non-ownership operation."""
+    log_section("System Info Structured Log Correlation")
+
+    request_id = f"safety-system-info-log-{unique_name()}"
+    response = fetch(
+        "/api/system/info",
+        headers={**auth_headers(TOKEN), "X-Request-Id": request_id},
+    )
+    assert_equal(
+        "authenticated system info preserves its success envelope",
+        response.status_code == 200 and json_field(response.text, "code") == "0",
+        True,
+    )
+    assert_equal(
+        "authenticated system info preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal(
+        "authenticated system info identifies the handling instance",
+        bool(instance_id),
+        True,
+    )
+    wait_for_correlated_application_log(
+        request_id=request_id,
+        instance_id=instance_id,
+        operation="system_info",
+        upload_id=None,
+        message_marker="[stage_timer] system_get_info",
+    )
+    log_pass("system info stage log keeps typed request correlation and null ownership")
+
+    unauthenticated_request_id = f"safety-system-info-unauth-log-{unique_name()}"
+    unauthenticated_response = fetch(
+        "/api/system/info",
+        headers={"X-Request-Id": unauthenticated_request_id},
+    )
+    assert_equal(
+        "unauthenticated system info is rejected",
+        unauthenticated_response.status_code == 401
+        and json_field(unauthenticated_response.text, "code") != "0",
+        True,
+    )
+    assert_equal(
+        "unauthenticated system info preserves caller request ID",
+        header_value(unauthenticated_response.headers, "X-Request-Id"),
+        unauthenticated_request_id,
+    )
+    unauthenticated_instance_id = header_value(
+        unauthenticated_response.headers,
+        "X-Disk-Instance-Id",
+    )
+    assert_equal(
+        "unauthenticated system info identifies the handling instance",
+        bool(unauthenticated_instance_id),
+        True,
+    )
+    wait_for_correlated_application_log(
+        request_id=unauthenticated_request_id,
+        instance_id=unauthenticated_instance_id,
+        operation="system_info",
+        upload_id=None,
+        message_marker="HTTP request completed",
+    )
+    log_pass("system info HTTP failure completion keeps typed request correlation")
+
+
 def run_expired_cleanup(
     request_id: str | None = None,
     *,
@@ -4410,6 +4479,7 @@ def main() -> None:
     test_file_mutation_log_context_invariants()
     test_folder_log_context_invariants()
     test_trash_log_context_invariants()
+    test_system_info_log_context_invariants()
     test_successful_chunked_upload_invariants()
     test_hundred_concurrent_complete_invariants()
     test_chunk_metadata_failure_retry_and_orphan_cleanup_invariants()

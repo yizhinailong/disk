@@ -24,6 +24,25 @@ The system SHALL expose authenticated system information for operational visibil
 - **WHEN** an authenticated user requests system information
 - **THEN** the system SHALL return version, runtime, connection, and storage summary information available to that user
 
+### Requirement: Typed System Information Correlation
+The system SHALL classify only the exact authenticated system-information path as the bounded `system_info` operation and SHALL propagate its correlation explicitly by value across the controller, service, request stage timer, and storage-statistics error boundary.
+
+#### Scenario: User reads system information
+- **WHEN** an authenticated request enters `/api/system/info`
+- **THEN** its response, controller events, request stage-timer event, and system-service events SHALL retain the same request ID, actual handling instance, and `system_info` operation
+
+#### Scenario: System-information HTTP completion is emitted
+- **WHEN** a system-information response emits its HTTP completion event at the configured log level
+- **THEN** that event SHALL retain the response request ID, actual handling instance, and `system_info` operation; successful completion remains `DEBUG` while non-2xx completion remains `WARN`
+
+#### Scenario: System information has no upload or durable-job ownership
+- **WHEN** system information records a user, connection-pool size, aggregate count, or stage duration
+- **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those system-domain values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: System-information classification remains bounded
+- **WHEN** a system path is not exactly `/api/system/info`, including an extra suffix
+- **THEN** the system-information classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
+
 ### Requirement: Operation Logs
 The system SHALL record and expose user-visible operation logs for key actions.
 
