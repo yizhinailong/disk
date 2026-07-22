@@ -78,6 +78,7 @@ set(TEST_SOURCES
     dtos/AdminDto_test.cpp
     dtos/AuthDto_test.cpp
     dtos/FileDto_test.cpp
+    dtos/FileDtoLogContext_test.cpp
     dtos/FolderDto_test.cpp
     dtos/ShareDto_test.cpp
     dtos/StorageJobAdminDto_test.cpp

@@ -233,12 +233,27 @@ The system SHALL associate requests with trace identifiers for log correlation a
 - **WHEN** the system handles an HTTP request
 - **THEN** it SHALL make the request trace identifier available for logging and response propagation
 
+### Requirement: Explicit File DTO Correlation
+Every file-domain request DTO that emits a parsing or validation event SHALL accept caller-owned `LogContext` explicitly by value and SHALL use only that supplied context for the event. This SHALL cover upload initialization and completion, file listing and search, owner download metadata and content, rename, move, copy, and soft-delete parsing without changing their existing request or validation contracts.
+
+#### Scenario: HTTP file request enters a direct-logging DTO
+- **WHEN** a file controller invokes one of those DTO parsers with the request context it established before parsing
+- **THEN** every direct DTO event SHALL retain the same request ID, actual handling instance, and bounded route operation, and a DTO-specific validation failure SHALL NOT create an additional application event with null request correlation
+
+#### Scenario: DTO parses domain values
+- **WHEN** the DTO observes an upload ID, file ID, folder ID, filename, search keyword, or any other request value
+- **THEN** it SHALL NOT derive or overwrite upload ID, job ID, lease owner, or state version from that value; upload completion SHALL continue to add its validated upload ID at the controller boundary after successful parsing
+
+#### Scenario: File DTO has no caller context
+- **WHEN** a unit, utility, or compatibility caller invokes a parser without providing `LogContext`
+- **THEN** parsing and validation behavior SHALL remain unchanged and any direct DTO event SHALL use explicit JSON null correlation rather than thread-local or request-value inference
+
 ### Requirement: Typed File Query Correlation
-The system SHALL classify file-list, numeric file-detail, and file-search requests as the bounded `file_query` operation and SHALL propagate their correlation explicitly by value across controller and query-service coroutine boundaries.
+The system SHALL classify file-list, numeric file-detail, and file-search requests as the bounded `file_query` operation and SHALL propagate their correlation explicitly by value across controller, direct file-DTO events, and query-service coroutine boundaries.
 
 #### Scenario: User lists, inspects, or searches files
 - **WHEN** an authenticated request enters a file-list, numeric file-detail, or file-search route
-- **THEN** its response, HTTP completion event, controller events, and query-service events SHALL retain the same request ID, actual handling instance, and `file_query` operation
+- **THEN** its response, HTTP completion event, controller events, direct file-DTO events, and query-service events SHALL retain the same request ID, actual handling instance, and `file_query` operation
 
 #### Scenario: File query has no upload or durable-job ownership
 - **WHEN** a file query records identifiers such as a file ID, parent folder ID, or search keyword
@@ -249,11 +264,11 @@ The system SHALL classify file-list, numeric file-detail, and file-search reques
 - **THEN** the file-query classifier SHALL NOT absorb it, and the route SHALL retain its existing bounded operation classification
 
 ### Requirement: Typed File Mutation Correlation
-The system SHALL classify numeric file rename, drive move, drive copy, and file soft-delete requests as the bounded `file_mutation` operation and SHALL propagate their correlation explicitly by value across controller, mutation-service, and move-to-trash coroutine boundaries.
+The system SHALL classify numeric file rename, drive move, drive copy, and file soft-delete requests as the bounded `file_mutation` operation and SHALL propagate their correlation explicitly by value across controller, direct file-DTO events, mutation-service, and move-to-trash coroutine boundaries.
 
 #### Scenario: User renames, moves, copies, or soft-deletes drive items
 - **WHEN** an authenticated request enters a numeric rename, move, copy, or supported soft-delete route
-- **THEN** its response, HTTP completion event, controller events, mutation-service events, and delete subflow events SHALL retain the same request ID, actual handling instance, and `file_mutation` operation
+- **THEN** its response, HTTP completion event, controller events, direct file-DTO events, mutation-service events, and delete subflow events SHALL retain the same request ID, actual handling instance, and `file_mutation` operation
 
 #### Scenario: File mutation has no upload or durable-job ownership
 - **WHEN** a file mutation records file, folder, content, user, quota, or cache identifiers

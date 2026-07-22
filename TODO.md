@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 事务边界日志关联）：完整构建、事务/缓存聚焦 GoogleTest 12/12、真实 HTTP safety 集成 1/1（脚本内 731 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1418 项，1411 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 474.32 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 文件 DTO 日志关联）：完整构建、文件 DTO 聚焦 GoogleTest 78/78、真实 HTTP safety 集成 1/1（脚本内 733 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1420 项，1413 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 477.86 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -677,6 +677,12 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定共享事
 文件 move/copy、上传 init/complete/cancel/expire、移入回收站、存储任务重放和三类存储恢复管理共 11 个托管事务入口，以及 folder rename、share create/save、永久删除和 Blob GC 共 5 个手动提交入口，均显式传入已有请求或 Worker 上下文。上传最终事务取得租约并在事务前续租后建立运行器，因此真实 insert 异常事件使用与回滚后持久任务一致的 upload ID、lease owner 和 state version；非上传请求继续保持其四个所有权字段为空。
 
 新增 `TransactionRunnerLogTest.FailureEventsPreserveExplicitContextAndNullDefaults`，以内存 NDJSON sink 同时核对数据库异常、普通异常、rollback、提交失败、额外 owner 与默认空上下文；缓存顺序合同继续验证带上下文的提交先于代际失效。`SafetyUploadInvariantsIntegration` 以唯一调用方 request ID 注入真实 PostgreSQL files insert 异常，并将事务事件与响应 instance、upload task 的 lease owner/state version 对账，同时拒绝包含唯一故障标记的空 request 应用事件。完整构建、Python 语法检查、事务/缓存聚焦 GoogleTest 12/12、真实 HTTP safety 集成 1/1（731 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；首次完整 CTest 的既有共享用户预留总量竞态偶发偏差 45 字节，随后 safety 聚焦复跑 731/731 和第二次完整 CTest 均通过，最终完整结果为 1418 项中 1411 通过、7 项环境门控跳过、0 失败，总耗时 474.32 秒。Redis、认证/限流过滤器等其他共享基础设施边界及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.29 文件 DTO 日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定文件 DTO 直接日志的显式关联合同。`FileDto.hpp` 中 init、complete、列表、下载信息、下载、rename、move、copy、delete 和 search 共 10 个解析入口现在按值接收调用方 `LogContext`，原有 23 条 `DEBUG` 与 24 条 `WARN` 事件全部使用该上下文；无上下文的直接调用继续通过默认参数输出 JSON `null`，DTO 不从请求字段、路径 ID 或消息文本推断 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。`FileController` 的 11 个调用点均传入请求级上下文，complete 仍只在 DTO 完整校验成功后由 Controller 补入规范 upload ID，公开请求、响应、校验结果和错误码没有变化。
+
+新增 `FileDtoLogContextTest` 源码合同与内存结构化日志用例，锁定 10 个入口、47 条直接日志、11 个 Controller 调用点、六个关联字段的按值保留、默认空上下文和禁止 DTO 推断所有权字段。`SafetyUploadInvariantsIntegration` 使用唯一调用方 request ID 发送真实非法文件哈希 init 请求，确认响应回显、DTO 警告的 request/instance/operation 一致、upload 仍为空，并拒绝同消息的空 request 应用重复事件。完整构建、Python 语法检查、文件 DTO 聚焦 GoogleTest 78/78、真实 HTTP safety 集成 1/1（733 项断言）和 OpenSpec 严格校验 24/24 通过；首次完整 CTest 中既有分区恢复 readiness 时序断言瞬态返回 503，失败目标复跑 733/733 后通过，第二次完整 CTest 共 1420 项，1413 通过、7 项环境门控跳过、0 失败，总耗时 477.86 秒。Redis、认证/限流过滤器等其他共享基础设施边界及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

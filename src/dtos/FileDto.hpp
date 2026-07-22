@@ -114,24 +114,37 @@ namespace disk::file {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<InitUploadRequest> {
-            Logger::Debug() << "Start parsing init upload request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<InitUploadRequest> {
+            Logger::Debug(log_context) << "Start parsing init upload request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto filename_result = RequireString(json, "filename");
-            if (!filename_result) return std::unexpected(filename_result.error());
+            if (!filename_result) {
+                return std::unexpected(filename_result.error());
+            }
 
             auto file_size_result = RequireUInt64(json, "file_size");
-            if (!file_size_result) return std::unexpected(file_size_result.error());
+            if (!file_size_result) {
+                return std::unexpected(file_size_result.error());
+            }
 
             auto file_hash_result = RequireString(json, "file_hash");
-            if (!file_hash_result) return std::unexpected(file_hash_result.error());
+            if (!file_hash_result) {
+                return std::unexpected(file_hash_result.error());
+            }
 
             auto parent_id_result = OptionalUInt64(json, "parent_id");
-            if (!parent_id_result) return std::unexpected(parent_id_result.error());
+            if (!parent_id_result) {
+                return std::unexpected(parent_id_result.error());
+            }
 
             InitUploadRequest request;
             request.filename = std::move(*filename_result);
@@ -141,13 +154,13 @@ namespace disk::file {
                 request.parent_id = **parent_id_result;
             }
 
-            Logger::Debug() << "Parsed init upload request: filename=\"" << request.filename
-                      << "\", file_size=" << request.file_size
-                      << ", file_hash=" << request.file_hash << ", parent_id=" << request.parent_id;
+            Logger::Debug(log_context) << "Parsed init upload request: filename=\"" << request.filename
+                                       << "\", file_size=" << request.file_size
+                                       << ", file_hash=" << request.file_hash << ", parent_id=" << request.parent_id;
 
             /// 验证文件名
             if (!request.ValidateFilenameLength()) {
-                Logger::Warn() << "Invalid filename length: " << request.filename.length();
+                Logger::Warn(log_context) << "Invalid filename length: " << request.filename.length();
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Filename length must be between 1-255 characters"
@@ -155,7 +168,7 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameForbiddenChars()) {
-                Logger::Warn() << "Filename contains forbidden characters: " << request.filename;
+                Logger::Warn(log_context) << "Filename contains forbidden characters: " << request.filename;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename contains forbidden characters: / \\ : * ? \" < > | or " "control " "c" "h" "a" "r" "a" "c" "t" "e" "r" "s"
@@ -163,7 +176,7 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameReservedNames()) {
-                Logger::Warn() << "Filename is a reserved name: " << request.filename;
+                Logger::Warn(log_context) << "Filename is a reserved name: " << request.filename;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename cannot be reserved name \".\" or \"..\""
@@ -171,15 +184,15 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameNotHidden()) {
-                Logger::Warn() << "Filename starts with a dot (hidden file): " << request.filename;
+                Logger::Warn(log_context) << "Filename starts with a dot (hidden file): " << request.filename;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidFilename, "Filename cannot start with \".\"")
                 );
             }
 
             if (!request.ValidateFilenameCharset()) {
-                Logger::Warn() << "Filename contains invalid UTF-8 or control characters: "
-                         << request.filename;
+                Logger::Warn(log_context) << "Filename contains invalid UTF-8 or control characters: "
+                                          << request.filename;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename must be valid UTF-8 and cannot contain control characters"
@@ -188,7 +201,7 @@ namespace disk::file {
 
             /// 验证文件大小
             if (!request.ValidateFileSize()) {
-                Logger::Warn() << "Invalid file size: " << request.file_size;
+                Logger::Warn(log_context) << "Invalid file size: " << request.file_size;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "File size must be greater than 0 and not exceed the maximum limit"
@@ -197,14 +210,14 @@ namespace disk::file {
 
             /// 验证文件哈希
             if (!request.ValidateFileHash()) {
-                Logger::Warn() << "Invalid file hash format: " << request.file_hash;
+                Logger::Warn(log_context) << "Invalid file hash format: " << request.file_hash;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "File hash must be a 32-character lowercase hexadecimal string"
                 ));
             }
 
-            Logger::Debug() << "Request parameters validation passed";
+            Logger::Debug(log_context) << "Request parameters validation passed";
             return request;
         }
 
@@ -341,31 +354,38 @@ namespace disk::file {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req)
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<CompleteUploadRequest> {
-            Logger::Debug() << "Start parsing complete upload request parameters";
+            Logger::Debug(log_context) << "Start parsing complete upload request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto upload_id_result = RequireString(json, "upload_id");
-            if (!upload_id_result) return std::unexpected(upload_id_result.error());
+            if (!upload_id_result) {
+                return std::unexpected(upload_id_result.error());
+            }
 
             CompleteUploadRequest request;
             request.upload_id = std::move(*upload_id_result);
 
-            Logger::Debug() << "Parsed complete upload request: upload_id=" << request.upload_id;
+            Logger::Debug(log_context) << "Parsed complete upload request: upload_id=" << request.upload_id;
 
             /// 验证 upload_id 非空
             if (request.upload_id.empty()) {
-                Logger::Warn() << "upload_id cannot be empty";
+                Logger::Warn(log_context) << "upload_id cannot be empty";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "upload_id cannot be empty")
                 );
             }
 
-            Logger::Debug() << "Request parameters validation passed";
+            Logger::Debug(log_context) << "Request parameters validation passed";
             return request;
         }
     };
@@ -429,8 +449,11 @@ namespace disk::file {
 
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<FileListRequest> {
-            Logger::Debug() << "Start parsing file list request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<FileListRequest> {
+            Logger::Debug(log_context) << "Start parsing file list request parameters";
 
             FileListRequest request;
 
@@ -448,21 +471,27 @@ namespace disk::file {
 
             /// 解析可选参数 parent_id
             auto parent_id_result = QueryUInt64(req, "parent_id");
-            if (!parent_id_result) return std::unexpected(parent_id_result.error());
+            if (!parent_id_result) {
+                return std::unexpected(parent_id_result.error());
+            }
             if (parent_id_result->has_value()) {
                 request.query.parent_id = **parent_id_result;
             }
 
             /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
-            if (!page_result) return std::unexpected(page_result.error());
+            if (!page_result) {
+                return std::unexpected(page_result.error());
+            }
             if (page_result->has_value()) {
                 request.query.page = **page_result;
             }
 
             /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
-            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (!page_size_result) {
+                return std::unexpected(page_size_result.error());
+            }
             if (page_size_result->has_value()) {
                 request.query.page_size = **page_size_result;
             }
@@ -471,7 +500,7 @@ namespace disk::file {
             auto sort_by_str = req->getParameter("sort_by");
             if (!sort_by_str.empty()) {
                 if (valid_sort_by.find(sort_by_str) == valid_sort_by.end()) {
-                    Logger::Warn() << "Parameter 'sort_by' invalid value: " << sort_by_str;
+                    Logger::Warn(log_context) << "Parameter 'sort_by' invalid value: " << sort_by_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'sort_by' invalid value, must be name/size/created_at/updated_at"
@@ -484,7 +513,7 @@ namespace disk::file {
             auto sort_order_str = req->getParameter("sort_order");
             if (!sort_order_str.empty()) {
                 if (valid_sort_order.find(sort_order_str) == valid_sort_order.end()) {
-                    Logger::Warn() << "Parameter 'sort_order' invalid value: " << sort_order_str;
+                    Logger::Warn(log_context) << "Parameter 'sort_order' invalid value: " << sort_order_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'sort_order' invalid value, must be asc/desc"
@@ -497,7 +526,7 @@ namespace disk::file {
             auto type_str = req->getParameter("type");
             if (!type_str.empty()) {
                 if (valid_types.find(type_str) == valid_types.end()) {
-                    Logger::Warn() << "Parameter 'type' invalid value: " << type_str;
+                    Logger::Warn(log_context) << "Parameter 'type' invalid value: " << type_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'type' invalid value, must be all/file/folder"
@@ -506,10 +535,10 @@ namespace disk::file {
                 request.query.type = type_str;
             }
 
-            Logger::Debug() << "Parsed file list request: parent_id=" << request.query.parent_id
-                      << ", page=" << request.query.page << ", page_size=" << request.query.page_size
-                      << ", sort_by=" << request.query.sort_by << ", sort_order=" << request.query.sort_order
-                      << ", type=" << request.query.type;
+            Logger::Debug(log_context) << "Parsed file list request: parent_id=" << request.query.parent_id
+                                       << ", page=" << request.query.page << ", page_size=" << request.query.page_size
+                                       << ", sort_by=" << request.query.sort_by << ", sort_order=" << request.query.sort_order
+                                       << ", type=" << request.query.type;
 
             return request;
         }
@@ -627,11 +656,14 @@ namespace disk::file {
 
         /// 从路径参数解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromPath(const std::string& file_id_str) -> Result<DownloadInfoRequest> {
-            Logger::Debug() << "Start parsing download info request parameters";
+        static auto FromPath(
+            const std::string& file_id_str,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<DownloadInfoRequest> {
+            Logger::Debug(log_context) << "Start parsing download info request parameters";
 
             if (!file_id_str.empty() && file_id_str[0] == '-') {
-                Logger::Warn() << "Parameter 'file_id' must be a positive integer: " << file_id_str;
+                Logger::Warn(log_context) << "Parameter 'file_id' must be a positive integer: " << file_id_str;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "Parameter 'file_id' must be a positive integer"
@@ -639,12 +671,14 @@ namespace disk::file {
             }
 
             auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
-            if (!file_id_result) return std::unexpected(file_id_result.error());
+            if (!file_id_result) {
+                return std::unexpected(file_id_result.error());
+            }
 
             DownloadInfoRequest request;
             request.file_id = *file_id_result;
 
-            Logger::Debug() << "Parsed download info request: file_id=" << request.file_id;
+            Logger::Debug(log_context) << "Parsed download info request: file_id=" << request.file_id;
 
             return request;
         }
@@ -731,16 +765,21 @@ namespace disk::file {
 
         /// 从路径参数解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromPath(const std::string& file_id_str) -> Result<DownloadRequest> {
-            Logger::Debug() << "Start parsing download file request parameters";
+        static auto FromPath(
+            const std::string& file_id_str,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<DownloadRequest> {
+            Logger::Debug(log_context) << "Start parsing download file request parameters";
 
             auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
-            if (!file_id_result) return std::unexpected(file_id_result.error());
+            if (!file_id_result) {
+                return std::unexpected(file_id_result.error());
+            }
 
             DownloadRequest request;
             request.file_id = *file_id_result;
 
-            Logger::Debug() << "Parsed download file request: file_id=" << request.file_id;
+            Logger::Debug(log_context) << "Parsed download file request: file_id=" << request.file_id;
 
             return request;
         }
@@ -852,31 +891,41 @@ namespace disk::file {
         /// 从路径参数和请求体解析并验证，返回 Result
         [[nodiscard]]
         static auto
-        FromPathAndRequest(const std::string& file_id_str, const drogon::HttpRequestPtr& req)
+        FromPathAndRequest(
+            const std::string& file_id_str,
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        )
             -> Result<RenameRequest> {
-            Logger::Debug() << "Start parsing rename request parameters";
+            Logger::Debug(log_context) << "Start parsing rename request parameters";
 
             /// 验证路径参数 file_id
             auto file_id_result = ParsePositiveUInt64(file_id_str, "file_id");
-            if (!file_id_result) return std::unexpected(file_id_result.error());
+            if (!file_id_result) {
+                return std::unexpected(file_id_result.error());
+            }
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             auto new_name_result = RequireString(json, "new_name");
-            if (!new_name_result) return std::unexpected(new_name_result.error());
+            if (!new_name_result) {
+                return std::unexpected(new_name_result.error());
+            }
 
             RenameRequest request;
             request.file_id = *file_id_result;
             request.new_name = std::move(*new_name_result);
 
-            Logger::Debug() << "Parsed rename request: file_id=" << request.file_id << ", new_name=\""
-                      << request.new_name << "\"";
+            Logger::Debug(log_context) << "Parsed rename request: file_id=" << request.file_id << ", new_name=\""
+                                       << request.new_name << "\"";
 
             /// 验证新文件名
             if (!request.ValidateFilenameLength()) {
-                Logger::Warn() << "Invalid filename length: " << request.new_name.length();
+                Logger::Warn(log_context) << "Invalid filename length: " << request.new_name.length();
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Filename length must be between 1-255 characters"
@@ -884,7 +933,7 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameForbiddenChars()) {
-                Logger::Warn() << "Filename contains forbidden characters: " << request.new_name;
+                Logger::Warn(log_context) << "Filename contains forbidden characters: " << request.new_name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename contains forbidden characters: / \\ : * ? \" < > | or " "control " "c" "h" "a" "r" "a" "c" "t" "e" "r" "s"
@@ -892,7 +941,7 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameReservedNames()) {
-                Logger::Warn() << "Filename is a reserved name: " << request.new_name;
+                Logger::Warn(log_context) << "Filename is a reserved name: " << request.new_name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename cannot be reserved name \".\" or \"..\""
@@ -900,22 +949,22 @@ namespace disk::file {
             }
 
             if (!request.ValidateFilenameNotHidden()) {
-                Logger::Warn() << "Filename starts with a dot (hidden file): " << request.new_name;
+                Logger::Warn(log_context) << "Filename starts with a dot (hidden file): " << request.new_name;
                 return std::unexpected(
                     ErrorInfo(ErrorCode::InvalidFilename, "Filename cannot start with \".\"")
                 );
             }
 
             if (!request.ValidateFilenameCharset()) {
-                Logger::Warn() << "Filename contains invalid UTF-8 or control characters: "
-                         << request.new_name;
+                Logger::Warn(log_context) << "Filename contains invalid UTF-8 or control characters: "
+                                          << request.new_name;
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidFilename,
                     "Filename must be valid UTF-8 and cannot contain control characters"
                 ));
             }
 
-            Logger::Debug() << "Request parameters validation passed";
+            Logger::Debug(log_context) << "Request parameters validation passed";
             return request;
         }
 
@@ -1005,25 +1054,34 @@ namespace disk::file {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<MoveRequest> {
-            Logger::Debug() << "Start parsing move drive items request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<MoveRequest> {
+            Logger::Debug(log_context) << "Start parsing move drive items request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             MoveRequest request;
 
             auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
-            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            if (!file_ids_result) {
+                return std::unexpected(file_ids_result.error());
+            }
             request.file_ids = std::move(*file_ids_result);
 
             auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
-            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            if (!folder_ids_result) {
+                return std::unexpected(folder_ids_result.error());
+            }
             request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
-                Logger::Warn() << "Move request must contain file_ids or folder_ids";
+                Logger::Warn(log_context) << "Move request must contain file_ids or folder_ids";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "Move request must contain file_ids or folder_ids"
@@ -1032,14 +1090,16 @@ namespace disk::file {
 
             /// 解析可选参数 target_folder_id
             auto target_folder_id_result = OptionalUInt64(json, "target_folder_id");
-            if (!target_folder_id_result) return std::unexpected(target_folder_id_result.error());
+            if (!target_folder_id_result) {
+                return std::unexpected(target_folder_id_result.error());
+            }
             if (target_folder_id_result->has_value()) {
                 request.target_folder_id = **target_folder_id_result;
             }
 
-            Logger::Debug() << "Parsed move request: file_ids.size()=" << request.file_ids.size()
-                      << ", folder_ids.size()=" << request.folder_ids.size()
-                      << ", target_folder_id=" << request.target_folder_id;
+            Logger::Debug(log_context) << "Parsed move request: file_ids.size()=" << request.file_ids.size()
+                                       << ", folder_ids.size()=" << request.folder_ids.size()
+                                       << ", target_folder_id=" << request.target_folder_id;
 
             return request;
         }
@@ -1106,25 +1166,34 @@ namespace disk::file {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<CopyRequest> {
-            Logger::Debug() << "Start parsing copy drive items request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<CopyRequest> {
+            Logger::Debug(log_context) << "Start parsing copy drive items request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             CopyRequest request;
 
             auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
-            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            if (!file_ids_result) {
+                return std::unexpected(file_ids_result.error());
+            }
             request.file_ids = std::move(*file_ids_result);
 
             auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
-            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            if (!folder_ids_result) {
+                return std::unexpected(folder_ids_result.error());
+            }
             request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
-                Logger::Warn() << "Copy request must contain file_ids or folder_ids";
+                Logger::Warn(log_context) << "Copy request must contain file_ids or folder_ids";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "Copy request must contain file_ids or folder_ids"
@@ -1133,14 +1202,16 @@ namespace disk::file {
 
             /// 解析可选参数 target_folder_id
             auto target_folder_id_result = OptionalUInt64(json, "target_folder_id");
-            if (!target_folder_id_result) return std::unexpected(target_folder_id_result.error());
+            if (!target_folder_id_result) {
+                return std::unexpected(target_folder_id_result.error());
+            }
             if (target_folder_id_result->has_value()) {
                 request.target_folder_id = **target_folder_id_result;
             }
 
-            Logger::Debug() << "Parsed copy request: file_ids.size()=" << request.file_ids.size()
-                      << ", folder_ids.size()=" << request.folder_ids.size()
-                      << ", target_folder_id=" << request.target_folder_id;
+            Logger::Debug(log_context) << "Parsed copy request: file_ids.size()=" << request.file_ids.size()
+                                       << ", folder_ids.size()=" << request.folder_ids.size()
+                                       << ", target_folder_id=" << request.target_folder_id;
 
             return request;
         }
@@ -1190,33 +1261,42 @@ namespace disk::file {
 
         /// 从 HTTP 请求解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<DeleteRequest> {
-            Logger::Debug() << "Start parsing delete file request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<DeleteRequest> {
+            Logger::Debug(log_context) << "Start parsing delete file request parameters";
 
             auto json_result = RequireJsonBody(req);
-            if (!json_result) return std::unexpected(json_result.error());
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
             const auto& json = *json_result.value();
 
             DeleteRequest request;
 
             auto file_ids_result = OptionalPositiveIdArray(json, "file_ids");
-            if (!file_ids_result) return std::unexpected(file_ids_result.error());
+            if (!file_ids_result) {
+                return std::unexpected(file_ids_result.error());
+            }
             request.file_ids = std::move(*file_ids_result);
 
             auto folder_ids_result = OptionalPositiveIdArray(json, "folder_ids");
-            if (!folder_ids_result) return std::unexpected(folder_ids_result.error());
+            if (!folder_ids_result) {
+                return std::unexpected(folder_ids_result.error());
+            }
             request.folder_ids = std::move(*folder_ids_result);
 
             if (request.file_ids.empty() && request.folder_ids.empty()) {
-                Logger::Warn() << "Delete request requires at least one file_id or folder_id";
+                Logger::Warn(log_context) << "Delete request requires at least one file_id or folder_id";
                 return std::unexpected(ErrorInfo(
                     ErrorCode::InvalidParameter,
                     "At least one file_id or folder_id is required"
                 ));
             }
 
-            Logger::Debug() << "Parsed delete request: file_ids.size()=" << request.file_ids.size()
-                      << ", folder_ids.size()=" << request.folder_ids.size();
+            Logger::Debug(log_context) << "Parsed delete request: file_ids.size()=" << request.file_ids.size()
+                                       << ", folder_ids.size()=" << request.folder_ids.size();
 
             return request;
         }
@@ -1302,8 +1382,11 @@ namespace disk::file {
 
         /// 从 HTTP 请求查询参数解析并验证，返回 Result
         [[nodiscard]]
-        static auto FromRequest(const drogon::HttpRequestPtr& req) -> Result<SearchRequest> {
-            Logger::Debug() << "Start parsing file search request parameters";
+        static auto FromRequest(
+            const drogon::HttpRequestPtr& req,
+            disk::utils::LogContext log_context = {}
+        ) -> Result<SearchRequest> {
+            Logger::Debug(log_context) << "Start parsing file search request parameters";
 
             SearchRequest request;
 
@@ -1313,7 +1396,7 @@ namespace disk::file {
             /// 解析必填参数 keyword
             auto keyword_str = req->getParameter("keyword");
             if (keyword_str.empty()) {
-                Logger::Warn() << "Missing required parameter: keyword";
+                Logger::Warn(log_context) << "Missing required parameter: keyword";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Missing required parameter: keyword")
                 );
@@ -1321,7 +1404,7 @@ namespace disk::file {
 
             /// 验证 keyword 长度
             if (keyword_str.length() < 1 || keyword_str.length() > 100) {
-                Logger::Warn() << "Parameter 'keyword' invalid length: " << keyword_str.length();
+                Logger::Warn(log_context) << "Parameter 'keyword' invalid length: " << keyword_str.length();
                 return std::unexpected(ErrorInfo(
                     ErrorCode::ValidationFailed,
                     "Parameter 'keyword' length must be between 1-100 characters"
@@ -1331,7 +1414,7 @@ namespace disk::file {
             /// 过滤 keyword 中的特殊字符（防止 SQL 注入）
             for (char c : keyword_str) {
                 if (c == '%' || c == '_' || c == '\\' || c == '\'' || c == '"') {
-                    Logger::Warn() << "Parameter 'keyword' contains forbidden characters: " << c;
+                    Logger::Warn(log_context) << "Parameter 'keyword' contains forbidden characters: " << c;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'keyword' contains forbidden characters"
@@ -1345,7 +1428,7 @@ namespace disk::file {
             auto type_str = req->getParameter("type");
             if (!type_str.empty()) {
                 if (valid_types.find(type_str) == valid_types.end()) {
-                    Logger::Warn() << "Parameter 'type' invalid value: " << type_str;
+                    Logger::Warn(log_context) << "Parameter 'type' invalid value: " << type_str;
                     return std::unexpected(ErrorInfo(
                         ErrorCode::ValidationFailed,
                         "Parameter 'type' invalid value, must be all/file/folder"
@@ -1356,28 +1439,34 @@ namespace disk::file {
 
             /// 解析可选参数 folder_id
             auto folder_id_result = QueryUInt64(req, "folder_id");
-            if (!folder_id_result) return std::unexpected(folder_id_result.error());
+            if (!folder_id_result) {
+                return std::unexpected(folder_id_result.error());
+            }
             request.query.folder_id = *folder_id_result;
 
             /// 解析可选参数 page
             auto page_result = QueryPositiveInt(req, "page", 1);
-            if (!page_result) return std::unexpected(page_result.error());
+            if (!page_result) {
+                return std::unexpected(page_result.error());
+            }
             if (page_result->has_value()) {
                 request.query.page = **page_result;
             }
 
             /// 解析可选参数 page_size
             auto page_size_result = QueryPositiveInt(req, "page_size", 1, 100);
-            if (!page_size_result) return std::unexpected(page_size_result.error());
+            if (!page_size_result) {
+                return std::unexpected(page_size_result.error());
+            }
             if (page_size_result->has_value()) {
                 request.query.page_size = **page_size_result;
             }
 
-            Logger::Debug() << "Parsed file search request: keyword=\"" << request.query.keyword
-                      << "\", type=" << request.query.type << ", folder_id="
-                      << (request.query.folder_id.has_value() ? std::to_string(*request.query.folder_id) :
-                                                                 "null")
-                      << ", page=" << request.query.page << ", page_size=" << request.query.page_size;
+            Logger::Debug(log_context) << "Parsed file search request: keyword=\"" << request.query.keyword
+                                       << "\", type=" << request.query.type << ", folder_id="
+                                       << (request.query.folder_id.has_value() ? std::to_string(*request.query.folder_id) :
+                                                                                 "null")
+                                       << ", page=" << request.query.page << ", page_size=" << request.query.page_size;
 
             return request;
         }
@@ -1421,4 +1510,4 @@ namespace disk::file {
         }
     };
 
-} ///< namespace disk::file
+} // namespace disk::file

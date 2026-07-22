@@ -1925,6 +1925,46 @@ def test_init_and_chunk_log_context_invariants() -> None:
     """Verify request correlation survives init/chunk coroutine boundaries."""
     log_section("Init And Chunk Structured Log Correlation")
 
+    dto_request_id = f"safety-init-dto-log-{unique_name()}"
+    invalid_hash = f"invalid-file-dto-hash-{unique_name()}"
+    dto_response = fetch(
+        "/api/file/upload/init",
+        method="POST",
+        headers={
+            **auth_headers(TOKEN),
+            "X-Request-Id": dto_request_id,
+        },
+        json_body={
+            "filename": f"invalid_dto_hash_{unique_name()}.bin",
+            "file_size": 1024,
+            "file_hash": invalid_hash,
+            "parent_id": 0,
+        },
+    )
+    assert_equal(
+        "file DTO rejects an invalid hash",
+        dto_response.status_code >= 400 and json_field(dto_response.text, "code") != "0",
+        True,
+    )
+    dto_instance_id = header_value(dto_response.headers, "X-Disk-Instance-Id")
+    assert_equal(
+        "file DTO failure preserves caller request ID",
+        header_value(dto_response.headers, "X-Request-Id"),
+        dto_request_id,
+    )
+    wait_for_correlated_application_log(
+        request_id=dto_request_id,
+        instance_id=dto_instance_id,
+        operation="upload_init",
+        upload_id=None,
+        message_marker=f"Invalid file hash format: {invalid_hash}",
+    )
+    assert_no_unscoped_application_log(
+        f"Invalid file hash format: {invalid_hash}",
+        assertion="file DTO validation emits no unscoped duplicate",
+    )
+    log_pass("file DTO validation log keeps typed request correlation")
+
     config_path = Path(os.environ.get("DISK_CONFIG_FILE", REPO_ROOT / "config.json"))
     if not config_path.is_absolute():
         config_path = REPO_ROOT / config_path

@@ -50,7 +50,7 @@ namespace disk::file {
             << "Received initialize upload request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
-        auto parse_result = InitUploadRequest::FromRequest(request);
+        auto parse_result = InitUploadRequest::FromRequest(request, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "Initialize upload request parameter validation failed: "
@@ -189,7 +189,7 @@ namespace disk::file {
             << "Received complete upload request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
-        auto parse_result = CompleteUploadRequest::FromRequest(request);
+        auto parse_result = CompleteUploadRequest::FromRequest(request, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "Complete upload request parameter validation failed: "
@@ -268,7 +268,7 @@ namespace disk::file {
             << "Received file list request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
-        auto parse_result = FileListRequest::FromRequest(request);
+        auto parse_result = FileListRequest::FromRequest(request, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "File list request parameter validation failed: "
@@ -309,7 +309,7 @@ namespace disk::file {
             << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数
-        auto parse_result = DownloadInfoRequest::FromPath(file_id);
+        auto parse_result = DownloadInfoRequest::FromPath(file_id, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "Get file detail request parameter validation failed: "
@@ -351,7 +351,7 @@ namespace disk::file {
             << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数
-        auto parse_result = disk::file::DownloadInfoRequest::FromPath(file_id);
+        auto parse_result = disk::file::DownloadInfoRequest::FromPath(file_id, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "Get download info request parameter validation failed: "
@@ -394,7 +394,7 @@ namespace disk::file {
             << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数
-        auto parse_result = disk::file::DownloadRequest::FromPath(file_id);
+        auto parse_result = disk::file::DownloadRequest::FromPath(file_id, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "Download file request parameter validation failed: "
@@ -463,7 +463,7 @@ namespace disk::file {
             << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数和请求体
-        auto parse_result = RenameRequest::FromPathAndRequest(file_id, request);
+        auto parse_result = RenameRequest::FromPathAndRequest(file_id, request, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "Rename request parameter validation failed: "
@@ -507,7 +507,7 @@ namespace disk::file {
             << "Received move file request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
-        auto parse_result = MoveRequest::FromRequest(request);
+        auto parse_result = MoveRequest::FromRequest(request, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "Move file request parameter validation failed: "
@@ -546,7 +546,7 @@ namespace disk::file {
             << "Received copy file request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
-        auto parse_result = CopyRequest::FromRequest(request);
+        auto parse_result = CopyRequest::FromRequest(request, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "Copy file request parameter validation failed: "
@@ -585,7 +585,7 @@ namespace disk::file {
             << "Received delete file request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
-        auto parse_result = DeleteRequest::FromRequest(request);
+        auto parse_result = DeleteRequest::FromRequest(request, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "Delete file request parameter validation failed: "
@@ -635,7 +635,7 @@ namespace disk::file {
             << "Received file search request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
-        auto parse_result = SearchRequest::FromRequest(request);
+        auto parse_result = SearchRequest::FromRequest(request, log_context);
         if (!parse_result) {
             Logger::Warn(log_context)
                 << "File search request parameter validation failed: "
