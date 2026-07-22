@@ -197,6 +197,9 @@ TEST(FilterOwnershipTest, AuthenticatedRateLimitersRemainRouteOwnedExactlyOnce) 
     const auto folder_controller = ControllerText("FolderController.hpp");
     EXPECT_EQ(CountOccurrences(folder_controller, "\"disk::filters::FolderRateLimitFilter\""), 4U);
 
+    const auto trash_controller = ControllerText("TrashController.hpp");
+    EXPECT_EQ(CountOccurrences(trash_controller, "\"disk::filters::RateLimitFilter\""), 5U);
+
     const auto admin_controller = ControllerText("AdminController.hpp");
     EXPECT_EQ(CountOccurrences(admin_controller, "\"disk::filters::AdminAuthFilter\""), 14U);
     EXPECT_EQ(CountOccurrences(admin_controller, "\"disk::filters::AdminRateLimitFilter\""), 14U);
@@ -269,6 +272,19 @@ TEST(FilterOwnershipTest, ShareRateLimitersHaveExactRouteOwnershipAndOrder) {
 }
 
 TEST(FilterOwnershipTest, RateLimitFiltersFailOpenOnRedisFailure) {
+    const auto api_filter =
+        ReadTextFile(SourceRoot() / "src" / "filters" / "RateLimitFilter.cpp");
+    EXPECT_TRUE(ContainsAllInOrder(
+        api_filter,
+        {
+            "auto incr_result = co_await m_counter",
+            "if (!incr_result)",
+            "Logger::Error(log_context)",
+            "Redis IncrWithExpire failed:",
+            "co_return nullptr;",
+        }
+    ));
+
     const auto admin_filter =
         ReadTextFile(SourceRoot() / "src" / "filters" / "AdminRateLimitFilter.cpp");
     EXPECT_TRUE(ContainsAllInOrder(

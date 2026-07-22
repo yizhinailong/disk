@@ -27,9 +27,18 @@ Usage:
   uv run test/integration/test_trash_lifecycle.py
 """
 
+import base64
 import json
 import os
 import sys
+import time
+import uuid
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE_ROOT = Path(os.environ.get("EVIDENCE_DIR", REPO_ROOT / ".sisyphus/evidence"))
+SERVER_LOG_PATH = EVIDENCE_ROOT / "trash-lifecycle-server.log"
+os.environ["SERVER_LOG"] = str(SERVER_LOG_PATH)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
@@ -46,6 +55,9 @@ from lib_py import (
     do_login,
     json_field,
     fetch,
+    header_value,
+    redis_delete_pattern,
+    redis_set_value,
     assert_json_field,
     assert_json_field_numeric_gt,
     create_temp_file,
@@ -69,9 +81,72 @@ TRASH_B_ID = ""
 RESTORED_FILE_A_ID = ""
 
 EVIDENCE_PREFIX = "task-6-trash-lifecycle"
+API_RATE_LIMIT = 100
+API_RATE_WINDOW_SECONDS = 60
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
+
+def access_token_subject(token: str) -> int:
+    """Read the trusted local access token subject for test-key ownership."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError("access token is not a compact JWT")
+    payload_segment = parts[1] + "=" * (-len(parts[1]) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
+    if payload.get("iss") != "disk" or payload.get("type") != "access":
+        raise ValueError("token payload is not a disk access token")
+    subject = str(payload.get("sub", ""))
+    if not subject.isdigit() or int(subject) <= 0:
+        raise ValueError("access token subject is not a positive user ID")
+    return int(subject)
+
+
+def wait_for_trash_rate_logs(request_id: str, instance_id: str) -> list[dict]:
+    """Return the correlated rejection and failure-duration records."""
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        records: list[dict] = []
+        if SERVER_LOG_PATH.is_file():
+            for line in SERVER_LOG_PATH.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ).splitlines():
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (
+                    isinstance(record, dict)
+                    and record.get("schema_version") == 1
+                    and record.get("source") == "application"
+                    and record.get("request_id") == request_id
+                    and record.get("instance_id") == instance_id
+                    and record.get("operation") == "trash"
+                    and record.get("upload_id") is None
+                    and record.get("job_id") is None
+                    and record.get("lease_owner") is None
+                    and record.get("state_version") is None
+                ):
+                    records.append(record)
+        messages = [str(record.get("message", "")) for record in records]
+        if (
+            any("API rate limit:" in message for message in messages)
+            and any("outcome=failure" in message for message in messages)
+        ):
+            return records
+        time.sleep(0.05)
+    return []
+
+
+def trash_response_contains_id(body: str, trash_id: str) -> bool:
+    """Return whether a trash list response contains one exact item ID."""
+    data = json.loads(body)
+    return any(
+        str(item.get("id")) == trash_id
+        for item in data.get("data", {}).get("items", [])
+    )
 
 
 def upload_fixture(token: str, suffix: str, file_size: int = 256) -> str:
@@ -497,7 +572,117 @@ def test_verify_file_b_gone() -> None:
         raise SystemExit(1)
 
 
-# ─── Test 10: Empty all trash ───────────────────────────────────────────────
+# ─── Test 10: Trash rate-limit rejection ───────────────────────────────────
+
+
+def test_trash_rate_limit_correlation() -> None:
+    log_section("Trash Rate-Limit Rejection")
+
+    probe_file_id = upload_fixture(TOKEN, "rate_limit_probe")
+    soft_delete_file(probe_file_id, "rate-limit-probe")
+    probe_trash_id = get_trash_id(probe_file_id, "rate-limit-probe")
+    if not probe_trash_id:
+        raise SystemExit(1)
+
+    try:
+        user_id = access_token_subject(TOKEN)
+    except (ValueError, json.JSONDecodeError) as error:
+        log_fail(f"Trash rate-limit token subject is unavailable: {error}")
+        raise SystemExit(1) from error
+
+    now = time.time()
+    window_start = (int(now) // API_RATE_WINDOW_SECONDS) * API_RATE_WINDOW_SECONDS
+    seconds_until_reset = window_start + API_RATE_WINDOW_SECONDS - now
+    if seconds_until_reset < 2:
+        time.sleep(seconds_until_reset + 0.05)
+        now = time.time()
+        window_start = (int(now) // API_RATE_WINDOW_SECONDS) * API_RATE_WINDOW_SECONDS
+
+    rate_key = f"rate:api:{user_id}:{window_start}"
+    request_id = f"trash-rate-limit-{uuid.uuid4()}"
+    ok = True
+    try:
+        redis_set_value(
+            rate_key,
+            str(API_RATE_LIMIT),
+            max(1, window_start + API_RATE_WINDOW_SECONDS - int(time.time())),
+        )
+        response = fetch(
+            "/api/trash/all",
+            method="DELETE",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+                "X-Request-Id": request_id,
+            },
+        )
+        save_evidence(f"{EVIDENCE_PREFIX}-rate-limit.json", response.text)
+
+        if response.status_code == 429 and json_field(response.text, "code") == "10005":
+            log_pass("trash-rate-limit: returned HTTP 429 and code 10005")
+        else:
+            log_fail(
+                "trash-rate-limit: response drifted: "
+                f"HTTP {response.status_code}, code={json_field(response.text, 'code')}"
+            )
+            ok = False
+
+        expected_headers = {
+            "X-RateLimit-Limit": str(API_RATE_LIMIT),
+            "X-RateLimit-Remaining": "0",
+            "X-Request-Id": request_id,
+        }
+        if all(
+            header_value(response.headers, name) == expected
+            for name, expected in expected_headers.items()
+        ) and header_value(response.headers, "X-RateLimit-Reset"):
+            log_pass("trash-rate-limit: response headers preserve the fixed-window contract")
+        else:
+            log_fail("trash-rate-limit: response headers drifted")
+            ok = False
+        if header_value(response.headers, "Retry-After"):
+            log_fail("trash-rate-limit: Retry-After must remain absent")
+            ok = False
+        else:
+            log_pass("trash-rate-limit: Retry-After remains absent")
+
+        instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+        records = wait_for_trash_rate_logs(request_id, instance_id) if instance_id else []
+        if records:
+            log_pass("trash-rate-limit: warning and failure duration preserve correlation")
+        else:
+            log_fail("trash-rate-limit: correlated rejection logs are missing")
+            ok = False
+
+        serialized_records = "\n".join(
+            json.dumps(record, ensure_ascii=False, sort_keys=True)
+            for record in records
+        )
+        if any(value and value in serialized_records for value in (TEST_PASS, TOKEN, probe_trash_id)):
+            log_fail("trash-rate-limit: correlated logs contain credentials or trash IDs")
+            ok = False
+        else:
+            log_pass("trash-rate-limit: correlated logs exclude credentials and trash IDs")
+    finally:
+        redis_delete_pattern(f"rate:api:{user_id}:*")
+
+    list_response = fetch(
+        "/api/trash",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    if list_response.status_code == 200 and trash_response_contains_id(
+        list_response.text,
+        probe_trash_id,
+    ):
+        log_pass("trash-rate-limit: rejected delete-all preserved the probe item")
+    else:
+        log_fail("trash-rate-limit: rejected delete-all removed the probe item")
+        ok = False
+
+    if not ok:
+        raise SystemExit(1)
+
+
+# ─── Test 11: Empty all trash ───────────────────────────────────────────────
 
 
 def test_empty_all_trash() -> None:
@@ -539,6 +724,7 @@ def main() -> None:
     print("==========================================")
     print()
 
+    SERVER_LOG_PATH.unlink(missing_ok=True)
     ensure_server()
 
     token = do_login(TEST_USER, TEST_PASS)
@@ -561,6 +747,7 @@ def main() -> None:
     test_verify_not_in_trash_after_restore()
     test_permanent_delete_file()
     test_verify_file_b_gone()
+    test_trash_rate_limit_correlation()
     test_empty_all_trash()
 
     print()

@@ -149,6 +149,25 @@ The route-owned administrator rate-limit filter SHALL build explicit request cor
 - **WHEN** a direct caller omits the request trace attribute or a request supplies an Authorization value, access token, confirmation, reason, or other request content
 - **THEN** the event SHALL retain the bounded route operation with explicit JSON null request correlation when needed and SHALL NOT contain the Authorization value, access token, password, request body, recovery reason, or storage credential
 
+### Requirement: Trash User Rate-Limit Filter Correlation
+The route-owned generic user rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every attribute failure, counter-dependency failure, successful check, limit rejection, and duration event directly owned by that filter SHALL use the context without changing its five trash route declarations, `rate:api` user fixed-window key, fixed 100-request threshold, 60-second window, Redis initialization, fail-open behavior, HTTP response, or trash side effects.
+
+#### Scenario: Trash user rate-limit filter handles traced routes
+- **WHEN** the filter emits an event for list, restore, either permanent-delete route, or delete-all
+- **THEN** it SHALL retain the same request ID and actual handling instance as the HTTP completion event with bounded `trash`
+
+#### Scenario: Trash user rate-limit filter rejects a destructive request
+- **WHEN** delete-all exceeds the current user fixed-window threshold
+- **THEN** the warning and failure-duration events SHALL retain the response request and instance correlation, the existing 429/`10005` envelope and three `X-RateLimit-*` headers SHALL remain unchanged, `Retry-After` SHALL remain absent, and no trash item SHALL be deleted
+
+#### Scenario: Trash user rate-limit filter observes identity and request values
+- **WHEN** the filter observes a user ID, trash ID, counter key, count, window, threshold, request field, duration, or dependency result before the trash controller validates the business request
+- **THEN** it SHALL NOT derive upload ID, job ID, lease owner, or state version from that value, and those fields SHALL remain null
+
+#### Scenario: Trash user rate-limit filter handles credentials, content, or missing trace state
+- **WHEN** a direct caller omits the request trace attribute or a request supplies an Authorization value, access token, trash ID, delete body, or other request content
+- **THEN** the event SHALL retain bounded `trash` with explicit JSON null request correlation when needed and SHALL NOT contain the Authorization value, access token, password, request body, trash ID, file content, or storage credential
+
 ### Requirement: Register Rate-Limit Filter Correlation
 The register rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing the exact-path scope, normalized-IP key, configured window or threshold, fail-open behavior, or HTTP response.
 

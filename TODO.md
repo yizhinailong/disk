@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 管理员限流日志关联）：完整构建、管理员限流与过滤器归属聚焦 GoogleTest 21/21、直接存储任务运维集成 1/1、存储任务运维注册 CTest 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1434 项，1427 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 476.79 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 回收站通用用户限流日志关联）：完整构建、回收站通用用户限流与过滤器归属聚焦 GoogleTest 13/13、直接回收站生命周期集成 43/43、回收站生命周期注册 CTest 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1436 项，1429 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 479.90 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -739,6 +739,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定路由级
 普通管理员、上传诊断、存储任务与恢复命令继续共享同一个管理员用户桶并保持 `admin` operation，精确过期清理路由使用同一桶但保持 `cleanup` operation，不因共享计数键而合并语义。过滤器不读取 Authorization 或请求正文，也不从用户、path、upload/job/scan ID、计数键、窗口、阈值或依赖结果推断 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。`AdminRateLimitLogContextContractTest` 与内存 NDJSON 用例锁定一个上下文构造点、三个日志调用、失败/成功/拒绝分支、五类代表路由、空所有权字段、默认真实 Redis helper 及凭据/恢复正文排除；`FilterOwnershipTest` 同步锁定当前 21 条路由的认证先行归属与注入计数器失败后的放行顺序。
 
 `test_storage_job_operations.py` 读取活动配置和当前已认证管理员，以 TTL 将该用户的管理员固定窗口键预置到阈值，再以唯一 request ID 发送真实存储任务列表请求；它核对 429、业务码 `10005`、四个限流头、响应 request/instance、warning 的 `admin` 关联和四个空所有权字段，并验证 `storage_jobs` 与 `operation_logs` 行数未改变且受管 stdout 不含管理员 JWT。完整构建、Python 语法检查、管理员限流与过滤器归属聚焦 GoogleTest 21/21、直接存储任务运维集成 1/1、存储任务运维注册 CTest 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1434 项，1427 通过、7 项环境门控跳过、0 失败，总耗时 476.79 秒。`TokenService`、`RedisService`、通用用户限流过滤器及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.37 回收站通用用户限流过滤器日志关联记录（2026-07-22）
+
+权威需求、数据库、部署运维、系统测试、单元测试和 OpenSpec 文档先行纠正旧的全局/令牌桶描述：名为 `RateLimitFilter` 的过滤器实际只由 `TrashController` 的 list、restore、两条 permanent-delete 和 delete-all 共 5 条路由声明，使用 `rate:api:{user_id}:{window}`、100 次/60 秒固定窗口。它现在在入口通过 `GetFilterLogContext` 从请求属性和现有 HTTP 分类器构造一次上下文；缺失属性、Redis 计数失败、成功检查、成功耗时、超限拒绝和失败耗时 6 类直接事件继续使用原有级别，并统一保留该上下文。计数动作新增同签名可注入边界供内存测试使用，默认构造仍初始化真实 `RedisService` 并调用既有固定窗口 helper；JWT 认证先行、Redis 故障 fail-open、阈值、路由归属、429 信封、三项 `X-RateLimit-*` 头及不返回 `Retry-After` 的响应合同未改变。
+
+5 条回收站路由继续共享同一个用户桶并保持 `trash` operation。过滤器不读取 Authorization 或请求正文，也不从用户、path、trash ID、计数键、窗口、阈值、耗时或依赖结果推断 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。`RateLimitLogContextTest` 与内存 NDJSON 用例锁定一个上下文构造点、六个日志调用、缺失属性/失败/成功/拒绝分支、空所有权字段、默认真实 Redis helper/初始化、三项限流头和凭据/正文/trash ID 排除；`FilterOwnershipTest` 同步锁定当前 5 条路由的唯一归属与注入计数器失败后的放行顺序。
+
+`test_trash_lifecycle.py` 创建并软删除唯一探针文件，以 TTL 将当前已认证用户的固定窗口键预置到 100，再以唯一 request ID 发送真实 delete-all 请求；它核对 429、业务码 `10005`、三项限流头、`Retry-After` 缺失以及 warning/失败耗时事件的 request/instance/`trash` 和四个空所有权字段，并在清理限流键后证明探针仍在回收站，随后由原有 delete-all 流程回收。完整构建、Python 语法检查、回收站通用用户限流与过滤器归属聚焦 GoogleTest 13/13、直接回收站生命周期集成 43/43、回收站生命周期注册 CTest 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1436 项，1429 通过、7 项环境门控跳过、0 失败，总耗时 479.90 秒。`TokenService`、`RedisService` 共享基础设施边界及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

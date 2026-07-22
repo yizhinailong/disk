@@ -1,7 +1,7 @@
 /**
  * @file RateLimitFilter.hpp
  * @author LiuFeng (liufeng.code@outlook.com)
- * @brief API 频率限制过滤器
+ * @brief 回收站路由通用用户频率限制过滤器
  *
  * @copyright Copyright (c) 2026
  *
@@ -10,20 +10,27 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
+#include <functional>
+#include <string>
 
 #include <drogon/HttpFilter.h>
 
-#include "services/RedisService.hpp"
+#include "utils/ErrorCode.hpp"
 
 namespace disk::filters {
 
+    using ApiRateLimitCounter =
+        std::function<drogon::Task<Result<int64_t>>(const std::string&, int)>;
+
     /**
-     * @brief API 频率限制过滤器
+     * @brief 回收站路由通用用户频率限制过滤器
      *
-     * 实现基于用户 ID 的 API 请求频率限制：
+     * 实现基于用户 ID 的回收站请求频率限制：
      * - 使用 Redis 固定窗口算法
      * - 默认限制：100 次/分钟/用户
      * - 窗口大小：60 秒
+     * - 只由 TrashController 的五条路由声明
      * - 超过限制返回 429 Too Many Requests
      *
      * 响应头：
@@ -34,6 +41,7 @@ namespace disk::filters {
     class RateLimitFilter : public drogon::HttpCoroFilter<RateLimitFilter> {
     public:
         RateLimitFilter();
+        explicit RateLimitFilter(ApiRateLimitCounter counter);
 
         [[nodiscard]]
         auto doFilter(const drogon::HttpRequestPtr& request)
@@ -43,7 +51,7 @@ namespace disk::filters {
         static constexpr int WINDOW_SECONDS = 60;
 
     private:
-        std::shared_ptr<disk::services::RedisService> m_redis_service{};
+        ApiRateLimitCounter m_counter;
 
         [[nodiscard]]
         static auto GetCurrentWindow() -> int64_t {
@@ -61,4 +69,4 @@ namespace disk::filters {
         }
     };
 
-} ///< namespace disk::filters
+} // namespace disk::filters
