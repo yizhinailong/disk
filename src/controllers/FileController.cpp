@@ -262,67 +262,83 @@ namespace disk::file {
 
     auto FileController::List(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "file_query");
 
-        Logger::Info() << "Received file list request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context)
+            << "Received file list request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
         auto parse_result = FileListRequest::FromRequest(request);
         if (!parse_result) {
-            Logger::Warn() << "File list request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "File list request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "File list parameters validated: parent_id=" << parse_result->query.parent_id
-                        << ", page=" << parse_result->query.page << ", page_size=" << parse_result->query.page_size
-                        << ", sort_by=" << parse_result->query.sort_by
-                        << ", sort_order=" << parse_result->query.sort_order << ", type=" << parse_result->query.type;
+        Logger::Debug(log_context)
+            << "File list parameters validated: parent_id=" << parse_result->query.parent_id
+            << ", page=" << parse_result->query.page << ", page_size=" << parse_result->query.page_size
+            << ", sort_by=" << parse_result->query.sort_by
+            << ", sort_order=" << parse_result->query.sort_order << ", type=" << parse_result->query.type;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取文件列表
-        auto result = co_await m_query_service->GetFileList(*parse_result, user_id);
+        auto result = co_await m_query_service->GetFileList(*parse_result, user_id, log_context);
         if (!result) {
-            Logger::Error() << "Get file list failed: " << result.error().message
-                            << " (user_id=" << user_id << ")";
+            Logger::Error(log_context)
+                << "Get file list failed: " << result.error().message
+                << " (user_id=" << user_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info() << "Get file list successful: items=" << result->items.size()
-                       << " (user_id=" << user_id << ")";
+        Logger::Info(log_context)
+            << "Get file list successful: items=" << result->items.size()
+            << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
     auto FileController::GetDetail(drogon::HttpRequestPtr request, std::string file_id)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "file_query");
 
-        Logger::Info() << "Received get file detail request: " << request->getPeerAddr().toIpPort()
-                       << ", file_id=" << file_id;
+        Logger::Info(log_context)
+            << "Received get file detail request: " << request->getPeerAddr().toIpPort()
+            << ", file_id=" << file_id;
 
         /// 1. 解析并验证路径参数
         auto parse_result = DownloadInfoRequest::FromPath(file_id);
         if (!parse_result) {
-            Logger::Warn() << "Get file detail request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "Get file detail request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "Get file detail parameters validated: file_id=" << parse_result->file_id;
+        Logger::Debug(log_context)
+            << "Get file detail parameters validated: file_id=" << parse_result->file_id;
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层获取文件详情
-        auto result = co_await m_query_service->GetFileDetail(parse_result->file_id, user_id);
+        auto result = co_await m_query_service->GetFileDetail(
+            parse_result->file_id,
+            user_id,
+            log_context
+        );
         if (!result) {
-            Logger::Error() << "Get file detail failed: " << result.error().message
-                            << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+            Logger::Error(log_context)
+                << "Get file detail failed: " << result.error().message
+                << " (user_id=" << user_id << ", file_id=" << file_id << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info() << "Get file detail successful: name=" << result->name
-                       << " (user_id=" << user_id << ", file_id=" << file_id << ")";
+        Logger::Info(log_context)
+            << "Get file detail successful: name=" << result->name
+            << " (user_id=" << user_id << ", file_id=" << file_id << ")";
         co_return Response::Success(result->ToJson());
     }
 
@@ -587,33 +603,39 @@ namespace disk::file {
 
     auto FileController::Search(drogon::HttpRequestPtr request)
         -> drogon::Task<drogon::HttpResponsePtr> {
+        auto log_context = disk::controllers::GetRequestLogContext(request, "file_query");
 
-        Logger::Info() << "Received file search request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context)
+            << "Received file search request: " << request->getPeerAddr().toIpPort();
 
         /// 1. 解析并验证请求参数
         auto parse_result = SearchRequest::FromRequest(request);
         if (!parse_result) {
-            Logger::Warn() << "File search request parameter validation failed: "
-                           << parse_result.error().message;
+            Logger::Warn(log_context)
+                << "File search request parameter validation failed: "
+                << parse_result.error().message;
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug() << "File search parameters validated: keyword=\"" << parse_result->query.keyword
-                        << "\"";
+        Logger::Debug(log_context)
+            << "File search parameters validated: keyword=\"" << parse_result->query.keyword
+            << "\"";
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
 
         /// 3. 调用 Service 层搜索文件
-        auto result = co_await m_query_service->Search(*parse_result, user_id);
+        auto result = co_await m_query_service->Search(*parse_result, user_id, log_context);
         if (!result) {
-            Logger::Error() << "File search failed: " << result.error().message << " (user_id=" << user_id
-                            << ")";
+            Logger::Error(log_context)
+                << "File search failed: " << result.error().message << " (user_id=" << user_id
+                << ")";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info() << "File search successful: total=" << result->pagination.total
-                       << ", page=" << result->pagination.page << " (user_id=" << user_id << ")";
+        Logger::Info(log_context)
+            << "File search successful: total=" << result->pagination.total
+            << ", page=" << result->pagination.page << " (user_id=" << user_id << ")";
         co_return Response::Success(result->ToJson());
     }
 

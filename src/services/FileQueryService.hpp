@@ -52,10 +52,15 @@ namespace disk::file {
          *
          * @param request 文件列表请求
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<FileListResponse>> 成功返回文件列表，失败返回错误
          */
         [[nodiscard]]
-        auto GetFileList(FileListRequest request, uint64_t user_id)
+        auto GetFileList(
+            FileListRequest request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<FileListResponse>>;
 
         /**
@@ -63,10 +68,15 @@ namespace disk::file {
          *
          * @param file_id 文件 ID
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<FileDetailResponse>> 成功返回文件详情，失败返回错误
          */
         [[nodiscard]]
-        auto GetFileDetail(uint64_t file_id, uint64_t user_id)
+        auto GetFileDetail(
+            uint64_t file_id,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<FileDetailResponse>>;
 
         /**
@@ -134,10 +144,15 @@ namespace disk::file {
          *
          * @param request 搜索请求
          * @param user_id 用户 ID
+         * @param log_context 请求日志上下文
          * @return drogon::Task<Result<SearchResponse>> 成功返回搜索结果，失败返回错误
          */
         [[nodiscard]]
-        auto Search(SearchRequest request, uint64_t user_id)
+        auto Search(
+            SearchRequest request,
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        )
             -> drogon::Task<Result<SearchResponse>>;
 
     private:

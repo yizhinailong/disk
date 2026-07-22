@@ -140,6 +140,17 @@ namespace disk::metrics {
         ) -> double {
             return row[field].isNull() ? 0.0 : row[field].as<double>();
         }
+
+        [[nodiscard]] auto IsNumericFileDetailPath(std::string_view path) noexcept -> bool {
+            constexpr std::string_view prefix = "/api/file/";
+            if (!path.starts_with(prefix)) {
+                return false;
+            }
+            const auto segment = path.substr(prefix.size());
+            return !segment.empty() && std::ranges::all_of(segment, [](char character) {
+                return character >= '0' && character <= '9';
+            });
+        }
     } // namespace
 
     auto ClassifyHttpOperation(std::string_view path) noexcept -> HttpOperation {
@@ -168,6 +179,10 @@ namespace disk::metrics {
             path.starts_with("/api/share/download/")) {
             return HttpOperation::Download;
         }
+        if (path == "/api/file/list" || path == "/api/file/search" ||
+            IsNumericFileDetailPath(path)) {
+            return HttpOperation::FileQuery;
+        }
         if (path == "/api/share" || path.starts_with("/api/share/")) {
             return HttpOperation::Share;
         }
@@ -185,6 +200,7 @@ namespace disk::metrics {
             "health",
             "metrics",
             "auth",
+            "file_query",
             "upload_init",
             "upload_chunk",
             "upload_complete",

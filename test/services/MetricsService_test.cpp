@@ -16,11 +16,21 @@ namespace disk::metrics {
             EXPECT_EQ(ClassifyHttpOperation("/api/health/ready"), HttpOperation::Health);
             EXPECT_EQ(ClassifyHttpOperation("/metrics"), HttpOperation::Metrics);
             EXPECT_EQ(ClassifyHttpOperation("/api/auth/login"), HttpOperation::Auth);
+            EXPECT_EQ(ClassifyHttpOperation("/api/file/list"), HttpOperation::FileQuery);
+            EXPECT_EQ(ClassifyHttpOperation("/api/file/123"), HttpOperation::FileQuery);
+            EXPECT_EQ(ClassifyHttpOperation("/api/file/search"), HttpOperation::FileQuery);
+            EXPECT_EQ(HttpOperationName(HttpOperation::FileQuery), "file_query");
             EXPECT_EQ(ClassifyHttpOperation("/api/file/upload/init"), HttpOperation::UploadInit);
             EXPECT_EQ(ClassifyHttpOperation("/api/file/upload/chunk"), HttpOperation::UploadChunk);
             EXPECT_EQ(ClassifyHttpOperation("/api/file/upload/complete"), HttpOperation::UploadComplete);
             EXPECT_EQ(ClassifyHttpOperation("/api/file/upload/upload-123"), HttpOperation::UploadCancel);
             EXPECT_EQ(ClassifyHttpOperation("/api/file/download/77"), HttpOperation::Download);
+            EXPECT_EQ(ClassifyHttpOperation("/api/file/not-a-number"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/file/123/rename"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/file/move"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/file/copy"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/file/delete"), HttpOperation::Other);
+            EXPECT_EQ(ClassifyHttpOperation("/api/file"), HttpOperation::Other);
             EXPECT_EQ(ClassifyHttpOperation("/api/share/secret-id"), HttpOperation::Share);
             EXPECT_EQ(
                 ClassifyHttpOperation("/api/admin/maintenance/cleanup/expired"),

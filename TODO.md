@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 过期上传状态版本与日志关联）：完整构建、聚焦过期仓储/生命周期 GTest 5/5、真实 HTTP safety 集成 1/1（脚本内 518 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1404 项，1397 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 481.89 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 文件查询日志关联）：完整构建、聚焦文件查询分类/上下文/缓存合同 GTest 3/3、真实 HTTP safety 集成 1/1（脚本内 530 项断言）和拓扑合同 1/1 通过；完整 CTest 共 1405 项，1398 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 484.63 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -573,6 +573,14 @@ API、数据库、部署运维、系统测试、单元测试和 OpenSpec 文档�
 `UploadLifecycleService` 保留调用方 request/operation 和 Worker 的真实 job/owner，只在事务提交后将返回版本写入逐上传 `INFO` 成功汇总；竞争失败保持空版本并降为 `DEBUG`。手动 cleanup 批次事件继续保持 `upload_id/job_id/lease_owner/state_version=null`，其逐项成功事件只补入真实 upload/version；Worker 任务级版本仍为空，逐项事件不得从 scan/page/attempts/job generation 推断版本。公开清理响应合同未改变。
 
 `UploadTaskRepositoryTest` 锁定版本 SQL、返回类型、单一过期原语及事务调用顺序；`SafetyUploadInvariantsIntegration` 通过真实 HTTP 手动过期清理查询迁移前后 PostgreSQL 行，验证版本精确增加一次，并在受管后端 stdout NDJSON 中定位同一 request/instance、真实 upload ID、提交版本和空 job/owner 的逐项成功事件。完整构建、Python 语法检查、聚焦过期仓储/生命周期 GTest 5/5、真实 HTTP safety 集成 1/1（脚本内 518 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1404 项，1397 通过、7 项环境门控跳过、0 失败，总耗时 481.89 秒。其他请求域的历史辅助日志和目标 S3/多实例环境门控仍未全部完成，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.16 文件查询日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定文件查询的类型化日志与分类边界。HTTP 指标只将精确的 `/api/file/list`、`/api/file/search` 和单段无符号十进制详情路径归为低基数 `operation=file_query`；上传、下载、rename/move/copy/delete 及非数字详情路径均保持原分类，不会被查询标签吸收。公开 REST 路由、请求参数、响应信封和错误码没有变化。
+
+`FileController` 在 DTO 或路径参数解析前从请求属性创建显式 `LogContext`，按值传入 `FileQueryService` 的列表、详情和搜索协程；Controller 与查询服务的既有请求级事件均使用同一 request/instance/operation。文件 ID、父目录 ID、搜索关键字、用户 ID 和缓存 key 只保留在消息中，不冒充 `upload_id`、`job_id`、`lease_owner` 或 `state_version`，这四个非查询所有权字段保持 JSON `null`。
+
+`MetricsServiceTest` 锁定查询与上传/下载/变更路径的分类边界，`FileQueryLogContextContractTest` 锁定 Controller/Service 六个代码区段的显式上下文传播。`SafetyUploadInvariantsIntegration` 使用三个不同的调用方 request ID，分别触发不存在父目录的列表失败、不存在文件的数字详情失败和非法搜索分页，逐行核对 Controller、查询服务及 HTTP 完成 NDJSON 的 request/instance、固定 operation 与四个空所有权字段。完整构建、Python 语法检查、聚焦 GTest 3/3、真实 HTTP safety 集成 1/1（脚本内 530 项断言）、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1405 项，1398 通过、7 项环境门控跳过、0 失败，总耗时 484.63 秒。DTO 内部解析日志、文件变更/目录/分享/管理员等其他历史请求域及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

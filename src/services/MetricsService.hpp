@@ -28,6 +28,7 @@ namespace disk::metrics {
         Health,
         Metrics,
         Auth,
+        FileQuery,
         UploadInit,
         UploadChunk,
         UploadComplete,

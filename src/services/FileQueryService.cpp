@@ -42,14 +42,19 @@ namespace disk::file {
 
     /// ==================== GetFileList ====================
 
-    auto FileQueryService::GetFileList(FileListRequest request, uint64_t user_id)
+    auto FileQueryService::GetFileList(
+        FileListRequest request,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<FileListResponse>> {
         const auto& query_params = request.query;
 
-        Logger::Debug() << "Starting get file list: parent_id=" << query_params.parent_id
-                        << ", page=" << query_params.page << ", page_size=" << query_params.page_size
-                        << ", sort_by=" << query_params.sort_by << ", sort_order=" << query_params.sort_order
-                        << ", type=" << query_params.type << ", user_id=" << user_id;
+        Logger::Debug(log_context)
+            << "Starting get file list: parent_id=" << query_params.parent_id
+            << ", page=" << query_params.page << ", page_size=" << query_params.page_size
+            << ", sort_by=" << query_params.sort_by << ", sort_order=" << query_params.sort_order
+            << ", type=" << query_params.type << ", user_id=" << user_id;
 
         /// 0. Try the current per-user Redis cache generation.
         std::string cache_key;
@@ -70,7 +75,7 @@ namespace disk::file {
 
             auto cache_result = co_await m_redis_service->Get(cache_key);
             if (cache_result.has_value()) {
-                Logger::Debug() << "File list cache hit: key=" << cache_key;
+                Logger::Debug(log_context) << "File list cache hit: key=" << cache_key;
                 Json::Value cached_json;
                 Json::CharReaderBuilder builder;
                 std::istringstream stream(*cache_result);
@@ -78,16 +83,18 @@ namespace disk::file {
                 if (Json::parseFromStream(builder, stream, &cached_json, &errors)) {
                     co_return FileListResponse::FromJson(cached_json);
                 }
-                Logger::Warn() << "File list cache parse error: " << errors;
+                Logger::Warn(log_context) << "File list cache parse error: " << errors;
             } else if (cache_result.error().code != ErrorCode::RedisKeyNotFound) {
-                Logger::Warn() << "File list cache read failed; falling back to database: user_id="
-                               << user_id;
+                Logger::Warn(log_context)
+                    << "File list cache read failed; falling back to database: user_id="
+                    << user_id;
                 cache_available = false;
             }
-            Logger::Debug() << "File list cache miss: key=" << cache_key;
+            Logger::Debug(log_context) << "File list cache miss: key=" << cache_key;
         } else {
-            Logger::Warn() << "File list cache version read failed; falling back to database: user_id="
-                           << user_id;
+            Logger::Warn(log_context)
+                << "File list cache version read failed; falling back to database: user_id="
+                << user_id;
         }
 
         /// 1. 验证 parent_id 文件夹存在且属于用户（如果 parent_id != 0）
@@ -98,9 +105,11 @@ namespace disk::file {
                     Criteria(Folders::Cols::_id, CompareOperator::EQ, query_params.parent_id) &&
                     Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id)
                 );
-                Logger::Debug() << "Folder verification passed: folder_id=" << query_params.parent_id;
+                Logger::Debug(log_context)
+                    << "Folder verification passed: folder_id=" << query_params.parent_id;
             } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Warn() << "Folder not found or no permission: folder_id=" << query_params.parent_id;
+                Logger::Warn(log_context)
+                    << "Folder not found or no permission: folder_id=" << query_params.parent_id;
                 co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
             }
         }
@@ -111,15 +120,16 @@ namespace disk::file {
             FileListQuery query(m_db_client);
             response = co_await query.Execute(query_params, user_id);
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Failed to query file list: " << e.base().what();
+            Logger::Warn(log_context) << "Failed to query file list: " << e.base().what();
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to query file list"
             ));
         }
 
-        Logger::Debug() << "File list retrieved successfully: total=" << response.pagination.total
-                        << ", page=" << query_params.page;
+        Logger::Debug(log_context)
+            << "File list retrieved successfully: total=" << response.pagination.total
+            << ", page=" << query_params.page;
 
         /// Cache only when the generation read succeeded.
         if (cache_available) {
@@ -133,7 +143,7 @@ namespace disk::file {
                 FileListCache::ENTRY_TTL_SECONDS
             );
             if (!set_result) {
-                Logger::Warn() << "File list cache write failed: user_id=" << user_id;
+                Logger::Warn(log_context) << "File list cache write failed: user_id=" << user_id;
             }
         }
 
@@ -142,10 +152,15 @@ namespace disk::file {
 
     /// ==================== GetFileDetail ====================
 
-    auto FileQueryService::GetFileDetail(uint64_t file_id, uint64_t user_id)
+    auto FileQueryService::GetFileDetail(
+        uint64_t file_id,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<FileDetailResponse>> {
 
-        Logger::Debug() << "Starting get file detail: file_id=" << file_id << ", user_id=" << user_id;
+        Logger::Debug(log_context)
+            << "Starting get file detail: file_id=" << file_id << ", user_id=" << user_id;
 
         try {
             CoroMapper<Files> file_mapper(m_db_client);
@@ -180,11 +195,13 @@ namespace disk::file {
             response.created_at = file.getValueOfCreatedAt().toDbStringLocal();
             response.updated_at = file.getValueOfUpdatedAt().toDbStringLocal();
 
-            Logger::Debug() << "File detail retrieved successfully: name=" << response.name;
+            Logger::Debug(log_context)
+                << "File detail retrieved successfully: name=" << response.name;
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "File not found or no permission: file_id=" << file_id;
+            Logger::Warn(log_context)
+                << "File not found or no permission: file_id=" << file_id;
             co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
         }
     }
@@ -331,25 +348,32 @@ namespace disk::file {
 
     /// ==================== Search ====================
 
-    auto FileQueryService::Search(SearchRequest request, uint64_t user_id)
+    auto FileQueryService::Search(
+        SearchRequest request,
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    )
         -> drogon::Task<Result<SearchResponse>> {
         const auto& query_params = request.query;
 
-        Logger::Debug() << "Starting search file: keyword=\"" << query_params.keyword
-                        << "\", type=" << query_params.type << ", folder_id="
-                        << (query_params.folder_id.has_value() ? std::to_string(*query_params.folder_id) : "null")
-                        << ", page=" << query_params.page << ", page_size=" << query_params.page_size
-                        << ", user_id=" << user_id;
+        Logger::Debug(log_context)
+            << "Starting search file: keyword=\"" << query_params.keyword
+            << "\", type=" << query_params.type << ", folder_id="
+            << (query_params.folder_id.has_value() ? std::to_string(*query_params.folder_id) : "null")
+            << ", page=" << query_params.page << ", page_size=" << query_params.page_size
+            << ", user_id=" << user_id;
 
         SearchResponse response;
         try {
             SearchQuery query(m_db_client);
             response = co_await query.Execute(query_params, user_id);
         } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn() << "Failed to search: " << e.base().what();
+            Logger::Warn(log_context) << "Failed to search: " << e.base().what();
         }
 
-        Logger::Debug() << "Search completed: total=" << response.pagination.total << ", page=" << query_params.page;
+        Logger::Debug(log_context)
+            << "Search completed: total=" << response.pagination.total
+            << ", page=" << query_params.page;
         co_return response;
     }
 

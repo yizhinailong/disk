@@ -42,6 +42,21 @@ The system SHALL associate requests with trace identifiers for log correlation a
 - **WHEN** the system handles an HTTP request
 - **THEN** it SHALL make the request trace identifier available for logging and response propagation
 
+### Requirement: Typed File Query Correlation
+The system SHALL classify file-list, numeric file-detail, and file-search requests as the bounded `file_query` operation and SHALL propagate their correlation explicitly by value across controller and query-service coroutine boundaries.
+
+#### Scenario: User lists, inspects, or searches files
+- **WHEN** an authenticated request enters a file-list, numeric file-detail, or file-search route
+- **THEN** its response, HTTP completion event, controller events, and query-service events SHALL retain the same request ID, actual handling instance, and `file_query` operation
+
+#### Scenario: File query has no upload or durable-job ownership
+- **WHEN** a file query records identifiers such as a file ID, parent folder ID, or search keyword
+- **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those query values SHALL NOT be overloaded into typed correlation fields
+
+#### Scenario: Another file-domain route is classified
+- **WHEN** the request targets upload, download, or a file-mutation route
+- **THEN** the file-query classifier SHALL NOT absorb it, and the route SHALL retain its existing bounded operation classification
+
 ### Requirement: Typed Upload Completion Correlation
 The system SHALL propagate upload-completion correlation explicitly across controller, service, lifecycle, database, and storage coroutine boundaries without thread-local request state or message parsing.
 

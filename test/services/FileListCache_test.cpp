@@ -5,10 +5,12 @@
  * @copyright Copyright (c) 2026
  */
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 #include <gtest/gtest.h>
 
@@ -45,6 +47,74 @@ namespace disk::file {
             EXPECT_NE(source.find("cache_available = false;"), std::string::npos);
             EXPECT_NE(source.find("falling back to database"), std::string::npos);
             EXPECT_NE(source.find("ErrorCode::InternalError,\n                \"Failed to query file list\""), std::string::npos);
+        }
+
+        TEST(FileQueryLogContextContractTest, ControllerAndServiceUseExplicitRequestContext) {
+            const auto controller = ReadSourceFile("src/controllers/FileController.cpp");
+            const auto service = ReadSourceFile("src/services/FileQueryService.cpp");
+
+            const auto list_controller_begin = controller.find("auto FileController::List(");
+            const auto detail_controller_begin = controller.find("auto FileController::GetDetail(");
+            const auto download_controller_begin = controller.find("auto FileController::DownloadInfo(");
+            const auto search_controller_begin = controller.find("auto FileController::Search(");
+            const auto controller_end = controller.find("} // namespace disk::file", search_controller_begin);
+            ASSERT_NE(list_controller_begin, std::string::npos);
+            ASSERT_NE(detail_controller_begin, std::string::npos);
+            ASSERT_NE(download_controller_begin, std::string::npos);
+            ASSERT_NE(search_controller_begin, std::string::npos);
+            ASSERT_NE(controller_end, std::string::npos);
+
+            const auto list_service_begin = service.find("auto FileQueryService::GetFileList(");
+            const auto detail_service_begin = service.find("auto FileQueryService::GetFileDetail(");
+            const auto download_service_begin = service.find("auto FileQueryService::GetDownloadInfo(");
+            const auto search_service_begin = service.find("auto FileQueryService::Search(");
+            const auto service_end = service.find("} // namespace disk::file", search_service_begin);
+            ASSERT_NE(list_service_begin, std::string::npos);
+            ASSERT_NE(detail_service_begin, std::string::npos);
+            ASSERT_NE(download_service_begin, std::string::npos);
+            ASSERT_NE(search_service_begin, std::string::npos);
+            ASSERT_NE(service_end, std::string::npos);
+
+            const std::array<std::string_view, 6> sections{
+                std::string_view(controller).substr(list_controller_begin, detail_controller_begin - list_controller_begin),
+                std::string_view(controller).substr(detail_controller_begin, download_controller_begin - detail_controller_begin),
+                std::string_view(controller).substr(search_controller_begin, controller_end - search_controller_begin),
+                std::string_view(service).substr(
+                    list_service_begin,
+                    detail_service_begin - list_service_begin
+                ),
+                std::string_view(service).substr(
+                    detail_service_begin,
+                    download_service_begin - detail_service_begin
+                ),
+                std::string_view(service).substr(
+                    search_service_begin,
+                    service_end - search_service_begin
+                ),
+            };
+            for (const auto section : sections) {
+                EXPECT_EQ(section.find("Logger::Debug()"), std::string_view::npos);
+                EXPECT_EQ(section.find("Logger::Info()"), std::string_view::npos);
+                EXPECT_EQ(section.find("Logger::Warn()"), std::string_view::npos);
+                EXPECT_EQ(section.find("Logger::Error()"), std::string_view::npos);
+                EXPECT_NE(section.find("log_context"), std::string_view::npos);
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    controller,
+                    "GetRequestLogContext(request, \"file_query\")"
+                ),
+                3
+            );
+            EXPECT_NE(
+                controller.find("GetFileList(*parse_result, user_id, log_context)"),
+                std::string::npos
+            );
+            EXPECT_NE(
+                controller.find("m_query_service->Search(*parse_result, user_id, log_context)"),
+                std::string::npos
+            );
         }
 
         TEST(FileListCacheContractTest, EveryDriveMutationBoundaryBumpsTheSharedGeneration) {
