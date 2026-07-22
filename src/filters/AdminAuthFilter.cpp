@@ -11,6 +11,7 @@
 
 #include <drogon/utils/coroutine.h>
 
+#include "filters/FilterLogContext.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::filters {
@@ -18,6 +19,7 @@ namespace disk::filters {
     auto AdminAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
+        const auto log_context = GetFilterLogContext(request);
         auto path = request->getPath();
 
         if (!path.starts_with("/api/admin/")) {
@@ -29,21 +31,21 @@ namespace disk::filters {
         auto status = request->attributes()->get<int>("status");
 
         if (role != 1) {
-            Logger::Warn() << "[admin_auth_filter] Non-admin access attempt: user_id=" << user_id
-                     << " role=" << role << " path=" << path;
+            Logger::Warn(log_context) << "[admin_auth_filter] Non-admin access attempt: user_id=" << user_id
+                                      << " role=" << role << " path=" << path;
             co_return disk::Response::Error(disk::error::Code::AdminRequired);
         }
 
         if (status != 1) {
-            Logger::Warn() << "[admin_auth_filter] Disabled admin access: user_id=" << user_id
-                     << " status=" << status << " path=" << path;
+            Logger::Warn(log_context) << "[admin_auth_filter] Disabled admin access: user_id=" << user_id
+                                      << " status=" << status << " path=" << path;
             co_return disk::Response::Error(disk::error::Code::AdminRequired);
         }
 
-        Logger::Trace() << "[admin_auth_filter] Admin access granted: user_id=" << user_id
-                  << " path=" << path;
+        Logger::Trace(log_context) << "[admin_auth_filter] Admin access granted: user_id=" << user_id
+                                   << " path=" << path;
 
         co_return nullptr;
     }
 
-} ///< namespace disk::filters
+} // namespace disk::filters

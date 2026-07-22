@@ -62,12 +62,31 @@ The system SHALL classify only the exact authenticated user-profile, password, a
 - **WHEN** a user path is not exactly `/api/user/profile`, `/api/user/password`, or `/api/user/storage`, including an extra suffix
 - **THEN** the user classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
 
+### Requirement: Authentication Filter Correlation
+The JWT authentication, share-token authentication, and administrator-authorization filters SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every event directly owned by those filters SHALL use that context without changing authentication, authorization, public-path, scope, revocation, or response behavior.
+
+#### Scenario: Authentication filter handles a traced request
+- **WHEN** one of those filters emits an exempt, success, rejection, revocation, scope, or dependency-failure event for a request whose trace attribute has been established
+- **THEN** the event SHALL retain the same request ID, actual handling instance, and bounded operation as the HTTP completion event
+
+#### Scenario: Authentication filter observes identity values
+- **WHEN** a filter observes a user ID, role, status, token JTI, share code, permission, path, or dependency result
+- **THEN** it SHALL NOT derive upload ID, job ID, lease owner, or state version from that value, and those fields SHALL remain null
+
+#### Scenario: Filter is invoked without a trace attribute
+- **WHEN** a unit, utility, or compatibility caller invokes a filter without an established request ID
+- **THEN** the direct filter event SHALL retain the classifier's bounded operation and explicit JSON null request correlation rather than using thread-local or credential-derived state
+
+#### Scenario: Authentication filter handles credentials
+- **WHEN** JWT or share-token authentication succeeds or fails
+- **THEN** filter events and typed correlation fields SHALL NOT contain raw Authorization or `X-Share-Token` header values, access tokens, refresh tokens, share tokens, passwords, password hashes, or storage credentials
+
 ### Requirement: Typed Authentication Correlation
-The system SHALL classify only the exact register, login, refresh, and logout paths as the bounded `auth` operation and SHALL propagate their correlation explicitly by value across the authentication controller, direct authentication-DTO events, and authentication-service coroutine boundaries.
+The system SHALL classify only the exact register, login, refresh, and logout paths as the bounded `auth` operation and SHALL propagate their correlation explicitly by value across the JWT authentication filter, authentication controller, direct authentication-DTO events, and authentication-service coroutine boundaries.
 
 #### Scenario: Client registers, logs in, refreshes, or logs out
 - **WHEN** a request enters `/api/auth/register`, `/api/auth/login`, `/api/auth/refresh`, or `/api/auth/logout`
-- **THEN** its response, HTTP completion event at the configured level, controller events, direct authentication-DTO events, and authentication-service events SHALL retain the same request ID, actual handling instance, and `auth` operation
+- **THEN** its JWT-filter events, response, HTTP completion event at the configured level, controller events, direct authentication-DTO events, and authentication-service events SHALL retain the same request ID, actual handling instance, and `auth` operation
 
 #### Scenario: Authentication request has no upload or durable-job ownership
 - **WHEN** an authentication request records an account, user ID, login-attempt count, refresh-token identifier, or operation-log result
@@ -82,11 +101,11 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **THEN** the authentication classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
 
 ### Requirement: Typed Share Correlation
-The system SHALL classify only registered non-download share path shapes as the bounded `share` operation and SHALL propagate their correlation explicitly by value across the share controller, direct share-DTO events, share-service helper coroutines, and share-audit boundary. Share download metadata and content routes SHALL retain the separate bounded `download` operation.
+The system SHALL classify only registered non-download share path shapes as the bounded `share` operation and SHALL propagate their correlation explicitly by value across JWT and share-token authentication filters, the share controller, direct share-DTO events, share-service helper coroutines, and share-audit boundary. Share download metadata and content routes SHALL retain the separate bounded `download` operation.
 
 #### Scenario: Owner or visitor manages or consumes a share
 - **WHEN** a request creates, lists, inspects, updates, cancels, accesses, browses, or saves a share through a registered non-download share path
-- **THEN** its response, HTTP completion event at the configured level, controller events, direct share-DTO events, and share-service events SHALL retain the same request ID, actual handling instance, and `share` operation; any resulting share-audit details SHALL persist the same request ID and `share` operation
+- **THEN** its authentication-filter events, response, HTTP completion event at the configured level, controller events, direct share-DTO events, and share-service events SHALL retain the same request ID, actual handling instance, and `share` operation; any resulting share-audit details SHALL persist the same request ID and `share` operation
 
 #### Scenario: Share download remains a download operation
 - **WHEN** a request enters `/api/share/download/{share_id}/{file_id}` or `/api/share/download/{share_id}/{file_id}/info`
@@ -105,11 +124,11 @@ The system SHALL classify only registered non-download share path shapes as the 
 - **THEN** the share classifiers SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
 
 ### Requirement: Typed Core Administration Correlation
-The system SHALL classify the core administration routes owned by `AdminController` as the fixed low-cardinality `admin` operation and SHALL propagate their correlation explicitly by value across the controller, direct administration-DTO events, administration-service coroutines, and operation-log audit boundary. The exact manual-cleanup route SHALL retain its separate `cleanup` operation.
+The system SHALL classify the core administration routes owned by `AdminController` as the fixed low-cardinality `admin` operation and SHALL propagate their correlation explicitly by value across JWT and administrator-authorization filters, the controller, direct administration-DTO events, administration-service coroutines, and operation-log audit boundary. The exact manual-cleanup route SHALL retain its separate `cleanup` operation.
 
 #### Scenario: Administrator uses a core administration route
 - **WHEN** an authenticated administrator lists, inspects, or changes users, reads storage or system statistics, lists, inspects, or cancels shares, or queries operation logs through a route registered by `AdminController`
-- **THEN** its response, HTTP completion event at the configured level, controller events, direct administration-DTO events, and administration-service events SHALL retain the same request ID, actual handling instance, and `admin` operation
+- **THEN** its authentication/authorization-filter events, response, HTTP completion event at the configured level, controller events, direct administration-DTO events, and administration-service events SHALL retain the same request ID, actual handling instance, and `admin` operation
 
 #### Scenario: Core administration writes an audit row
 - **WHEN** a core administration request records a successful user, storage, or share audit event

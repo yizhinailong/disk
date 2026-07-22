@@ -11,6 +11,7 @@
 
 #include <chrono>
 
+#include "filters/FilterLogContext.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::filters {
@@ -29,6 +30,7 @@ namespace disk::filters {
     auto ShareAuthFilter::doFilter(const drogon::HttpRequestPtr& request)
         -> drogon::Task<drogon::HttpResponsePtr> {
 
+        const auto log_context = GetFilterLogContext(request);
         auto start = std::chrono::steady_clock::now();
 
         const auto& share_token_header = request->getHeader("X-Share-Token");
@@ -37,7 +39,7 @@ namespace disk::filters {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
+            Logger::Info(log_context) << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
             co_return disk::Response::Error(disk::error::Code::TokenMissing);
         }
 
@@ -50,7 +52,7 @@ namespace disk::filters {
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            Logger::Info() << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
+            Logger::Info(log_context) << "[share_auth_filter] duration_us=" << duration_us << " outcome=failure";
 
             switch (error.code) {
                 case disk::error::Code::TokenExpired:
@@ -66,9 +68,9 @@ namespace disk::filters {
 
         const auto& claims = verify_result.value();
         if (RequiresDownloadScope(request->path()) && claims.scope.permission != "download") {
-            Logger::Warn() << "Share token scope does not permit operation: share_code="
-                           << claims.share_code << ", permission=" << claims.scope.permission
-                           << ", path=" << request->path();
+            Logger::Warn(log_context) << "Share token scope does not permit operation: share_code="
+                                      << claims.share_code << ", permission=" << claims.scope.permission
+                                      << ", path=" << request->path();
             co_return disk::Response::Error(disk::error::Code::ShareAccessDenied);
         }
 
@@ -79,8 +81,8 @@ namespace disk::filters {
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        Logger::Info() << "[share_auth_filter] duration_us=" << duration_us
-                       << " outcome=success share_code=" << claims.share_code;
+        Logger::Info(log_context) << "[share_auth_filter] duration_us=" << duration_us
+                                  << " outcome=success share_code=" << claims.share_code;
 
         co_return nullptr;
     }

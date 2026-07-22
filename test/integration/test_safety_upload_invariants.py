@@ -905,6 +905,36 @@ def assert_auth_log_context(
     log_pass("authentication logs keep typed request correlation and null ownership fields")
 
 
+def assert_auth_filter_rejection_log_context(
+    *,
+    response,
+    request_id: str,
+    operation: str,
+    message_marker: str,
+) -> None:
+    """Assert one authentication-filter rejection keeps bounded correlation."""
+    assert_equal(
+        "authentication filter returns a documented rejection",
+        response.status_code >= 400 and json_field(response.text, "code") != "0",
+        True,
+    )
+    assert_equal(
+        "authentication filter preserves caller request ID",
+        header_value(response.headers, "X-Request-Id"),
+        request_id,
+    )
+    instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+    assert_equal("authentication filter identifies the handling instance", bool(instance_id), True)
+    wait_for_correlated_application_log(
+        request_id=request_id,
+        instance_id=instance_id,
+        operation=operation,
+        upload_id=None,
+        message_marker=message_marker,
+    )
+    log_pass("authentication filter log keeps typed correlation and null ownership fields")
+
+
 def assert_share_log_context(
     *,
     response,
@@ -1615,6 +1645,89 @@ def test_auth_log_context_invariants() -> None:
             refreshed_refresh_token,
         )
     )
+
+
+def test_auth_filter_log_context_invariants() -> None:
+    """Verify JWT, share-token, and administrator filters retain request context."""
+    log_section("Authentication Filter Structured Log Correlation")
+
+    jwt_request_id = f"safety-jwt-filter-log-{unique_name()}"
+    jwt_response = fetch(
+        "/api/file/list",
+        headers={"X-Request-Id": jwt_request_id},
+    )
+    assert_auth_filter_rejection_log_context(
+        response=jwt_response,
+        request_id=jwt_request_id,
+        operation="file_query",
+        message_marker="[jwt_auth_filter]",
+    )
+
+    share_request_id = f"safety-share-filter-log-{unique_name()}"
+    share_response = fetch(
+        f"/api/share/browse/missing-{unique_name()}",
+        headers={"X-Request-Id": share_request_id},
+    )
+    assert_auth_filter_rejection_log_context(
+        response=share_response,
+        request_id=share_request_id,
+        operation="share",
+        message_marker="[share_auth_filter]",
+    )
+
+    username = unique_name("filteruser")
+    email = f"{username}@example.com"
+    password = "FilterUser123"
+    user_id: int | None = None
+    access_token = ""
+    refresh_token = ""
+    redis_delete_pattern("rate:register:*")
+    try:
+        register_response = fetch(
+            "/api/auth/register",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            json_body={"username": username, "email": email, "password": password},
+        )
+        assert_equal(
+            "authentication filter fixture registration succeeds",
+            json_field(register_response.text, "code"),
+            "0",
+        )
+        user_id_value = scalar("SELECT id FROM users WHERE username = %s", (username,))
+        assert_equal("authentication filter fixture user exists", user_id_value is not None, True)
+        user_id = int(user_id_value)
+
+        login_response = fetch(
+            "/api/auth/login",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            json_body={"account": username, "password": password},
+        )
+        access_token = str(json_field(login_response.text, "data.access_token") or "")
+        refresh_token = str(json_field(login_response.text, "data.refresh_token") or "")
+        assert_equal("authentication filter fixture login returns a token", bool(access_token), True)
+
+        admin_request_id = f"safety-admin-filter-log-{unique_name()}"
+        admin_response = fetch(
+            "/api/admin/users",
+            headers={
+                **auth_headers(access_token),
+                "X-Request-Id": admin_request_id,
+            },
+        )
+        assert_auth_filter_rejection_log_context(
+            response=admin_response,
+            request_id=admin_request_id,
+            operation="admin",
+            message_marker="[admin_auth_filter]",
+        )
+        assert_server_log_excludes_secrets((password, access_token, refresh_token))
+    finally:
+        if user_id is not None:
+            redis_delete_pattern(f"refresh_token:{user_id}")
+        execute("DELETE FROM users WHERE username = %s", (username,))
+        redis_delete_pattern("rate:register:*")
 
 
 def test_share_log_context_invariants() -> None:
@@ -5267,6 +5380,7 @@ def main() -> None:
     test_system_info_log_context_invariants()
     test_user_log_context_invariants()
     test_auth_log_context_invariants()
+    test_auth_filter_log_context_invariants()
     test_share_log_context_invariants()
     test_admin_log_context_invariants()
     test_successful_chunked_upload_invariants()

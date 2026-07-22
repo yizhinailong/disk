@@ -65,6 +65,7 @@ set(TEST_SOURCES
     services/OperationLogJsonDetails_test.cpp
     services/OperationLogService_test.cpp
     services/ProcessRuntime_test.cpp
+    filters/AuthFilterLogContext_test.cpp
     filters/AdminAuthFilter_test.cpp
     filters/ShareAuthFilter_test.cpp
     filters/ShareRateLimitFilter_test.cpp
@@ -129,6 +130,7 @@ set(TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/services/UploadStateMachine.cpp
     ${CMAKE_SOURCE_DIR}/src/services/UploadTaskRepository.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/JwtAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
@@ -177,6 +179,7 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/src/services/TokenService.cpp
     ${CMAKE_SOURCE_DIR}/src/services/RedisService.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/AdminAuthFilter.cpp
+    ${CMAKE_SOURCE_DIR}/src/filters/JwtAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareAuthFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/ShareRateLimitFilter.cpp
     ${CMAKE_SOURCE_DIR}/src/filters/RegisterRateLimitFilter.cpp
