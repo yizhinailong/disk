@@ -148,34 +148,6 @@ namespace disk::file {
 
     private:
         /**
-         * @brief 检查并扣除存储配额（事务版）
-         *
-         * @param client 数据库客户端
-         * @param user_id 用户 ID
-         * @param file_size 需要的存储空间
-         * @return drogon::Task<Result<void>> 成功或配额不足错误
-         */
-        [[nodiscard]]
-        auto CheckStorageQuota(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t user_id,
-            uint64_t file_size
-        ) const -> drogon::Task<Result<void>>;
-
-        /**
-         * @brief 更新存储使用量（事务版）
-         *
-         * @param client 数据库客户端
-         * @param user_id 用户 ID
-         * @param delta 存储增量
-         */
-        auto UpdateStorageUsed(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t user_id,
-            int64_t delta
-        ) -> drogon::Task<void>;
-
-        /**
          * @brief 批量插入复制文件记录并获取新 ID（事务版）
          *
          * @param client 数据库客户端

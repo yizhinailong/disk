@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 上传诊断日志关联）：完整构建、上传诊断/存储任务聚焦 GoogleTest 6/6、直接存储任务运维集成 1/1、注册上传诊断/存储任务 CTest 8/8 和拓扑合同 1/1 通过；完整 CTest 共 1446 项，1439 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 476.94 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 配额服务日志关联）：完整构建、配额/回收站日志合同聚焦 GoogleTest 6/6、相邻清理/文件变更聚焦 GoogleTest 30/30、直接真实 HTTP safety 集成 790/790 项断言通过；完整 CTest 共 1447 项，1440 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 482.46 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -779,6 +779,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定管理员
 诊断服务仅在调用方 upload ID 与 PostgreSQL 返回任务行精确一致时，补入该行真实 `state_version` 和可选 `lease_owner`；同一上下文逐个传入 staging `HeadChunkObject` 与 `StorageJobAdminService::ListRelatedToUpload`。关联任务可能为零或多行，整条诊断链保持 `job_id=null`；helper 和默认空调用不从 upload/prefix、对象描述符、任务行、返回任务或消息推断字段。Controller 接收、Service 完成及两个异常事件均使用固定消息，不记录路径/分页、用户/文件元数据、hash、对象 key/prefix、ETag、任务 payload/error、SQL、连接信息、异常正文、Authorization/JWT 或存储凭据；数据库查询、对象 HEAD、分页、响应和只读语义不变。
 
 新增上传诊断源码合同并扩展真实存储任务运维集成：唯一 request ID 的 Controller 事件携带 validated upload 且 state/lease 为空，Service 完成事件再携带数据库真实 `state_version=3` 与 lease owner，两者 request/实际 instance/admin/upload 一致、job ID 为空且 message 精确等于固定文本。完整构建、Python 语法检查、聚焦 GoogleTest 6/6、直接存储任务运维集成 1/1、注册上传诊断/存储任务 CTest 8/8、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1446 项，1439 通过、7 项环境门控跳过、0 失败，总耗时 476.94 秒。真实 S3/MinIO HEAD 和多实例环境门控仍未执行，其他共享数据库 helper 也尚未全部关联，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.42 配额服务日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定共享配额边界的显式关联合同。`QuotaService` 的独立客户端与事务客户端共 13 个入口现在按值接收可选 `LogContext`，内部重载逐层原样转发；预留、释放、预留转已用、直接消费、已用量调整和对账查询的 18 条操作事件统一保留调用方已有的 request/instance/operation/upload/job/lease/version。`UploadLifecycleService` 的 8 个、`FileMutationService` 的 4 个以及 `TrashService` 的 1 个生产调用点均传入原上下文；构造事件继续是无请求归属的进程事件。
+
+配额日志只使用固定事件消息，不记录用户 ID、字节数、调整量、SQL、连接信息、业务错误正文或异常正文，也不从配额输入、影响行数、数据库结果、线程局部状态或消息文本推断类型化字段；数据库语句、事务边界、配额错误码和响应语义未改变。同步删除 `FileMutationService` 的两个以及 `TrashService`、`CleanupService` 各一个从未调用的私有配额转发器，避免保留绕过显式上下文的平行路径。`QuotaServiceContractTest` 锁定 13 个入口、18 条事件、内部重载和全部生产调用点；`TrashLogContextContractTest` 不再以已删除 helper 作为源码截取边界，并明确禁止该 helper 回归。
+
+`SafetyUploadInvariantsIntegration` 临时把当前用户 quota 收紧到已用量加预留量，以唯一 request ID 发起真实非去重上传初始化；它核对 HTTP 400、业务码 `50004`、配额层与上传层两条固定 warning 的同一 `upload_init` 关联、四个所有权字段为空、数据库未创建任务或预留，并在 `finally` 中恢复且复核完整 quota。完整构建、Python 语法检查、配额/回收站日志合同聚焦 GoogleTest 6/6、相邻清理/文件变更聚焦 GoogleTest 30/30、直接 safety 集成 790/790 项断言和 OpenSpec 严格校验 24/24 通过。首次完整 CTest 的唯一失败是旧 `TrashLogContextContractTest` 仍以已删除转发器作为源码终点；同步合同后第二次完整 CTest 共 1447 项，1440 通过、7 项环境门控跳过、0 失败，总耗时 482.46 秒。`ContentService`、`FolderRepository`、`FileServiceUtils` 等其他共享数据库 helper 与目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

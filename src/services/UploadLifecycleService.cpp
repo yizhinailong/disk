@@ -541,7 +541,8 @@ namespace disk::upload {
                     auto quota_result = co_await quota_service.ConsumeUsedStorage(
                         transaction,
                         command.user_id,
-                        command.file_size
+                        command.file_size,
+                        log_context
                     );
                     if (!quota_result) {
                         co_return std::unexpected(quota_result.error());
@@ -662,17 +663,22 @@ namespace disk::upload {
         auto quota_result = co_await quota_service.ReserveUploadStorage(
             m_db_client,
             command.user_id,
-            command.file_size
+            command.file_size,
+            log_context
         );
         if (!quota_result) {
-            Logger::Warn(log_context)
-                << "Storage quota reservation failed: user_id=" << command.user_id;
+            Logger::Warn(log_context) << "Upload storage quota reservation failed";
             co_return std::unexpected(quota_result.error());
         }
 
         if (command.chunk_size == 0) {
             Logger::Error(log_context) << "Invalid upload chunk size configured: 0";
-            co_await quota_service.ReleaseReservedStorage(m_db_client, command.user_id, command.file_size);
+            co_await quota_service.ReleaseReservedStorage(
+                m_db_client,
+                command.user_id,
+                command.file_size,
+                log_context
+            );
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Invalid upload chunk size configuration")
             );
@@ -685,7 +691,12 @@ namespace disk::upload {
                 << "\", file_size=" << command.file_size
                 << ", chunk_size=" << command.chunk_size
                 << ", total_chunks=" << total_chunks_u64;
-            co_await quota_service.ReleaseReservedStorage(m_db_client, command.user_id, command.file_size);
+            co_await quota_service.ReleaseReservedStorage(
+                m_db_client,
+                command.user_id,
+                command.file_size,
+                log_context
+            );
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "File requires too many chunks")
             );
@@ -756,7 +767,12 @@ namespace disk::upload {
         }
 
         if (create_task_failed) {
-            co_await quota_service.ReleaseReservedStorage(m_db_client, command.user_id, command.file_size);
+            co_await quota_service.ReleaseReservedStorage(
+                m_db_client,
+                command.user_id,
+                command.file_size,
+                log_context
+            );
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to create upload task")
             );
@@ -1343,7 +1359,8 @@ namespace disk::upload {
                 auto transfer_result = co_await quota_service.CommitReservedToUsed(
                     transaction,
                     command.user_id,
-                    upload_task.getValueOfFileSize()
+                    upload_task.getValueOfFileSize(),
+                    log_context
                 );
                 if (!transfer_result) {
                     co_return std::unexpected(transfer_result.error());
@@ -1488,7 +1505,8 @@ namespace disk::upload {
                 auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
                     transaction,
                     user_id,
-                    cancelled_record->cleanup.reserved_bytes
+                    cancelled_record->cleanup.reserved_bytes,
+                    log_context
                 );
                 if (!release_result) {
                     co_return std::unexpected(release_result.error());
@@ -1604,7 +1622,8 @@ namespace disk::upload {
                 auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
                     transaction,
                     user_id,
-                    reserved_bytes
+                    reserved_bytes,
+                    log_context
                 );
                 if (!release_result) {
                     co_return std::unexpected(release_result.error());

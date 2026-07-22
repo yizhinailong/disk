@@ -93,15 +93,6 @@ namespace disk::services {
 
     private:
         drogon::orm::DbClientPtr m_db_client;
-
-        /**
-         * @brief 更新用户存储使用量
-         *
-         * @param user_id 用户 ID
-         * @param delta 变化量（负数为减少）
-         * @return drogon::Task<void>
-         */
-        auto UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void>;
     };
 
 } // namespace disk::services

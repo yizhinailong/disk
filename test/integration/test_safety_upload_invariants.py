@@ -2413,6 +2413,125 @@ def test_init_and_chunk_log_context_invariants() -> None:
         cancel_upload(upload_id)
 
 
+def test_quota_log_context_invariants() -> None:
+    """Verify quota rejection keeps request correlation without domain values."""
+    log_section("Quota Service Structured Log Correlation")
+    payload = f"safety-quota-log-{unique_name()}".encode()
+    filename = f"quota_log_{unique_name()}.bin"
+    file_hash = md5_bytes(payload)
+    request_id = f"safety-quota-log-{unique_name()}"
+    quota_before = user_quota()
+    constrained_quota = quota_before["storage_used"] + quota_before["storage_reserved"]
+    unexpected_upload_id = ""
+
+    assert_equal(
+        "quota log fixture constrains the test user",
+        execute(
+            "UPDATE users SET storage_quota = %s WHERE id = %s",
+            (constrained_quota, USER_ID),
+        ),
+        1,
+    )
+    try:
+        response = fetch(
+            "/api/file/upload/init",
+            method="POST",
+            headers={**auth_headers(TOKEN), "X-Request-Id": request_id},
+            json_body={
+                "filename": filename,
+                "file_size": len(payload),
+                "file_hash": file_hash,
+                "parent_id": 0,
+            },
+        )
+        save_evidence(f"{EVIDENCE_PREFIX}-{request_id}.json", response.text)
+        unexpected_upload_id = json_field(response.text, "data.upload_id")
+
+        assert_equal("quota rejection returns HTTP 400", response.status_code, 400)
+        assert_equal(
+            "quota rejection preserves the domain error code",
+            json_field(response.text, "code"),
+            "50004",
+        )
+        assert_equal(
+            "quota rejection preserves caller request ID",
+            header_value(response.headers, "X-Request-Id"),
+            request_id,
+        )
+        instance_id = header_value(response.headers, "X-Disk-Instance-Id")
+        assert_equal("quota rejection identifies the handling instance", bool(instance_id), True)
+
+        quota_log = wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="upload_init",
+            upload_id=None,
+            message_marker="Storage quota reservation rejected",
+        )
+        caller_log = wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="upload_init",
+            upload_id=None,
+            message_marker="Upload storage quota reservation failed",
+        )
+        wait_for_correlated_application_log(
+            request_id=request_id,
+            instance_id=instance_id,
+            operation="upload_init",
+            upload_id=None,
+            message_marker="HTTP request completed",
+        )
+        assert_equal(
+            "quota helper message contains no domain values",
+            quota_log.get("message"),
+            "Storage quota reservation rejected",
+        )
+        assert_equal(
+            "quota caller message contains no domain values",
+            caller_log.get("message"),
+            "Upload storage quota reservation failed",
+        )
+        assert_no_unscoped_application_log(
+            "Storage quota reservation rejected",
+            assertion="quota rejection emits no unscoped duplicate",
+        )
+
+        quota_after = user_quota()
+        assert_equal(
+            "quota rejection preserves used storage",
+            quota_after["storage_used"],
+            quota_before["storage_used"],
+        )
+        assert_equal(
+            "quota rejection creates no reservation",
+            quota_after["storage_reserved"],
+            quota_before["storage_reserved"],
+        )
+        assert_equal(
+            "quota rejection creates no upload task",
+            int(
+                scalar(
+                    "SELECT COUNT(*) FROM upload_tasks "
+                    "WHERE user_id = %s AND file_hash = %s AND filename = %s",
+                    (USER_ID, file_hash, filename),
+                )
+                or 0
+            ),
+            0,
+        )
+        log_pass("quota service logs keep typed request correlation and fixed messages")
+    finally:
+        if unexpected_upload_id:
+            cancel_upload(unexpected_upload_id)
+        execute(
+            "UPDATE users SET storage_quota = %s WHERE id = %s",
+            (quota_before["storage_quota"], USER_ID),
+        )
+
+    assert_equal("quota log fixture restores user accounting", user_quota(), quota_before)
+
+
 def cancel_upload_raw(upload_id: str, request_id: str | None = None):
     """Call cancel upload and return the raw response."""
     headers = auth_headers(TOKEN)
@@ -5590,6 +5709,7 @@ def main() -> None:
     log_info(f"Using user_id={USER_ID}, chunk_size={configured_chunk_size()}, base_url={BASE_URL}")
 
     test_init_and_chunk_log_context_invariants()
+    test_quota_log_context_invariants()
     test_file_query_log_context_invariants()
     test_file_mutation_log_context_invariants()
     test_folder_log_context_invariants()

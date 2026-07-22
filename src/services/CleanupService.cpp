@@ -19,18 +19,17 @@
 #include <drogon/orm/CoroMapper.h>
 #include <drogon/orm/Criteria.h>
 
+#include "TrashService.hpp"
 #include "models/FileContents.hpp"
 #include "models/Trash.hpp"
-#include "services/ContentService.hpp"
 #include "models/UploadTasks.hpp"
 #include "models/Users.hpp"
+#include "services/ContentService.hpp"
 #include "services/FileServiceUtils.hpp"
-#include "services/QuotaService.hpp"
 #include "services/TrashContentIdResolver.hpp"
-#include "TrashService.hpp"
+#include "services/UploadLifecycleService.hpp"
 #include "storage/BlobStoreMgr.hpp"
 #include "storage/StorageMgr.hpp"
-#include "services/UploadLifecycleService.hpp"
 #include "utils/BatchUtils.hpp"
 
 namespace disk::services {
@@ -127,9 +126,4 @@ namespace disk::services {
         }
     }
 
-    auto CleanupService::UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void> {
-        disk::quota::QuotaService quota_service(m_db_client);
-        co_await quota_service.AdjustUsedStorage(m_db_client, user_id, delta);
-    }
-
-} ///< namespace disk::services
+} // namespace disk::services

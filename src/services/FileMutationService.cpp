@@ -526,14 +526,13 @@ namespace disk::file {
                     co_return co_await quota_service.ReserveStorage(
                         transaction,
                         user_id,
-                        total_copy_size
+                        total_copy_size,
+                        log_context
                     );
                 }
             );
             if (!quota_result) {
-                Logger::Warn(log_context)
-                    << "Storage quota reservation failed for copy: user_id=" << user_id
-                    << ", total_copy_size=" << total_copy_size;
+                Logger::Warn(log_context) << "Copy storage quota reservation failed";
                 co_return std::unexpected(quota_result.error());
             }
         }
@@ -564,7 +563,8 @@ namespace disk::file {
                     co_return co_await quota_service.ReleaseReservedStorageChecked(
                         transaction,
                         user_id,
-                        bytes
+                        bytes,
+                        log_context
                     );
                 }
             );
@@ -756,7 +756,8 @@ namespace disk::file {
                     auto commit_quota_result = co_await quota_service.CommitReservedToUsed(
                         transaction,
                         user_id,
-                        valid_items_size
+                        valid_items_size,
+                        log_context
                     );
                     if (!commit_quota_result) {
                         co_return std::unexpected(commit_quota_result.error());
@@ -1071,7 +1072,8 @@ namespace disk::file {
                         auto commit_quota_result = co_await quota_service.CommitReservedToUsed(
                             transaction,
                             user_id,
-                            plan.item_size
+                            plan.item_size,
+                            log_context
                         );
                         if (!commit_quota_result) {
                             co_return std::unexpected(commit_quota_result.error());
@@ -1172,25 +1174,6 @@ namespace disk::file {
     }
 
     /// ==================== 私有辅助方法 ====================
-
-    auto FileMutationService::CheckStorageQuota(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t user_id,
-        uint64_t file_size
-    ) const -> drogon::Task<Result<void>> {
-        disk::quota::QuotaService quota_service(m_db_client);
-        co_return co_await quota_service.ConsumeUsedStorage(client, user_id, file_size);
-    }
-
-    auto FileMutationService::UpdateStorageUsed(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t user_id,
-        int64_t delta
-    ) -> drogon::Task<void> {
-
-        disk::quota::QuotaService quota_service(m_db_client);
-        co_await quota_service.AdjustUsedStorage(client, user_id, delta);
-    }
 
     auto FileMutationService::InsertCopiedFiles(
         const drogon::orm::DbClientPtr& client,

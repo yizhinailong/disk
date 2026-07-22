@@ -15,6 +15,7 @@
 #include <drogon/orm/DbClient.h>
 
 #include "utils/ErrorCode.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::quota {
 
@@ -44,82 +45,106 @@ namespace disk::quota {
         auto operator=(QuotaService&&) -> QuotaService& = default;
 
         [[nodiscard]]
-        auto ReserveStorage(uint64_t user_id, uint64_t bytes) const
+        auto ReserveStorage(
+            uint64_t user_id,
+            uint64_t bytes,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
         auto ReserveStorage(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
-            uint64_t bytes
+            uint64_t bytes,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
-        auto ReserveUploadStorage(uint64_t user_id, uint64_t bytes) const
+        auto ReserveUploadStorage(
+            uint64_t user_id,
+            uint64_t bytes,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
         auto ReserveUploadStorage(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
-            uint64_t bytes
+            uint64_t bytes,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
 
-        auto ReleaseReservedStorage(uint64_t user_id, uint64_t bytes) const
+        auto ReleaseReservedStorage(
+            uint64_t user_id,
+            uint64_t bytes,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<void>;
 
         auto ReleaseReservedStorage(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
-            uint64_t bytes
+            uint64_t bytes,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<void>;
 
         [[nodiscard]]
         auto ReleaseReservedStorageChecked(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
-            uint64_t bytes
+            uint64_t bytes,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
         auto CommitReservedToUsed(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
-            uint64_t bytes
+            uint64_t bytes,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
         auto ConsumeUsedStorage(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
-            uint64_t bytes
+            uint64_t bytes,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
 
         auto AdjustUsedStorage(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
-            int64_t delta
+            int64_t delta,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<void>;
 
         [[nodiscard]]
         auto AdjustUsedStorageChecked(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
-            int64_t delta
+            int64_t delta,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
-        auto GetReconciliation(uint64_t user_id) const
+        auto GetReconciliation(
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
+        ) const
             -> drogon::Task<std::optional<AccountingReconciliation>>;
 
         [[nodiscard]]
         auto GetReconciliation(
             const drogon::orm::DbClientPtr& client,
-            uint64_t user_id
+            uint64_t user_id,
+            disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<std::optional<AccountingReconciliation>>;
 
     private:
         drogon::orm::DbClientPtr m_db_client;
     };
 
-} ///< namespace disk::quota
+} // namespace disk::quota

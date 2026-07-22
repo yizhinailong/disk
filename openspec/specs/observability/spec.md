@@ -127,6 +127,25 @@ The shared Redis service SHALL accept explicit correlation by value for every co
 - **WHEN** the singleton accepts its Redis client before serving command work
 - **THEN** the initialization event SHALL remain a context-free process event and SHALL NOT disclose endpoint or credential data
 
+### Requirement: Quota Service Correlation
+The shared quota service SHALL accept caller-owned `LogContext` explicitly by value for all standalone and transaction-client reservation, release, commit, consumption, adjustment, and reconciliation entry points. Upload lifecycle, file mutation, and trash deletion callers SHALL pass their already established context without changing PostgreSQL statements, conditional-update invariants, zero-byte behavior, `Result` values, quota accounting, transaction ownership, or public responses.
+
+#### Scenario: A request performs quota accounting
+- **WHEN** an upload, file mutation, trash deletion, cleanup, or durable Worker flow reaches the quota service through an existing request or job boundary
+- **THEN** every directly owned quota event SHALL retain the supplied request, actual instance, bounded operation, upload ID, job ID, lease owner, and state version exactly as provided across standalone and transaction-client overloads
+
+#### Scenario: Quota accounting observes domain and dependency values
+- **WHEN** the service observes a user ID, byte count, signed adjustment, affected-row count, domain error, SQL failure, or database exception
+- **THEN** it SHALL NOT infer or overwrite any typed correlation field, and its application messages SHALL use fixed event names without those values, SQL, connection details, or exception text
+
+#### Scenario: A quota caller omits correlation
+- **WHEN** a unit, utility, migration, or compatibility caller invokes any quota entry point without `LogContext`
+- **THEN** request and ownership fields SHALL remain JSON null rather than being reconstructed from parameters, database rows, thread-local state, or messages
+
+#### Scenario: Quota service initializes
+- **WHEN** a quota service instance is constructed without request-owned work
+- **THEN** its initialization event SHALL remain a context-free process event while all operation events SHALL use the explicit per-call context
+
 ### Requirement: Upload Rate-Limit Filter Correlation
 The route-owned upload rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every request-attribute failure, counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing its init, chunk, complete, and cancel route ownership, user fixed-window key, configured window or threshold, fail-open behavior, or HTTP response.
 

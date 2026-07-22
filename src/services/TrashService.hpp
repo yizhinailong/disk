@@ -331,15 +331,6 @@ namespace disk::trash {
         ) const -> drogon::Task<bool>;
 
         /**
-         * @brief 更新用户存储使用量
-         *
-         * @param user_id 用户 ID
-         * @param delta 变化量（正数为增加，负数为减少）
-         * @return drogon::Task<void>
-         */
-        auto UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void>;
-
-        /**
          * @brief 恢复单个文件
          *
          * @param trash_id 回收站项目 ID

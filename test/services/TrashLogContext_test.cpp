@@ -73,7 +73,7 @@ namespace disk::trash {
             const auto service_body = ExtractRange(
                 service_source,
                 "auto TrashService::List(",
-                "    auto TrashService::UpdateStorageUsed("
+                "    auto TrashService::ExtractExtension("
             );
 
             ASSERT_FALSE(controller_body.empty());
@@ -127,6 +127,7 @@ namespace disk::trash {
                 service_body,
                 "DecrementRefCountsAndEnqueueGc("
             ));
+            EXPECT_FALSE(Contains(service_source, "auto TrashService::UpdateStorageUsed("));
 
             for (const auto* body : { &controller_body, &dto_source, &service_body }) {
                 EXPECT_FALSE(Contains(*body, "Logger::Debug()"));

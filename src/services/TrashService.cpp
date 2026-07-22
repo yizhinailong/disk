@@ -1545,7 +1545,12 @@ namespace disk::trash {
             disk::quota::QuotaService quota_service(m_db_client);
             for (const auto& [user_id, delta] : user_storage_delta) {
                 if (delta != 0) {
-                    co_await quota_service.AdjustUsedStorage(transaction, user_id, delta);
+                    co_await quota_service.AdjustUsedStorage(
+                        transaction,
+                        user_id,
+                        delta,
+                        log_context
+                    );
                 }
             }
 
@@ -1685,11 +1690,6 @@ namespace disk::trash {
             Logger::Debug(log_context) << "Folder not found: folder_id=" << folder_id;
             co_return false;
         }
-    }
-
-    auto TrashService::UpdateStorageUsed(uint64_t user_id, int64_t delta) -> drogon::Task<void> {
-        disk::quota::QuotaService quota_service(m_db_client);
-        co_await quota_service.AdjustUsedStorage(m_db_client, user_id, delta);
     }
 
     auto TrashService::ExtractExtension(const std::string& filename) -> std::string {
