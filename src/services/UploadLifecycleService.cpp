@@ -630,9 +630,6 @@ namespace disk::upload {
                 }
 
                 if (*expire_result) {
-                    Logger::Info(log_context)
-                        << "Expired upload task found, expiring through lifecycle: upload_id="
-                        << task_id;
                     pending_invalidation.upload_task_ids.push_back(task_id);
                     log_context.upload_id.reset();
                 } else {
@@ -1579,7 +1576,9 @@ namespace disk::upload {
     ) const
         -> drogon::Task<Result<bool>> {
         log_context.upload_id = upload_id;
-        bool expired = false;
+        log_context.state_version.reset();
+        const auto start = std::chrono::steady_clock::now();
+        std::optional<uint64_t> transitioned_state_version;
         uint64_t user_id = 0;
         uint64_t reserved_bytes = 0;
 
@@ -1598,8 +1597,8 @@ namespace disk::upload {
                     co_return {};
                 }
 
-                user_id = expired_record->user_id;
-                reserved_bytes = expired_record->reserved_bytes;
+                user_id = expired_record->cleanup.user_id;
+                reserved_bytes = expired_record->cleanup.reserved_bytes;
                 disk::quota::QuotaService quota_service(m_db_client);
                 auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
                     transaction,
@@ -1612,26 +1611,36 @@ namespace disk::upload {
 
                 co_await storage_job_repository.Enqueue(
                     transaction,
-                    disk::jobs::BuildStagingCleanupJob(expired_record->staging_session)
+                    disk::jobs::BuildStagingCleanupJob(expired_record->cleanup.staging_session)
                 );
                 co_await upload_task_repository.DeleteChunks(transaction, upload_id);
 
-                expired = true;
+                transitioned_state_version = expired_record->state_version;
                 co_return {};
             }
         );
 
         if (!tx_result) {
+            Logger::Warn(log_context)
+                << "[expire_upload] outcome=transaction_failed upload_id=" << upload_id;
             co_return std::unexpected(tx_result.error());
         }
 
-        if (!expired) {
+        if (!transitioned_state_version.has_value()) {
+            Logger::Debug(log_context)
+                << "[expire_upload] outcome=cas_lost upload_id=" << upload_id;
             co_return false;
         }
 
-        Logger::Debug(log_context)
-            << "Expired upload task marked as expired: task_id=" << upload_id
-            << ", user_id=" << user_id << ", reserved_bytes=" << reserved_bytes;
+        log_context.state_version = transitioned_state_version.value();
+        const auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                     std::chrono::steady_clock::now() - start
+        )
+                                     .count();
+        Logger::Info(log_context)
+            << "[expire_upload] duration_us=" << duration_us
+            << " outcome=success upload_id=" << upload_id
+            << " user_id=" << user_id << " reserved_bytes=" << reserved_bytes;
 
         co_return true;
     }

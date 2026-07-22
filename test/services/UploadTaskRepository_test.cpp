@@ -118,8 +118,11 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Cancelled"));
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkExpiredIfInProgressReturning("));
+            EXPECT_TRUE(Contains(source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2, "));
+            EXPECT_TRUE(Contains(source, "state_version = state_version + 1 "));
             EXPECT_TRUE(Contains(source, "WHERE id = $3 AND status = $4 AND expires_at < NOW() "));
             EXPECT_TRUE(Contains(source, "RETURNING id, temp_path, user_id, reserved_bytes"));
+            EXPECT_TRUE(Contains(source, "AS staging_prefix, state_version"));
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Expired"));
         }
 
@@ -253,22 +256,30 @@ namespace disk::file {
             EXPECT_TRUE(Contains(lifecycle_source, "if (*expire_result)"));
 
             EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::MarkExpiredIfInProgressReturning("));
-            EXPECT_TRUE(Contains(repository_source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 "));
+            EXPECT_FALSE(Contains(repository_source, "auto UploadTaskRepository::MarkExpiredIfInProgressBatch("));
+            EXPECT_TRUE(Contains(repository_source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2, "));
+            EXPECT_TRUE(Contains(repository_source, "state_version = state_version + 1 "));
             EXPECT_TRUE(Contains(repository_source, "WHERE id = $3 AND status = $4 AND expires_at < NOW() "));
             EXPECT_TRUE(Contains(repository_source, "RETURNING id, temp_path, user_id, reserved_bytes"));
+            EXPECT_TRUE(Contains(repository_source, "AS staging_prefix, state_version"));
             EXPECT_TRUE(Contains(repository_source, "ORDER BY expires_at, id LIMIT $2"));
 
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.MarkExpiredIfInProgressReturning("));
             EXPECT_FALSE(Contains(lifecycle_source, "UPDATE upload_tasks SET status"));
             EXPECT_TRUE(Contains(lifecycle_source, "quota_service.ReleaseReservedStorageChecked("));
-            EXPECT_TRUE(Contains(lifecycle_source, "BuildStagingCleanupJob(expired_record->staging_session)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "BuildStagingCleanupJob(expired_record->cleanup.staging_session)"));
             EXPECT_TRUE(Contains(lifecycle_source, "storage_job_repository.Enqueue("));
             EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.DeleteChunks(transaction, upload_id)"));
+            EXPECT_TRUE(Contains(lifecycle_source, "transitioned_state_version = expired_record->state_version"));
+            EXPECT_TRUE(Contains(lifecycle_source, "log_context.state_version = transitioned_state_version.value()"));
+            EXPECT_TRUE(Contains(lifecycle_source, "[expire_upload] duration_us="));
+            EXPECT_TRUE(Contains(lifecycle_source, "outcome=success"));
+            EXPECT_TRUE(Contains(lifecycle_source, "outcome=cas_lost"));
             EXPECT_FALSE(Contains(lifecycle_source, "->CleanupSession("));
         }
 
         TEST(UploadTaskRepositoryExpirationBoundaryTest, ReturningExpirationPrimitiveKeepsExpectedSignature) {
-            using ExpectedSignature = drogon::Task<std::optional<ExpiredUploadTaskRecord>> (
+            using ExpectedSignature = drogon::Task<std::optional<ExpiredUploadTransitionRecord>> (
                 UploadTaskRepository::*
             )(
                 const drogon::orm::DbClientPtr&,

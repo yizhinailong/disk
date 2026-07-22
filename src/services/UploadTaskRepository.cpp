@@ -14,9 +14,6 @@
 
 #include <drogon/orm/Mapper.h>
 
-#include "FileServiceUtils.hpp"
-#include "utils/BatchUtils.hpp"
-
 namespace disk::file {
 
     namespace {
@@ -447,44 +444,13 @@ namespace disk::file {
         };
     }
 
-    auto UploadTaskRepository::MarkExpiredIfInProgressBatch(
-        const std::vector<std::string>& upload_ids,
-        const std::string& fail_reason
-    ) const -> drogon::Task<uint64_t> {
-        if (upload_ids.empty()) {
-            co_return 0;
-        }
-
-        auto placeholders = disk::utils::BatchUtils::BuildInPlaceholders(upload_ids);
-        auto expired_status_param = static_cast<int>(upload_ids.size()) + 1;
-        auto fail_reason_param = static_cast<int>(upload_ids.size()) + 2;
-        auto in_progress_status_param = static_cast<int>(upload_ids.size()) + 3;
-        auto result = co_await disk::file::utils::ExecSqlWithBindings(
-            m_db_client,
-            "UPDATE upload_tasks SET status = $" + std::to_string(expired_status_param) +
-                ", finalized_at = NOW(), fail_reason = $" + std::to_string(fail_reason_param) +
-                " WHERE id IN (" + placeholders + ") AND status = $" +
-                std::to_string(in_progress_status_param),
-            [&](auto& binder) {
-                for (const auto& upload_id : upload_ids) {
-                    binder << upload_id;
-                }
-                binder << disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Expired)
-                       << fail_reason
-                       << disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress);
-            }
-        );
-
-        co_return static_cast<uint64_t>(result.affectedRows());
-    }
-
     auto UploadTaskRepository::MarkExpiredIfInProgressReturning(
         const drogon::orm::DbClientPtr& client,
         const std::string& upload_id,
         const std::string& fail_reason
-    ) const -> drogon::Task<std::optional<ExpiredUploadTaskRecord>> {
+    ) const -> drogon::Task<std::optional<ExpiredUploadTransitionRecord>> {
         auto result = co_await client->execSqlCoro(
-            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2 " "WHERE id = $3 AND status = $4 AND expires_at < NOW() " "RETURNING id, temp_path, user_id, reserved_bytes, staging_backend, " "COALESCE(staging_prefix, temp_path) AS staging_prefix",
+            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2, " "state_version = state_version + 1 " "WHERE id = $3 AND status = $4 AND expires_at < NOW() " "RETURNING id, temp_path, user_id, reserved_bytes, staging_backend, " "COALESCE(staging_prefix, temp_path) AS staging_prefix, state_version",
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Expired),
             fail_reason,
             upload_id,
@@ -495,7 +461,10 @@ namespace disk::file {
             co_return std::nullopt;
         }
 
-        co_return ToUploadTaskCleanupRecord(result[0]);
+        co_return ExpiredUploadTransitionRecord{
+            .cleanup = ToUploadTaskCleanupRecord(result[0]),
+            .state_version = result[0]["state_version"].as<uint64_t>(),
+        };
     }
 
     auto UploadTaskRepository::RecordChunkIfInProgress(

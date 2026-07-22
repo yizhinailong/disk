@@ -81,7 +81,7 @@ The system SHALL derive durable Worker correlation only from claimed PostgreSQL 
 
 #### Scenario: Worker correlates staging cleanup to an upload
 - **WHEN** a claimed `staging_cleanup` job has a valid cleanup payload whose non-empty upload ID exactly matches its aggregate ID
-- **THEN** job-level Worker events SHALL carry that value as the upload ID, while malformed staging jobs and every other job type SHALL keep the job-level upload ID null; an expiration lifecycle event MAY add an upload ID only after reading the actual persistent upload-task row
+- **THEN** job-level Worker events SHALL carry that value as the upload ID, while malformed staging jobs and every other job type SHALL keep the job-level upload ID null; an expiration lifecycle event MAY add an upload ID and state version only from the actual successful upload-task transition
 
 #### Scenario: Worker no longer owns the completed attempt
 - **WHEN** the Worker persists a succeeded, retry, or dead-letter result, or can no longer confirm continued ownership
@@ -111,7 +111,7 @@ The system SHALL classify the manual expired-cleanup endpoint as the bounded `cl
 
 #### Scenario: Cleanup expires an individual upload
 - **WHEN** cleanup reads and expires a persistent upload-task row
-- **THEN** the item-level lifecycle event MAY add that row's actual upload ID without changing the caller's request or durable-job correlation
+- **THEN** the winning transition SHALL increment the persistent state version exactly once, and its post-commit item-level lifecycle event SHALL add that row's actual upload ID and returned state version without changing the caller's request or durable-job correlation
 
 #### Scenario: Cleanup enqueues Blob garbage collection without observing its row ID
 - **WHEN** expired-trash deletion decrements a content reference and the repository enqueue interface does not return the durable job's persistent row ID
@@ -119,7 +119,7 @@ The system SHALL classify the manual expired-cleanup endpoint as the bounded `cl
 
 #### Scenario: Worker executes expiration through shared services
 - **WHEN** a claimed expired-upload or expired-trash job enters the same lifecycle and trash/content services
-- **THEN** its internal events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner, while request ID and state version remain null unless a future persisted schema explicitly supplies them
+- **THEN** its job-level events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner while request ID and state version remain null; an upload item-level event MAY add only the state version returned by its successful expiration transition
 
 ### Requirement: Bounded High-Volume Logging
 The system SHALL apply an outcome-based logging policy to upload-chunk traffic so that the normal production log level does not emit one success record per chunk while failures and low-cardinality metrics remain complete.

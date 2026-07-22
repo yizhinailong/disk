@@ -661,8 +661,16 @@ def wait_for_correlated_application_log(
     raise AssertionError("unreachable")
 
 
-def run_expired_cleanup(request_id: str | None = None) -> dict[str, int]:
+def run_expired_cleanup(
+    request_id: str | None = None,
+    *,
+    expected_upload_id: str | None = None,
+    expected_state_version: int | None = None,
+) -> dict[str, int]:
     """Run the deterministic admin/manual cleanup seam and return cleanup counts."""
+    if (expected_upload_id is None) != (expected_state_version is None):
+        raise ValueError("expected upload ID and state version must be supplied together")
+
     headers = auth_headers(TOKEN)
     if request_id is not None:
         headers["X-Request-Id"] = request_id
@@ -702,6 +710,16 @@ def run_expired_cleanup(request_id: str | None = None) -> dict[str, int]:
                 upload_id=None,
                 message_marker=marker,
             )
+        if expected_upload_id is not None and expected_state_version is not None:
+            wait_for_correlated_application_log(
+                request_id=request_id,
+                instance_id=instance_id,
+                operation="cleanup",
+                upload_id=expected_upload_id,
+                message_marker="[expire_upload]",
+                state_version=expected_state_version,
+            )
+            log_pass("expired upload lifecycle log records the committed state version")
         log_pass("expired cleanup logs keep typed request correlation")
     return {
         "expired_trash_deleted": int(json_field(resp.text, "data.expired_trash_deleted") or 0),
@@ -3778,6 +3796,8 @@ def test_expired_upload_cleanup_invariants() -> None:
     quota_after_init = user_quota()
     upload_single_chunk(upload_id, payload)
     assert_chunk_row_count(upload_id, 1)
+    task_before_expiry = assert_upload_task(upload_id, 0)
+    version_before_expiry = int(task_before_expiry["state_version"])
     assert_numeric_delta(
         "expire fixture reserves storage",
         quota_before["storage_reserved"],
@@ -3792,12 +3812,21 @@ def test_expired_upload_cleanup_invariants() -> None:
     assert_equal("expire fixture marks upload task expired in DB", affected, 1)
 
     cleanup_request_id = f"safety-cleanup-log-{unique_name()}"
-    cleanup_counts = run_expired_cleanup(cleanup_request_id)
+    cleanup_counts = run_expired_cleanup(
+        cleanup_request_id,
+        expected_upload_id=upload_id,
+        expected_state_version=version_before_expiry + 1,
+    )
     quota_after_cleanup = user_quota()
 
     assert_equal("cleanup reports at least one expired upload", cleanup_counts["expired_upload_tasks_cleaned"] >= 1, True)
     assert_chunk_row_count(upload_id, 0)
     task = assert_upload_task(upload_id, 3)
+    assert_equal(
+        "expire transition increments state_version once",
+        int(task["state_version"]),
+        version_before_expiry + 1,
+    )
     assert_equal("expired task fail_reason documents expiry", task["fail_reason"], "任务过期")
     assert_numeric_delta(
         "expired upload cleanup releases reserved storage",

@@ -42,6 +42,11 @@ namespace disk::file {
         bool task_expired{ false };
     };
 
+    struct ExpiredUploadTransitionRecord {
+        UploadTaskCleanupRecord cleanup;
+        uint64_t state_version{ 0 };
+    };
+
     using ExpiredUploadTaskRecord = UploadTaskCleanupRecord;
 
     enum class FinalizeClaimDisposition {
@@ -189,17 +194,11 @@ namespace disk::file {
         ) const -> drogon::Task<std::optional<UploadTaskCancellationState>>;
 
         [[nodiscard]]
-        auto MarkExpiredIfInProgressBatch(
-            const std::vector<std::string>& upload_ids,
-            const std::string& fail_reason
-        ) const -> drogon::Task<uint64_t>;
-
-        [[nodiscard]]
         auto MarkExpiredIfInProgressReturning(
             const drogon::orm::DbClientPtr& client,
             const std::string& upload_id,
             const std::string& fail_reason
-        ) const -> drogon::Task<std::optional<ExpiredUploadTaskRecord>>;
+        ) const -> drogon::Task<std::optional<ExpiredUploadTransitionRecord>>;
 
         [[nodiscard]]
         auto RecordChunkIfInProgress(
