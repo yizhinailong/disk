@@ -71,6 +71,7 @@ set(TEST_SOURCES
     filters/ShareRateLimitLogContext_test.cpp
     filters/ShareRateLimitFilter_test.cpp
     filters/JwtAuthFilter_test.cpp
+    filters/RegisterRateLimitLogContext_test.cpp
     filters/RegisterRateLimit_test.cpp
     filters/RequestTraceFilter_test.cpp
     filters/DownloadRateLimit_test.cpp

@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 分享限流日志关联）：完整构建、分享限流聚焦 GoogleTest 40/40、真实 HTTP 分享限流直接集成 10/10、注册 CTest 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，各测试计时合计 472.12 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-22，本轮 Phase 7 注册限流日志关联）：完整构建、注册限流与过滤器归属聚焦 GoogleTest 23/23、真实 HTTP safety 直接集成 763/763、注册 safety CTest 1/1 和拓扑合同 1/1 通过；完整 CTest 共 1426 项，1419 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 475.65 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -699,6 +699,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定分享 ac
 日志的类型化 operation 继续表示 HTTP 路由而不是内部限流桶：access、browse 和 save 为 `share`，分享下载为 `download`；`/api/share/save/{share_code}` 即使消耗 download 桶，也不被误标为下载请求。日志不写入原始 Authorization、Share Token 或 JTI，也不从客户端 IP、JTI、分享码、计数键或依赖结果推断 `upload_id`、`job_id`、`lease_owner` 和 `state_version`；缺少 request 属性的直接调用保持 request JSON `null` 与有界 operation。
 
 新增 `ShareRateLimitLogContextContractTest` 与内存 NDJSON 用例，锁定 2 个上下文构造点、4 条 `ERROR`、2 条 `WARN` 以及全部失败/拒绝分支的 request/instance/operation、空所有权字段和凭据排除。`test_share_rate_limit.py` 为 access、browse 和 download 的真实最终 429 请求分别注入唯一 request ID，从该脚本独占的 API stdout NDJSON 对账响应实例、有界 operation 和四个空所有权字段，并继续扫描 Redis 键、日志、审计与保存 evidence 的凭据/JTI 排除。完整构建、Python 语法检查、分享限流聚焦 GoogleTest 40/40、直接集成 10/10、注册分享限流 CTest 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1424 项，1417 通过、7 项环境门控跳过、0 失败，各测试计时合计 472.12 秒。`TokenService`、`RedisService`、其余用户/IP 限流过滤器及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.32 注册限流过滤器日志关联记录（2026-07-22）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定全局注册 IP 限流器的显式关联合同。`RegisterRateLimitFilter` 现在在入口通过 `GetFilterLogContext` 从请求属性和现有 HTTP 分类器构造一次上下文；Redis 计数失败、成功检查和超限拒绝三条直接事件分别以原有 `ERROR`、`DEBUG` 和 `WARN` 级别使用该上下文。计数动作新增同签名可注入边界供内存测试使用，默认构造仍取得真实 `RedisService` 并调用既有固定窗口 helper；精确 `/api/auth/register` 范围、规范化 IP 键、配置回退、Redis 故障 fail-open 和 429 响应未改变。
+
+三条事件统一保留调用方 request、实际 instance 和有界 `auth` operation；缺少 request 属性的直接调用继续输出 JSON `null`。过滤器不读取注册正文或凭据，不从客户端 IP、计数键、窗口、阈值或依赖结果推断 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。`RegisterRateLimitLogContextContractTest` 与内存 NDJSON 用例锁定一个上下文构造点、三个日志级别、失败/成功/拒绝分支、空所有权字段、默认真实 Redis helper 以及原始注册密码排除；`FilterOwnershipTest` 同步锁定注入计数器失败后的放行顺序。
+
+`SafetyUploadInvariantsIntegration` 读取当前配置，在窗口切换边界外以 TTL 将本机规范化 IP 的当前固定窗口键预置到阈值，再以唯一 request ID 发送真实注册请求；它核对 HTTP 429、业务码 `10005`、四个限流头、响应 request/instance、warning 的 `auth` 关联和四个空所有权字段，并在 finally 中清理注册限流键族及扫描两个注册密码未进入受管日志。完整构建、Python 语法检查、注册限流与过滤器归属聚焦 GoogleTest 23/23、直接 safety 集成 763/763、注册 safety CTest 1/1、拓扑合同 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1426 项，1419 通过、7 项环境门控跳过、0 失败，总耗时 475.65 秒。`TokenService`、`RedisService`、其余用户/IP 限流过滤器及目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

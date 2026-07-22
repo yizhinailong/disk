@@ -64,6 +64,7 @@ from lib_py import (  # noqa: E402
     query_one,
     redis_delete_pattern,
     redis_get_value,
+    redis_set_value,
     redis_ttl,
     save_evidence,
     scalar,
@@ -1570,6 +1571,110 @@ def test_auth_log_context_invariants() -> None:
         ),
     )
 
+    config_path = Path(os.environ.get("DISK_CONFIG_FILE", REPO_ROOT / "config.json"))
+    if not config_path.is_absolute():
+        config_path = REPO_ROOT / config_path
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    disk_config = config.get("custom_config", {}).get("disk", {})
+    register_limit = int(disk_config.get("register_rate_limit_per_window", 5))
+    if register_limit <= 0:
+        register_limit = 5
+    register_window_seconds = int(
+        disk_config.get("register_rate_limit_window_seconds", 300)
+    )
+    if register_window_seconds <= 0:
+        register_window_seconds = 300
+
+    now = time.time()
+    window_start = (int(now) // register_window_seconds) * register_window_seconds
+    seconds_until_reset = window_start + register_window_seconds - now
+    if seconds_until_reset < 2:
+        time.sleep(seconds_until_reset + 0.05)
+        now = time.time()
+        window_start = (int(now) // register_window_seconds) * register_window_seconds
+
+    register_rate_key = f"rate:register:127.0.0.1:{window_start}"
+    limited_register_password = "SafetyRegisterLimit123"
+    limited_register_request_id = f"safety-register-rate-log-{unique_name()}"
+    try:
+        redis_set_value(
+            register_rate_key,
+            str(register_limit),
+            max(1, window_start + register_window_seconds - int(time.time())),
+        )
+        limited_register_response = fetch(
+            "/api/auth/register",
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "X-Request-Id": limited_register_request_id,
+            },
+            json_body={
+                "username": f"limited-{unique_name()}",
+                "email": f"limited-{unique_name()}@example.com",
+                "password": limited_register_password,
+            },
+        )
+        assert_equal(
+            "register rate boundary returns HTTP 429",
+            limited_register_response.status_code,
+            429,
+        )
+        assert_equal(
+            "register rate boundary returns code 10005",
+            json_field(limited_register_response.text, "code"),
+            "10005",
+        )
+        assert_equal(
+            "register rate boundary returns the configured limit",
+            header_value(limited_register_response.headers, "X-RateLimit-Limit"),
+            str(register_limit),
+        )
+        assert_equal(
+            "register rate boundary reports no remaining requests",
+            header_value(limited_register_response.headers, "X-RateLimit-Remaining"),
+            "0",
+        )
+        assert_equal(
+            "register rate boundary returns a reset timestamp",
+            bool(header_value(limited_register_response.headers, "X-RateLimit-Reset")),
+            True,
+        )
+        assert_equal(
+            "register rate boundary returns Retry-After",
+            bool(header_value(limited_register_response.headers, "Retry-After")),
+            True,
+        )
+        assert_equal(
+            "register rate boundary preserves caller request ID",
+            header_value(limited_register_response.headers, "X-Request-Id"),
+            limited_register_request_id,
+        )
+        limited_register_instance_id = header_value(
+            limited_register_response.headers,
+            "X-Disk-Instance-Id",
+        )
+        assert_equal(
+            "register rate boundary identifies the handling instance",
+            bool(limited_register_instance_id),
+            True,
+        )
+        limited_register_log = wait_for_correlated_application_log(
+            request_id=limited_register_request_id,
+            instance_id=limited_register_instance_id,
+            operation="auth",
+            upload_id=None,
+            message_marker="Register rate limit:",
+        )
+        assert_equal(
+            "register rate rejection uses warning level",
+            limited_register_log.get("level"),
+            "warning",
+        )
+        log_pass("register rate-limit rejection keeps bounded request correlation")
+    finally:
+        redis_delete_pattern("rate:register:*")
+
     login_request_id = f"safety-auth-login-log-{unique_name()}"
     login_response = fetch(
         "/api/auth/login",
@@ -1638,6 +1743,7 @@ def test_auth_log_context_invariants() -> None:
     assert_server_log_excludes_secrets(
         (
             register_password,
+            limited_register_password,
             TEST_PASS,
             access_token,
             refresh_token,

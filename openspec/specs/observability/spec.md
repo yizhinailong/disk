@@ -81,6 +81,21 @@ The JWT authentication, share-token authentication, and administrator-authorizat
 - **WHEN** JWT or share-token authentication succeeds or fails
 - **THEN** filter events and typed correlation fields SHALL NOT contain raw Authorization or `X-Share-Token` header values, access tokens, refresh tokens, share tokens, passwords, password hashes, or storage credentials
 
+### Requirement: Register Rate-Limit Filter Correlation
+The register rate-limit filter SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every counter-dependency failure, successful check, and limit-rejection event directly owned by that filter SHALL use the context without changing the exact-path scope, normalized-IP key, configured window or threshold, fail-open behavior, or HTTP response.
+
+#### Scenario: Register rate-limit filter handles a traced request
+- **WHEN** the filter emits a dependency-failure, successful-check, or rejection event for an exact `/api/auth/register` request whose trace attribute has been established
+- **THEN** the event SHALL retain the same request ID, actual handling instance, and bounded `auth` operation as the HTTP completion event
+
+#### Scenario: Register rate-limit filter observes client and counter values
+- **WHEN** the filter observes a normalized client IP, counter key, count, window, threshold, or dependency result
+- **THEN** it SHALL NOT derive upload ID, job ID, lease owner, or state version from that value, and those fields SHALL remain null
+
+#### Scenario: Register rate-limit filter handles registration credentials or missing trace state
+- **WHEN** a direct caller omits the request trace attribute or a registration request contains account, email, or password fields
+- **THEN** the event SHALL retain the bounded `auth` operation with explicit JSON null request correlation when needed and SHALL NOT contain the registration body, password, password hash, Authorization value, token, or storage credential
+
 ### Requirement: Share Rate-Limit Filter Correlation
 The share access and authenticated share-operation rate-limit filters SHALL build explicit request correlation at filter entry from the request trace attribute and the existing bounded HTTP operation classifier. Every counter-dependency failure, verified-JTI attribute failure, and limit-rejection event directly owned by those filters SHALL use that context without changing rate-limit keys, windows, thresholds, authentication order, fail-open behavior, or HTTP responses.
 

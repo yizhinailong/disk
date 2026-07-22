@@ -252,7 +252,6 @@ TEST(FilterOwnershipTest, RateLimitFiltersFailOpenOnRedisFailure) {
         "DownloadRateLimitFilter.cpp",
         "FolderRateLimitFilter.cpp",
         "AdminRateLimitFilter.cpp",
-        "RegisterRateLimitFilter.cpp",
     };
 
     for (const auto filter_file : filter_files) {
@@ -267,6 +266,19 @@ TEST(FilterOwnershipTest, RateLimitFiltersFailOpenOnRedisFailure) {
             }
         )) << filter_file;
     }
+
+    const auto register_filter =
+        ReadTextFile(SourceRoot() / "src" / "filters" / "RegisterRateLimitFilter.cpp");
+    EXPECT_TRUE(ContainsAllInOrder(
+        register_filter,
+        {
+            "auto incr_result = co_await m_counter",
+            "if (!incr_result)",
+            "Logger::Error(log_context)",
+            "Redis IncrWithExpire failed:",
+            "co_return nullptr;",
+        }
+    ));
 }
 
 TEST(FilterOwnershipTest, RateLimitFiltersUseNormalizedConfiguration) {
