@@ -104,6 +104,38 @@ def read_log(server: ManagedServer) -> str:
     return server.log_path.read_text(encoding="utf-8", errors="replace")
 
 
+def find_scheduler_event(
+    log: str,
+    *,
+    operation: str,
+    message_marker: str,
+) -> dict[str, Any] | None:
+    """Find one schema-v1 scheduler event without individual job ownership."""
+    for line in log.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(record, dict):
+            continue
+        message = str(record.get("message", ""))
+        if (
+            record.get("schema_version") == 1
+            and record.get("source") == "application"
+            and record.get("instance_id") == WORKER_INSTANCE_ID
+            and record.get("request_id") is None
+            and record.get("operation") == operation
+            and record.get("upload_id") is None
+            and record.get("job_id") is None
+            and record.get("lease_owner") is None
+            and record.get("state_version") is None
+            and message_marker in message
+            and "instance_id=" not in message
+        ):
+            return record
+    return None
+
+
 def require_api_scheduler_disabled(server: ManagedServer, health: dict[str, Any]) -> str:
     require(
         health.get("worker_claiming_enabled") is False,
@@ -219,6 +251,24 @@ def main() -> int:
                 SEEDER_MARKERS[1] in worker_log,
                 "claiming Worker did not log a completed seed cycle",
             )
+            scheduler_start_event = find_scheduler_event(
+                worker_log,
+                operation="storage_job_scheduler",
+                message_marker=SEEDER_MARKERS[0],
+            )
+            require(
+                scheduler_start_event is not None,
+                "claiming Worker scheduler start lacks typed process correlation",
+            )
+            seed_cycle_event = find_scheduler_event(
+                worker_log,
+                operation="storage_job_seed",
+                message_marker=SEEDER_MARKERS[1],
+            )
+            require(
+                seed_cycle_event is not None,
+                "claiming Worker seed cycle lacks typed process correlation",
+            )
 
             api_b_config = server_config(
                 database_name,
@@ -295,6 +345,8 @@ def main() -> int:
                             api_b_log.count(marker) for marker in SEEDER_MARKERS
                         ),
                         "worker_seeder_start_entries": worker_log.count(SEEDER_MARKERS[0]),
+                        "worker_scheduler_start_context": scheduler_start_event is not None,
+                        "worker_seed_cycle_context": seed_cycle_event is not None,
                     },
                     indent=2,
                 )

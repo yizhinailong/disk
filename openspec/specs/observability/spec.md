@@ -669,6 +669,14 @@ The system SHALL derive durable Worker correlation only from claimed PostgreSQL 
 - **WHEN** the Worker callback returns a domain failure or throws an exception
 - **THEN** the runtime SHALL emit a fixed failure event with `storage_worker_poll` correlation and SHALL NOT record the domain error message, exception text, database details, endpoint, credentials, or identifiers inferred from message text
 
+#### Scenario: Worker seeds periodic durable jobs
+- **WHEN** a claiming Worker starts or stops the periodic scheduler, or reports an aggregate periodic seed result before any individual job is claimed
+- **THEN** the event SHALL use the actual process instance, SHALL use `storage_job_scheduler` for scheduler lifecycle or `storage_job_seed` for seed results, and SHALL keep request ID, upload ID, job ID, lease owner, and state version null rather than inferring ownership from a seed plan, deduplication key, payload, or aggregate count
+
+#### Scenario: Periodic job seeding fails
+- **WHEN** periodic plan construction, repository enqueueing, or the seed cycle returns a failure or throws an exception
+- **THEN** the scheduler SHALL emit a fixed failure event with `storage_job_seed` correlation and SHALL NOT record the domain error message, exception text, database details, endpoint, credentials, or identifiers inferred from message text
+
 ### Requirement: Typed Download Correlation
 The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.
 

@@ -156,7 +156,6 @@ namespace disk::services {
         }
         instance->m_repository =
             std::make_shared<disk::jobs::StorageJobRepository>(std::move(db_client));
-        instance->m_instance_id = std::move(instance_id);
         instance->m_accepting.store(true);
     }
 
@@ -187,9 +186,9 @@ namespace disk::services {
             }
         });
 
-        Logger::Info() << "Periodic storage job seeder started: instance_id="
-                       << instance->m_instance_id
-                       << ", interval_seconds=" << kPeriodicSeedIntervalSeconds;
+        Logger::Info(utils::LogContext{ .operation = "storage_job_scheduler" })
+            << "Periodic storage job seeder started: interval_seconds="
+            << kPeriodicSeedIntervalSeconds;
     }
 
     auto ScheduledTasks::Stop() -> void {
@@ -204,9 +203,9 @@ namespace disk::services {
                 [loop = instance->m_loop, timer]() { loop->invalidateTimer(timer); }
             );
         }
-        Logger::Info() << "Periodic storage job seeder stopped: instance_id="
-                       << instance->m_instance_id
-                       << ", in_flight=" << instance->m_seed_inflight.load();
+        Logger::Info(utils::LogContext{ .operation = "storage_job_scheduler" })
+            << "Periodic storage job seeder stopped: in_flight="
+            << instance->m_seed_inflight.load();
     }
 
     auto ScheduledTasks::SeedOnce(std::chrono::system_clock::time_point now)
@@ -233,9 +232,9 @@ namespace disk::services {
                 }
             }
             co_return result;
-        } catch (const std::exception& error) {
-            Logger::Error() << "Periodic storage job seed failed: instance_id=" << m_instance_id
-                            << ", error=" << error.what();
+        } catch (const std::exception&) {
+            Logger::Error(utils::LogContext{ .operation = "storage_job_seed" })
+                << "Periodic storage job seed failed";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to seed periodic storage jobs")
             );
@@ -256,15 +255,14 @@ namespace disk::services {
             if (const auto self = weak_self.lock(); self != nullptr) {
                 auto result = co_await self->SeedOnce(std::chrono::system_clock::now());
                 if (!result) {
-                    Logger::Error() << "Periodic storage job seed cycle failed: instance_id="
-                                    << self->m_instance_id
-                                    << ", error=" << result.error().message;
+                    Logger::Error(utils::LogContext{ .operation = "storage_job_seed" })
+                        << "Periodic storage job seed cycle failed";
                 } else if (result->attempted > 0) {
-                    Logger::Info() << "Periodic storage job seed cycle completed: instance_id="
-                                   << self->m_instance_id
-                                   << ", attempted=" << result->attempted
-                                   << ", enqueued=" << result->enqueued
-                                   << ", deduplicated=" << result->deduplicated;
+                    Logger::Info(utils::LogContext{ .operation = "storage_job_seed" })
+                        << "Periodic storage job seed cycle completed: attempted="
+                        << result->attempted
+                        << ", enqueued=" << result->enqueued
+                        << ", deduplicated=" << result->deduplicated;
                 }
             }
         });

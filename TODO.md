@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-22，本轮 Phase 7 Worker 轮询运行时日志关联）：完整构建、Worker 运行时/真实排空接管聚焦 CTest 7/7、直接三 Worker 自然租约接管演练通过；完整 CTest 共 1451 项，1444 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 487.15 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 7 周期任务播种日志关联）：完整构建、周期播种 GoogleTest 4/4、真实角色切换聚焦 CTest 1/1 通过；完整 CTest 共 1452 项，1445 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 507.18 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -820,6 +820,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定 Worker �
 
 完整构建、Python 语法检查、Worker 运行时/真实排空接管聚焦 CTest 7/7、直接三 Worker 演练和 OpenSpec 严格校验 24/24 通过。完整 CTest 首轮共 1451 项，1443 通过、7 项环境门控跳过、1 项失败，总耗时 477.75 秒；唯一失败是既有上传安全网中网络分区恢复后的 readiness 一次返回 503，其余 791 条断言通过，该用例随后聚焦复跑 1/1 通过（109.58 秒）。第二轮完整 CTest 共 1451 项，1444 通过、7 项环境门控跳过、0 失败，总耗时 487.15 秒。其他尚未逐条归属的日志路径与目标 MinIO/云 S3、多实例拓扑门禁仍未收敛，因此 12.1 的两个总任务继续保持未勾选。
 
+### 12.47 周期任务播种日志关联记录（2026-07-25）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定周期任务播种边界的类型化关联合同。`ScheduledTasks` 的启动与停止现在使用固定 `operation=storage_job_scheduler`，播种完成、仓储异常和周期失败使用固定 `operation=storage_job_seed`；这些事件发生在单个持久任务认领之外，因此 `request_id/upload_id/job_id/lease_owner/state_version` 全部保持 JSON `null`，不得从 scan ID、dedupe key、aggregate ID、payload、播种计划或聚合计数推断任务所有权。实际 instance 只由结构化日志器的进程注册值写入顶层字段，运行对象不再保存仅供 message 拼接的实例 ID 副本；初始化校验、60 秒周期、首次立即播种、去重、角色归属、停止接收和排空语义不变。
+
+生命周期消息只保留间隔或 in-flight 状态，成功消息只保留 attempted/enqueued/deduplicated 三项有界计数；仓储异常和周期失败分别固定为 `Periodic storage job seed failed` 与 `Periodic storage job seed cycle failed`，不记录 `ErrorInfo`、异常正文、SQL、endpoint、连接信息、凭据或消息内实例 ID。新增 `ScheduledTasksLogContextContractTest` 锁定五条生产日志、operation 数量、固定失败消息和敏感详情排除；增强后的 `test_scheduler_role_cutover.py` 逐行解析真实 Worker 的启动/完成 NDJSON，同时保留 API A/B 无 seeder、Worker 唯一播种六个当前窗口任务以及 API 扩缩容前后完整行快照不变的既有不变量。结构化证据 `.sisyphus/evidence/scheduler-role-cutover-summary.json` 记录两项关联结论，SHA-256 为 `7f650b8a595607aaba208ba3ffd379133448cdfd7904d76eb034ba8b4b71263e`。
+
+完整构建、Python 语法检查、周期播种 GoogleTest 4/4、真实角色切换聚焦 CTest 1/1 和 OpenSpec 严格校验 24/24 通过。最终完整 CTest 共 1452 项，1445 通过、7 项环境门控跳过、0 失败，总耗时 507.18 秒。其他尚未逐条归属的日志路径与目标 MinIO/云 S3、多实例拓扑门禁仍未收敛，因此 12.1 的两个总任务继续保持未勾选。
+
 ## 13. Phase 8：测试与验证
 
 ### 13.1 单元测试
@@ -993,7 +1001,7 @@ local 非终态、未完成 cleanup 与逐原卷扫描全部归零的证据，�
 CTest 共 1382 项：1376 通过、6 项常规环境门控跳过、0 失败，总耗时 362.12 秒；
 OpenSpec 严格校验 24/24 通过。结构化证据为
 `.sisyphus/evidence/scheduler-role-cutover-summary.json`，SHA-256 为
-`960d00f7675d75ef59f687d2c8ba751b24762249c4b2bb0d245154e71995f93f`。本机门禁证明应用角色
+`7f650b8a595607aaba208ba3ffd379133448cdfd7904d76eb034ba8b4b71263e`。本机门禁证明应用角色
 分离与数据库不变式；目标预发布/生产环境仍须按部署指南用实际编排重复 Worker
 重启、API B 加入/摘除和完整行快照比对。
 - [x] 逐步增加 API/Worker 副本并重新核算 PostgreSQL、Redis、S3 连接和并发预算。

@@ -75,7 +75,6 @@ namespace disk::services {
         auto TriggerSeed() -> void;
 
         std::shared_ptr<disk::jobs::StorageJobRepository> m_repository;
-        std::string m_instance_id;
         trantor::EventLoop* m_loop{};
         std::atomic<trantor::TimerId> m_seed_timer{ trantor::InvalidTimerId };
         std::atomic_bool m_started{ false };

@@ -2,6 +2,10 @@
 
 #include <array>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include <string_view>
 
 #include <gtest/gtest.h>
@@ -12,12 +16,82 @@ namespace disk::services {
     namespace {
         using namespace std::chrono_literals;
 
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto Contains(const std::string& source, std::string_view expected) -> bool {
+            return source.find(expected) != std::string::npos;
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
+        }
+
         [[nodiscard]] auto MakeUtcTimePoint(
             std::chrono::year_month_day date,
             std::chrono::hours hour,
             std::chrono::minutes minute = 0min
         ) -> std::chrono::system_clock::time_point {
             return std::chrono::sys_days(date) + hour + minute;
+        }
+
+        TEST(ScheduledTasksLogContextContractTest, UsesTypedProcessCorrelationAndFixedFailures) {
+            const auto header = ReadSourceFile("src/services/ScheduledTasks.hpp");
+            const auto source = ReadSourceFile("src/services/ScheduledTasks.cpp");
+            const auto runtime_begin = source.find("auto ScheduledTasks::Initialize(");
+
+            ASSERT_FALSE(header.empty());
+            ASSERT_NE(runtime_begin, std::string::npos);
+            const auto runtime_source = source.substr(runtime_begin);
+
+            EXPECT_EQ(
+                CountOccurrences(runtime_source, "Logger::Info(utils::LogContext"),
+                3U
+            );
+            EXPECT_EQ(
+                CountOccurrences(runtime_source, "Logger::Error(utils::LogContext"),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    runtime_source,
+                    ".operation = \"storage_job_scheduler\""
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(runtime_source, ".operation = \"storage_job_seed\""),
+                3U
+            );
+            EXPECT_TRUE(Contains(
+                runtime_source,
+                "<< \"Periodic storage job seed failed\";"
+            ));
+            EXPECT_TRUE(Contains(
+                runtime_source,
+                "<< \"Periodic storage job seed cycle failed\";"
+            ));
+            EXPECT_FALSE(Contains(runtime_source, "Logger::Info()"));
+            EXPECT_FALSE(Contains(runtime_source, "Logger::Error()"));
+            EXPECT_FALSE(Contains(runtime_source, ".what()"));
+            EXPECT_FALSE(Contains(runtime_source, "result.error().message"));
+            EXPECT_FALSE(Contains(runtime_source, "instance_id="));
+            EXPECT_FALSE(Contains(runtime_source, "m_instance_id"));
+            EXPECT_FALSE(Contains(header, "m_instance_id"));
         }
 
         TEST(ScheduledTasksTest, BuildsSixBoundedFirstPageJobsForUtcWindows) {
