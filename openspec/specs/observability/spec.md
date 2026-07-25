@@ -688,6 +688,17 @@ The system SHALL correlate process drain lifecycle events without assigning them
 - **WHEN** accepted API work, the Worker runtime, or the periodic scheduler remains in flight at the configured deadline
 - **THEN** the process SHALL emit a `process_runtime` warning with only bounded aggregate drain state and SHALL NOT repeat the instance in the message or infer request, upload, job, lease, or version ownership
 
+### Requirement: Typed Pre-Instance Process Bootstrap Correlation
+The system SHALL correlate process bootstrap events before validated instance registration without inventing process or business ownership.
+
+#### Scenario: A pre-instance bootstrap stage succeeds
+- **WHEN** the process starts, initializes libsodium, or loads the runtime configuration before validated instance registration
+- **THEN** the application event SHALL use `process_bootstrap` and SHALL keep instance ID, request ID, upload ID, job ID, lease owner, and state version null
+
+#### Scenario: A pre-instance bootstrap stage fails
+- **WHEN** libsodium initialization, runtime configuration loading, or secure configuration validation prevents startup
+- **THEN** the process SHALL emit a fixed `process_bootstrap` error summary without exception text or inferred ownership and SHALL preserve the existing non-zero exit behavior
+
 ### Requirement: Typed Download Correlation
 The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.
 

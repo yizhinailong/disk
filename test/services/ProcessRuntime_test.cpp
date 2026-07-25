@@ -69,6 +69,45 @@ namespace disk::runtime {
             EXPECT_FALSE(Contains(shutdown_source, "state_version="));
         }
 
+        TEST(ProcessBootstrapLogContextContractTest, UsesTypedPreInstanceCorrelation) {
+            const auto source = ReadSourceFile("src/main.cpp");
+            const auto bootstrap_begin = source.find("auto main() -> int");
+            const auto bootstrap_end = source.find("Logger::SetInstanceId", bootstrap_begin);
+
+            ASSERT_NE(bootstrap_begin, std::string::npos);
+            ASSERT_NE(bootstrap_end, std::string::npos);
+            const auto bootstrap_source =
+                source.substr(bootstrap_begin, bootstrap_end - bootstrap_begin);
+
+            EXPECT_EQ(CountOccurrences(bootstrap_source, "Logger::Info(bootstrap_log_context)"), 3U);
+            EXPECT_EQ(CountOccurrences(bootstrap_source, "Logger::Error(bootstrap_log_context)"), 3U);
+            EXPECT_EQ(
+                CountOccurrences(bootstrap_source, ".operation = \"process_bootstrap\""),
+                1U
+            );
+            EXPECT_TRUE(Contains(bootstrap_source, "\"Disk system starting...\""));
+            EXPECT_TRUE(Contains(bootstrap_source, "\"libsodium initialization failed\""));
+            EXPECT_TRUE(Contains(bootstrap_source, "\"libsodium initialized successfully\""));
+            EXPECT_TRUE(Contains(
+                bootstrap_source,
+                "\"Runtime configuration loading failed\""
+            ));
+            EXPECT_TRUE(Contains(
+                bootstrap_source,
+                "\"Runtime configuration loaded successfully\""
+            ));
+            EXPECT_TRUE(Contains(bootstrap_source, "\"Secure config validation failed\""));
+            EXPECT_FALSE(Contains(bootstrap_source, "Logger::Info()"));
+            EXPECT_FALSE(Contains(bootstrap_source, "Logger::Error()"));
+            EXPECT_FALSE(Contains(bootstrap_source, ".what()"));
+            EXPECT_FALSE(Contains(bootstrap_source, "instance_id="));
+            EXPECT_FALSE(Contains(bootstrap_source, "request_id="));
+            EXPECT_FALSE(Contains(bootstrap_source, "upload_id="));
+            EXPECT_FALSE(Contains(bootstrap_source, "job_id="));
+            EXPECT_FALSE(Contains(bootstrap_source, "lease_owner="));
+            EXPECT_FALSE(Contains(bootstrap_source, "state_version="));
+        }
+
         TEST(ProcessRuntimeTest, RecognizesOnlyDocumentedHealthPaths) {
             EXPECT_TRUE(IsHealthProbePath("/api/health"));
             EXPECT_TRUE(IsHealthProbePath("/api/health/live"));

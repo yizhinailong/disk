@@ -29,6 +29,7 @@ EXPECTED_ERROR = (
     "Secure mode API requires upload_staging_backend=s3; "
     "local staging creation is disabled"
 )
+BOOTSTRAP_ERROR = "Secure config validation failed"
 
 
 def reserve_port() -> int:
@@ -52,6 +53,34 @@ def stop_process(process: subprocess.Popen[str]) -> None:
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(timeout=2)
+
+
+def find_bootstrap_error(output: str) -> dict[str, object] | None:
+    for line in output.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (
+            record.get("schema_version") == 1
+            and record.get("source") == "application"
+            and record.get("level") == "error"
+            and record.get("operation") == "process_bootstrap"
+            and record.get("message") == BOOTSTRAP_ERROR
+            and all(
+                record.get(field) is None
+                for field in (
+                    "instance_id",
+                    "request_id",
+                    "upload_id",
+                    "job_id",
+                    "lease_owner",
+                    "state_version",
+                )
+            )
+        ):
+            return record
+    return None
 
 
 def main() -> int:
@@ -111,9 +140,16 @@ def main() -> int:
 
     output, _ = process.communicate()
     error_observed = EXPECTED_ERROR in output
+    bootstrap_error = find_bootstrap_error(output)
+    bootstrap_error_context = bootstrap_error is not None
+    bootstrap_summary_bounded = (
+        bootstrap_error is not None and bootstrap_error.get("message") == BOOTSTRAP_ERROR
+    )
     passed = (
         process.returncode == 1
         and error_observed
+        and bootstrap_error_context
+        and bootstrap_summary_bounded
         and not listener_opened
         and not timed_out
     )
@@ -122,6 +158,8 @@ def main() -> int:
         "scenario": "secure_api_local_staging_cutoff",
         "exit_code": process.returncode,
         "expected_error_observed": error_observed,
+        "bootstrap_error_context": bootstrap_error_context,
+        "bootstrap_summary_bounded": bootstrap_summary_bounded,
         "listener_opened": listener_opened,
         "timed_out": timed_out,
         "passed": passed,

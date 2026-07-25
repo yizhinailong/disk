@@ -240,24 +240,27 @@ namespace {
 auto main() -> int {
     disk::utils::Logger::Init();
     disk::utils::Logger::CaptureFrameworkLogs();
+    const disk::utils::LogContext bootstrap_log_context{ .operation = "process_bootstrap" };
 
-    disk::utils::Logger::Info() << "Disk system starting...";
+    disk::utils::Logger::Info(bootstrap_log_context) << "Disk system starting...";
 
     /// 初始化 libsodium 加密库
     if (sodium_init() < 0) {
-        disk::utils::Logger::Error() << "libsodium initialization failed";
+        disk::utils::Logger::Error(bootstrap_log_context) << "libsodium initialization failed";
         return 1;
     }
-    disk::utils::Logger::Info() << "libsodium initialized successfully";
+    disk::utils::Logger::Info(bootstrap_log_context) << "libsodium initialized successfully";
 
     /// 加载配置文件并在交给 Drogon 前应用严格的环境覆盖。
     try {
         drogon::app().loadConfigJson(disk::utils::RuntimeConfig::LoadFromEnvironment());
-    } catch (const std::exception& e) {
-        disk::utils::Logger::Error() << "Runtime configuration loading failed: " << e.what();
+    } catch (const std::exception&) {
+        disk::utils::Logger::Error(bootstrap_log_context)
+            << "Runtime configuration loading failed";
         return 1;
     }
-    disk::utils::Logger::Info() << "Runtime configuration loaded successfully";
+    disk::utils::Logger::Info(bootstrap_log_context)
+        << "Runtime configuration loaded successfully";
 
     /// 使用 config.json 中的值初始化 ConfigMgr
     disk::utils::ConfigMgr::GetInstance()->LoadConfig();
@@ -265,8 +268,9 @@ auto main() -> int {
     /// 验证配置（JWT_SECRET 所有环境必须设置，DATABASE/REDIS 仅安全模式要求）
     try {
         disk::utils::ConfigMgr::GetInstance()->ValidateSecureConfig();
-    } catch (const std::runtime_error& e) {
-        disk::utils::Logger::Error() << "Secure config validation failed: " << e.what();
+    } catch (const std::runtime_error&) {
+        disk::utils::Logger::Error(bootstrap_log_context)
+            << "Secure config validation failed";
         return 1;
     }
 
