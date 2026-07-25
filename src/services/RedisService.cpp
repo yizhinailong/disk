@@ -105,7 +105,7 @@ namespace disk::services {
         auto instance = GetInstance();
         if (!instance->m_redis_client) {
             instance->m_redis_client = std::move(redis_client);
-            Logger::Debug() << "RedisService initialized";
+            Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=redis";
         }
     }
 

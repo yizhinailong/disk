@@ -43,7 +43,7 @@ namespace disk::file {
         m_upload_staging_storage(upload_staging_storage),
         m_blob_store(blob_store) {
         StartUploadTaskCacheMaintenance();
-        Logger::Debug() << "UploadService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=upload";
     }
 
     /// ==================== InitUpload ====================

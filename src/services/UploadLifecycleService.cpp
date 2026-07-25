@@ -382,7 +382,7 @@ namespace disk::upload {
         m_storage(storage),
         m_upload_staging_storage(upload_staging_storage),
         m_blob_store(blob_store) {
-        Logger::Debug() << "UploadLifecycleService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=upload_lifecycle";
     }
 
     auto DecideInitFlow(

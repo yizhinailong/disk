@@ -155,7 +155,14 @@ namespace disk::log {
             EXPECT_EQ(CountOccurrences(controller, "Logger::Info(log_context)"), 1U);
             EXPECT_EQ(CountOccurrences(controller, "Logger::Error(log_context)"), 1U);
             EXPECT_EQ(CountOccurrences(service_source, "Logger::Error(log_context)"), 2U);
-            EXPECT_EQ(CountOccurrences(service_source, "Logger::Debug()"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    service_source,
+                    "Logger::Debug(disk::utils::ServiceRuntimeLogContext())"
+                ),
+                1U
+            );
+            EXPECT_EQ(service_source.find("Logger::Debug()"), std::string::npos);
 
             EXPECT_EQ(controller.find("Logger::Info()"), std::string::npos);
             EXPECT_EQ(controller.find("Logger::Error()"), std::string::npos);

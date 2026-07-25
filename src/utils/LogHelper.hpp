@@ -29,6 +29,10 @@ namespace disk::utils {
         std::optional<uint64_t> state_version;
     };
 
+    [[nodiscard]] inline auto ServiceRuntimeLogContext() -> LogContext {
+        return { .operation = "service_runtime" };
+    }
+
     class LogStream final {
     public:
         explicit LogStream(

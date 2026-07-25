@@ -46,7 +46,7 @@ namespace disk::file {
           m_file_repository(m_db_client),
           m_folder_repository(m_db_client),
           m_storage(storage) {
-        Logger::Debug() << "FileMutationService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=file_mutation";
     }
 
     /// ==================== Rename ====================

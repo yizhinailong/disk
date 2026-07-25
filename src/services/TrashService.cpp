@@ -161,7 +161,7 @@ namespace disk::trash {
 
     TrashService::TrashService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)), m_trash_query(m_db_client) {
-        Logger::Debug() << "TrashService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=trash";
     }
 
     auto TrashService::CreateTrashRecords(

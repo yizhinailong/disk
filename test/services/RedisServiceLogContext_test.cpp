@@ -152,11 +152,18 @@ namespace disk::services {
             );
             EXPECT_EQ(CountOccurrences(source, "Logger::Trace(log_context)"), 7U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 16U);
-            EXPECT_EQ(CountOccurrences(source, "Logger::Debug()"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "Logger::Debug(disk::utils::ServiceRuntimeLogContext())"
+                ),
+                1U
+            );
+            EXPECT_FALSE(Contains(source, "Logger::Debug()"));
             EXPECT_FALSE(Contains(source, "Logger::Trace()"));
             EXPECT_FALSE(Contains(source, "Logger::Error()"));
             EXPECT_FALSE(Contains(source, "Logger::Debug(log_context)"));
-            EXPECT_TRUE(Contains(source, "RedisService initialized"));
+            EXPECT_TRUE(Contains(source, "Service initialized: service=redis"));
             EXPECT_TRUE(Contains(source, "WrapRedisResultParseError(\"PING\", ex, log_context)"));
 
             for (const auto* sensitive : {

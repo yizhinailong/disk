@@ -1,11 +1,13 @@
 #include "services/ProcessRuntime.hpp"
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -185,6 +187,66 @@ namespace disk::runtime {
             EXPECT_FALSE(Contains(initialization_source, "GetUploadTaskExpirySeconds()"));
             EXPECT_FALSE(Contains(initialization_source, "GetAssemblyMaxConcurrent()"));
             EXPECT_FALSE(Contains(initialization_source, "GetAssembleBufferSizeBytes()"));
+
+            const auto log_helper = ReadSourceFile("src/utils/LogHelper.hpp");
+            ASSERT_FALSE(log_helper.empty());
+            EXPECT_EQ(
+                CountOccurrences(log_helper, ".operation = \"service_runtime\""),
+                1U
+            );
+
+            constexpr std::array<std::pair<std::string_view, std::string_view>, 16> service_logs{
+                {
+                 { "src/services/AdminService.cpp", "admin" },
+                 { "src/services/AuthService.cpp", "auth" },
+                 { "src/services/CleanupService.cpp", "cleanup" },
+                 { "src/services/ContentService.cpp", "content" },
+                 { "src/services/FileMutationService.cpp", "file_mutation" },
+                 { "src/services/FileQueryService.cpp", "file_query" },
+                 { "src/services/FolderService.cpp", "folder" },
+                 { "src/services/OperationLogService.cpp", "operation_log" },
+                 { "src/services/QuotaService.cpp", "quota" },
+                 { "src/services/RedisService.cpp", "redis" },
+                 { "src/services/ShareService.cpp", "share" },
+                 { "src/services/SystemService.cpp", "system" },
+                 { "src/services/TrashService.cpp", "trash" },
+                 { "src/services/UploadLifecycleService.cpp", "upload_lifecycle" },
+                 { "src/services/UploadService.cpp", "upload" },
+                 { "src/services/UserService.cpp", "user" },
+                 }
+            };
+
+            std::string combined_service_sources;
+            for (const auto& [path, service] : service_logs) {
+                const auto service_source = ReadSourceFile(path);
+                ASSERT_FALSE(service_source.empty()) << path;
+                combined_service_sources += service_source;
+                EXPECT_TRUE(Contains(
+                    service_source,
+                    "Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << \"Service initialized: service=" +
+                        std::string(service) + "\""
+                )) << path;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    combined_service_sources,
+                    "Logger::Debug(disk::utils::ServiceRuntimeLogContext())"
+                ),
+                service_logs.size()
+            );
+            EXPECT_EQ(
+                CountOccurrences(combined_service_sources, "Service initialized: service="),
+                service_logs.size()
+            );
+            EXPECT_EQ(CountOccurrences(combined_service_sources, "Logger::Debug()"), 1U);
+            EXPECT_TRUE(Contains(
+                combined_service_sources,
+                "Upload task cache maintenance timer started"
+            ));
+            EXPECT_FALSE(Contains(combined_service_sources, "initialization completed"));
+            EXPECT_FALSE(Contains(combined_service_sources, "RedisService initialized"));
+            EXPECT_FALSE(Contains(combined_service_sources, "instance_id="));
         }
 
         TEST(ProcessRuntimeTest, RecognizesOnlyDocumentedHealthPaths) {

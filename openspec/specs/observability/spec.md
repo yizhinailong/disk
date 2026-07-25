@@ -740,6 +740,17 @@ The system SHALL correlate post-registration process initialization stages witho
 - **WHEN** the initialized process emits a startup progress event
 - **THEN** the message MAY contain a bounded role and framework version but SHALL NOT contain a manually copied instance ID, filesystem path, storage capacity summary, endpoint, credential, secret, token, or exception text
 
+### Requirement: Typed Service Initialization Diagnostics
+The system SHALL correlate constructor and singleton-initialization diagnostics from application domain services as process-owned runtime events without assigning HTTP request, upload, or durable-job ownership.
+
+#### Scenario: An application service initializes
+- **WHEN** an admin, authentication, cleanup, content, file mutation/query, folder, operation-log, quota, Redis, share, system, trash, upload lifecycle/upload, or user service emits its initialization diagnostic
+- **THEN** the event SHALL use fixed `operation=service_runtime`, SHALL accept only the instance already registered with the structured logger, and SHALL keep request ID, upload ID, job ID, lease owner, and state version null
+
+#### Scenario: Service construction has deployment or domain inputs
+- **WHEN** a service constructor or singleton initializer receives database, Redis, storage, configuration, user-domain, or other dependency values
+- **THEN** its DEBUG message SHALL contain only the fixed low-cardinality service label and SHALL NOT contain a manually copied instance ID, request or domain value, database client name, endpoint, path, credential, secret, token, storage pointer, or exception text; construction order, singleton guards, dependencies, and initialization behavior SHALL remain unchanged
+
 ### Requirement: Typed Download Correlation
 The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.
 

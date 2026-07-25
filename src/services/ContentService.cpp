@@ -63,7 +63,7 @@ namespace disk::content {
 
     ContentService::ContentService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        Logger::Debug() << "ContentService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=content";
     }
 
     auto ContentService::FindByMd5(

@@ -57,7 +57,7 @@ namespace disk::services {
     AdminService::AdminService()
         : m_db_client(disk::metrics::ObserveDbClient(drogon::app().getDbClient())),
           m_start_time(std::chrono::steady_clock::now()) {
-        Logger::Debug() << "AdminService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=admin";
     }
 
     auto AdminService::ListUsers(

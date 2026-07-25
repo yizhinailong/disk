@@ -28,7 +28,7 @@ namespace disk::folder {
 
     FolderService::FolderService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)), m_folder_repository(m_db_client) {
-        Logger::Debug() << "FolderService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=folder";
     }
 
     namespace {

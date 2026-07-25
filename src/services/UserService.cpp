@@ -26,7 +26,7 @@ namespace disk::user {
 
     UserService::UserService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        Logger::Debug() << "UserService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=user";
     }
 
     auto UserService::GetProfile(

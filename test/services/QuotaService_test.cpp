@@ -151,7 +151,14 @@ namespace disk::quota {
             EXPECT_EQ(CountOccurrences(source, "Logger::Debug(log_context)"), 5U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 4U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 9U);
-            EXPECT_EQ(CountOccurrences(source, "Logger::Debug()"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "Logger::Debug(disk::utils::ServiceRuntimeLogContext())"
+                ),
+                1U
+            );
+            EXPECT_FALSE(Contains(source, "Logger::Debug()"));
             EXPECT_FALSE(Contains(source, "Logger::Warn()"));
             EXPECT_FALSE(Contains(source, "Logger::Error()"));
 

@@ -97,7 +97,7 @@ namespace disk::share {
           m_audit_service(m_db_client) {
         /// 初始化 RedisService 单例（如果尚未初始化）
         disk::services::RedisService::Initialize(m_redis_client);
-        Logger::Debug() << "ShareService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=share";
     }
 
     /// ==================== 公共方法 ====================

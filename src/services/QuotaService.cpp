@@ -15,7 +15,7 @@ namespace disk::quota {
 
     QuotaService::QuotaService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        Logger::Debug() << "QuotaService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=quota";
     }
 
     auto QuotaService::ReserveStorage(

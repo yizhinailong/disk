@@ -88,10 +88,28 @@ namespace disk::utils::test {
 
         Logger::HighVolumeDetail() << "chunk-detail";
         Logger::HighVolumeSuccess() << "chunk-success";
+        Logger::Debug(ServiceRuntimeLogContext()) << "Service initialized: service=test";
 
         const auto output = Output();
         EXPECT_NE(output.find("chunk-detail"), std::string::npos);
         EXPECT_NE(output.find("chunk-success"), std::string::npos);
+
+        const auto records = Records();
+        ASSERT_EQ(records.size(), 3U);
+        const auto& runtime_record = records.back();
+        EXPECT_EQ(runtime_record["level"].asString(), "debug");
+        EXPECT_EQ(runtime_record["instance_id"].asString(), "disk-test-instance");
+        EXPECT_EQ(runtime_record["operation"].asString(), "service_runtime");
+        EXPECT_EQ(runtime_record["message"].asString(), "Service initialized: service=test");
+        for (const auto* field : {
+                 "request_id",
+                 "upload_id",
+                 "job_id",
+                 "lease_owner",
+                 "state_version",
+             }) {
+            EXPECT_TRUE(runtime_record[field].isNull()) << field;
+        }
     }
 
     TEST_F(LogHelperTest, ApplicationLogEmitsTypedCorrelationContext) {

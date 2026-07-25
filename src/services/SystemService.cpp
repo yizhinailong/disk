@@ -29,7 +29,7 @@ namespace disk::system {
         : m_db_client(std::move(db_client)),
           m_redis_client(std::move(redis_client)),
           m_start_time(std::chrono::steady_clock::now()) {
-        Logger::Debug() << "SystemService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=system";
     }
 
     auto SystemService::GetInfo(

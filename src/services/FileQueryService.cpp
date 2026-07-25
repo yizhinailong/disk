@@ -37,7 +37,7 @@ namespace disk::file {
 
     FileQueryService::FileQueryService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        Logger::Debug() << "FileQueryService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=file_query";
     }
 
     /// ==================== GetFileList ====================

@@ -40,7 +40,7 @@ namespace disk::auth {
         /// 初始化 TokenService 单例
         disk::services::TokenService::Initialize(ConfigMgr::GetInstance()->GetJwtSecret());
 
-        Logger::Debug() << "AuthService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=auth";
     }
 
     auto AuthService::Register(

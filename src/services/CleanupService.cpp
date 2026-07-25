@@ -47,7 +47,7 @@ namespace disk::services {
 
     CleanupService::CleanupService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
-        Logger::Debug() << "CleanupService initialization completed";
+        Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=cleanup";
     }
 
     auto CleanupService::RunExpiredCleanupOnce(disk::utils::LogContext log_context)

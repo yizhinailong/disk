@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 7 TokenService 运行时日志关联）：完整构建、TokenService 上下文 GoogleTest 4/4 和真实双 API 认证一致性聚焦 CTest 1/1 通过；完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 494.17 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 7 服务初始化日志关联）：完整构建、服务初始化上下文 GoogleTest 6/6 通过；完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 491.31 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -877,6 +877,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定认证进
 运行时消息只保留线程数、周期以及 submitted/completed/active/peak、eviction/size 等有界数值，不记录请求上下文、消息内 instance、token/JTI/token hash/cache key、凭据、secret、endpoint 或异常正文；claim、签名、TTL、Redis/CAS、撤销、CPU pool、timer、cache、指标重置、日志级别、错误码和响应语义不变。`TokenServiceLogContextContractTest` 锁定 3 条 debug、3 条 info、唯一运行时上下文、固定消息和无参 Logger 排除；增强后的 `test_auth_cluster_consistency.py` 将测试进程指标周期收紧到 1 秒，在真实 API A 中核对 pool 初始化、timer 启动和周期指标的实际 instance、五个空所有权字段与消息白名单，同时完整保留双 API refresh CAS、跨实例撤销/分享取消、Redis 故障 fail-closed、恢复及 API B 重启不变量。`0600` 结构化证据 `.sisyphus/evidence/auth-cluster-consistency-summary.json` 的 SHA-256 为 `1d2c672bfc0b1271d625ce865369c4f30315b601b766d7cf41f1d834c1399ce4`。
 
 完整构建、Python 语法检查、TokenService 上下文 GoogleTest 4/4、真实双 API 认证一致性聚焦 CTest 1/1 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项环境门控跳过、0 失败，总耗时 494.17 秒。其他尚未逐条归属的日志路径及目标 MinIO/云 S3、多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.54 服务初始化日志关联记录（2026-07-25）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定服务构造边界的类型化关联合同。Admin、Auth、Cleanup、Content、FileMutation、FileQuery、Folder、OperationLog、Quota、Redis、Share、System、Trash、UploadLifecycle、Upload 和 User 共 16 个初始化调用点统一使用共享 `ServiceRuntimeLogContext` 和固定 `operation=service_runtime`；这些进程事件不属于单个 HTTP 请求、上传或持久任务，实际 instance 只由结构化日志器的进程注册值写入，`request_id/upload_id/job_id/lease_owner/state_version` 全部保持 JSON `null`。
+
+初始化消息统一为固定 `Service initialized: service=<label>`，label 只取 16 个低基数服务名，不记录请求或领域标识、数据库客户端、endpoint、路径、凭据、secret、token、指针或异常正文；原 DEBUG 级别、构造顺序、依赖注入、Redis 单例保护和业务行为不变。`LogHelperTest` 解析真实内存 NDJSON，验证实际 instance、固定 operation、消息和五个空所有权字段；`ProcessInitializationLogContextContractTest` 跨 16 个生产源文件锁定唯一共享 helper、固定 label、无旧式初始化消息，并确认服务目录只剩 Upload task cache maintenance timer 一处无参 Logger。Content、Quota、Redis 和 OperationLog 的既有源码合同同步收紧为类型化初始化调用。
+
+完整构建、服务初始化上下文 GoogleTest 6/6 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项环境门控跳过、0 失败，总耗时 491.31 秒。Upload task cache maintenance timer 及其他尚未逐条归属的日志路径仍待后续收敛，目标 MinIO/云 S3 和多实例环境门控也未全部执行，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 
