@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 7 周期任务播种日志关联）：完整构建、周期播种 GoogleTest 4/4、真实角色切换聚焦 CTest 1/1 通过；完整 CTest 共 1452 项，1445 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 507.18 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 7 进程排空日志关联）：完整构建、进程运行时 GoogleTest 10/10、真实 Worker 排空接管聚焦 CTest 1/1 通过；完整 CTest 共 1453 项，1446 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 495.38 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -816,7 +816,7 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定 `/metric
 
 OpenSpec、部署运维、系统测试和单元测试文档先行固定 Worker 运行时边界的类型化关联合同。`StorageWorkerRuntime` 的启动与排空事件现在使用固定 `operation=storage_worker_runtime`，聚合轮询完成、`Result` 失败和异常使用固定 `operation=storage_worker_poll`；这些事件位于持久任务认领边界之外，所以 `request_id/upload_id/job_id/lease_owner/state_version` 全部保持 JSON `null`，不能把某次回调聚合结果关联到单个任务。实际 instance 只由结构化日志器的进程注册值写入顶层字段，运行时对象不再保存仅供 message 拼接的实例 ID 副本；构造参数、合法性校验、连续 drain、空闲定时轮询、异常吞吐和优雅关闭语义不变。
 
-轮询成功消息继续只保留 claimed/succeeded/retried/dead-lettered/ownership-lost 五项有界聚合计数；领域失败和异常分别固定为 `Storage worker poll failed` 与 `Storage worker poll threw`，不记录 `ErrorInfo`、异常正文、SQL、endpoint、连接信息、凭据或消息内实例 ID。新增内存 NDJSON 用例以不同的构造实例值和日志器注册值依次触发成功、领域失败、异常和幂等排空，精确断言 operation、实际 instance、五个空关联字段与敏感标记排除。增强后的 `test_worker_drain_takeover.py` 逐行解析真实 Worker A 的启动/排空事件，并保留 SIGTERM 后不再认领、排空截止、持久租约不改写、B 自然接管以及 B/C 独占竞争的既有不变量；`0600` 证据 `.sisyphus/evidence/worker-drain-takeover-summary.json` 新增两项运行时关联结论，SHA-256 为 `1511337e10e9d20fcac62994bce1818bf5c0a6d65f7ab8c143a16c05ca06dd67`。
+轮询成功消息继续只保留 claimed/succeeded/retried/dead-lettered/ownership-lost 五项有界聚合计数；领域失败和异常分别固定为 `Storage worker poll failed` 与 `Storage worker poll threw`，不记录 `ErrorInfo`、异常正文、SQL、endpoint、连接信息、凭据或消息内实例 ID。新增内存 NDJSON 用例以不同的构造实例值和日志器注册值依次触发成功、领域失败、异常和幂等排空，精确断言 operation、实际 instance、五个空关联字段与敏感标记排除。增强后的 `test_worker_drain_takeover.py` 逐行解析真实 Worker A 的启动/排空事件，并保留 SIGTERM 后不再认领、排空截止、持久租约不改写、B 自然接管以及 B/C 独占竞争的既有不变量；`0600` 证据 `.sisyphus/evidence/worker-drain-takeover-summary.json` 新增两项运行时关联结论，当前 SHA-256 为 `87dae292e643af45979fe5aec86d865ab3b86f0025d1e8f2c5075dd07fcdb0d5`。
 
 完整构建、Python 语法检查、Worker 运行时/真实排空接管聚焦 CTest 7/7、直接三 Worker 演练和 OpenSpec 严格校验 24/24 通过。完整 CTest 首轮共 1451 项，1443 通过、7 项环境门控跳过、1 项失败，总耗时 477.75 秒；唯一失败是既有上传安全网中网络分区恢复后的 readiness 一次返回 503，其余 791 条断言通过，该用例随后聚焦复跑 1/1 通过（109.58 秒）。第二轮完整 CTest 共 1451 项，1444 通过、7 项环境门控跳过、0 失败，总耗时 487.15 秒。其他尚未逐条归属的日志路径与目标 MinIO/云 S3、多实例拓扑门禁仍未收敛，因此 12.1 的两个总任务继续保持未勾选。
 
@@ -827,6 +827,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定周期任
 生命周期消息只保留间隔或 in-flight 状态，成功消息只保留 attempted/enqueued/deduplicated 三项有界计数；仓储异常和周期失败分别固定为 `Periodic storage job seed failed` 与 `Periodic storage job seed cycle failed`，不记录 `ErrorInfo`、异常正文、SQL、endpoint、连接信息、凭据或消息内实例 ID。新增 `ScheduledTasksLogContextContractTest` 锁定五条生产日志、operation 数量、固定失败消息和敏感详情排除；增强后的 `test_scheduler_role_cutover.py` 逐行解析真实 Worker 的启动/完成 NDJSON，同时保留 API A/B 无 seeder、Worker 唯一播种六个当前窗口任务以及 API 扩缩容前后完整行快照不变的既有不变量。结构化证据 `.sisyphus/evidence/scheduler-role-cutover-summary.json` 记录两项关联结论，SHA-256 为 `7f650b8a595607aaba208ba3ffd379133448cdfd7904d76eb034ba8b4b71263e`。
 
 完整构建、Python 语法检查、周期播种 GoogleTest 4/4、真实角色切换聚焦 CTest 1/1 和 OpenSpec 严格校验 24/24 通过。最终完整 CTest 共 1452 项，1445 通过、7 项环境门控跳过、0 失败，总耗时 507.18 秒。其他尚未逐条归属的日志路径与目标 MinIO/云 S3、多实例拓扑门禁仍未收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.48 进程排空日志关联记录（2026-07-25）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定 `BeginShutdown` 进程边界的类型化关联合同。API、Worker 与开发兼容 all 角色的 draining、deadline 和 completed 事件现在统一使用固定 `operation=process_runtime`，实际 instance 只由结构化日志器的进程注册值写入顶层字段；这些事件不属于单个请求、上传或持久任务，所以 `request_id/upload_id/job_id/lease_owner/state_version` 全部保持 JSON `null`。本轮只改变日志上下文与消息边界，不改变幂等信号处理、停止接收/认领/播种的顺序、100 ms 排空检查、超时退出或持久租约自然接管语义。
+
+开始消息只保留角色与 timeout seconds，超时 warning 只保留 API in-flight 计数和 Worker/scheduler drained 布尔值，完成消息保持固定；三者均不在 message 重复实例 ID，也不记录请求、任务、SQL、endpoint、凭据或异常正文。`ProcessDrainLogContextContractTest` 锁定 2 条 info、1 条 warning、3 个固定 operation 以及空所有权/无手工实例约束；增强后的 `test_worker_drain_takeover.py` 逐行解析真实 Worker A 的进程 draining/deadline NDJSON，并继续验证 SIGTERM 后停止认领、排空截止、持久租约不改写、B 自然接管和 B/C 独占竞争。`0600` 证据 `.sisyphus/evidence/worker-drain-takeover-summary.json` 的 SHA-256 为 `87dae292e643af45979fe5aec86d865ab3b86f0025d1e8f2c5075dd07fcdb0d5`。
+
+完整构建、Python 语法检查、进程运行时 GoogleTest 10/10、真实 Worker 排空接管聚焦 CTest 1/1 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1453 项，1446 通过、7 项环境门控跳过、0 失败，总耗时 495.38 秒。其他尚未逐条归属的日志路径及目标 MinIO/云 S3、多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 
@@ -1193,7 +1201,7 @@ B 先以 attempts=1 完成信号后创建的独立哨兵，只在目标的持久
 聚焦 CTest 32/32 通过（63.66 秒）；完整 CTest 共 1391 项：1385 通过、6 项环境门控跳过、0 失败，
 总耗时 416.23 秒；OpenSpec 严格校验 24/24 通过。`0600` 结构化证据为
 `.sisyphus/evidence/worker-drain-takeover-summary.json`（SHA-256
-`1511337e10e9d20fcac62994bce1818bf5c0a6d65f7ab8c143a16c05ca06dd67`）。该本机隔离演练证明应用、
+`87dae292e643af45979fe5aec86d865ab3b86f0025d1e8f2c5075dd07fcdb0d5`）。该本机隔离演练证明应用、
 数据库与 Compose 合同，不替代目标编排器逐台终止、实际宽限时间和目标数据库只读快照证据。
 
 - [x] S3/DB 已成功但响应失败的任务通过幂等 complete 恢复，不手工删除对象。

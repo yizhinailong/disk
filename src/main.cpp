@@ -187,10 +187,11 @@ namespace {
         services->shutdown_deadline = std::chrono::steady_clock::now() +
                                       std::chrono::seconds(drain_timeout_seconds);
 
-        disk::utils::Logger::Info()
-            << "Process draining: instance_id=" << services->state->InstanceId()
-            << ", role=" << disk::utils::ProcessRoleName(services->state->Role())
-            << ", timeout_seconds=" << drain_timeout_seconds;
+        disk::utils::Logger::Info(
+            disk::utils::LogContext{ .operation = "process_runtime" }
+        ) << "Process draining: role="
+          << disk::utils::ProcessRoleName(services->state->Role())
+          << ", timeout_seconds=" << drain_timeout_seconds;
 
         auto* loop = drogon::app().getLoop();
         if (loop == nullptr) {
@@ -212,16 +213,16 @@ namespace {
             }
 
             if (timed_out && (!api_drained || !worker_drained || !scheduler_drained)) {
-                disk::utils::Logger::Warn()
-                    << "Process drain deadline reached: instance_id="
-                    << services->state->InstanceId()
-                    << ", api_inflight=" << services->state->BusinessRequestsInflight()
-                    << ", worker_drained=" << worker_drained
-                    << ", scheduler_drained=" << scheduler_drained;
+                disk::utils::Logger::Warn(
+                    disk::utils::LogContext{ .operation = "process_runtime" }
+                ) << "Process drain deadline reached: api_inflight="
+                  << services->state->BusinessRequestsInflight()
+                  << ", worker_drained=" << worker_drained
+                  << ", scheduler_drained=" << scheduler_drained;
             } else {
-                disk::utils::Logger::Info()
-                    << "Process drain completed: instance_id="
-                    << services->state->InstanceId();
+                disk::utils::Logger::Info(
+                    disk::utils::LogContext{ .operation = "process_runtime" }
+                ) << "Process drain completed";
             }
 
             const auto timer = services->shutdown_timer.exchange(trantor::InvalidTimerId);

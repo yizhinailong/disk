@@ -677,6 +677,17 @@ The system SHALL derive durable Worker correlation only from claimed PostgreSQL 
 - **WHEN** periodic plan construction, repository enqueueing, or the seed cycle returns a failure or throws an exception
 - **THEN** the scheduler SHALL emit a fixed failure event with `storage_job_seed` correlation and SHALL NOT record the domain error message, exception text, database details, endpoint, credentials, or identifiers inferred from message text
 
+### Requirement: Typed Process Drain Correlation
+The system SHALL correlate process drain lifecycle events without assigning them to an HTTP request or an individual durable job.
+
+#### Scenario: A process begins or completes graceful drain
+- **WHEN** an initialized API, Worker, or combined development process begins drain or confirms all owned in-flight work is drained
+- **THEN** the lifecycle event SHALL use the actual process instance, SHALL use `process_runtime`, and SHALL keep request ID, upload ID, job ID, lease owner, and state version null
+
+#### Scenario: A process reaches its drain deadline
+- **WHEN** accepted API work, the Worker runtime, or the periodic scheduler remains in flight at the configured deadline
+- **THEN** the process SHALL emit a `process_runtime` warning with only bounded aggregate drain state and SHALL NOT repeat the instance in the message or infer request, upload, job, lease, or version ownership
+
 ### Requirement: Typed Download Correlation
 The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.
 

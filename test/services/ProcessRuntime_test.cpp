@@ -1,11 +1,74 @@
 #include "services/ProcessRuntime.hpp"
 
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 #include <gtest/gtest.h>
 
 namespace disk::runtime {
     namespace {
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto Contains(const std::string& source, std::string_view expected) -> bool {
+            return source.find(expected) != std::string::npos;
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
+        }
+
+        TEST(ProcessDrainLogContextContractTest, UsesTypedProcessCorrelationWithoutOwnership) {
+            const auto source = ReadSourceFile("src/main.cpp");
+            const auto shutdown_begin = source.find("auto BeginShutdown(");
+            const auto shutdown_end = source.find("} // namespace", shutdown_begin);
+
+            ASSERT_NE(shutdown_begin, std::string::npos);
+            ASSERT_NE(shutdown_end, std::string::npos);
+            const auto shutdown_source =
+                source.substr(shutdown_begin, shutdown_end - shutdown_begin);
+
+            EXPECT_EQ(CountOccurrences(shutdown_source, "Logger::Info("), 2U);
+            EXPECT_EQ(CountOccurrences(shutdown_source, "Logger::Warn("), 1U);
+            EXPECT_EQ(
+                CountOccurrences(shutdown_source, ".operation = \"process_runtime\""),
+                3U
+            );
+            EXPECT_TRUE(Contains(shutdown_source, "\"Process draining: role=\""));
+            EXPECT_TRUE(Contains(
+                shutdown_source,
+                "\"Process drain deadline reached: api_inflight=\""
+            ));
+            EXPECT_TRUE(Contains(shutdown_source, "\"Process drain completed\""));
+            EXPECT_FALSE(Contains(shutdown_source, "Logger::Info()"));
+            EXPECT_FALSE(Contains(shutdown_source, "Logger::Warn()"));
+            EXPECT_FALSE(Contains(shutdown_source, "instance_id="));
+            EXPECT_FALSE(Contains(shutdown_source, "InstanceId()"));
+            EXPECT_FALSE(Contains(shutdown_source, "request_id="));
+            EXPECT_FALSE(Contains(shutdown_source, "upload_id="));
+            EXPECT_FALSE(Contains(shutdown_source, "job_id="));
+            EXPECT_FALSE(Contains(shutdown_source, "lease_owner="));
+            EXPECT_FALSE(Contains(shutdown_source, "state_version="));
+        }
+
         TEST(ProcessRuntimeTest, RecognizesOnlyDocumentedHealthPaths) {
             EXPECT_TRUE(IsHealthProbePath("/api/health"));
             EXPECT_TRUE(IsHealthProbePath("/api/health/live"));

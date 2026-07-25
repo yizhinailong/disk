@@ -111,14 +111,14 @@ def find_worker_job_event(
     return None
 
 
-def find_worker_runtime_event(
+def find_unowned_process_event(
     server: ManagedServer,
     *,
     instance_id: str,
     operation: str,
     message_marker: str,
 ) -> dict[str, Any] | None:
-    """Find one schema-v1 Worker runtime event without task ownership."""
+    """Find one schema-v1 process event without request or task ownership."""
     for line in read_log(server).splitlines():
         try:
             record = json.loads(line)
@@ -528,7 +528,7 @@ def main() -> int:
                 f"job_id={sentinel['job_id']}" not in log_after_exit,
                 "Worker A touched the post-signal sentinel",
             )
-            runtime_start_event = find_worker_runtime_event(
+            runtime_start_event = find_unowned_process_event(
                 worker_a,
                 instance_id=WORKER_A,
                 operation="storage_worker_runtime",
@@ -538,16 +538,35 @@ def main() -> int:
                 runtime_start_event is not None,
                 "Worker A runtime start event lacks typed process correlation",
             )
-            runtime_drain_event = find_worker_runtime_event(
+            runtime_drain_event = find_unowned_process_event(
                 worker_a,
                 instance_id=WORKER_A,
                 operation="storage_worker_runtime",
                 message_marker="Storage worker runtime draining",
             )
             require(
-                runtime_drain_event is not None
-                and "Process drain deadline reached" in log_after_exit,
-                "Worker A did not log its typed bounded drain deadline",
+                runtime_drain_event is not None,
+                "Worker A runtime drain event lacks typed process correlation",
+            )
+            process_drain_start_event = find_unowned_process_event(
+                worker_a,
+                instance_id=WORKER_A,
+                operation="process_runtime",
+                message_marker="Process draining",
+            )
+            require(
+                process_drain_start_event is not None,
+                "Worker A process drain start lacks typed process correlation",
+            )
+            process_drain_deadline_event = find_unowned_process_event(
+                worker_a,
+                instance_id=WORKER_A,
+                operation="process_runtime",
+                message_marker="Process drain deadline reached",
+            )
+            require(
+                process_drain_deadline_event is not None,
+                "Worker A process drain deadline lacks typed process correlation",
             )
 
             after_exit = job_snapshot(database_name, target["job_id"])
@@ -757,6 +776,8 @@ def main() -> int:
                     "drain_deadline_reached": True,
                     "runtime_start_context": True,
                     "runtime_drain_context": True,
+                    "process_drain_start_context": process_drain_start_event is not None,
+                    "process_drain_deadline_context": process_drain_deadline_event is not None,
                     "retiring_exit_code": return_code,
                     "new_claims_after_signal": 0,
                     "new_seed_cycles_after_signal": 0,
