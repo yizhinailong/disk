@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 7 注册后进程启动日志关联）：完整构建、进程启动源码合同、真实 Worker 观察模式与 Blob GC 进程死亡接管聚焦 CTest 3/3 通过；完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 504.65 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 7 TokenService 运行时日志关联）：完整构建、TokenService 上下文 GoogleTest 4/4 和真实双 API 认证一致性聚焦 CTest 1/1 通过；完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 494.17 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -869,6 +869,14 @@ main 删除了重复的 final/temp 文件系统路径以及 chunk size、文件�
 `ProcessInitializationLogContextContractTest` 锁定五个 process、三个 storage 调用点、固定消息、无旧式 Logger、无异常正文/消息内 instance 和七项路径/容量 getter 排除；增强后的 `test_worker_observation_mode.py` 在真实 local 观察 Worker 中精确核对四条 storage 与三条 process startup NDJSON 的实际 instance、空所有权和有界消息，同时保留 readiness/metrics、Ready 任务、租约和不播种不变量。`test_blob_gc_process_death.py` 继续通过固定初始化完成事件等待接管 Worker，并完整验证 live lease 不改写及自然接管。结构化证据 `.sisyphus/evidence/worker-observation-summary.json` 的当前 SHA-256 为 `ae38bb4bb9a734840e5ae65992c2f5b73acdbc54a2f38d16e556a9d77c7b7307`。
 
 完整构建、Python 语法检查、进程启动源码合同、真实 Worker 观察模式与 Blob GC 进程死亡接管聚焦 CTest 3/3 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项环境门控跳过、0 失败，总耗时 504.65 秒。其他尚未逐条归属的日志路径及目标 MinIO/云 S3、多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.53 TokenService 运行时日志关联记录（2026-07-25）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定认证进程边界的类型化关联合同。`TokenService` 的单例构造、Auth CPU pool 创建、cache maintenance、metrics timer、周期 pool 指标和 cache eviction 共六条事件统一使用固定 `operation=auth_runtime`；这些事件不属于单个 HTTP 请求、上传或持久任务，实际 instance 只由结构化日志器的进程注册值写入，`request_id/upload_id/job_id/lease_owner/state_version` 全部保持 JSON `null`。请求级 auth/share 事件继续按值保留调用方上下文。
+
+运行时消息只保留线程数、周期以及 submitted/completed/active/peak、eviction/size 等有界数值，不记录请求上下文、消息内 instance、token/JTI/token hash/cache key、凭据、secret、endpoint 或异常正文；claim、签名、TTL、Redis/CAS、撤销、CPU pool、timer、cache、指标重置、日志级别、错误码和响应语义不变。`TokenServiceLogContextContractTest` 锁定 3 条 debug、3 条 info、唯一运行时上下文、固定消息和无参 Logger 排除；增强后的 `test_auth_cluster_consistency.py` 将测试进程指标周期收紧到 1 秒，在真实 API A 中核对 pool 初始化、timer 启动和周期指标的实际 instance、五个空所有权字段与消息白名单，同时完整保留双 API refresh CAS、跨实例撤销/分享取消、Redis 故障 fail-closed、恢复及 API B 重启不变量。`0600` 结构化证据 `.sisyphus/evidence/auth-cluster-consistency-summary.json` 的 SHA-256 为 `1d2c672bfc0b1271d625ce865369c4f30315b601b766d7cf41f1d834c1399ce4`。
+
+完整构建、Python 语法检查、TokenService 上下文 GoogleTest 4/4、真实双 API 认证一致性聚焦 CTest 1/1 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项环境门控跳过、0 失败，总耗时 494.17 秒。其他尚未逐条归属的日志路径及目标 MinIO/云 S3、多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

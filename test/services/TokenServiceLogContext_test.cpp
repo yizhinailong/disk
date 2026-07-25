@@ -136,11 +136,36 @@ namespace disk::services {
             EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 11U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 2U);
 
-            EXPECT_EQ(CountOccurrences(source, "Logger::Debug()"), 3U);
-            EXPECT_EQ(CountOccurrences(source, "Logger::Info()"), 3U);
+            EXPECT_EQ(
+                CountOccurrences(source, "Logger::Debug(AuthRuntimeLogContext())"),
+                3U
+            );
+            EXPECT_EQ(
+                CountOccurrences(source, "Logger::Info(AuthRuntimeLogContext())"),
+                3U
+            );
+            EXPECT_EQ(CountOccurrences(source, ".operation = \"auth_runtime\""), 1U);
+            EXPECT_FALSE(Contains(source, "Logger::Debug()"));
+            EXPECT_FALSE(Contains(source, "Logger::Info()"));
             EXPECT_FALSE(Contains(source, "Logger::Trace()"));
             EXPECT_FALSE(Contains(source, "Logger::Warn()"));
             EXPECT_FALSE(Contains(source, "Logger::Error()"));
+            EXPECT_TRUE(Contains(source, "Auth CPU pool initialized: threads="));
+            EXPECT_TRUE(Contains(source, "Token service constructed"));
+            EXPECT_TRUE(Contains(
+                source,
+                "Revocation cache maintenance started: interval_seconds="
+            ));
+            EXPECT_TRUE(Contains(
+                source,
+                "Auth CPU pool metrics started: interval_seconds="
+            ));
+            EXPECT_TRUE(Contains(source, "Auth CPU pool metrics: period_seconds="));
+            EXPECT_TRUE(Contains(
+                source,
+                "Token cache eviction completed: access_evicted="
+            ));
+            EXPECT_FALSE(Contains(source, "instance_id="));
             EXPECT_FALSE(Contains(source, "CalculateRemainingTtl"));
             EXPECT_FALSE(Contains(header, "CalculateRemainingTtl"));
             EXPECT_FALSE(Contains(header, "m_redis_client"));

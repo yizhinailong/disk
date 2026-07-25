@@ -50,6 +50,10 @@ namespace disk::services {
 
         static PoolMetrics g_pool_metrics;
 
+        [[nodiscard]] auto AuthRuntimeLogContext() -> disk::utils::LogContext {
+            return { .operation = "auth_runtime" };
+        }
+
         [[nodiscard]] auto IsValidSharePermission(const std::string& permission) -> bool {
             return permission == "view" || permission == "download";
         }
@@ -61,7 +65,7 @@ namespace disk::services {
                 "AuthCpuPool"
             );
             pool->start();
-            Logger::Info() << "[auth_cpu_pool] created threads=" << thread_count;
+            Logger::Info(AuthRuntimeLogContext()) << "Auth CPU pool initialized: threads=" << thread_count;
             return pool;
         }
 
@@ -96,7 +100,7 @@ namespace disk::services {
           m_jwt_verifier(BuildJwtVerifier("")),
           m_share_jwt_verifier(BuildShareJwtVerifier("")),
           m_redis_service(RedisService::GetInstance()) {
-        Logger::Debug() << "TokenService initialization completed";
+        Logger::Debug(AuthRuntimeLogContext()) << "Token service constructed";
     }
 
     void TokenService::Initialize(std::string jwt_secret) {
@@ -450,8 +454,8 @@ namespace disk::services {
             CACHE_MAINTENANCE_INTERVAL_SECONDS,
             [this]() { EvictExpiredCacheEntries(); }
         );
-        Logger::Debug() << "Revocation cache maintenance timer started (interval="
-                        << CACHE_MAINTENANCE_INTERVAL_SECONDS << "s)";
+        Logger::Debug(AuthRuntimeLogContext()) << "Revocation cache maintenance started: interval_seconds="
+                                               << CACHE_MAINTENANCE_INTERVAL_SECONDS;
 
         const auto& json = drogon::app().getCustomConfig();
         int metrics_interval = 60;
@@ -471,8 +475,8 @@ namespace disk::services {
             static_cast<double>(interval_seconds),
             [this]() { LogPoolMetrics(); }
         );
-        Logger::Info() << "[auth_cpu_pool] TokenService metrics timer started interval_s="
-                       << interval_seconds;
+        Logger::Info(AuthRuntimeLogContext()) << "Auth CPU pool metrics started: interval_seconds="
+                                              << interval_seconds;
     }
 
     auto TokenService::LogPoolMetrics() -> void {
@@ -487,11 +491,11 @@ namespace disk::services {
         const auto active = g_pool_metrics.active_tasks.load(std::memory_order_relaxed);
         const auto peak = g_pool_metrics.peak_active.exchange(0, std::memory_order_relaxed);
 
-        Logger::Info() << "[auth_cpu_pool] period_s=" << elapsed_s
-                       << " jwt_submitted=" << submitted
-                       << " jwt_completed=" << completed
-                       << " active=" << active
-                       << " peak=" << peak;
+        Logger::Info(AuthRuntimeLogContext()) << "Auth CPU pool metrics: period_seconds=" << elapsed_s
+                                              << ", submitted=" << submitted
+                                              << ", completed=" << completed
+                                              << ", active=" << active
+                                              << ", peak=" << peak;
 
         m_metrics_last_reset = now;
     }
@@ -512,10 +516,10 @@ namespace disk::services {
             share_evicted = m_share_revocation_cache.EvictExpired(now);
             share_remaining = m_share_revocation_cache.Size();
         }
-        Logger::Debug() << "Cache eviction completed: access_evicted=" << access_evicted
-                        << " access_size=" << access_remaining
-                        << " share_evicted=" << share_evicted
-                        << " share_size=" << share_remaining;
+        Logger::Debug(AuthRuntimeLogContext()) << "Token cache eviction completed: access_evicted=" << access_evicted
+                                               << ", access_size=" << access_remaining
+                                               << ", share_evicted=" << share_evicted
+                                               << ", share_size=" << share_remaining;
     }
 
     auto TokenService::ExtractJti(

@@ -11,6 +11,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -272,6 +273,86 @@ def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+AUTH_RUNTIME_MESSAGE_PATTERNS = (
+    re.compile(r"Auth CPU pool initialized: threads=\d+"),
+    re.compile(r"Token service constructed"),
+    re.compile(r"Revocation cache maintenance started: interval_seconds=\d+"),
+    re.compile(r"Auth CPU pool metrics started: interval_seconds=\d+"),
+    re.compile(
+        r"Auth CPU pool metrics: period_seconds=\d+, submitted=\d+, "
+        r"completed=\d+, active=\d+, peak=\d+"
+    ),
+    re.compile(
+        r"Token cache eviction completed: access_evicted=\d+, access_size=\d+, "
+        r"share_evicted=\d+, share_size=\d+"
+    ),
+)
+
+
+def auth_runtime_events(server: ManagedServer) -> list[dict[str, Any]]:
+    if server.log_handle is not None:
+        server.log_handle.flush()
+    if not server.log_path.is_file():
+        return []
+
+    events: list[dict[str, Any]] = []
+    for line in server.log_path.read_text(
+        encoding="utf-8",
+        errors="replace",
+    ).splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (
+            isinstance(record, dict)
+            and record.get("schema_version") == 1
+            and record.get("source") == "application"
+            and record.get("operation") == "auth_runtime"
+        ):
+            events.append(record)
+    return events
+
+
+def auth_runtime_ready(server: ManagedServer) -> bool:
+    messages = [str(event.get("message", "")) for event in auth_runtime_events(server)]
+    return (
+        any(message.startswith("Auth CPU pool initialized: threads=") for message in messages)
+        and "Auth CPU pool metrics started: interval_seconds=1" in messages
+        and any(message.startswith("Auth CPU pool metrics: period_seconds=") for message in messages)
+    )
+
+
+def require_auth_runtime_logs(server: ManagedServer) -> int:
+    events = auth_runtime_events(server)
+    require(events, "API A emitted no auth_runtime events")
+    messages = [str(event.get("message", "")) for event in events]
+    require(
+        any(message.startswith("Auth CPU pool initialized: threads=") for message in messages),
+        f"auth CPU pool initialization event is missing: {messages}",
+    )
+    require(
+        "Auth CPU pool metrics started: interval_seconds=1" in messages,
+        f"auth CPU pool metrics timer event is missing: {messages}",
+    )
+    require(
+        any(message.startswith("Auth CPU pool metrics: period_seconds=") for message in messages),
+        f"auth CPU pool periodic metrics event is missing: {messages}",
+    )
+
+    for event in events:
+        require(event.get("instance_id") == API_A, f"auth runtime instance drifted: {event}")
+        for field in ("request_id", "upload_id", "job_id", "lease_owner", "state_version"):
+            require(event.get(field) is None, f"auth runtime event populated {field}: {event}")
+        message = str(event.get("message", ""))
+        require(
+            any(pattern.fullmatch(message) for pattern in AUTH_RUNTIME_MESSAGE_PATTERNS),
+            f"auth runtime message is not bounded: {event}",
+        )
+        require("instance_id=" not in message, f"auth runtime message repeats instance: {event}")
+    return len(events)
+
+
 def cluster_config(
     database_name: str,
     port: int,
@@ -296,6 +377,7 @@ def cluster_config(
             "timeout": 1.0,
         }
     )
+    config["custom_config"]["disk"]["auth_cpu_pool_metrics_interval_seconds"] = 1
     return config
 
 
@@ -785,6 +867,13 @@ def main() -> int:
             )
             require_share_browse(api_b.base_url, active_share_id, active_share_token)
 
+            wait_until(
+                "API A auth runtime metrics",
+                lambda: auth_runtime_ready(api_a),
+                timeout_seconds=5,
+            )
+            auth_runtime_event_count = require_auth_runtime_logs(api_a)
+
             write_evidence(
                 {
                     "schema_version": 1,
@@ -799,6 +888,10 @@ def main() -> int:
                     "redis_backed_revocation_survived_fault": True,
                     "api_b_restarted": True,
                     "revocations_survived_api_restart": True,
+                    "auth_runtime_context": True,
+                    "auth_runtime_event_count": auth_runtime_event_count,
+                    "auth_runtime_messages_bounded": True,
+                    "auth_runtime_periodic_metrics": True,
                     "shared_redis_service_stopped": False,
                     "passed": True,
                 }

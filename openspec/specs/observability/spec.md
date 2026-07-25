@@ -102,7 +102,11 @@ The shared token service SHALL accept explicit correlation by value for request-
 
 #### Scenario: Token service emits process events
 - **WHEN** token-singleton initialization, authentication CPU-pool creation, cache-maintenance timer startup, metrics timer startup, periodic pool metrics, or cache eviction emits a process event
-- **THEN** request ID, operation, upload ID, job ID, lease owner, and state version SHALL remain JSON null because no HTTP request owns that event
+- **THEN** the event SHALL use fixed `operation=auth_runtime`, SHALL accept only the structured logger's registered process instance, and SHALL keep request ID, upload ID, job ID, lease owner, and state version JSON null because no HTTP request or durable job owns that event
+
+#### Scenario: Token process event records bounded diagnostics
+- **WHEN** a token process event records CPU-pool threads, a maintenance or metrics interval, periodic submitted/completed/active/peak counts, or cache-eviction counts and sizes
+- **THEN** its message SHALL contain only those bounded diagnostics and SHALL NOT contain request context, a manually copied instance ID, token, JTI, token hash, cache key, credential, secret, endpoint, or exception text; token, pool, timer, cache, metric-reset, and log-level behavior SHALL remain unchanged
 
 ### Requirement: Redis Service Correlation
 The shared Redis service SHALL accept explicit correlation by value for every command API and SHALL apply the supplied context to every directly owned command success, protocol, parsing, and dependency-failure event. Authentication, token, share, file-list cache, rate-limit, administrator status, and readiness callers SHALL pass their already established context without changing Redis commands, keys, values, TTLs, transactions, Lua scripts, CAS behavior, metrics, error results, or dependency-failure policy.
