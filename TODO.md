@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 7 显式日志上下文编译期门禁）：完整构建、Logger/LogStream 显式上下文 GoogleTest 6/6 通过，后端 `src/` 无无参 Logger 调用；完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 498.79 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 7 跨 API/DB/Worker/S3 追踪验收）：完整构建 421/421、日志/上传生命周期/Worker/S3 聚焦 CTest 82/82、受控 Moto 5.2.2 S3 门禁 2/2 通过；完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 508.66 秒；OpenSpec 严格校验 24/24 通过。Moto 只验证当前 S3 协议和追踪关联，不替代目标 MinIO/云 S3；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -481,7 +481,7 @@ Python 语法检查、CMake 配置和完整构建通过；PgBouncer/拓扑聚焦
 
 - [x] 所有结构化日志包含 `request_id`、`instance_id`；上传相关日志增加 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。
 - [x] 禁止记录 JWT、share token、密码、S3 凭据和文件正文。
-- [ ] 为 init/chunk/complete/download/cleanup 建立跨 API、DB、Worker、S3 的追踪关联。
+- [x] 为 init/chunk/complete/download/cleanup 建立跨 API、DB、Worker、S3 的追踪关联。
 - [x] 明确日志采样策略，避免大批量分片上传产生不可控日志量。
 
 ### 12.2 指标
@@ -901,6 +901,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定显式日
 `LogHelperTest` 的 C++23 concepts 同时证明九个 Logger 无参调用全部不可用、显式上下文入口全部返回 `LogStream`，且直接流不能仅用 level 构造；`ProcessInitializationLogContextContractTest` 同时锁定公开头文件无 `LogContext context = {}` 并递归排除后端无参 Logger。应用事件与被捕获的 Drogon/Trantor/ORM 框架事件继续经同一 formatter 输出 `request_id/instance_id/operation/upload_id/job_id/lease_owner/state_version`，暂无权威值的字段为 JSON `null`；级别、采样、instance 注册和消息格式不变。
 
 完整构建、Logger/LogStream 显式上下文 GoogleTest 6/6 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项环境门控跳过、0 失败，总耗时 498.79 秒。结构化信封字段总项现有实现、内存 NDJSON、框架捕获、编译期入口与全后端源码门禁共同证明，因此 12.1 第一项已勾选；目标 S3/多实例环境的跨 API/DB/Worker/S3 总追踪仍未完成，第三项保持未勾选。
+
+### 12.57 跨 API/DB/Worker/S3 追踪验收记录（2026-07-25）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定端到端存储追踪合同。应用进程在加载 Drogon 配置后把 Trantor 的 TRACE/DEBUG/INFO/WARN/ERROR/FATAL 映射到结构化 spdlog logger，保证 `app.log.log_level` 同时控制框架与应用事件；上传初始化在 PostgreSQL 创建权威任务后立即把真实 `upload_id` 写回日志上下文，后续分片、完成、S3 和 Worker 事件不再依赖消息正文反推任务标识。
+
+`S3AppFlowIntegration` 为 init、chunk、complete、完整下载和 Range 下载分别发送唯一调用方 `X-Request-Id`，使用固定 `instance_id` 解析应用 NDJSON，并将响应 `request_id`、PostgreSQL `upload_tasks`/`upload_task_chunks`/`storage_jobs`/`file_contents`、实际 S3 staging/final key 与类型化日志逐项关联。断言覆盖 init 返回权威 `upload_id`、chunk 与 S3 put、complete 的已提交 `state_version` 和空 lease、multipart complete、完整/Range S3 get、cleanup Worker 认领、S3 delete 及成功终态；持久 cleanup `job_id`、`upload_id`、owner 和去重键均与数据库一致。
+
+Python 语法检查、完整构建 421/421、日志/上传生命周期/Worker/S3 聚焦 CTest 82/82、受控 Moto 5.2.2 的 `S3StorageAdapterIntegration`/`S3AppFlowIntegration` 2/2 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项环境门控跳过、0 失败，总耗时 508.66 秒；首次完整运行曾有一个历史毫秒级分享过滤器用例瞬态阻塞，终止后单独复跑 1/1 通过，带 120 秒单项上限的完整重跑未复现。以上证据关闭 12.1 第三项；Moto 只作为受控 S3 协议回归端点，不替代目标 MinIO/云 S3、多实例随机路由、故障注入、高可用或发布验收，这些 Phase 8 和最终 Definition of Done 门禁继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

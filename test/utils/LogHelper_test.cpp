@@ -1,5 +1,6 @@
 #include "utils/LogHelper.hpp"
 
+#include <array>
 #include <concepts>
 #include <memory>
 #include <sstream>
@@ -11,6 +12,7 @@
 #include <json/json.h>
 #include <spdlog/sinks/ostream_sink.h>
 #include <spdlog/spdlog.h>
+#include <trantor/utils/Logger.h>
 
 namespace disk::utils::test {
 
@@ -141,6 +143,25 @@ namespace disk::utils::test {
              }) {
             EXPECT_TRUE(runtime_record[field].isNull()) << field;
         }
+    }
+
+    TEST_F(LogHelperTest, SynchronizesFrameworkLogLevel) {
+        const auto previous_level = trantor::Logger::logLevel();
+        constexpr std::array LEVELS{
+            std::pair{ trantor::Logger::kTrace,    spdlog::level::trace },
+            std::pair{ trantor::Logger::kDebug,    spdlog::level::debug },
+            std::pair{  trantor::Logger::kInfo,     spdlog::level::info },
+            std::pair{  trantor::Logger::kWarn,     spdlog::level::warn },
+            std::pair{ trantor::Logger::kError,      spdlog::level::err },
+            std::pair{ trantor::Logger::kFatal, spdlog::level::critical },
+        };
+
+        for (const auto& [framework_level, expected_level] : LEVELS) {
+            trantor::Logger::setLogLevel(framework_level);
+            Logger::SyncFrameworkLevel();
+            EXPECT_EQ(m_logger->level(), expected_level);
+        }
+        trantor::Logger::setLogLevel(previous_level);
     }
 
     TEST_F(LogHelperTest, ApplicationLogEmitsTypedCorrelationContext) {

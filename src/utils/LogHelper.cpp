@@ -68,6 +68,27 @@ namespace disk::utils {
         }
 
         [[nodiscard]]
+        auto FrameworkLogLevel() -> spdlog::level::level_enum {
+            switch (trantor::Logger::logLevel()) {
+                case trantor::Logger::kTrace:
+                    return spdlog::level::trace;
+                case trantor::Logger::kDebug:
+                    return spdlog::level::debug;
+                case trantor::Logger::kInfo:
+                    return spdlog::level::info;
+                case trantor::Logger::kWarn:
+                    return spdlog::level::warn;
+                case trantor::Logger::kError:
+                    return spdlog::level::err;
+                case trantor::Logger::kFatal:
+                    return spdlog::level::critical;
+                case trantor::Logger::kNumberOfLogLevels:
+                    return spdlog::level::off;
+            }
+            return spdlog::level::info;
+        }
+
+        [[nodiscard]]
         auto MillisecondsSinceEpoch(spdlog::log_clock::time_point time) -> Json::Int64 {
             return static_cast<Json::Int64>(
                 std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -270,6 +291,13 @@ namespace disk::utils {
 
     auto Logger::CaptureFrameworkLogs() -> void {
         trantor::Logger::enableSpdLog(-1, spdlog::default_logger());
+    }
+
+    auto Logger::SyncFrameworkLevel() -> void {
+        const auto logger = spdlog::default_logger();
+        if (logger != nullptr) {
+            logger->set_level(FrameworkLogLevel());
+        }
     }
 
     auto Logger::SetInstanceId(std::string instance_id) -> void {

@@ -255,6 +255,7 @@ auto main() -> int {
     /// 加载配置文件并在交给 Drogon 前应用严格的环境覆盖。
     try {
         drogon::app().loadConfigJson(disk::utils::RuntimeConfig::LoadFromEnvironment());
+        disk::utils::Logger::SyncFrameworkLevel();
     } catch (const std::exception&) {
         disk::utils::Logger::Error(bootstrap_log_context)
             << "Runtime configuration loading failed";

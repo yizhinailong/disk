@@ -40,6 +40,81 @@ def require_envelope(response: Any, expected_status: int, label: str) -> dict[st
     return payload
 
 
+def require_response_context(
+    response: Any,
+    request_id: str,
+    instance_id: str,
+    label: str,
+) -> None:
+    require(
+        response.headers.get("x-request-id") == request_id,
+        f"{label} echoes the caller request ID",
+    )
+    require(
+        response.headers.get("x-disk-instance-id") == instance_id,
+        f"{label} identifies the handling instance",
+    )
+
+
+def application_records(log_path: Path) -> list[dict[str, Any]]:
+    if not log_path.is_file():
+        return []
+
+    records: list[dict[str, Any]] = []
+    for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (
+            isinstance(record, dict)
+            and record.get("schema_version") == 1
+            and record.get("source") == "application"
+        ):
+            records.append(record)
+    return records
+
+
+def wait_for_application_record(
+    log_path: Path,
+    label: str,
+    predicate: Any,
+    timeout_seconds: float = 10.0,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        for record in application_records(log_path):
+            if predicate(record):
+                require(True, label)
+                return record
+        time.sleep(0.05)
+    raise TestFailure(f"Timed out waiting for application log: {label}")
+
+
+def has_context(
+    record: dict[str, Any],
+    *,
+    request_id: str | None,
+    instance_id: str,
+    operation: str,
+    upload_id: str | None,
+    job_id: int | None,
+    lease_owner: str | None,
+    state_version: int | None,
+) -> bool:
+    return all(
+        (
+            record.get("request_id") == request_id,
+            record.get("instance_id") == instance_id,
+            record.get("operation") == operation,
+            record.get("upload_id") == upload_id,
+            record.get("job_id") == job_id,
+            record.get("lease_owner") == lease_owner,
+            record.get("state_version") == state_version,
+        )
+    )
+
+
 def object_exists(client: Any, bucket: str, key: str) -> bool:
     from botocore.exceptions import ClientError
 
@@ -134,6 +209,14 @@ def main() -> int:
     port = int(os.environ.get("DISK_S3_APP_PORT", "18080"))
     base_url = f"http://127.0.0.1:{port}"
     run_id = uuid.uuid4().hex[:12]
+    instance_id = f"s3-app-{run_id}"
+    request_ids = {
+        "init": f"s3-app-init-{run_id}",
+        "chunk": f"s3-app-chunk-{run_id}",
+        "complete": f"s3-app-complete-{run_id}",
+        "full": f"s3-app-download-full-{run_id}",
+        "range": f"s3-app-download-range-{run_id}",
+    }
     object_prefix = f"objects/app-{run_id}"
     staging_prefix = f"staging/app-{run_id}"
     payload = (f"disk-s3-app-flow-{run_id}-".encode() + bytes(range(256))) * 64
@@ -176,7 +259,10 @@ def main() -> int:
             connection.commit()
             return affected
 
-    def wait_for_staging_cleanup(upload_id: str, timeout_seconds: float = 20.0) -> None:
+    def wait_for_staging_cleanup(
+        upload_id: str,
+        timeout_seconds: float = 20.0,
+    ) -> dict[str, Any]:
         dedupe_key = f"staging-cleanup:{upload_id}"
         prefix = f"{staging_prefix}/{upload_id}/"
         deadline = time.monotonic() + timeout_seconds
@@ -184,12 +270,13 @@ def main() -> int:
         last_keys: list[str] = []
         while time.monotonic() < deadline:
             last_job = query_one(
-                "SELECT status, attempts, last_error FROM storage_jobs WHERE dedupe_key = %s",
+                "SELECT id, job_type, aggregate_id, dedupe_key, status, attempts, "
+                "locked_by, last_error FROM storage_jobs WHERE dedupe_key = %s",
                 (dedupe_key,),
             )
             last_keys = list_prefix_keys(s3_client, bucket, prefix)
             if last_job is not None and int(last_job["status"]) == 3 and not last_keys:
-                return
+                return last_job
             if last_job is not None and int(last_job["status"]) == 4:
                 raise TestFailure(
                     f"S3 staging cleanup entered DeadLetter: {last_job}"
@@ -235,10 +322,17 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="disk-s3-app-") as temp_dir_raw:
         temp_dir = Path(temp_dir_raw)
+        framework_log_path = temp_dir / "framework-log"
+        framework_log_path.mkdir()
         config = json.loads(json.dumps(base_config))
         config["listeners"] = [{"address": "127.0.0.1", "port": port}]
         config["app"]["upload_path"] = str(temp_dir / "drogon-upload")
+        config["app"]["log"] = {
+            "log_level": "DEBUG",
+            "log_path": str(framework_log_path),
+        }
         disk_config = config["custom_config"]["disk"]
+        disk_config["instance_id"] = instance_id
         disk_config["storage_backend"] = "s3"
         disk_config["upload_staging_backend"] = "s3"
         disk_config["storage_base_path"] = str(temp_dir / "unused-local-blobs")
@@ -308,7 +402,7 @@ def main() -> int:
 
                 init = http.post(
                     "/api/file/upload/init",
-                    headers=auth_headers,
+                    headers={**auth_headers, "X-Request-Id": request_ids["init"]},
                     json={
                         "filename": filename,
                         "file_size": len(payload),
@@ -317,6 +411,7 @@ def main() -> int:
                     },
                 )
                 init_payload = require_envelope(init, 200, "upload init")
+                require_response_context(init, request_ids["init"], instance_id, "upload init")
                 require(str(init_payload["code"]) == "0", "upload init succeeds")
                 require(not init_payload["data"].get("instant_upload", False), "application upload uses chunk finalization")
                 upload_id = str(init_payload["data"]["upload_id"])
@@ -325,17 +420,22 @@ def main() -> int:
                 chunk = http.post(
                     "/api/file/upload/chunk",
                     params={"upload_id": upload_id, "chunk_index": 0, "chunk_hash": payload_hash},
-                    headers={**auth_headers, "Content-Type": "application/octet-stream"},
+                    headers={
+                        **auth_headers,
+                        "Content-Type": "application/octet-stream",
+                        "X-Request-Id": request_ids["chunk"],
+                    },
                     content=payload,
                 )
                 chunk_payload = require_envelope(chunk, 200, "upload chunk")
+                require_response_context(chunk, request_ids["chunk"], instance_id, "upload chunk")
                 require(chunk_payload["data"]["uploaded"] is True, "upload chunk succeeds")
                 require(
                     not (temp_dir / "staging" / upload_id).exists(),
                     "S3-native chunk upload creates no node-local session directory",
                 )
                 task_staging = query_one(
-                    "SELECT staging_backend, staging_prefix FROM upload_tasks WHERE id = %s",
+                    "SELECT staging_backend, staging_prefix, state_version FROM upload_tasks WHERE id = %s",
                     (upload_id,),
                 )
                 require(
@@ -350,13 +450,27 @@ def main() -> int:
                     f"{staging_prefix}/{upload_id}/",
                 )
                 require(len(staged_keys) == 1 and "/chunks/0-" in staged_keys[0], "chunk is stored in S3 staging")
+                chunk_row = query_one(
+                    "SELECT object_key FROM upload_task_chunks WHERE task_id = %s AND chunk_index = 0",
+                    (upload_id,),
+                )
+                require(
+                    chunk_row is not None and chunk_row["object_key"] == staged_keys[0],
+                    "PostgreSQL chunk descriptor identifies the S3 staging object",
+                )
 
                 complete = http.post(
                     "/api/file/upload/complete",
-                    headers=auth_headers,
+                    headers={**auth_headers, "X-Request-Id": request_ids["complete"]},
                     json={"upload_id": upload_id},
                 )
                 complete_payload = require_envelope(complete, 200, "upload complete")
+                require_response_context(
+                    complete,
+                    request_ids["complete"],
+                    instance_id,
+                    "upload complete",
+                )
                 require(str(complete_payload["code"]) == "0", "S3 upload finalization succeeds")
                 file_id = int(complete_payload["data"]["file"]["id"])
 
@@ -364,8 +478,27 @@ def main() -> int:
                 wait_for_object_state(s3_client, bucket, object_key, True)
                 head = s3_client.head_object(Bucket=bucket, Key=object_key)
                 require(head["ContentLength"] == len(payload), "final S3 object has the uploaded size")
-                wait_for_staging_cleanup(upload_id)
+                cleanup_job = wait_for_staging_cleanup(upload_id)
                 require(True, "Worker cleans only the completed S3 staging session")
+                require(
+                    int(cleanup_job["id"]) > 0
+                    and cleanup_job["job_type"] == "staging_cleanup"
+                    and cleanup_job["aggregate_id"] == upload_id
+                    and cleanup_job["dedupe_key"] == f"staging-cleanup:{upload_id}"
+                    and cleanup_job["locked_by"] is None,
+                    "PostgreSQL cleanup job retains authoritative upload identity and clears its lease",
+                )
+                completed_task = query_one(
+                    "SELECT status, state_version, lease_owner FROM upload_tasks WHERE id = %s",
+                    (upload_id,),
+                )
+                require(
+                    completed_task is not None
+                    and int(completed_task["status"]) == 1
+                    and int(completed_task["state_version"]) > int(task_staging["state_version"])
+                    and completed_task["lease_owner"] is None,
+                    "PostgreSQL upload task persists the completed version and clears its lease",
+                )
                 content_row = query_one(
                     "SELECT fc.hash_sha256, fc.storage_path FROM files f "
                     "JOIN file_contents fc ON fc.id = f.content_id WHERE f.id = %s",
@@ -378,20 +511,175 @@ def main() -> int:
                     "database persists SHA-256 and the authoritative final object key",
                 )
 
-                full = http.get(f"/api/file/download/{file_id}", headers=auth_headers)
+                full = http.get(
+                    f"/api/file/download/{file_id}",
+                    headers={**auth_headers, "X-Request-Id": request_ids["full"]},
+                )
                 require(full.status_code == 200, "full S3-backed download returns HTTP 200")
+                require_response_context(full, request_ids["full"], instance_id, "full download")
                 require(full.content == payload, "full S3-backed download preserves bytes")
                 require(full.headers.get("accept-ranges") == "bytes", "full download keeps range capability header")
 
                 partial = http.get(
                     f"/api/file/download/{file_id}",
-                    headers={**auth_headers, "Range": "bytes=7-31"},
+                    headers={
+                        **auth_headers,
+                        "Range": "bytes=7-31",
+                        "X-Request-Id": request_ids["range"],
+                    },
                 )
                 require(partial.status_code == 206, "range S3-backed download returns HTTP 206")
+                require_response_context(
+                    partial,
+                    request_ids["range"],
+                    instance_id,
+                    "range download",
+                )
                 require(partial.content == payload[7:32], "range S3-backed download preserves selected bytes")
                 require(
                     partial.headers.get("content-range") == f"bytes 7-31/{len(payload)}",
                     "range download keeps public Content-Range shape",
+                )
+
+                completed_version = int(completed_task["state_version"])
+                job_id = int(cleanup_job["id"])
+                wait_for_application_record(
+                    log_path,
+                    "upload init log links the request to the PostgreSQL upload ID",
+                    lambda record: has_context(
+                        record,
+                        request_id=request_ids["init"],
+                        instance_id=instance_id,
+                        operation="upload_init",
+                        upload_id=upload_id,
+                        job_id=None,
+                        lease_owner=None,
+                        state_version=None,
+                    )
+                    and str(record.get("message", "")).startswith("Upload task created successfully:"),
+                )
+                wait_for_application_record(
+                    log_path,
+                    "upload chunk log retains request and upload correlation",
+                    lambda record: has_context(
+                        record,
+                        request_id=request_ids["chunk"],
+                        instance_id=instance_id,
+                        operation="upload_chunk",
+                        upload_id=upload_id,
+                        job_id=None,
+                        lease_owner=None,
+                        state_version=None,
+                    )
+                    and str(record.get("message", "")).startswith("Chunk upload successful:"),
+                )
+                wait_for_application_record(
+                    log_path,
+                    "S3 chunk write retains API correlation across the blocking queue",
+                    lambda record: has_context(
+                        record,
+                        request_id=request_ids["chunk"],
+                        instance_id=instance_id,
+                        operation="upload_chunk",
+                        upload_id=upload_id,
+                        job_id=None,
+                        lease_owner=None,
+                        state_version=None,
+                    )
+                    and record.get("message")
+                    == "S3 SDK call result: sdk_operation=put_object, outcome=success",
+                )
+                wait_for_application_record(
+                    log_path,
+                    "upload completion log uses the committed state version and cleared lease",
+                    lambda record: has_context(
+                        record,
+                        request_id=request_ids["complete"],
+                        instance_id=instance_id,
+                        operation="upload_complete",
+                        upload_id=upload_id,
+                        job_id=None,
+                        lease_owner=None,
+                        state_version=completed_version,
+                    )
+                    and str(record.get("message", "")).startswith("File upload completed:"),
+                )
+                wait_for_application_record(
+                    log_path,
+                    "S3 promotion retains the active finalize lease and database version",
+                    lambda record: record.get("request_id") == request_ids["complete"]
+                    and record.get("instance_id") == instance_id
+                    and record.get("operation") == "upload_complete"
+                    and record.get("upload_id") == upload_id
+                    and record.get("job_id") is None
+                    and record.get("lease_owner") == instance_id
+                    and isinstance(record.get("state_version"), int)
+                    and 0 < int(record["state_version"]) < completed_version
+                    and record.get("message")
+                    == "S3 SDK call result: sdk_operation=complete_multipart_upload, outcome=success",
+                )
+                for request_name, label in (("full", "full"), ("range", "range")):
+                    wait_for_application_record(
+                        log_path,
+                        f"S3 {label} download retains request correlation",
+                        lambda record, request_name=request_name: has_context(
+                            record,
+                            request_id=request_ids[request_name],
+                            instance_id=instance_id,
+                            operation="download",
+                            upload_id=None,
+                            job_id=None,
+                            lease_owner=None,
+                            state_version=None,
+                        )
+                        and record.get("message")
+                        == "S3 SDK call result: sdk_operation=get_object, outcome=success",
+                    )
+                wait_for_application_record(
+                    log_path,
+                    "Worker cleanup start uses the claimed PostgreSQL job lease",
+                    lambda record: has_context(
+                        record,
+                        request_id=None,
+                        instance_id=instance_id,
+                        operation="storage_job_staging_cleanup",
+                        upload_id=upload_id,
+                        job_id=job_id,
+                        lease_owner=instance_id,
+                        state_version=None,
+                    )
+                    and str(record.get("message", "")).startswith("Storage job execution started:"),
+                )
+                wait_for_application_record(
+                    log_path,
+                    "S3 cleanup retains claimed Worker correlation",
+                    lambda record: has_context(
+                        record,
+                        request_id=None,
+                        instance_id=instance_id,
+                        operation="storage_job_staging_cleanup",
+                        upload_id=upload_id,
+                        job_id=job_id,
+                        lease_owner=instance_id,
+                        state_version=None,
+                    )
+                    and record.get("message")
+                    == "S3 SDK call result: sdk_operation=delete_objects, outcome=success",
+                )
+                wait_for_application_record(
+                    log_path,
+                    "Worker cleanup completion retains job identity and clears lease correlation",
+                    lambda record: has_context(
+                        record,
+                        request_id=None,
+                        instance_id=instance_id,
+                        operation="storage_job_staging_cleanup",
+                        upload_id=upload_id,
+                        job_id=job_id,
+                        lease_owner=None,
+                        state_version=None,
+                    )
+                    and str(record.get("message", "")).startswith("Storage job execution completed:"),
                 )
 
                 soft_delete = http.request(

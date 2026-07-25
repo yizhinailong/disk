@@ -831,6 +831,21 @@ The system SHALL propagate caller-owned correlation explicitly by value through 
 - **WHEN** the adapter records an SDK result event
 - **THEN** it SHALL NOT include bucket, endpoint, object key or prefix, remote multipart upload ID, continuation token, credentials, signatures, object content, or SDK exception text
 
+### Requirement: End-to-End Storage Trace Acceptance
+The system SHALL provide an environment-gated application-flow acceptance that correlates upload initialization, chunk persistence, completion, download, and asynchronous staging cleanup across the HTTP API, PostgreSQL, the durable Worker, and an S3-compatible endpoint without changing production log volume.
+
+#### Scenario: Isolated S3 application flow is traced
+- **WHEN** the acceptance starts one explicitly identified API/Worker process at `DEBUG`, sends caller-owned request IDs for init, chunk, complete, and download, and completes one S3-native upload
+- **THEN** every response SHALL echo its request ID and actual instance, API and S3 SDK events SHALL retain the corresponding bounded operation, the authoritative upload ID SHALL join PostgreSQL task/chunk rows to the S3 staging prefix, and the completed database content row SHALL retain the observed final object key
+
+#### Scenario: Durable cleanup continues the upload trace
+- **WHEN** the completed upload enqueues and a Worker claims its `staging_cleanup` job
+- **THEN** the PostgreSQL job's positive ID, aggregate upload ID, and dedupe key SHALL match the Worker start/completion events, S3 cleanup SDK events SHALL use the claimed job, upload, and lease fields, and the successful completion event SHALL clear lease owner while retaining instance and job identity
+
+#### Scenario: Diagnostic trace preserves production sampling
+- **WHEN** the environment-gated acceptance enables `DEBUG` to observe expected S3 results and successful chunk detail
+- **THEN** the structured application logger SHALL synchronize the level loaded by the framework, that setting SHALL be confined to the test process, normal production `INFO` SHALL continue to suppress those events, and the acceptance SHALL parse only typed schema-v1 application fields rather than extracting identifiers from message text
+
 ### Requirement: Background Maintenance Visibility
 The system SHALL expose Worker claiming configuration and current acceptance state independently, and a Worker in observation mode SHALL continue to expose dependency readiness and database-backed queue snapshots without executing maintenance work.
 

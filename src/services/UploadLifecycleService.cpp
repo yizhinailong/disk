@@ -736,6 +736,7 @@ namespace disk::upload {
                 staging_session,
                 static_cast<uint32_t>(command.expiry_seconds)
             );
+            log_context.upload_id = task.getValueOfId();
 
             Logger::Debug(log_context)
                 << "Upload task created successfully: upload_id=" << task.getValueOfId()

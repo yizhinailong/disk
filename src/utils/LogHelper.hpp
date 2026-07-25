@@ -71,6 +71,8 @@ namespace disk::utils {
 
         static auto CaptureFrameworkLogs() -> void;
 
+        static auto SyncFrameworkLevel() -> void;
+
         static auto SetInstanceId(std::string instance_id) -> void;
 
         static auto Trace(LogContext context) -> LogStream;
