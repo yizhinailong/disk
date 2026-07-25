@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 import tempfile
 import time
@@ -38,6 +39,7 @@ from test_expand_mixed_version import (  # noqa: E402
     allocate_ports,
     connect,
     create_database,
+    database_environment,
     drop_database,
     require,
     resolve_current_binary,
@@ -54,6 +56,7 @@ from test_staging_canary import (  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_PATH = REPO_ROOT / ".sisyphus/evidence/contract-readiness-cycle-summary.json"
+CONTRACT_READINESS_SQL = REPO_ROOT / "deploy" / "contract-readiness.sql"
 EXPIRY_SECONDS = 3
 POLL_SECONDS = 0.1
 PROCESS_TIMEOUT_SECONDS = 45
@@ -409,6 +412,88 @@ def final_blockers(
         name: scalar(database_name, statement, parameters)
         for name, (statement, parameters) in statements.items()
     }
+
+
+def contract_state_fingerprint(database_name: str) -> dict[str, str]:
+    return query_one(
+        database_name,
+        """
+        SELECT
+            (SELECT MD5(COALESCE(STRING_AGG(TO_JSONB(row_data)::text, E'\\n' ORDER BY id), ''))
+             FROM upload_tasks AS row_data) AS upload_tasks,
+            (SELECT MD5(COALESCE(STRING_AGG(TO_JSONB(row_data)::text, E'\\n'
+                                            ORDER BY task_id, chunk_index), ''))
+             FROM upload_task_chunks AS row_data) AS upload_task_chunks,
+            (SELECT MD5(COALESCE(STRING_AGG(TO_JSONB(row_data)::text, E'\\n' ORDER BY id), ''))
+             FROM storage_jobs AS row_data) AS storage_jobs,
+            (SELECT MD5(COALESCE(STRING_AGG(TO_JSONB(row_data)::text, E'\\n' ORDER BY id), ''))
+             FROM storage_reconciliation_findings AS row_data) AS findings,
+            (SELECT MD5(COALESCE(STRING_AGG(TO_JSONB(row_data)::text, E'\\n' ORDER BY id), ''))
+             FROM users AS row_data) AS users,
+            (SELECT MD5(COALESCE(STRING_AGG(TO_JSONB(row_data)::text, E'\\n' ORDER BY id), ''))
+             FROM files AS row_data) AS files,
+            (SELECT MD5(COALESCE(STRING_AGG(TO_JSONB(row_data)::text, E'\\n' ORDER BY id), ''))
+             FROM file_contents AS row_data) AS file_contents,
+            (SELECT MD5(COALESCE(STRING_AGG(TO_JSONB(row_data)::text, E'\\n' ORDER BY id), ''))
+             FROM trash AS row_data) AS trash
+        """,
+    )
+
+
+def run_contract_readiness_sql(
+    database_name: str,
+    variables: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    command = ["psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1"]
+    for name, value in variables.items():
+        command.extend(("-v", f"{name}={value}"))
+    command.extend(("-f", str(CONTRACT_READINESS_SQL)))
+    return subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        env=database_environment(database_name),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def executable_contract_snapshot(
+    database_name: str,
+    cutover_at: datetime,
+    scan_id: str,
+    *,
+    verify_missing_inputs: bool = True,
+) -> dict[str, Any]:
+    variables = {
+        "t_s3_only": iso_timestamp(cutover_at),
+        "scan_id": scan_id,
+    }
+    if verify_missing_inputs:
+        for omitted_name in variables:
+            partial_variables = {
+                name: value for name, value in variables.items() if name != omitted_name
+            }
+            result = run_contract_readiness_sql(database_name, partial_variables)
+            require(
+                result.returncode == 3,
+                f"contract readiness accepted missing {omitted_name}: {result.stderr}",
+            )
+            require(
+                f"{omitted_name} is required" in result.stdout + result.stderr,
+                f"missing {omitted_name} error drifted",
+            )
+
+    result = run_contract_readiness_sql(database_name, variables)
+    require(
+        result.returncode == 0,
+        f"contract readiness SQL failed: {result.stdout}\n{result.stderr}",
+    )
+    output_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    require(len(output_lines) == 1, "contract readiness SQL must emit one JSON line")
+    snapshot = json.loads(output_lines[0])
+    require(isinstance(snapshot, dict), "contract readiness output is not an object")
+    return snapshot
 
 
 def iso_timestamp(value: datetime) -> str:
@@ -815,6 +900,91 @@ def main() -> int:
                 "contract reconciliation retried",
             )
 
+            readiness_sql = CONTRACT_READINESS_SQL.read_text(encoding="utf-8")
+            normalized_readiness_sql = readiness_sql.upper()
+            require(
+                normalized_readiness_sql.count(
+                    "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
+                == 1
+                and normalized_readiness_sql.count("COMMIT;") == 1,
+                "contract readiness transaction boundary drifted",
+            )
+            for forbidden_statement in (
+                "INSERT INTO",
+                "UPDATE ",
+                "DELETE FROM",
+                "MERGE INTO",
+                "ALTER ",
+                "DROP ",
+                "TRUNCATE ",
+                "CREATE ",
+                "GRANT ",
+                "REVOKE ",
+            ):
+                require(
+                    forbidden_statement not in normalized_readiness_sql,
+                    f"contract readiness SQL contains {forbidden_statement.strip()}",
+                )
+
+            state_before_snapshot = contract_state_fingerprint(database_name)
+            executable_snapshot = executable_contract_snapshot(
+                database_name,
+                cutover_at,
+                scan_id,
+            )
+            incomplete_snapshot = executable_contract_snapshot(
+                database_name,
+                cutover_at,
+                f"{scan_id}-not-completed",
+                verify_missing_inputs=False,
+            )
+            state_after_snapshot = contract_state_fingerprint(database_name)
+            require(
+                state_after_snapshot == state_before_snapshot,
+                "contract readiness SQL changed application state",
+            )
+            require(
+                executable_snapshot.get("schema_version") == 1,
+                "contract readiness schema version drifted",
+            )
+            inputs = executable_snapshot.get("inputs")
+            require(
+                isinstance(inputs, dict) and inputs.get("scan_id") == scan_id,
+                "contract readiness inputs drifted",
+            )
+            require(
+                executable_snapshot.get("blockers") == blockers,
+                "executable blocker counts differ from independent queries",
+            )
+            reconciliation_snapshot = executable_snapshot.get("reconciliation")
+            expected_scopes = {
+                scope: {"pages": count, "all_succeeded": True}
+                for scope, count in page_counts.items()
+            }
+            require(
+                isinstance(reconciliation_snapshot, dict)
+                and reconciliation_snapshot.get("scope_count") == len(SCOPES)
+                and reconciliation_snapshot.get("required_scope_count")
+                == len(SCOPES)
+                and reconciliation_snapshot.get("all_pages_succeeded") is True
+                and reconciliation_snapshot.get("scopes") == expected_scopes,
+                "contract readiness reconciliation summary drifted",
+            )
+            require(
+                executable_snapshot.get("contract_design_review_admitted") is True
+                and executable_snapshot.get("compatibility_removal_allowed") is False,
+                "contract readiness exceeded design-review authority",
+            )
+            incomplete_reconciliation = incomplete_snapshot.get("reconciliation")
+            require(
+                isinstance(incomplete_reconciliation, dict)
+                and incomplete_reconciliation.get("scope_count") == 0
+                and incomplete_snapshot.get("contract_design_review_admitted") is False
+                and incomplete_snapshot.get("compatibility_removal_allowed") is False,
+                "incomplete reconciliation evidence admitted compatibility retirement",
+            )
+
             staging_inventory = list_keys(s3, bucket, staging_prefix + "/")
             final_inventory = list_keys(s3, bucket, object_prefix + "/")
             require(not staging_inventory, "S3 staging inventory is not empty")
@@ -879,6 +1049,15 @@ def main() -> int:
                     "unresolved_findings": blockers["unresolved_findings"],
                 },
                 "contract_blockers": blockers,
+                "executable_snapshot": {
+                    "schema_version": int(executable_snapshot["schema_version"]),
+                    "missing_inputs_rejected": True,
+                    "incomplete_evidence_blocked": True,
+                    "independent_blockers_match": True,
+                    "state_unchanged": True,
+                    "design_review_admitted": True,
+                    "compatibility_removal_allowed": False,
+                },
                 "ownership": {
                     "api_periodic_seeders": 0,
                     "worker_periodic_seeders": 1,

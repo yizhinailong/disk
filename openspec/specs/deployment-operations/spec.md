@@ -484,6 +484,18 @@ The data-to-contract gate SHALL begin only after incompatible processes have exi
 - **WHEN** any old process, pre-cutover active upload, local non-terminal task, incomplete cleanup, active upload lease, nullable field targeted for tightening, pending/retry/running/dead-letter upload job, reconciliation failure, or unresolved finding remains
 - **THEN** the contract migration SHALL remain blocked and the expand schema and compatible handlers SHALL remain available
 
+#### Scenario: Operator produces a contract-readiness snapshot
+- **WHEN** the versioned repository SQL is invoked with the recorded S3-only cutover time and the completed reconciliation scan ID
+- **THEN** it SHALL run in one repeatable-read read-only transaction and emit exactly one schema-versioned JSON object containing every reviewed database-observable compatibility blocker, quota and reference-count mismatch counts, and per-scope reconciliation page/success summaries
+
+#### Scenario: Contract-readiness input or evidence is incomplete
+- **WHEN** either required input is absent, any blocker count is non-zero, or reconciliation does not contain exactly the four reviewed scopes with all pages succeeded
+- **THEN** the executable snapshot SHALL fail before querying application tables when input is absent or report design-review admission as false, SHALL always report compatibility removal as not authorized, and SHALL NOT execute DDL or mutate application data
+
+#### Scenario: Repository readiness evidence is complete
+- **WHEN** every blocker is zero and exactly the four reviewed reconciliation scopes have all pages succeeded
+- **THEN** the snapshot MAY report admission to a separate V005 design review but SHALL still report compatibility removal as not authorized until the target environment separately approves and executes that design with its required backup, recovery, rollout, and retirement evidence
+
 #### Scenario: The repository compresses the observation time
 - **WHEN** an isolated integration test uses a shortened TTL and admits its claiming Worker only after PostgreSQL reports the probe expired
 - **THEN** the Worker's real initial periodic seed MAY represent the later expiration scan, while production acceptance SHALL still require the actual configured TTL and a distinct subsequent hourly scan

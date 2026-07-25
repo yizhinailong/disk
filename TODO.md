@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 10 生产拓扑依赖收尾）：完整构建无增量工作，安全启动/生产存储/无粘性拓扑聚焦 CTest 4/4 通过；完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 509.89 秒；OpenSpec 严格校验 24/24 通过。仓库生产参考配置已固定 secure mode、S3 final/staging、无节点持久业务卷和无粘性入口；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 10 兼容退役准入快照）：完整构建无增量工作，真实 PostgreSQL/S3 contract-readiness 聚焦 CTest 1/1 通过；完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 503.52 秒；OpenSpec 严格校验 24/24 通过。仓库已提供缺参拒绝、单事务只读、机器可读且不授权直接删除的兼容退役快照；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行实际 TTL 后独立小时扫描、V005 设计审批、明确退役日期、镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -1420,6 +1420,14 @@ OpenSpec 与部署运维文档先行收敛生产参考拓扑：API/Worker 必须
 `DistributedTopologyContract` 逐角色锁定 Kubernetes 的两个 `emptyDir` mount、Compose 四个应用进程无本地业务卷、分布式 final/staging S3 默认值、Service 无会话亲和和 Nginx 无粘性策略；同一脚本把 Phase 10 完成状态绑定到这些实现断言。`ConfigMgrJwtTest` 和 `SecureLocalStagingCutoffIntegration` 继续证明 secure API 在监听前拒绝 local staging，而显式 secure Worker 仍可处理已盘点存量 local 描述符。保留这条 legacy Worker 兼容路径是迁移排空要求，不会重新开放生产 local 任务创建，也不构成最终拓扑的节点目录依赖。
 
 Python 语法检查、完整构建无增量工作、安全启动/生产存储/无粘性拓扑聚焦 CTest 4/4 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项环境门控跳过、0 失败，总耗时 509.89 秒。以上仓库级证据关闭 Phase 10 第一项；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，未执行候选镜像、服务端 dry-run、真实 Nginx、目标 MinIO/云 S3 或双 API 随机路由，因此 Phase 6、Phase 9 和最终 Definition of Done 的目标环境门禁继续保持未勾选。
+
+### 15.13 兼容退役准入快照记录（2026-07-25）
+
+审计确认 `upload_task_creation_enabled` 仍是回滚冻结的启动期安全开关，`worker_claiming_enabled` 仍承担观察与排空语义；`upload_tasks.temp_path`、local backend、可空分片描述字段以及 guarded expand rollback 也继续受存量任务和 contract-readiness 合同保护。目标环境尚未完成实际 TTL 后独立小时扫描、全量四 scope 对账、V005 设计/恢复演练审批和退役日期记录，直接删除任一项都会破坏当前迁移或回滚合同，因此 Phase 10 第二项不能据仓库空夹具提前勾选。
+
+OpenSpec、部署运维和系统测试文档先行新增可执行准入合同。`deploy/contract-readiness.sql` 强制传入受控记录中的 `T_s3_only` 与 reconciliation `scan_id`，缺参在读取应用表前稳定失败；有效调用只在一个 `REPEATABLE READ READ ONLY` 事务中读取，输出唯一 schema-v1 JSON，集中包含 12 类 blocker、四 scope 页数/成功状态、`contract_design_review_admitted` 与固定为 `false` 的 `compatibility_removal_allowed`。输出不包含任务 ID、对象 key、endpoint 或凭据，全零结果只准入独立 V005 设计评审，不执行 DDL 或兼容删除。
+
+增强后的 `ContractReadinessCycleIntegration` 在真实隔离 PostgreSQL、Redis、Moto S3、S3-only API 和延后 Worker 上完成自然到期、cleanup、后续上传/下载及四 scope 对账；两种缺参均以 psql 退出码 3 拒绝，有效快照的 12 类 blocker 与独立查询逐项相等且全零，scope 页数一致；同一全零数据库配合未知 scan ID 时 scope 数为 0、design review admission 为 false，两个快照的 compatibility removal 均为 false。脚本前后上传、分片、任务、finding、用户、文件、内容与回收站全表指纹不变。Python 语法检查、完整构建无增量工作、聚焦 CTest 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1458 项，1451 通过、7 项环境门控跳过、0 失败，总耗时 503.52 秒。该批推进 Phase 9 遗留状态可查询能力，但因目标退役日期与批准证据尚缺，Phase 9 第三项、Phase 10 第二项和最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 
