@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 10 兼容退役准入快照）：完整构建无增量工作，真实 PostgreSQL/S3 contract-readiness 聚焦 CTest 1/1 通过；完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 503.52 秒；OpenSpec 严格校验 24/24 通过。仓库已提供缺参拒绝、单事务只读、机器可读且不授权直接删除的兼容退役快照；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行实际 TTL 后独立小时扫描、V005 设计审批、明确退役日期、镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 10 API 状态文档收敛）：完整构建无增量工作，分布式拓扑文档合同聚焦 CTest 1/1 通过；完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 496.69 秒；OpenSpec 严格校验 24/24 通过。权威 API 文档已与 S3-native 暂存、持久 cleanup/reconciliation 和 local 迁移兼容边界同步，并由静态合同拒绝旧“仍待实现”状态回归；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行实际 TTL 后独立小时扫描、V005 设计审批、明确退役日期、镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -1428,6 +1428,12 @@ Python 语法检查、完整构建无增量工作、安全启动/生产存储/�
 OpenSpec、部署运维和系统测试文档先行新增可执行准入合同。`deploy/contract-readiness.sql` 强制传入受控记录中的 `T_s3_only` 与 reconciliation `scan_id`，缺参在读取应用表前稳定失败；有效调用只在一个 `REPEATABLE READ READ ONLY` 事务中读取，输出唯一 schema-v1 JSON，集中包含 12 类 blocker、四 scope 页数/成功状态、`contract_design_review_admitted` 与固定为 `false` 的 `compatibility_removal_allowed`。输出不包含任务 ID、对象 key、endpoint 或凭据，全零结果只准入独立 V005 设计评审，不执行 DDL 或兼容删除。
 
 增强后的 `ContractReadinessCycleIntegration` 在真实隔离 PostgreSQL、Redis、Moto S3、S3-only API 和延后 Worker 上完成自然到期、cleanup、后续上传/下载及四 scope 对账；两种缺参均以 psql 退出码 3 拒绝，有效快照的 12 类 blocker 与独立查询逐项相等且全零，scope 页数一致；同一全零数据库配合未知 scan ID 时 scope 数为 0、design review admission 为 false，两个快照的 compatibility removal 均为 false。脚本前后上传、分片、任务、finding、用户、文件、内容与回收站全表指纹不变。Python 语法检查、完整构建无增量工作、聚焦 CTest 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1458 项，1451 通过、7 项环境门控跳过、0 失败，总耗时 503.52 秒。该批推进 Phase 9 遗留状态可查询能力，但因目标退役日期与批准证据尚缺，Phase 9 第三项、Phase 10 第二项和最终 Definition of Done 继续保持未勾选。
+
+### 15.14 API 实现状态文档收敛记录（2026-07-25）
+
+权威 `docs/design/02-API接口设计.md` 的上传分片章节仍保留“共享 S3/MinIO 暂存和持久孤儿清理仍待实现”的旧阶段说明，与当前 `UploadStagingStorage`、生产安全模式 S3 门禁、持久 `storage_jobs` cleanup/reconciliation 及 local 迁移排空合同冲突。本轮将其改为当前实现边界，并在 `DistributedTopologyContract` 中同时要求三项现状标记存在、旧说明不存在，避免已经交付的分布式能力再次被文档降级。
+
+Python 语法检查、完整构建无增量工作、分布式拓扑文档合同聚焦 CTest 1/1 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1458 项，1451 通过、7 项环境门控跳过、0 失败，总耗时 496.69 秒。该批收敛一个已确认的权威文档漂移，但最终 DoD 的“所有文档与最终行为一致”仍需结合目标环境发布结果做全量终审，因此保持未勾选。
 
 ## 16. 最终 Definition of Done
 

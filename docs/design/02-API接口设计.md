@@ -846,7 +846,7 @@ Authorization: Bearer <access_token>
 **POST** `/api/file/upload/chunk`
 
 #### 实现状态
-**现有接口、PostgreSQL `InProgress` 条件记录和不可变分片描述符已实现；共享 S3/MinIO 暂存和持久孤儿清理仍待实现**
+**已实现：接口通过后端无关的 `UploadStagingStorage` 写入不可变分片；生产安全模式要求共享 S3/MinIO 暂存，对象写入成功但数据库未记录等孤儿工件由持久 `storage_jobs` cleanup/reconciliation 收敛。local 暂存仅保留给开发测试和迁移期存量任务排空。**
 
 上传文件分片数据。
 

@@ -96,6 +96,18 @@ def main() -> int:
     ):
         require(obsolete not in feature_spec, f"feature specification retains obsolete: {obsolete}")
 
+    api_contract = (root / "docs/design/02-API接口设计.md").read_text(encoding="utf-8")
+    for marker in (
+        "生产安全模式要求共享 S3/MinIO 暂存",
+        "持久 `storage_jobs` cleanup/reconciliation 收敛",
+        "local 暂存仅保留给开发测试和迁移期存量任务排空",
+    ):
+        require(marker in api_contract, f"API contract is missing current staging status: {marker}")
+    require(
+        "共享 S3/MinIO 暂存和持久孤儿清理仍待实现" not in api_contract,
+        "API contract regressed to the obsolete staging implementation status",
+    )
+
     decision_record = (root / "docs/backend-refactor-decisions.md").read_text(
         encoding="utf-8"
     )
