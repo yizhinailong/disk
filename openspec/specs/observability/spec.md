@@ -759,6 +759,14 @@ The system SHALL correlate the upload-task cache maintenance timer diagnostic as
 - **THEN** the DEBUG event SHALL use fixed `operation=upload_runtime`, SHALL accept only the instance already registered with the structured logger, and SHALL keep request ID, upload ID, job ID, lease owner, and state version null
 - **AND** the message MAY contain only the bounded maintenance interval and SHALL NOT contain a cache key, upload or user identifier, request context, endpoint, path, credential, secret, token, storage pointer, or exception text; event-loop availability, callback registration, eviction behavior, and interval SHALL remain unchanged
 
+### Requirement: Compile-Time Explicit Log Context
+The system SHALL require every application logging entry point and direct log-stream construction to receive an explicit typed correlation context so new call sites cannot silently rely on a default empty context.
+
+#### Scenario: Application code emits any supported log level
+- **WHEN** code invokes Trace, Debug, Info, Warn, Error, Fatal, high-volume detail, high-volume success, or high-volume failure logging
+- **THEN** the public Logger declaration SHALL require exactly one `LogContext` argument, the `LogStream` constructor SHALL require a level and `LogContext`, context-free invocation or construction SHALL be rejected at compile time, and intentionally unowned events SHALL pass an explicit empty `LogContext`
+- **AND** severity, high-volume sampling behavior, structured envelope fields, registered instance handling, and JSON null representation for unavailable correlation values SHALL remain unchanged
+
 ### Requirement: Typed Download Correlation
 The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.
 

@@ -214,6 +214,7 @@ namespace disk::runtime {
                 CountOccurrences(log_helper, ".operation = \"service_runtime\""),
                 1U
             );
+            EXPECT_FALSE(Contains(log_helper, "LogContext context = {}"));
 
             constexpr std::array<std::pair<std::string_view, std::string_view>, 16> service_logs{
                 {

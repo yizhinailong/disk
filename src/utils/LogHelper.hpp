@@ -37,7 +37,7 @@ namespace disk::utils {
     public:
         explicit LogStream(
             spdlog::level::level_enum level,
-            LogContext context = {}
+            LogContext context
         );
 
         ~LogStream() noexcept;
@@ -73,16 +73,16 @@ namespace disk::utils {
 
         static auto SetInstanceId(std::string instance_id) -> void;
 
-        static auto Trace(LogContext context = {}) -> LogStream;
-        static auto Debug(LogContext context = {}) -> LogStream;
-        static auto Info(LogContext context = {}) -> LogStream;
-        static auto Warn(LogContext context = {}) -> LogStream;
-        static auto Error(LogContext context = {}) -> LogStream;
-        static auto Fatal(LogContext context = {}) -> LogStream;
+        static auto Trace(LogContext context) -> LogStream;
+        static auto Debug(LogContext context) -> LogStream;
+        static auto Info(LogContext context) -> LogStream;
+        static auto Warn(LogContext context) -> LogStream;
+        static auto Error(LogContext context) -> LogStream;
+        static auto Fatal(LogContext context) -> LogStream;
 
-        static auto HighVolumeDetail(LogContext context = {}) -> LogStream;
-        static auto HighVolumeSuccess(LogContext context = {}) -> LogStream;
-        static auto HighVolumeFailure(LogContext context = {}) -> LogStream;
+        static auto HighVolumeDetail(LogContext context) -> LogStream;
+        static auto HighVolumeSuccess(LogContext context) -> LogStream;
+        static auto HighVolumeFailure(LogContext context) -> LogStream;
     };
 
 } // namespace disk::utils

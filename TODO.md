@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 7 上传缓存运行时日志关联）：完整构建、上传缓存 timer 源码合同 GoogleTest 1/1 通过，后端 `src/` 无无参 Logger 调用；完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 492.91 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 7 显式日志上下文编译期门禁）：完整构建、Logger/LogStream 显式上下文 GoogleTest 6/6 通过，后端 `src/` 无无参 Logger 调用；完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 498.79 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -479,7 +479,7 @@ Python 语法检查、CMake 配置和完整构建通过；PgBouncer/拓扑聚焦
 
 ### 12.1 日志与追踪
 
-- [ ] 所有结构化日志包含 `request_id`、`instance_id`；上传相关日志增加 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。
+- [x] 所有结构化日志包含 `request_id`、`instance_id`；上传相关日志增加 `upload_id`、`job_id`、`lease_owner` 和 `state_version`。
 - [x] 禁止记录 JWT、share token、密码、S3 凭据和文件正文。
 - [ ] 为 init/chunk/complete/download/cleanup 建立跨 API、DB、Worker、S3 的追踪关联。
 - [x] 明确日志采样策略，避免大批量分片上传产生不可控日志量。
@@ -893,6 +893,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定 `UploadS
 消息只保留有界 `interval_seconds=60`，不记录 cache key、upload/user ID、请求上下文、endpoint、路径、凭据、secret、token、存储指针或异常正文；event loop 空值判定、`runEvery` 注册、60 秒周期、callback、锁和过期淘汰语义不变。`ProcessInitializationLogContextContractTest` 截取 timer 函数锁定唯一上下文、固定消息、周期常量和敏感值排除，并递归扫描后端 C++ 源码，确认 `src/` 的 Trace/Debug/Info/Warn/Error/Fatal 均不再存在无参 Logger 调用。
 
 完整构建、上传缓存 timer 源码合同 GoogleTest 1/1 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项环境门控跳过、0 失败，总耗时 492.91 秒。本轮关闭后端无参 Logger 子项，但目标 MinIO/云 S3、多实例环境门控与跨 API/DB/Worker/S3 总追踪验收尚未全部执行，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.56 显式日志上下文编译期门禁记录（2026-07-25）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定显式日志上下文的编译期合同。Logger 的 Trace、Debug、Info、Warn、Error、Fatal 与高频 detail/success/failure 九个入口删除默认空 `LogContext`，直接 `LogStream` 构造也必须同时传入 level 和上下文。公共头文件变更后全部生产与测试依赖已完整重编译，没有遗留依赖默认参数的生产路径；有意空关联的早期启动和采样测试改为显式 `LogContext{}`。
+
+`LogHelperTest` 的 C++23 concepts 同时证明九个 Logger 无参调用全部不可用、显式上下文入口全部返回 `LogStream`，且直接流不能仅用 level 构造；`ProcessInitializationLogContextContractTest` 同时锁定公开头文件无 `LogContext context = {}` 并递归排除后端无参 Logger。应用事件与被捕获的 Drogon/Trantor/ORM 框架事件继续经同一 formatter 输出 `request_id/instance_id/operation/upload_id/job_id/lease_owner/state_version`，暂无权威值的字段为 JSON `null`；级别、采样、instance 注册和消息格式不变。
+
+完整构建、Logger/LogStream 显式上下文 GoogleTest 6/6 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项环境门控跳过、0 失败，总耗时 498.79 秒。结构化信封字段总项现有实现、内存 NDJSON、框架捕获、编译期入口与全后端源码门禁共同证明，因此 12.1 第一项已勾选；目标 S3/多实例环境的跨 API/DB/Worker/S3 总追踪仍未完成，第三项保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

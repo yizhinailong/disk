@@ -1,5 +1,6 @@
 #include "utils/LogHelper.hpp"
 
+#include <concepts>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -12,6 +13,36 @@
 #include <spdlog/spdlog.h>
 
 namespace disk::utils::test {
+
+    template <typename LoggerType>
+    concept HasContextFreeLoggerEntry =
+        requires { LoggerType::Trace(); } ||
+        requires { LoggerType::Debug(); } ||
+        requires { LoggerType::Info(); } ||
+        requires { LoggerType::Warn(); } ||
+        requires { LoggerType::Error(); } ||
+        requires { LoggerType::Fatal(); } ||
+        requires { LoggerType::HighVolumeDetail(); } ||
+        requires { LoggerType::HighVolumeSuccess(); } ||
+        requires { LoggerType::HighVolumeFailure(); };
+
+    template <typename LoggerType>
+    concept HasExplicitLoggerEntries = requires(LogContext context) {
+        { LoggerType::Trace(context) } -> std::same_as<LogStream>;
+        { LoggerType::Debug(context) } -> std::same_as<LogStream>;
+        { LoggerType::Info(context) } -> std::same_as<LogStream>;
+        { LoggerType::Warn(context) } -> std::same_as<LogStream>;
+        { LoggerType::Error(context) } -> std::same_as<LogStream>;
+        { LoggerType::Fatal(context) } -> std::same_as<LogStream>;
+        { LoggerType::HighVolumeDetail(context) } -> std::same_as<LogStream>;
+        { LoggerType::HighVolumeSuccess(context) } -> std::same_as<LogStream>;
+        { LoggerType::HighVolumeFailure(context) } -> std::same_as<LogStream>;
+    };
+
+    static_assert(!HasContextFreeLoggerEntry<Logger>);
+    static_assert(HasExplicitLoggerEntries<Logger>);
+    static_assert(!std::constructible_from<LogStream, spdlog::level::level_enum>);
+    static_assert(std::constructible_from<LogStream, spdlog::level::level_enum, LogContext>);
 
     class LogHelperTest : public ::testing::Test {
     protected:
@@ -73,9 +104,9 @@ namespace disk::utils::test {
     TEST_F(LogHelperTest, InfoLevelDropsHighVolumeSuccessAndKeepsFailures) {
         m_logger->set_level(spdlog::level::info);
 
-        Logger::HighVolumeDetail() << "chunk-detail";
-        Logger::HighVolumeSuccess() << "chunk-success";
-        Logger::HighVolumeFailure() << "chunk-failure";
+        Logger::HighVolumeDetail(LogContext{}) << "chunk-detail";
+        Logger::HighVolumeSuccess(LogContext{}) << "chunk-success";
+        Logger::HighVolumeFailure(LogContext{}) << "chunk-failure";
 
         const auto output = Output();
         EXPECT_EQ(output.find("chunk-detail"), std::string::npos);
@@ -86,8 +117,8 @@ namespace disk::utils::test {
     TEST_F(LogHelperTest, DebugLevelKeepsHighVolumeDetailsAndSuccesses) {
         m_logger->set_level(spdlog::level::debug);
 
-        Logger::HighVolumeDetail() << "chunk-detail";
-        Logger::HighVolumeSuccess() << "chunk-success";
+        Logger::HighVolumeDetail(LogContext{}) << "chunk-detail";
+        Logger::HighVolumeSuccess(LogContext{}) << "chunk-success";
         Logger::Debug(ServiceRuntimeLogContext()) << "Service initialized: service=test";
 
         const auto output = Output();
@@ -173,7 +204,7 @@ namespace disk::utils::test {
         m_logger->set_level(spdlog::level::info);
         Logger::SetInstanceId("");
 
-        Logger::Info() << "early startup";
+        Logger::Info(LogContext{}) << "early startup";
 
         const auto records = Records();
         ASSERT_EQ(records.size(), 1U);
