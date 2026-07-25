@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 7 跨 API/DB/Worker/S3 追踪验收）：完整构建 421/421、日志/上传生命周期/Worker/S3 聚焦 CTest 82/82、受控 Moto 5.2.2 S3 门禁 2/2 通过；完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 508.66 秒；OpenSpec 严格校验 24/24 通过。Moto 只验证当前 S3 协议和追踪关联，不替代目标 MinIO/云 S3；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 10 生产拓扑依赖收尾）：完整构建无增量工作，安全启动/生产存储/无粘性拓扑聚焦 CTest 4/4 通过；完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 509.89 秒；OpenSpec 严格校验 24/24 通过。仓库生产参考配置已固定 secure mode、S3 final/staging、无节点持久业务卷和无粘性入口；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -1325,7 +1325,7 @@ SHA-256 分别为 `8380abf9d97188bfda1451cf2179f70fecdd62194549c5e24a85b46bd5461
 
 ## 15. Phase 10：收尾与技术债清理
 
-- [ ] 删除生产路径对 sticky session 和本地上传暂存的依赖。
+- [x] 删除生产路径对 sticky session 和本地上传暂存的依赖。
 - [x] 删除被数据库租约替代的跨请求 `AssemblyWorkerPool` 单飞职责；仅保留仍有明确局部价值的并发控制。
 - [ ] 删除过渡 feature flag、旧 schema 字段、旧配置和旧迁移分支。
 - [x] 删除已被 Worker 替代的 API 集群级定时任务注册。
@@ -1412,6 +1412,14 @@ Python 语法检查、两个合同脚本直接执行、聚焦 CTest 2/2、CMake 
 迁移流程图现在明确备份/空隔离恢复演练、manifest/checksum、Worker/API 顺序、旧连接回收、四域对账与 `schema_action=preserve_expand`；生产目录图现在展示 Nginx TLS/`least_conn`、双 API、双 Worker、各节点互不共享的本机临时目录/日志，以及共享 PostgreSQL、Redis 和 S3 final/staging。`DistributedTopologyContract` 固定了迁移入口、回滚边界、新图关键节点、两张运维 Mermaid 清单，并禁止 V001/MySQL 旧文本和单进程目录图回归。
 
 Python 语法检查、合同脚本直接执行、V003/V004 对账 SQL 四项计数 0/0/0/0 和聚焦 CTest 5/5 均通过；使用 Mermaid CLI 11.16.0 与 Chromium 148 对 `docs/design/` 五份活跃文档中的 14/14 张图完成实际 SVG 渲染，全部非空。CMake 配置和完整构建通过；完整 CTest 共 1381 项，1375 通过、6 项环境门控跳过、0 失败，总耗时 427.74 秒；OpenSpec 严格校验 24/24 通过。至此 Phase 10 第 821 项所列的架构图、部署样例、运维手册、错误码表和测试数量全部完成；目标 MinIO/云 S3、真实 Nginx/多实例与压力门禁未执行，第 822 项仍保持未勾选。
+
+### 15.12 生产无粘性与共享暂存依赖收尾记录（2026-07-25）
+
+OpenSpec 与部署运维文档先行收敛生产参考拓扑：API/Worker 必须同时启用 secure mode、S3 final 和 S3 upload staging；`/var/lib/disk` 与 `/tmp` 只允许使用可丢弃 `emptyDir` 作为请求临时文件和运行时 scratch，不得以 `hostPath`、PVC 或 Compose 应用卷承载 Blob、分片或组装结果的正确性。Kubernetes Service 固定 `sessionAffinity=None`，Nginx 继续拒绝 cookie/sticky/`ip_hash`，静态检查不替代真实双 API 随机路由验收。
+
+`DistributedTopologyContract` 逐角色锁定 Kubernetes 的两个 `emptyDir` mount、Compose 四个应用进程无本地业务卷、分布式 final/staging S3 默认值、Service 无会话亲和和 Nginx 无粘性策略；同一脚本把 Phase 10 完成状态绑定到这些实现断言。`ConfigMgrJwtTest` 和 `SecureLocalStagingCutoffIntegration` 继续证明 secure API 在监听前拒绝 local staging，而显式 secure Worker 仍可处理已盘点存量 local 描述符。保留这条 legacy Worker 兼容路径是迁移排空要求，不会重新开放生产 local 任务创建，也不构成最终拓扑的节点目录依赖。
+
+Python 语法检查、完整构建无增量工作、安全启动/生产存储/无粘性拓扑聚焦 CTest 4/4 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项环境门控跳过、0 失败，总耗时 509.89 秒。以上仓库级证据关闭 Phase 10 第一项；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，未执行候选镜像、服务端 dry-run、真实 Nginx、目标 MinIO/云 S3 或双 API 随机路由，因此 Phase 6、Phase 9 和最终 Definition of Done 的目标环境门禁继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

@@ -545,6 +545,22 @@ def main() -> int:
             and container["securityContext"]["capabilities"]["drop"] == ["ALL"],
             f"{role} container security boundary drifted",
         )
+        require(
+            {
+                mount["name"]: mount["mountPath"]
+                for mount in container["volumeMounts"]
+            }
+            == {"runtime-data": "/var/lib/disk", "tmp": "/tmp"},
+            f"{role} runtime scratch mounts drifted",
+        )
+        require(
+            {
+                volume["name"]: set(volume) - {"name"}
+                for volume in pod["volumes"]
+            }
+            == {"runtime-data": {"emptyDir"}, "tmp": {"emptyDir"}},
+            f"{role} must not depend on a host path or persistent application volume",
+        )
 
     validate_deployment("workloads/api/deployment.yaml", "api")
     validate_deployment("workloads/worker/deployment.yaml", "worker")
@@ -911,6 +927,10 @@ def main() -> int:
         "环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行" in latest_verification.group(0),
         "TODO latest verification must retain the target-environment caveat",
     )
+    require(
+        "- [x] 删除生产路径对 sticky session 和本地上传暂存的依赖。" in todo,
+        "production topology dependency retirement must remain completed",
+    )
 
     compose = yaml.safe_load((root / "docker-compose.distributed.yml").read_text(encoding="utf-8"))
     services = compose["services"]
@@ -963,6 +983,10 @@ def main() -> int:
         environment = services[name]["environment"]
         require(environment["DISK_PROCESS_ROLE"] == role, f"{name} role drifted")
         require(environment["DISK_INSTANCE_ID"] == instance_id, f"{name} instance ID drifted")
+        require(
+            "volumes" not in services[name],
+            f"{name} must not mount node-local application storage",
+        )
         require(
             services[name]["stop_grace_period"]
             == "${DISK_STOP_GRACE_PERIOD:-40s}",

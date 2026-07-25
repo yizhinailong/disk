@@ -287,6 +287,10 @@ After local non-terminal uploads, incomplete local cleanup jobs, and staged arti
 - **WHEN** secure mode is disabled and local staging is selected
 - **THEN** the existing single-process development and test workflow SHALL remain available and SHALL NOT be represented as a production topology
 
+#### Scenario: Production workloads have no authoritative node-local storage
+- **WHEN** the reference production API and Worker workloads are rendered
+- **THEN** they SHALL enable secure mode with both final and upload staging storage set to S3, SHALL NOT mount a host path or persistent volume for Blob or upload-staging correctness, and MAY use only explicitly disposable local runtime scratch that can be lost without moving sessions or files before replacement
+
 ### Requirement: Reversible dual-API admission
 The distributed release SHALL provide a reviewed two-API load-balancer pool and a one-API fallback pool that removes the newly admitted instance without changing database schema, persistent application state, or client affinity. The switch operation SHALL validate the complete deployment configuration before applying it, and an instance SHALL be removed from the active pool and verified absent from routed traffic before it receives a termination signal. This admission gate does not replace the later non-sticky randomized-routing acceptance test.
 
@@ -316,6 +320,10 @@ The active two-API pool SHALL accept a single upload whose requests are dynamica
 #### Scenario: Runtime routing remains affine
 - **WHEN** all bounded route probes for the same client and upload identify only one API while both reviewed targets are ready
 - **THEN** the acceptance gate SHALL fail even if static configuration contains no cookie, sticky, or IP-hash directive
+
+#### Scenario: Reference ingress has no affinity configuration
+- **WHEN** the repository production Service and reverse-proxy policy are rendered
+- **THEN** the Service SHALL use no session affinity and the proxy SHALL contain no cookie, sticky, or IP-hash routing directive, while this static result SHALL NOT replace the runtime two-instance acceptance
 
 ### Requirement: Worker observation rollout
 The rollout SHALL support deploying a Worker with job claiming disabled after the expand migration and compatibility release. The observation Worker SHALL validate its required dependencies and query real queue metrics without claiming, renewing, completing, or seeding persistent jobs. Enabling execution SHALL require an explicit configuration change and process restart.
