@@ -23,6 +23,7 @@
 
 #include "services/MetricsService.hpp"
 #include "storage/AssemblyConcurrencyLimiter.hpp"
+#include "storage/StorageLogContext.hpp"
 #include "utils/FileHashUtil.hpp"
 #include "utils/LogHelper.hpp"
 
@@ -815,10 +816,9 @@ namespace disk::storage {
             m_worker_queue,
             m_s3_config.io_threads
         );
-        Logger::Info() << "S3ObjectStorage initialized: bucket=" << m_s3_config.bucket
-                       << ", prefix=" << m_s3_config.object_prefix
-                       << ", max_connections=" << m_s3_config.max_connections
-                       << ", io_threads=" << m_s3_config.io_threads;
+        Logger::Info(StorageRuntimeLogContext()) << "S3 object storage initialized: max_connections="
+                                                 << m_s3_config.max_connections
+                                                 << ", io_threads=" << m_s3_config.io_threads;
     }
 
     auto S3ObjectStorage::SetMultipartUploadJournal(

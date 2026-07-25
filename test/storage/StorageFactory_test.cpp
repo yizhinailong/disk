@@ -1,9 +1,12 @@
 #include "storage/StorageFactory.hpp"
 
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include <drogon/drogon.h>
 #include <gtest/gtest.h>
@@ -15,6 +18,44 @@
 #include "utils/ConfigMgr.hpp"
 
 namespace {
+
+    auto RepositoryRoot() -> std::filesystem::path {
+        return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+    }
+
+    auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+        std::ifstream input(RepositoryRoot() / relative_path);
+        std::ostringstream buffer;
+        buffer << input.rdbuf();
+        return buffer.str();
+    }
+
+    auto Contains(const std::string& source, std::string_view expected) -> bool {
+        return source.find(expected) != std::string::npos;
+    }
+
+    auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+        size_t count = 0;
+        size_t position = 0;
+        while ((position = source.find(expected, position)) != std::string::npos) {
+            ++count;
+            position += expected.size();
+        }
+        return count;
+    }
+
+    auto SourceSection(
+        const std::string& source,
+        std::string_view begin_marker,
+        std::string_view end_marker
+    ) -> std::string {
+        const auto begin = source.find(begin_marker);
+        const auto end = source.find(end_marker, begin);
+        if (begin == std::string::npos || end == std::string::npos || end <= begin) {
+            return {};
+        }
+        return source.substr(begin, end - begin);
+    }
 
     class FakeS3Client final : public disk::storage::IS3Client {
     public:
@@ -174,6 +215,41 @@ namespace {
     };
 
 } // namespace
+
+TEST(StorageRuntimeLogContextContractTest, UsesTypedContextAndBoundedDeploymentDetails) {
+    const auto context_source = ReadSourceFile("src/storage/StorageLogContext.hpp");
+    const auto factory_source = ReadSourceFile("src/storage/StorageFactory.cpp");
+    const auto local_file_source = ReadSourceFile("src/storage/LocalFileStorage.cpp");
+    const auto local_blob_source = ReadSourceFile("src/storage/LocalBlobStore.cpp");
+    const auto s3_source = ReadSourceFile("src/storage/S3ObjectStorage.cpp");
+    const auto combined_source = factory_source + local_file_source + local_blob_source + s3_source;
+    const auto s3_constructor = SourceSection(
+        s3_source,
+        "S3ObjectStorage::S3ObjectStorage(",
+        "auto S3ObjectStorage::SetMultipartUploadJournal("
+    );
+
+    EXPECT_EQ(CountOccurrences(context_source, ".operation = \"storage_runtime\""), 1U);
+    EXPECT_FALSE(Contains(context_source, ".request_id ="));
+    EXPECT_FALSE(Contains(context_source, ".upload_id ="));
+    EXPECT_FALSE(Contains(context_source, ".job_id ="));
+    EXPECT_FALSE(Contains(context_source, ".lease_owner ="));
+    EXPECT_FALSE(Contains(context_source, ".state_version ="));
+    EXPECT_EQ(CountOccurrences(combined_source, "Logger::Info(StorageRuntimeLogContext())"), 5U);
+    EXPECT_FALSE(Contains(combined_source, "Logger::Info()"));
+    EXPECT_TRUE(Contains(factory_source, "Storage backend selected: backend=local"));
+    EXPECT_TRUE(Contains(factory_source, "Storage backend selected: backend=s3"));
+    EXPECT_TRUE(Contains(local_file_source, "Local file storage initialized: io_threads="));
+    EXPECT_TRUE(Contains(local_blob_source, "Local blob storage initialized: io_threads="));
+    EXPECT_TRUE(Contains(s3_constructor, "S3 object storage initialized: max_connections="));
+    EXPECT_FALSE(s3_constructor.empty());
+    EXPECT_FALSE(Contains(s3_constructor, "bucket="));
+    EXPECT_FALSE(Contains(s3_constructor, "prefix="));
+    EXPECT_FALSE(Contains(s3_constructor, "endpoint="));
+    EXPECT_FALSE(Contains(s3_constructor, "region="));
+    EXPECT_FALSE(Contains(s3_constructor, "instance_id="));
+    EXPECT_FALSE(Contains(s3_constructor, "e.what()"));
+}
 
 TEST_F(StorageFactoryTest, SelectsLocalStorageWithoutCreatingS3Client) {
     auto config_mgr = LoadStorageConfig("local", root);

@@ -20,6 +20,7 @@
 
 #include "services/MetricsService.hpp"
 #include "storage/AssemblyConcurrencyLimiter.hpp"
+#include "storage/StorageLogContext.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
 #include "utils/LogHelper.hpp"
@@ -243,8 +244,8 @@ namespace disk::storage {
             assembly_worker_thread_count
         );
 
-        Logger::Info() << "LocalFileStorage worker queues initialized: io_threads=" << worker_thread_count
-                       << ", assembly_threads=" << assembly_worker_thread_count;
+        Logger::Info(StorageRuntimeLogContext()) << "Local file storage initialized: io_threads=" << worker_thread_count
+                                                 << ", assembly_threads=" << assembly_worker_thread_count;
     }
 
     auto LocalFileStorage::EnsureUploadSession(

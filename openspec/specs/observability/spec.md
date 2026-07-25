@@ -710,6 +710,17 @@ The system SHALL emit configuration loading and secure-validation diagnostics wi
 - **WHEN** ConfigMgr reports storage path selection or secure environment validation
 - **THEN** the message SHALL NOT contain a configured filesystem path, a manually copied instance ID, an endpoint, credential values, or secret contents, while bounded numeric values, validated backend names, role names, and fixed environment variable names MAY be retained
 
+### Requirement: Typed Storage Runtime Diagnostics
+The system SHALL correlate storage backend selection and adapter initialization as process-owned runtime events without assigning request, upload, or durable-job ownership.
+
+#### Scenario: A storage backend or adapter initializes
+- **WHEN** the storage factory selects local or S3 storage, or a local/S3 adapter initializes its bounded worker capacity
+- **THEN** the event SHALL use `storage_runtime`, SHALL use only the actual instance registered with the logger, and SHALL keep request ID, upload ID, job ID, lease owner, and state version null
+
+#### Scenario: Storage deployment details are sensitive
+- **WHEN** a storage runtime event reports the selected backend or initialized capacity
+- **THEN** the message MAY contain only the bounded backend name and worker-thread or connection counts, and SHALL NOT contain filesystem paths, bucket names, endpoints, regions, object prefixes or keys, credentials, exception text, or a manually copied instance ID
+
 ### Requirement: Typed Download Correlation
 The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.
 

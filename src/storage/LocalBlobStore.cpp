@@ -14,6 +14,7 @@
 #include <trantor/utils/ConcurrentTaskQueue.h>
 
 #include "services/MetricsService.hpp"
+#include "storage/StorageLogContext.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
 #include "utils/LogHelper.hpp"
@@ -207,7 +208,7 @@ namespace disk::storage {
             worker_thread_count
         );
 
-        Logger::Info() << "LocalBlobStore worker queue initialized: io_threads=" << worker_thread_count;
+        Logger::Info(StorageRuntimeLogContext()) << "Local blob storage initialized: io_threads=" << worker_thread_count;
     }
 
     auto LocalBlobStore::PromoteToFinal(

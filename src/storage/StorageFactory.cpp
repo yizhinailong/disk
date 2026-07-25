@@ -7,6 +7,7 @@
 #include "storage/LocalFileStorage.hpp"
 #include "storage/S3Client.hpp"
 #include "storage/S3ObjectStorage.hpp"
+#include "storage/StorageLogContext.hpp"
 #include "utils/LogHelper.hpp"
 
 namespace disk::storage {
@@ -21,14 +22,14 @@ namespace disk::storage {
 
         switch (config_mgr->GetStorageBackend()) {
             case disk::utils::StorageBackend::Local:
-                Logger::Info() << "Initializing local filesystem storage backend";
+                Logger::Info(StorageRuntimeLogContext()) << "Storage backend selected: backend=local";
                 return StorageBundle{
                     .storage = std::make_shared<LocalFileStorage>(config_mgr),
                     .blob_store = std::make_shared<LocalBlobStore>(std::move(config_mgr)),
                 };
 
             case disk::utils::StorageBackend::S3: {
-                Logger::Info() << "Initializing S3 object storage backend";
+                Logger::Info(StorageRuntimeLogContext()) << "Storage backend selected: backend=s3";
                 try {
                     const auto s3_config = config_mgr->GetS3StorageConfig();
                     auto client = s3_client_factory ? s3_client_factory(s3_config) : std::make_shared<AwsS3Client>(s3_config);

@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 7 运行时配置日志关联）：完整构建、ConfigMgr GoogleTest 56/56、配置源码合同与真实安全配置启动拒绝聚焦 CTest 2/2 通过；完整 CTest 共 1455 项，1448 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 501.81 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 7 存储运行时日志关联）：完整构建、存储运行时/工厂 GoogleTest 4/4、源码合同与真实 Worker 观察模式聚焦 CTest 2/2 通过；完整 CTest 共 1456 项，1449 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 491.92 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -851,6 +851,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定 `ConfigM
 存储路径消息现在只说明显式值或默认值，不记录实际文件系统路径；进程配置摘要保留已验证 role 和受约束的 finalize lease，不在 message 重复 instance。其他诊断只保留已解析的 local/s3、受约束容量/时长/线程/限流数值、JWT 长度和固定环境变量名，不新增 endpoint、bucket、对象前缀、配置文件路径、凭据值或 secret 内容；默认值、环境覆盖优先级、解析、getter、异常正文和安全模式拒绝语义不变。`ConfigMgrLogContextContractTest` 锁定 24 条生产日志、固定上下文及路径/实例排除；真实安全模式 API/local staging 门禁同时解析组件 error 与 main bootstrap 摘要。证据 `.sisyphus/evidence/local-staging-cutoff-summary.json` 的 SHA-256 为 `3e0743c0a3cea4b68c45fd11560bc943ed072ca53cd046bc7302469f99a596d5`。
 
 完整构建、Python 语法检查、ConfigMgr GoogleTest 56/56、配置源码合同与真实启动拒绝聚焦 CTest 2/2 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1455 项，1448 通过、7 项环境门控跳过、0 失败，总耗时 501.81 秒。其他尚未逐条归属的日志路径及目标 MinIO/云 S3、多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.51 存储运行时日志关联记录（2026-07-25）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定存储初始化边界的类型化关联合同。`StorageFactory` 的 local/S3 选择以及 `LocalFileStorage`、`LocalBlobStore`、`S3ObjectStorage` 的工作队列初始化共五条事件统一使用共享 `StorageRuntimeLogContext` 和固定 `operation=storage_runtime`；这些进程事件发生在 HTTP 请求和持久任务认领之外，实际 instance 只由结构化日志器的注册值写入，`request_id/upload_id/job_id/lease_owner/state_version` 全部保持 JSON `null`。
+
+消息只保留固定 backend 和经过配置校验的 I/O、组装线程或最大连接数。S3 初始化不再记录 bucket 和对象 prefix，五条事件也不记录本地路径、endpoint、region、对象 key、凭据、异常正文或消息内 instance；后端选择、S3 bucket 可访问性校验、队列容量、指标注册、构造顺序和失败传播语义不变。`StorageRuntimeLogContextContractTest` 锁定共享上下文、五个调用点、固定消息和 S3 构造区间的部署细节排除；增强后的 `test_worker_observation_mode.py` 在真实 local Worker 中确认工厂、文件和 Blob 三条事件各出现一次、使用实际 instance 和五个空所有权字段，同时保留 readiness/metrics 正常、Ready 任务不变、无租约和不播种语义。结构化证据 `.sisyphus/evidence/worker-observation-summary.json` 的当前 SHA-256 为 `662c5bb61f649826b07676f6759843a5db0b632a31546848bd8a1627ba2ba29b`。
+
+完整构建、Python 语法检查、存储运行时/工厂 GoogleTest 4/4、源码合同与真实 Worker 观察模式聚焦 CTest 2/2 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1456 项，1449 通过、7 项环境门控跳过、0 失败，总耗时 491.92 秒。其他尚未逐条归属的日志路径及目标 MinIO/云 S3、多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 

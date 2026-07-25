@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 import time
@@ -41,6 +42,74 @@ EVIDENCE_PATH = (
 INSTANCE_ID = "worker-observer-integration"
 POLL_INTERVAL_MS = 100
 OBSERVATION_SECONDS = 0.6
+
+
+def storage_runtime_events(log: str) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for line in log.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(record, dict):
+            continue
+        if (
+            record.get("schema_version") == 1
+            and record.get("source") == "application"
+            and record.get("operation") == "storage_runtime"
+        ):
+            events.append(record)
+    return events
+
+
+def require_storage_runtime_logs(
+    log: str,
+    final_root: Path,
+    staging_root: Path,
+) -> None:
+    events = storage_runtime_events(log)
+    require(len(events) == 3, f"expected three local storage runtime events, got {events}")
+
+    messages = [str(event.get("message", "")) for event in events]
+    require(
+        messages.count("Storage backend selected: backend=local") == 1,
+        f"local storage selection event drifted: {messages}",
+    )
+    require(
+        sum(
+            re.fullmatch(
+                r"Local file storage initialized: io_threads=\d+, assembly_threads=\d+",
+                message,
+            )
+            is not None
+            for message in messages
+        )
+        == 1,
+        f"local file storage event drifted: {messages}",
+    )
+    require(
+        sum(
+            re.fullmatch(r"Local blob storage initialized: io_threads=\d+", message)
+            is not None
+            for message in messages
+        )
+        == 1,
+        f"local blob storage event drifted: {messages}",
+    )
+
+    for event in events:
+        message = str(event.get("message", ""))
+        require(event.get("instance_id") == INSTANCE_ID, f"storage instance drifted: {event}")
+        require(event.get("request_id") is None, f"storage request ownership drifted: {event}")
+        require(event.get("upload_id") is None, f"storage upload ownership drifted: {event}")
+        require(event.get("job_id") is None, f"storage job ownership drifted: {event}")
+        require(event.get("lease_owner") is None, f"storage lease ownership drifted: {event}")
+        require(event.get("state_version") is None, f"storage version ownership drifted: {event}")
+        require("instance_id=" not in message, f"storage message repeats instance: {event}")
+        require(str(final_root) not in message, f"storage message leaked final path: {event}")
+        require(str(staging_root) not in message, f"storage message leaked staging path: {event}")
+        for forbidden in ("bucket=", "endpoint=", "region=", "prefix=", "object_key="):
+            require(forbidden not in message, f"storage message leaked {forbidden}: {event}")
 
 
 def seed_ready_job(database_name: str, dedupe_key: str) -> dict[str, Any]:
@@ -213,6 +282,7 @@ def main() -> int:
                 "Worker observation mode enabled" in log,
                 "startup log does not identify observation mode",
             )
+            require_storage_runtime_logs(log, final_root, staging_root)
 
             EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
             EVIDENCE_PATH.write_text(
@@ -231,6 +301,9 @@ def main() -> int:
                         "metrics_snapshot_success": 1,
                         "worker_claiming_enabled": 0,
                         "worker_accepting_jobs": 0,
+                        "storage_runtime_events": 3,
+                        "storage_runtime_context": True,
+                        "storage_runtime_details_bounded": True,
                     },
                     indent=2,
                 )
