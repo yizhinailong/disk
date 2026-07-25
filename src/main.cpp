@@ -23,6 +23,7 @@
 #include "storage/MultipartUploadRecovery.hpp"
 #include "storage/S3ObjectStorage.hpp"
 #include "storage/StorageFactory.hpp"
+#include "storage/StorageLogContext.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/LogHelper.hpp"
@@ -277,6 +278,9 @@ auto main() -> int {
     const auto config = disk::utils::ConfigMgr::GetInstance();
     const auto role = config->GetProcessRole();
     disk::utils::Logger::SetInstanceId(config->GetInstanceId());
+    const disk::utils::LogContext process_runtime_log_context{
+        .operation = "process_runtime",
+    };
     auto runtime_services = std::make_shared<RuntimeServices>(
         std::make_shared<disk::runtime::ProcessRuntimeState>(
             role,
@@ -289,41 +293,30 @@ auto main() -> int {
 
     if (disk::utils::IncludesApi(role)) {
         disk::services::TokenService::Initialize(config->GetJwtSecret());
-        disk::utils::Logger::Info() << "TokenService initialized successfully";
+        disk::utils::Logger::Info(process_runtime_log_context)
+            << "Token service initialized";
     }
-
-    /// 记录有效存储路径
-    disk::utils::Logger::Info() << "Effective storage configuration:";
-    disk::utils::Logger::Info() << "  storage_base_path: "
-                                << config->GetStorageBasePath();
-    disk::utils::Logger::Info() << "  temp_upload_path: " << config->GetTempUploadPath();
-    disk::utils::Logger::Info() << "  chunk_size: " << config->GetChunkSize();
-    disk::utils::Logger::Info() << "  max_file_size: " << config->GetMaxFileSize();
-    disk::utils::Logger::Info() << "  upload_task_expiry_seconds: "
-                                << config->GetUploadTaskExpirySeconds();
-    disk::utils::Logger::Info() << "  assembly_max_concurrent: "
-                                << config->GetAssemblyMaxConcurrent();
-    disk::utils::Logger::Info() << "  assemble_buffer_size_bytes: "
-                                << config->GetAssembleBufferSizeBytes();
 
     /// 初始化文件存储和最终 Blob 存储
     try {
         auto storage_bundle = disk::storage::StorageFactory::Create(config);
         disk::storage::StorageMgr::SetInstance(std::move(storage_bundle.storage));
         disk::storage::BlobStoreMgr::SetInstance(std::move(storage_bundle.blob_store));
-    } catch (const std::runtime_error& e) {
-        disk::utils::Logger::Error() << "File storage initialization failed: " << e.what();
+    } catch (const std::runtime_error&) {
+        disk::utils::Logger::Error(disk::storage::StorageRuntimeLogContext())
+            << "Storage manager initialization failed";
         return 1;
     }
-    disk::utils::Logger::Info() << "File storage initialized successfully";
+    disk::utils::Logger::Info(disk::storage::StorageRuntimeLogContext())
+        << "Storage managers initialized";
 
-    disk::utils::Logger::Info() << "Drogon framework version: " << drogon::getVersion();
-    disk::utils::Logger::Info() << "Process configured: instance_id=" << config->GetInstanceId()
-                                << ", role=" << disk::utils::ProcessRoleName(role);
+    disk::utils::Logger::Info(process_runtime_log_context)
+        << "Process runtime configured: framework_version=" << drogon::getVersion()
+        << ", role=" << disk::utils::ProcessRoleName(role);
 
     RegisterRequestLifecycle(runtime_services);
 
-    drogon::app().registerBeginningAdvice([runtime_services, config, role]() {
+    drogon::app().registerBeginningAdvice([runtime_services, config, role, process_runtime_log_context]() {
         auto db_client = disk::metrics::ObserveDbClient(drogon::app().getDbClient());
 
         if (disk::utils::IncludesApi(role)) {
@@ -339,7 +332,8 @@ auto main() -> int {
                         config->GetUploadFinalizeLeaseSeconds()
                     )
                 );
-                disk::utils::Logger::Info() << "S3 multipart recovery journal initialized";
+                disk::utils::Logger::Info(disk::storage::StorageRuntimeLogContext())
+                    << "S3 multipart recovery journal initialized";
             }
 
             disk::services::RedisService::Initialize(redis_client);
@@ -351,9 +345,8 @@ auto main() -> int {
                 config->GetJwtSecret()
             );
             disk::services::TokenService::GetInstance()->StartCacheMaintenance();
-            disk::utils::Logger::Info()
-                << "Application service context initialized: instance_id="
-                << config->GetInstanceId();
+            disk::utils::Logger::Info(process_runtime_log_context)
+                << "Application service context initialized";
         }
 
         if (runtime_services->state->IsWorkerClaimingEnabled()) {
@@ -389,16 +382,15 @@ auto main() -> int {
             runtime_services->worker_runtime.store(std::move(worker_runtime));
             runtime_services->state->SetWorkerAccepting(true);
         } else if (disk::utils::IncludesWorker(role)) {
-            disk::utils::Logger::Info()
+            disk::utils::Logger::Info(process_runtime_log_context)
                 << "Worker observation mode enabled; job claiming and scheduled task "
-                << "registration are disabled: instance_id="
-                << config->GetInstanceId();
+                << "registration are disabled";
         }
 
         runtime_services->state->MarkInitialized();
-        disk::utils::Logger::Info() << "Process initialization completed: instance_id="
-                                    << config->GetInstanceId()
-                                    << ", role=" << disk::utils::ProcessRoleName(role);
+        disk::utils::Logger::Info(process_runtime_log_context)
+            << "Process initialization completed: role="
+            << disk::utils::ProcessRoleName(role);
     });
 
     const auto shutdown = [runtime_services, config]() {

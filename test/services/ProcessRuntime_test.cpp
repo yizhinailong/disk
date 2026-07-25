@@ -108,6 +108,85 @@ namespace disk::runtime {
             EXPECT_FALSE(Contains(bootstrap_source, "state_version="));
         }
 
+        TEST(ProcessInitializationLogContextContractTest, UsesTypedPostRegistrationCorrelation) {
+            const auto source = ReadSourceFile("src/main.cpp");
+            const auto initialization_begin = source.find("Logger::SetInstanceId");
+            const auto initialization_end = source.find(
+                "const auto shutdown =",
+                initialization_begin
+            );
+
+            ASSERT_NE(initialization_begin, std::string::npos);
+            ASSERT_NE(initialization_end, std::string::npos);
+            const auto initialization_source = source.substr(
+                initialization_begin,
+                initialization_end - initialization_begin
+            );
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    initialization_source,
+                    "Logger::Info(process_runtime_log_context)"
+                ),
+                5U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    initialization_source,
+                    "Logger::Info(disk::storage::StorageRuntimeLogContext())"
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    initialization_source,
+                    "Logger::Error(disk::storage::StorageRuntimeLogContext())"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(initialization_source, ".operation = \"process_runtime\""),
+                1U
+            );
+            EXPECT_TRUE(Contains(initialization_source, "\"Token service initialized\""));
+            EXPECT_TRUE(Contains(
+                initialization_source,
+                "\"Storage manager initialization failed\""
+            ));
+            EXPECT_TRUE(Contains(initialization_source, "\"Storage managers initialized\""));
+            EXPECT_TRUE(Contains(
+                initialization_source,
+                "\"Process runtime configured: framework_version=\""
+            ));
+            EXPECT_TRUE(Contains(
+                initialization_source,
+                "\"S3 multipart recovery journal initialized\""
+            ));
+            EXPECT_TRUE(Contains(
+                initialization_source,
+                "\"Application service context initialized\""
+            ));
+            EXPECT_TRUE(Contains(
+                initialization_source,
+                "\"Worker observation mode enabled; job claiming and scheduled task \""
+            ));
+            EXPECT_TRUE(Contains(
+                initialization_source,
+                "\"Process initialization completed: role=\""
+            ));
+            EXPECT_FALSE(Contains(initialization_source, "Logger::Info()"));
+            EXPECT_FALSE(Contains(initialization_source, "Logger::Error()"));
+            EXPECT_FALSE(Contains(initialization_source, ".what()"));
+            EXPECT_FALSE(Contains(initialization_source, "instance_id="));
+            EXPECT_FALSE(Contains(initialization_source, "GetStorageBasePath()"));
+            EXPECT_FALSE(Contains(initialization_source, "GetTempUploadPath()"));
+            EXPECT_FALSE(Contains(initialization_source, "GetChunkSize()"));
+            EXPECT_FALSE(Contains(initialization_source, "GetMaxFileSize()"));
+            EXPECT_FALSE(Contains(initialization_source, "GetUploadTaskExpirySeconds()"));
+            EXPECT_FALSE(Contains(initialization_source, "GetAssemblyMaxConcurrent()"));
+            EXPECT_FALSE(Contains(initialization_source, "GetAssembleBufferSizeBytes()"));
+        }
+
         TEST(ProcessRuntimeTest, RecognizesOnlyDocumentedHealthPaths) {
             EXPECT_TRUE(IsHealthProbePath("/api/health"));
             EXPECT_TRUE(IsHealthProbePath("/api/health/live"));

@@ -711,15 +711,30 @@ The system SHALL emit configuration loading and secure-validation diagnostics wi
 - **THEN** the message SHALL NOT contain a configured filesystem path, a manually copied instance ID, an endpoint, credential values, or secret contents, while bounded numeric values, validated backend names, role names, and fixed environment variable names MAY be retained
 
 ### Requirement: Typed Storage Runtime Diagnostics
-The system SHALL correlate storage backend selection and adapter initialization as process-owned runtime events without assigning request, upload, or durable-job ownership.
+The system SHALL correlate storage backend selection, adapter initialization, manager installation, and recovery-journal setup as process-owned runtime events without assigning request, upload, or durable-job ownership.
 
-#### Scenario: A storage backend or adapter initializes
-- **WHEN** the storage factory selects local or S3 storage, or a local/S3 adapter initializes its bounded worker capacity
+#### Scenario: A storage backend or runtime component initializes
+- **WHEN** the storage factory selects local or S3 storage, a local/S3 adapter initializes its bounded worker capacity, the process installs its storage managers, or an API configures the S3 recovery journal
 - **THEN** the event SHALL use `storage_runtime`, SHALL use only the actual instance registered with the logger, and SHALL keep request ID, upload ID, job ID, lease owner, and state version null
 
 #### Scenario: Storage deployment details are sensitive
 - **WHEN** a storage runtime event reports the selected backend or initialized capacity
 - **THEN** the message MAY contain only the bounded backend name and worker-thread or connection counts, and SHALL NOT contain filesystem paths, bucket names, endpoints, regions, object prefixes or keys, credentials, exception text, or a manually copied instance ID
+
+#### Scenario: Storage manager initialization fails
+- **WHEN** backend construction or manager installation throws before the process starts serving
+- **THEN** the process SHALL emit a fixed `storage_runtime` error without exception text or deployment details and SHALL preserve the existing non-zero exit behavior
+
+### Requirement: Typed Initialized Process Runtime Diagnostics
+The system SHALL correlate post-registration process initialization stages without assigning them to an HTTP request, upload, or durable job.
+
+#### Scenario: An initialized process reports startup progress
+- **WHEN** the process initializes token services, records its framework and role, initializes the API application context, enters Worker observation mode, or completes initialization
+- **THEN** the event SHALL use `process_runtime`, SHALL use the actual instance registered with the logger, and SHALL keep request ID, upload ID, job ID, lease owner, and state version null
+
+#### Scenario: Process startup messages expose identity or storage configuration
+- **WHEN** the initialized process emits a startup progress event
+- **THEN** the message MAY contain a bounded role and framework version but SHALL NOT contain a manually copied instance ID, filesystem path, storage capacity summary, endpoint, credential, secret, token, or exception text
 
 ### Requirement: Typed Download Correlation
 The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.

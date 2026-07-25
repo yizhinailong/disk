@@ -438,8 +438,7 @@ def verify_process_death_takeover(
             "takeover Worker initialization",
             lambda: (
                 True
-                if f"Process initialization completed: instance_id={takeover_instance}, role=worker"
-                in read_log(takeover_log)
+                if "Process initialization completed: role=worker" in read_log(takeover_log)
                 else None
             ),
             timeout_seconds=30,

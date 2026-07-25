@@ -44,7 +44,7 @@ POLL_INTERVAL_MS = 100
 OBSERVATION_SECONDS = 0.6
 
 
-def storage_runtime_events(log: str) -> list[dict[str, Any]]:
+def runtime_events(log: str, operation: str) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for line in log.splitlines():
         try:
@@ -56,10 +56,23 @@ def storage_runtime_events(log: str) -> list[dict[str, Any]]:
         if (
             record.get("schema_version") == 1
             and record.get("source") == "application"
-            and record.get("operation") == "storage_runtime"
+            and record.get("operation") == operation
         ):
             events.append(record)
     return events
+
+
+def require_unowned_runtime_context(event: dict[str, Any], operation: str) -> str:
+    message = str(event.get("message", ""))
+    require(event.get("instance_id") == INSTANCE_ID, f"runtime instance drifted: {event}")
+    require(event.get("operation") == operation, f"runtime operation drifted: {event}")
+    require(event.get("request_id") is None, f"runtime request ownership drifted: {event}")
+    require(event.get("upload_id") is None, f"runtime upload ownership drifted: {event}")
+    require(event.get("job_id") is None, f"runtime job ownership drifted: {event}")
+    require(event.get("lease_owner") is None, f"runtime lease ownership drifted: {event}")
+    require(event.get("state_version") is None, f"runtime version ownership drifted: {event}")
+    require("instance_id=" not in message, f"runtime message repeats instance: {event}")
+    return message
 
 
 def require_storage_runtime_logs(
@@ -67,8 +80,8 @@ def require_storage_runtime_logs(
     final_root: Path,
     staging_root: Path,
 ) -> None:
-    events = storage_runtime_events(log)
-    require(len(events) == 3, f"expected three local storage runtime events, got {events}")
+    events = runtime_events(log, "storage_runtime")
+    require(len(events) == 4, f"expected four local storage runtime events, got {events}")
 
     messages = [str(event.get("message", "")) for event in events]
     require(
@@ -96,20 +109,45 @@ def require_storage_runtime_logs(
         == 1,
         f"local blob storage event drifted: {messages}",
     )
+    require(
+        messages.count("Storage managers initialized") == 1,
+        f"storage manager event drifted: {messages}",
+    )
 
     for event in events:
-        message = str(event.get("message", ""))
-        require(event.get("instance_id") == INSTANCE_ID, f"storage instance drifted: {event}")
-        require(event.get("request_id") is None, f"storage request ownership drifted: {event}")
-        require(event.get("upload_id") is None, f"storage upload ownership drifted: {event}")
-        require(event.get("job_id") is None, f"storage job ownership drifted: {event}")
-        require(event.get("lease_owner") is None, f"storage lease ownership drifted: {event}")
-        require(event.get("state_version") is None, f"storage version ownership drifted: {event}")
-        require("instance_id=" not in message, f"storage message repeats instance: {event}")
+        message = require_unowned_runtime_context(event, "storage_runtime")
         require(str(final_root) not in message, f"storage message leaked final path: {event}")
         require(str(staging_root) not in message, f"storage message leaked staging path: {event}")
         for forbidden in ("bucket=", "endpoint=", "region=", "prefix=", "object_key="):
             require(forbidden not in message, f"storage message leaked {forbidden}: {event}")
+
+
+def require_process_runtime_logs(log: str) -> None:
+    events = runtime_events(log, "process_runtime")
+    require(len(events) == 3, f"expected three process startup events, got {events}")
+    messages = [require_unowned_runtime_context(event, "process_runtime") for event in events]
+
+    require(
+        sum(
+            message.startswith("Process runtime configured: framework_version=")
+            and message.endswith(", role=worker")
+            for message in messages
+        )
+        == 1,
+        f"process configuration event drifted: {messages}",
+    )
+    require(
+        messages.count(
+            "Worker observation mode enabled; job claiming and scheduled task "
+            "registration are disabled"
+        )
+        == 1,
+        f"Worker observation event drifted: {messages}",
+    )
+    require(
+        messages.count("Process initialization completed: role=worker") == 1,
+        f"process completion event drifted: {messages}",
+    )
 
 
 def seed_ready_job(database_name: str, dedupe_key: str) -> dict[str, Any]:
@@ -283,6 +321,7 @@ def main() -> int:
                 "startup log does not identify observation mode",
             )
             require_storage_runtime_logs(log, final_root, staging_root)
+            require_process_runtime_logs(log)
 
             EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
             EVIDENCE_PATH.write_text(
@@ -301,9 +340,12 @@ def main() -> int:
                         "metrics_snapshot_success": 1,
                         "worker_claiming_enabled": 0,
                         "worker_accepting_jobs": 0,
-                        "storage_runtime_events": 3,
+                        "storage_runtime_events": 4,
                         "storage_runtime_context": True,
                         "storage_runtime_details_bounded": True,
+                        "process_runtime_events": 3,
+                        "process_runtime_context": True,
+                        "process_runtime_details_bounded": True,
                     },
                     indent=2,
                 )
