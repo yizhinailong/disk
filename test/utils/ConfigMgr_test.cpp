@@ -18,7 +18,11 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
+#include <string_view>
 
 #include <drogon/drogon.h>
 #include <gtest/gtest.h>
@@ -26,6 +30,55 @@
 namespace {
 
     using disk::utils::ConfigMgr;
+
+    auto RepositoryRoot() -> std::filesystem::path {
+        return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+    }
+
+    auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+        std::ifstream input(RepositoryRoot() / relative_path);
+        std::ostringstream buffer;
+        buffer << input.rdbuf();
+        return buffer.str();
+    }
+
+    auto Contains(const std::string& source, std::string_view expected) -> bool {
+        return source.find(expected) != std::string::npos;
+    }
+
+    auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+        size_t count = 0;
+        size_t position = 0;
+        while ((position = source.find(expected, position)) != std::string::npos) {
+            ++count;
+            position += expected.size();
+        }
+        return count;
+    }
+
+    TEST(ConfigMgrLogContextContractTest, UsesTypedContextAndBoundedDeploymentDetails) {
+        const auto source = ReadSourceFile("src/utils/ConfigMgr.cpp");
+
+        EXPECT_EQ(CountOccurrences(source, "Logger::Info(RuntimeConfigLogContext())"), 15U);
+        EXPECT_EQ(CountOccurrences(source, "Logger::Warn(RuntimeConfigLogContext())"), 3U);
+        EXPECT_EQ(CountOccurrences(source, "Logger::Error(RuntimeConfigLogContext())"), 6U);
+        EXPECT_EQ(CountOccurrences(source, ".operation = \"runtime_config\""), 1U);
+        EXPECT_FALSE(Contains(source, "Logger::Info()"));
+        EXPECT_FALSE(Contains(source, "Logger::Warn()"));
+        EXPECT_FALSE(Contains(source, "Logger::Error()"));
+        EXPECT_TRUE(Contains(source, "\"Storage base path loaded from config\""));
+        EXPECT_TRUE(Contains(source, "\"Storage base path missing; using default\""));
+        EXPECT_TRUE(Contains(source, "\"Temporary upload path loaded from config\""));
+        EXPECT_TRUE(Contains(source, "\"Temporary upload path missing; using default\""));
+        EXPECT_FALSE(Contains(source, "Loaded storage_base_path from config:"));
+        EXPECT_FALSE(Contains(source, "storage_base_path not found in config, using default:"));
+        EXPECT_FALSE(Contains(source, "Loaded temp_upload_path from config:"));
+        EXPECT_FALSE(Contains(source, "temp_upload_path not found in config, using default:"));
+        EXPECT_FALSE(Contains(source, "<< m_storage_base_path"));
+        EXPECT_FALSE(Contains(source, "<< m_temp_upload_path"));
+        EXPECT_FALSE(Contains(source, "<< m_instance_id"));
+        EXPECT_FALSE(Contains(source, "instance_id:"));
+    }
 
     /// ================================================================================
     /// EnvVarGuard — RAII helper for save/set/restore environment variables

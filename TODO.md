@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 7 进程 bootstrap 日志关联）：完整构建、进程运行时 GoogleTest 11/11、bootstrap 源码合同与真实安全配置启动拒绝聚焦 CTest 2/2 通过；完整 CTest 共 1454 项，1447 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 492.85 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 7 运行时配置日志关联）：完整构建、ConfigMgr GoogleTest 56/56、配置源码合同与真实安全配置启动拒绝聚焦 CTest 2/2 通过；完整 CTest 共 1455 项，1448 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 501.81 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -840,9 +840,17 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定 `BeginSh
 
 OpenSpec、部署运维、系统测试和单元测试文档先行固定 `main` 在实例注册前的类型化关联合同。进程开始、libsodium 成功/失败、运行时配置成功/失败和安全配置校验失败六条事件统一使用固定 `operation=process_bootstrap`；配置尚未验证且 `Logger::SetInstanceId` 尚未调用，因此 `instance_id/request_id/upload_id/job_id/lease_owner/state_version` 全部保持 JSON `null`，不得从环境、配置或异常文本推断身份。本轮不改变初始化顺序、成功路径或失败路径退出码。
 
-main 的运行时配置与安全校验失败只保留固定阶段摘要，不再拼接 `std::exception::what()`；配置组件自身的受控门禁诊断保持原职责。`ProcessBootstrapLogContextContractTest` 锁定 3 条 info、3 条 error、唯一 bootstrap 上下文、六条固定消息以及无异常正文/手工所有权；增强后的 `test_secure_local_staging_cutoff.py` 解析真实安全模式 API/local staging 启动拒绝 NDJSON，确认固定 error、空实例/所有权，同时保留退出码 1、监听未开放、未超时和既有门禁诊断。结构化证据 `.sisyphus/evidence/local-staging-cutoff-summary.json` 的 SHA-256 为 `aa8c86d34c5d85008f4f302319512344df1f70a4fda18974d20b657b6aa4d750`。
+main 的运行时配置与安全校验失败只保留固定阶段摘要，不再拼接 `std::exception::what()`；配置组件自身的受控门禁诊断保持原职责。`ProcessBootstrapLogContextContractTest` 锁定 3 条 info、3 条 error、唯一 bootstrap 上下文、六条固定消息以及无异常正文/手工所有权；增强后的 `test_secure_local_staging_cutoff.py` 解析真实安全模式 API/local staging 启动拒绝 NDJSON，确认固定 error、空实例/所有权，同时保留退出码 1、监听未开放、未超时和既有门禁诊断。结构化证据 `.sisyphus/evidence/local-staging-cutoff-summary.json` 的当前 SHA-256 为 `3e0743c0a3cea4b68c45fd11560bc943ed072ca53cd046bc7302469f99a596d5`。
 
 完整构建、Python 语法检查、进程运行时 GoogleTest 11/11、bootstrap 源码合同与真实启动拒绝聚焦 CTest 2/2 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1454 项，1447 通过、7 项环境门控跳过、0 失败，总耗时 492.85 秒。其他尚未逐条归属的日志路径及目标 MinIO/云 S3、多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.50 运行时配置日志关联记录（2026-07-25）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定 `ConfigMgr` 的类型化关联合同。15 条配置加载/模式 info、3 条默认值 warning 和 6 条安全校验 error 统一使用固定 `operation=runtime_config`；组件只接受结构化日志器已注册的实际实例，正常启动时先于 `Logger::SetInstanceId`，因此 `instance_id` 为 JSON `null`，`request_id/upload_id/job_id/lease_owner/state_version` 也全部保持 JSON `null`，不得从 `m_instance_id` 或环境变量提前复制。
+
+存储路径消息现在只说明显式值或默认值，不记录实际文件系统路径；进程配置摘要保留已验证 role 和受约束的 finalize lease，不在 message 重复 instance。其他诊断只保留已解析的 local/s3、受约束容量/时长/线程/限流数值、JWT 长度和固定环境变量名，不新增 endpoint、bucket、对象前缀、配置文件路径、凭据值或 secret 内容；默认值、环境覆盖优先级、解析、getter、异常正文和安全模式拒绝语义不变。`ConfigMgrLogContextContractTest` 锁定 24 条生产日志、固定上下文及路径/实例排除；真实安全模式 API/local staging 门禁同时解析组件 error 与 main bootstrap 摘要。证据 `.sisyphus/evidence/local-staging-cutoff-summary.json` 的 SHA-256 为 `3e0743c0a3cea4b68c45fd11560bc943ed072ca53cd046bc7302469f99a596d5`。
+
+完整构建、Python 语法检查、ConfigMgr GoogleTest 56/56、配置源码合同与真实启动拒绝聚焦 CTest 2/2 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1455 项，1448 通过、7 项环境门控跳过、0 失败，总耗时 501.81 秒。其他尚未逐条归属的日志路径及目标 MinIO/云 S3、多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 
@@ -971,7 +979,7 @@ current API/唯一 Worker 将任务分别收敛为 Completed、Cancelled、Expir
 CTest 38/38 通过。完整 CTest 共 1380 项：1374 通过、6 项环境门控跳过、0 失败，总耗时
 371.90 秒；OpenSpec 严格校验 24/24 通过。结构化证据为
 `.sisyphus/evidence/local-staging-cutoff-summary.json`，SHA-256 为
-`aa8c86d34c5d85008f4f302319512344df1f70a4fda18974d20b657b6aa4d750`。目标环境仍须先保存
+`3e0743c0a3cea4b68c45fd11560bc943ed072ca53cd046bc7302469f99a596d5`。目标环境仍须先保存
 local 非终态、未完成 cleanup 与逐原卷扫描全部归零的证据，再发布本门禁制品。
 
 ### 14.3 多实例与 Worker 切换

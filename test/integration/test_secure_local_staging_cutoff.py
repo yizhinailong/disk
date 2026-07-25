@@ -55,7 +55,12 @@ def stop_process(process: subprocess.Popen[str]) -> None:
         process.wait(timeout=2)
 
 
-def find_bootstrap_error(output: str) -> dict[str, object] | None:
+def find_unowned_error(
+    output: str,
+    *,
+    operation: str,
+    message: str,
+) -> dict[str, object] | None:
     for line in output.splitlines():
         try:
             record = json.loads(line)
@@ -65,8 +70,8 @@ def find_bootstrap_error(output: str) -> dict[str, object] | None:
             record.get("schema_version") == 1
             and record.get("source") == "application"
             and record.get("level") == "error"
-            and record.get("operation") == "process_bootstrap"
-            and record.get("message") == BOOTSTRAP_ERROR
+            and record.get("operation") == operation
+            and record.get("message") == message
             and all(
                 record.get(field) is None
                 for field in (
@@ -140,8 +145,18 @@ def main() -> int:
 
     output, _ = process.communicate()
     error_observed = EXPECTED_ERROR in output
-    bootstrap_error = find_bootstrap_error(output)
+    bootstrap_error = find_unowned_error(
+        output,
+        operation="process_bootstrap",
+        message=BOOTSTRAP_ERROR,
+    )
+    config_error = find_unowned_error(
+        output,
+        operation="runtime_config",
+        message=EXPECTED_ERROR,
+    )
     bootstrap_error_context = bootstrap_error is not None
+    config_error_context = config_error is not None
     bootstrap_summary_bounded = (
         bootstrap_error is not None and bootstrap_error.get("message") == BOOTSTRAP_ERROR
     )
@@ -149,6 +164,7 @@ def main() -> int:
         process.returncode == 1
         and error_observed
         and bootstrap_error_context
+        and config_error_context
         and bootstrap_summary_bounded
         and not listener_opened
         and not timed_out
@@ -160,6 +176,7 @@ def main() -> int:
         "expected_error_observed": error_observed,
         "bootstrap_error_context": bootstrap_error_context,
         "bootstrap_summary_bounded": bootstrap_summary_bounded,
+        "config_error_context": config_error_context,
         "listener_opened": listener_opened,
         "timed_out": timed_out,
         "passed": passed,

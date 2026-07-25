@@ -21,6 +21,10 @@
 
 namespace disk::utils {
     namespace {
+        auto RuntimeConfigLogContext() -> LogContext {
+            return LogContext{ .operation = "runtime_config" };
+        }
+
         auto ParseProcessRole(std::string_view value) -> ProcessRole {
             if (value == "api") {
                 return ProcessRole::Api;
@@ -461,63 +465,78 @@ namespace disk::utils {
             /// 从配置读取 storage_base_path
             if (app_config.isMember("storage_base_path")) {
                 m_storage_base_path = app_config["storage_base_path"].asString();
-                Logger::Info() << "Loaded storage_base_path from config: " << m_storage_base_path;
+                Logger::Info(RuntimeConfigLogContext())
+                    << "Storage base path loaded from config";
             } else {
-                Logger::Warn() << "storage_base_path not found in config, using default: " << m_storage_base_path;
+                Logger::Warn(RuntimeConfigLogContext())
+                    << "Storage base path missing; using default";
             }
 
             /// 从配置读取 temp_upload_path
             if (app_config.isMember("temp_upload_path")) {
                 m_temp_upload_path = app_config["temp_upload_path"].asString();
-                Logger::Info() << "Loaded temp_upload_path from config: " << m_temp_upload_path;
+                Logger::Info(RuntimeConfigLogContext())
+                    << "Temporary upload path loaded from config";
             } else {
-                Logger::Warn() << "temp_upload_path not found in config, using default: " << m_temp_upload_path;
+                Logger::Warn(RuntimeConfigLogContext())
+                    << "Temporary upload path missing; using default";
             }
 
             /// 从配置读取 chunk_size
             if (app_config.isMember("chunk_size")) {
                 m_chunk_size = static_cast<uint32_t>(app_config["chunk_size"].asUInt());
-                Logger::Info() << "Loaded chunk_size from config: " << m_chunk_size;
+                Logger::Info(RuntimeConfigLogContext())
+                    << "Loaded chunk_size from config: " << m_chunk_size;
             }
 
             /// 从配置读取 max_file_size
             if (app_config.isMember("max_file_size")) {
                 m_max_file_size = static_cast<uint64_t>(app_config["max_file_size"].asUInt64());
-                Logger::Info() << "Loaded max_file_size from config: " << m_max_file_size;
+                Logger::Info(RuntimeConfigLogContext())
+                    << "Loaded max_file_size from config: " << m_max_file_size;
             }
 
             /// 从配置读取 upload_task_expiry_seconds
             if (app_config.isMember("upload_task_expiry_seconds")) {
                 m_upload_task_expiry_seconds = app_config["upload_task_expiry_seconds"].asInt();
-                Logger::Info() << "Loaded upload_task_expiry_seconds from config: " << m_upload_task_expiry_seconds;
+                Logger::Info(RuntimeConfigLogContext())
+                    << "Loaded upload_task_expiry_seconds from config: "
+                    << m_upload_task_expiry_seconds;
             }
 
             /// 从配置读取 assembly_max_concurrent
             if (app_config.isMember("assembly_max_concurrent")) {
                 m_assembly_max_concurrent = static_cast<uint32_t>(app_config["assembly_max_concurrent"].asUInt());
-                Logger::Info() << "Loaded assembly_max_concurrent from config: " << m_assembly_max_concurrent;
+                Logger::Info(RuntimeConfigLogContext())
+                    << "Loaded assembly_max_concurrent from config: "
+                    << m_assembly_max_concurrent;
             }
 
             /// 从配置读取 assemble_buffer_size_bytes
             if (app_config.isMember("assemble_buffer_size_bytes")) {
                 m_assemble_buffer_size_bytes = static_cast<uint32_t>(app_config["assemble_buffer_size_bytes"].asUInt());
-                Logger::Info() << "Loaded assemble_buffer_size_bytes from config: " << m_assemble_buffer_size_bytes;
+                Logger::Info(RuntimeConfigLogContext())
+                    << "Loaded assemble_buffer_size_bytes from config: "
+                    << m_assemble_buffer_size_bytes;
             }
 
             /// 从配置读取 file_io_threads
             m_file_io_threads = static_cast<uint32_t>(app_config.get("file_io_threads", 0).asUInt());
             if (m_file_io_threads > 0) {
-                Logger::Info() << "Loaded file_io_threads from config: " << m_file_io_threads;
+                Logger::Info(RuntimeConfigLogContext())
+                    << "Loaded file_io_threads from config: " << m_file_io_threads;
             }
 
             const auto backend_value = app_config.get("storage_backend", "local").asString();
             m_storage_backend = ParseStorageBackend(backend_value);
-            Logger::Info() << "Loaded storage_backend from config: " << backend_value;
+            Logger::Info(RuntimeConfigLogContext())
+                << "Loaded storage_backend from config: " << backend_value;
 
             const auto staging_backend_value =
                 app_config.get("upload_staging_backend", "local").asString();
             m_upload_staging_backend = ParseStorageBackend(staging_backend_value);
-            Logger::Info() << "Loaded upload_staging_backend from config: " << staging_backend_value;
+            Logger::Info(RuntimeConfigLogContext())
+                << "Loaded upload_staging_backend from config: " << staging_backend_value;
             if (m_upload_staging_backend == StorageBackend::S3 &&
                 m_storage_backend != StorageBackend::S3) {
                 throw std::runtime_error(
@@ -634,8 +653,9 @@ namespace disk::utils {
             /// 从配置读取 upload_rate_limit_per_minute
             if (app_config.isMember("upload_rate_limit_per_minute")) {
                 m_upload_rate_limit_per_minute = app_config["upload_rate_limit_per_minute"].asInt();
-                Logger::Info() << "Loaded upload_rate_limit_per_minute from config: "
-                               << m_upload_rate_limit_per_minute;
+                Logger::Info(RuntimeConfigLogContext())
+                    << "Loaded upload_rate_limit_per_minute from config: "
+                    << m_upload_rate_limit_per_minute;
             }
 
             const auto load_int = [&app_config](const char* key, int current_value) -> int {
@@ -704,7 +724,8 @@ namespace disk::utils {
             m_register_rate_limit_window_seconds =
                 load_int("register_rate_limit_window_seconds", m_register_rate_limit_window_seconds);
         } else {
-            Logger::Warn() << "'disk' section not found in custom config, using default values";
+            Logger::Warn(RuntimeConfigLogContext())
+                << "'disk' section not found in custom config, using default values";
         }
 
         if (const auto* instance_id = std::getenv("DISK_INSTANCE_ID"); instance_id != nullptr) {
@@ -715,9 +736,9 @@ namespace disk::utils {
             m_process_role = ParseProcessRole(process_role);
             m_process_role_explicit = true;
         }
-        Logger::Info() << "Using process_role: " << ProcessRoleName(m_process_role)
-                       << ", instance_id: " << m_instance_id
-                       << ", upload_finalize_lease_seconds: " << m_upload_finalize_lease_seconds;
+        Logger::Info(RuntimeConfigLogContext())
+            << "Using process configuration: role=" << ProcessRoleName(m_process_role)
+            << ", upload_finalize_lease_seconds=" << m_upload_finalize_lease_seconds;
 
         /// 读取数据库和 Redis 连接池大小
         {
@@ -765,7 +786,7 @@ namespace disk::utils {
         } else {
             error_msg = "JWT_SECRET is too short (" + std::to_string(std::strlen(env_secret)) + " chars). A minimum of " + std::to_string(MIN_SECRET_LENGTH) + " characters is required in all environments.";
         }
-        Logger::Error() << error_msg;
+        Logger::Error(RuntimeConfigLogContext()) << error_msg;
         throw std::runtime_error(error_msg);
     }
 
@@ -960,7 +981,7 @@ namespace disk::utils {
         const auto* jwt_secret = std::getenv("JWT_SECRET");
         if (jwt_secret == nullptr || std::strlen(jwt_secret) < MIN_JWT_SECRET_LENGTH) {
             std::string error_msg = "JWT_SECRET environment variable is missing or too short. " "A minimum of " + std::to_string(MIN_JWT_SECRET_LENGTH) + " characters is required in all environments.";
-            Logger::Error() << error_msg;
+            Logger::Error(RuntimeConfigLogContext()) << error_msg;
             throw std::runtime_error(error_msg);
         }
 
@@ -984,11 +1005,13 @@ namespace disk::utils {
 
         /// Only validate DATABASE_PASSWORD, REDIS_PASSWORD and transport policy in secure mode.
         if (!IsSecureMode()) {
-            Logger::Info() << "Running in development mode - skipping DATABASE/REDIS password validation";
+            Logger::Info(RuntimeConfigLogContext())
+                << "Running in development mode - skipping DATABASE/REDIS password validation";
             return;
         }
 
-        Logger::Info() << "Running in secure mode - validating required environment variables";
+        Logger::Info(RuntimeConfigLogContext())
+            << "Running in secure mode - validating required environment variables";
 
         std::vector<std::string> missing_vars;
 
@@ -1010,14 +1033,14 @@ namespace disk::utils {
                 }
                 error_msg += missing_vars[i];
             }
-            Logger::Error() << error_msg;
+            Logger::Error(RuntimeConfigLogContext()) << error_msg;
             throw std::runtime_error(error_msg);
         }
 
         if (!m_process_role_explicit || m_process_role == ProcessRole::All) {
             const std::string error_msg =
                 "Secure mode requires an explicit api or worker process role";
-            Logger::Error() << error_msg;
+            Logger::Error(RuntimeConfigLogContext()) << error_msg;
             throw std::runtime_error(error_msg);
         }
 
@@ -1025,7 +1048,7 @@ namespace disk::utils {
             m_upload_staging_backend == StorageBackend::Local) {
             const std::string error_msg =
                 "Secure mode API requires upload_staging_backend=s3; local staging creation is disabled";
-            Logger::Error() << error_msg;
+            Logger::Error(RuntimeConfigLogContext()) << error_msg;
             throw std::runtime_error(error_msg);
         }
 
@@ -1034,11 +1057,12 @@ namespace disk::utils {
             (!m_s3_storage_config.use_ssl || !m_s3_storage_config.verify_ssl)) {
             const std::string error_msg =
                 "Secure mode requires S3 TLS with certificate verification";
-            Logger::Error() << error_msg;
+            Logger::Error(RuntimeConfigLogContext()) << error_msg;
             throw std::runtime_error(error_msg);
         }
 
-        Logger::Info() << "All required environment variables validated successfully";
+        Logger::Info(RuntimeConfigLogContext())
+            << "All required environment variables validated successfully";
     }
 
     auto ConfigMgr::GetDbPoolSize() const noexcept -> int64_t {
