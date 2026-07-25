@@ -751,6 +751,14 @@ The system SHALL correlate constructor and singleton-initialization diagnostics 
 - **WHEN** a service constructor or singleton initializer receives database, Redis, storage, configuration, user-domain, or other dependency values
 - **THEN** its DEBUG message SHALL contain only the fixed low-cardinality service label and SHALL NOT contain a manually copied instance ID, request or domain value, database client name, endpoint, path, credential, secret, token, storage pointer, or exception text; construction order, singleton guards, dependencies, and initialization behavior SHALL remain unchanged
 
+### Requirement: Typed Upload Cache Runtime Diagnostics
+The system SHALL correlate the upload-task cache maintenance timer diagnostic as a process-owned upload runtime event without assigning HTTP request, upload, or durable-job ownership.
+
+#### Scenario: The upload-task cache maintenance timer starts
+- **WHEN** `UploadService` registers its periodic expired-entry eviction callback with the available event loop
+- **THEN** the DEBUG event SHALL use fixed `operation=upload_runtime`, SHALL accept only the instance already registered with the structured logger, and SHALL keep request ID, upload ID, job ID, lease owner, and state version null
+- **AND** the message MAY contain only the bounded maintenance interval and SHALL NOT contain a cache key, upload or user identifier, request context, endpoint, path, credential, secret, token, storage pointer, or exception text; event-loop availability, callback registration, eviction behavior, and interval SHALL remain unchanged
+
 ### Requirement: Typed Download Correlation
 The system SHALL propagate download request correlation explicitly across owner and visitor controllers, database query services, the shared response builder, integrity handling, delayed stream callbacks, statistics, and share audit boundaries without thread-local request state.
 

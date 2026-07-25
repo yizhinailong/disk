@@ -24,6 +24,26 @@ namespace disk::runtime {
             return buffer.str();
         }
 
+        auto ReadSourceTree(const std::filesystem::path& relative_path) -> std::string {
+            std::string combined_source;
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(
+                     RepositoryRoot() / relative_path
+                 )) {
+                if (!entry.is_regular_file()) {
+                    continue;
+                }
+                const auto extension = entry.path().extension();
+                if (extension != ".cpp" && extension != ".hpp") {
+                    continue;
+                }
+                std::ifstream input(entry.path());
+                std::ostringstream buffer;
+                buffer << input.rdbuf();
+                combined_source += buffer.str();
+            }
+            return combined_source;
+        }
+
         auto Contains(const std::string& source, std::string_view expected) -> bool {
             return source.find(expected) != std::string::npos;
         }
@@ -239,11 +259,62 @@ namespace disk::runtime {
                 CountOccurrences(combined_service_sources, "Service initialized: service="),
                 service_logs.size()
             );
-            EXPECT_EQ(CountOccurrences(combined_service_sources, "Logger::Debug()"), 1U);
+            const auto upload_service_source = ReadSourceFile("src/services/UploadService.cpp");
+            const auto timer_begin = upload_service_source.find(
+                "auto UploadService::StartUploadTaskCacheMaintenance()"
+            );
+            const auto timer_end = upload_service_source.find(
+                "auto UploadService::EvictExpiredUploadTaskCacheEntries()",
+                timer_begin
+            );
+            ASSERT_NE(timer_begin, std::string::npos);
+            ASSERT_NE(timer_end, std::string::npos);
+            const auto timer_source = upload_service_source.substr(
+                timer_begin,
+                timer_end - timer_begin
+            );
+
+            EXPECT_EQ(
+                CountOccurrences(upload_service_source, ".operation = \"upload_runtime\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(timer_source, "Logger::Debug(UploadRuntimeLogContext())"),
+                1U
+            );
             EXPECT_TRUE(Contains(
-                combined_service_sources,
-                "Upload task cache maintenance timer started"
+                timer_source,
+                "Upload task cache maintenance timer started: interval_seconds="
             ));
+            EXPECT_EQ(
+                CountOccurrences(
+                    timer_source,
+                    "UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS"
+                ),
+                2U
+            );
+            const auto upload_service_header = ReadSourceFile("src/services/UploadService.hpp");
+            EXPECT_TRUE(Contains(
+                upload_service_header,
+                "UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS = 60.0;"
+            ));
+            EXPECT_FALSE(Contains(timer_source, "upload_id"));
+            EXPECT_FALSE(Contains(timer_source, "user_id"));
+            EXPECT_FALSE(Contains(timer_source, "instance_id"));
+            EXPECT_FALSE(Contains(timer_source, "cache key"));
+            EXPECT_FALSE(Contains(timer_source, ".what()"));
+
+            const auto backend_source = ReadSourceTree("src");
+            for (const auto no_context_logger : {
+                     "Logger::Trace()",
+                     "Logger::Debug()",
+                     "Logger::Info()",
+                     "Logger::Warn()",
+                     "Logger::Error()",
+                     "Logger::Fatal()",
+                 }) {
+                EXPECT_FALSE(Contains(backend_source, no_context_logger)) << no_context_logger;
+            }
             EXPECT_FALSE(Contains(combined_service_sources, "initialization completed"));
             EXPECT_FALSE(Contains(combined_service_sources, "RedisService initialized"));
             EXPECT_FALSE(Contains(combined_service_sources, "instance_id="));

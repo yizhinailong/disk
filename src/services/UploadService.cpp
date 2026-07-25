@@ -31,6 +31,14 @@ namespace disk::file {
     using disk::utils::FileHashUtil;
     using drogon_model::disk::UploadTasks;
 
+    namespace {
+
+        [[nodiscard]] auto UploadRuntimeLogContext() -> disk::utils::LogContext {
+            return { .operation = "upload_runtime" };
+        }
+
+    } // namespace
+
     /// ==================== 构造函数 ====================
 
     UploadService::UploadService(
@@ -555,8 +563,9 @@ namespace disk::file {
                 UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS,
                 [this]() { EvictExpiredUploadTaskCacheEntries(); }
             );
-            Logger::Debug() << "Upload task cache maintenance timer started (interval="
-                            << UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS << "s)";
+            Logger::Debug(UploadRuntimeLogContext())
+                << "Upload task cache maintenance timer started: interval_seconds="
+                << UPLOAD_TASK_CACHE_MAINTENANCE_INTERVAL_SECONDS;
         }
     }
 

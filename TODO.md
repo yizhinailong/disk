@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-25，本轮 Phase 7 服务初始化日志关联）：完整构建、服务初始化上下文 GoogleTest 6/6 通过；完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 491.31 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-25，本轮 Phase 7 上传缓存运行时日志关联）：完整构建、上传缓存 timer 源码合同 GoogleTest 1/1 通过，后端 `src/` 无无参 Logger 调用；完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 492.91 秒；OpenSpec 严格校验 24/24 通过。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
 
 ## 1. 目标与范围
 
@@ -885,6 +885,14 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定服务构
 初始化消息统一为固定 `Service initialized: service=<label>`，label 只取 16 个低基数服务名，不记录请求或领域标识、数据库客户端、endpoint、路径、凭据、secret、token、指针或异常正文；原 DEBUG 级别、构造顺序、依赖注入、Redis 单例保护和业务行为不变。`LogHelperTest` 解析真实内存 NDJSON，验证实际 instance、固定 operation、消息和五个空所有权字段；`ProcessInitializationLogContextContractTest` 跨 16 个生产源文件锁定唯一共享 helper、固定 label、无旧式初始化消息，并确认服务目录只剩 Upload task cache maintenance timer 一处无参 Logger。Content、Quota、Redis 和 OperationLog 的既有源码合同同步收紧为类型化初始化调用。
 
 完整构建、服务初始化上下文 GoogleTest 6/6 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项环境门控跳过、0 失败，总耗时 491.31 秒。Upload task cache maintenance timer 及其他尚未逐条归属的日志路径仍待后续收敛，目标 MinIO/云 S3 和多实例环境门控也未全部执行，因此 12.1 的两个总任务继续保持未勾选。
+
+### 12.55 上传缓存运行时日志关联记录（2026-07-25）
+
+OpenSpec、部署运维、系统测试和单元测试文档先行固定 `UploadService` 上传任务缓存维护 timer 的类型化进程边界。可用 event loop 成功注册过期条目淘汰 callback 后，唯一 DEBUG 事件使用 `UploadService.cpp` 局部 `UploadRuntimeLogContext` 和固定 `operation=upload_runtime`；实际 instance 只由结构化日志器的进程注册值写入，`request_id/upload_id/job_id/lease_owner/state_version` 全部保持 JSON `null`。
+
+消息只保留有界 `interval_seconds=60`，不记录 cache key、upload/user ID、请求上下文、endpoint、路径、凭据、secret、token、存储指针或异常正文；event loop 空值判定、`runEvery` 注册、60 秒周期、callback、锁和过期淘汰语义不变。`ProcessInitializationLogContextContractTest` 截取 timer 函数锁定唯一上下文、固定消息、周期常量和敏感值排除，并递归扫描后端 C++ 源码，确认 `src/` 的 Trace/Debug/Info/Warn/Error/Fatal 均不再存在无参 Logger 调用。
+
+完整构建、上传缓存 timer 源码合同 GoogleTest 1/1 和 OpenSpec 严格校验 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项环境门控跳过、0 失败，总耗时 492.91 秒。本轮关闭后端无参 Logger 子项，但目标 MinIO/云 S3、多实例环境门控与跨 API/DB/Worker/S3 总追踪验收尚未全部执行，因此 12.1 的两个总任务继续保持未勾选。
 
 ## 13. Phase 8：测试与验证
 
