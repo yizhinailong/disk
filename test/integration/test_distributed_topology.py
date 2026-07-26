@@ -184,6 +184,11 @@ def main() -> int:
         "⏳ ADR-002 重构范围，完成前不得宣称生产级分布式" not in system_test_plan,
         "system test plan retains the obsolete ADR-002 implementation status",
     )
+    require(
+        "DIST-UPLOAD-005" in system_test_plan
+        and "清空节点本地目录后的共享 Blob 下载" in system_test_plan,
+        "system test plan is missing the node-local cleanup download gate",
+    )
 
     operations_guide = (root / "docs/design/05-部署运维指南.md").read_text(
         encoding="utf-8"
@@ -918,6 +923,28 @@ def main() -> int:
         and "test_pgbouncer_transaction_pool.py" in test_cmake,
         "PgBouncer transaction-pool test is not registered in CTest",
     )
+
+    distributed_flow_source = (root / "test/integration/test_distributed_flow.py").read_text(
+        encoding="utf-8"
+    )
+    distributed_local_source = (root / "test/integration/test_distributed_local.py").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "clear_api_local_storage(service)",
+        "api_local_storage_is_empty(service)",
+        "shared_blob_downloads_after_local_cleanup",
+        "both APIs download one shared blob after clearing node-local storage",
+        "/var/lib/disk/blobs",
+        "/var/lib/disk/temp",
+    ):
+        require(marker in distributed_flow_source, f"distributed flow is missing {marker}")
+    for marker in (
+        'service in {"api-a", "api-b"}',
+        '("blobs", "temp")',
+        "shutil.rmtree(directory, ignore_errors=True)",
+    ):
+        require(marker in distributed_local_source, f"local distributed runner is missing {marker}")
 
     transaction_pool_sources = []
     for source_root in (root / "src", root / "scripts", root / "sql"):

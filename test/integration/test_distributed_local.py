@@ -422,6 +422,25 @@ class LocalTopology:
     def fingerprint(self, service: str) -> str:
         return self._service(service).fingerprint()
 
+    def clear_api_local_storage(self, service: str) -> None:
+        require(service in {"api-a", "api-b"}, f"local storage cleanup rejected {service}")
+        service_root = self.root / service
+        for directory_name in ("blobs", "temp"):
+            directory = service_root / directory_name
+            shutil.rmtree(directory, ignore_errors=True)
+            directory.mkdir()
+
+    def api_local_storage_is_empty(self, service: str) -> bool:
+        require(service in {"api-a", "api-b"}, f"local storage inspection rejected {service}")
+        service_root = self.root / service
+        return all(
+            directory.is_dir() and next(directory.iterdir(), None) is None
+            for directory in (
+                service_root / "blobs",
+                service_root / "temp",
+            )
+        )
+
     def close(self, preserve_logs: bool) -> None:
         self._stop_proxy()
         for name in ("api-a", "api-b", "worker-a", "worker-b", "minio", "redis", "postgres"):

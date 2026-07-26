@@ -45,6 +45,10 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** completion, cancellation, and expiration scanning concurrently contend for the same active or database-expired upload through different API instances
 - **THEN** the task SHALL reach exactly one legal terminal state, clear its lease and chunk rows, settle reserved and used quota exactly once, preserve file/content/ref-count invariants, and enqueue exactly one deduplicated staging-cleanup task
 
+#### Scenario: Shared final objects survive node-local cleanup
+- **WHEN** an S3-native upload completes and the test removes each API instance's local Blob and temporary-upload directories while leaving Drogon's HTTP request-spooling directory under framework ownership
+- **THEN** both API instances SHALL independently return the complete object and a byte range from the shared final key without recreating or reading node-local business data
+
 #### Scenario: Shared-user reservations change during a fault wait
 - **WHEN** a lease-expiry fault scenario waits long enough for an unrelated upload owned by the same test user to expire or settle
 - **THEN** validation SHALL prove the target task's single settlement from its terminal state and persisted accounting fields, and in one database snapshot SHALL calculate the residual between current reserved quota and all Pending and Finalizing task reservations and prove that residual is unchanged from the pre-fault snapshot instead of comparing stale aggregate totals or attributing a pre-existing shared-fixture residual to the target task

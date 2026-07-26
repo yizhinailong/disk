@@ -33,6 +33,10 @@ class TopologyControl(Protocol):
 
     def fingerprint(self, service: str) -> str: ...
 
+    def clear_api_local_storage(self, service: str) -> None: ...
+
+    def api_local_storage_is_empty(self, service: str) -> bool: ...
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -225,6 +229,36 @@ def main(
         fingerprint = inspection.stdout.strip()
         require(bool(fingerprint), f"container fingerprint is missing for {service}")
         return fingerprint
+
+    def clear_api_local_storage(service: str) -> None:
+        require(service in {"api-a", "api-b"}, f"local storage cleanup rejected {service}")
+        if topology is not None:
+            topology.clear_api_local_storage(service)
+            return
+        compose(
+            "exec",
+            "-T",
+            service,
+            "sh",
+            "-ec",
+            "for path in /var/lib/disk/blobs /var/lib/disk/temp; "
+            'do rm -rf -- "$path"; mkdir -p -- "$path"; done',
+        )
+
+    def api_local_storage_is_empty(service: str) -> bool:
+        require(service in {"api-a", "api-b"}, f"local storage inspection rejected {service}")
+        if topology is not None:
+            return topology.api_local_storage_is_empty(service)
+        result = compose(
+            "exec",
+            "-T",
+            service,
+            "sh",
+            "-ec",
+            "for path in /var/lib/disk/blobs /var/lib/disk/temp; "
+            'do [ -d "$path" ] && [ -z "$(find "$path" -mindepth 1 -print -quit)" ] || exit 1; done',
+        )
+        return result.returncode == 0
 
     run_id = uuid.uuid4().hex[:12]
     username = f"dist_{run_id}"
@@ -538,6 +572,60 @@ def main(
             require(file_count is not None and int(file_count["count"]) == 1, "concurrent complete created duplicate files")
             wait_until(lambda: object_exists(object_key), 30, "final S3 object")
             passed("concurrent complete converges to one file and one final object")
+
+            for service in ("api-a", "api-b"):
+                clear_api_local_storage(service)
+                require(
+                    api_local_storage_is_empty(service),
+                    f"{service} local storage was not empty after controlled cleanup",
+                )
+
+            shared_blob_downloads: dict[str, dict[str, Any]] = {}
+            for service, base_url, instance_id in (
+                ("api-a", api_a_url, "disk-api-a"),
+                ("api-b", api_b_url, "disk-api-b"),
+            ):
+                full_download = http.get(
+                    f"{base_url}/api/file/download/{file_id}",
+                    headers=auth,
+                    timeout=120,
+                )
+                require(
+                    full_download.status_code == 200 and full_download.content == content,
+                    f"{service} could not read the shared final object after local cleanup",
+                )
+                require(
+                    full_download.headers.get("X-Disk-Instance-Id") == instance_id,
+                    f"{service} full download omitted its instance identity",
+                )
+
+                range_download = http.get(
+                    f"{base_url}/api/file/download/{file_id}",
+                    headers={**auth, "Range": "bytes=7-31"},
+                    timeout=120,
+                )
+                require(
+                    range_download.status_code == 206
+                    and range_download.content == content[7:32]
+                    and range_download.headers.get("Content-Range")
+                    == f"bytes 7-31/{len(content)}",
+                    f"{service} could not range-read the shared final object after local cleanup",
+                )
+                require(
+                    range_download.headers.get("X-Disk-Instance-Id") == instance_id,
+                    f"{service} range download omitted its instance identity",
+                )
+                require(
+                    api_local_storage_is_empty(service),
+                    f"{service} recreated node-local business data while downloading from S3",
+                )
+                shared_blob_downloads[service] = {
+                    "instance_id": instance_id,
+                    "full_status": full_download.status_code,
+                    "range_status": range_download.status_code,
+                }
+            evidence["shared_blob_downloads_after_local_cleanup"] = shared_blob_downloads
+            passed("both APIs download one shared blob after clearing node-local storage")
 
             routed_quota_before = query_one(
                 "SELECT storage_used, storage_reserved FROM users WHERE id = %s",
