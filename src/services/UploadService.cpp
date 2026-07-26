@@ -10,7 +10,10 @@
 #include "UploadService.hpp"
 
 #include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <string_view>
+#include <thread>
 
 #include <drogon/drogon.h>
 
@@ -35,6 +38,48 @@ namespace disk::file {
 
         [[nodiscard]] auto UploadRuntimeLogContext() -> disk::utils::LogContext {
             return { .operation = "upload_runtime" };
+        }
+
+        auto PauseChunkAfterWriteForFaultInjection(
+            const std::string& upload_id,
+            uint32_t chunk_index,
+            disk::utils::LogContext log_context
+        ) -> void {
+            if (ConfigMgr::GetInstance()->IsSecureMode()) {
+                return;
+            }
+
+            const auto* enabled = std::getenv("DISK_TEST_FAULT_INJECTION");
+            const auto* target_upload_id = std::getenv(
+                "DISK_TEST_PAUSE_AFTER_CHUNK_WRITE_UPLOAD_ID"
+            );
+            if (enabled == nullptr || std::string_view(enabled) != "1" ||
+                target_upload_id == nullptr || upload_id != target_upload_id) {
+                return;
+            }
+
+            log_context.upload_id = upload_id;
+            Logger::Warn(log_context)
+                << "Test fault injection paused upload after chunk object write: upload_id="
+                << upload_id << ", chunk_index=" << chunk_index;
+
+            const auto* release_file = std::getenv("DISK_TEST_CHUNK_WRITE_RELEASE_FILE");
+            if (release_file != nullptr && !std::string_view(release_file).empty()) {
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(5);
+                std::error_code error;
+                while (std::chrono::steady_clock::now() < deadline) {
+                    if (std::filesystem::exists(release_file, error)) {
+                        Logger::Warn(log_context)
+                            << "Test fault injection released upload after chunk object write: upload_id="
+                            << upload_id << ", chunk_index=" << chunk_index;
+                        return;
+                    }
+                    error.clear();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+            }
+
+            std::this_thread::sleep_for(std::chrono::minutes(5));
         }
 
     } // namespace
@@ -282,6 +327,8 @@ namespace disk::file {
 
             co_return std::unexpected(write_result.error());
         }
+
+        PauseChunkAfterWriteForFaultInjection(upload_id, chunk_index, log_context);
 
         /// 7. 仅在数据库任务仍为 InProgress 时记录分片；缓存不能授予写权限。
         try {

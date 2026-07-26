@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-26，本轮 Phase 2 过期上传清理重放）：`SafetyUploadInvariantsIntegration` 聚焦 1/1 通过（111.68 秒）。已成功 cleanup 的 Expired 上传再次经同一确定性管理入口扫描时，清理数为 0；任务版本/时间/原因/租约/预留字节、用户 reserved/used/quota、零分片和唯一 cleanup 任务完整快照均不变，reserved 保持非负且未创建文件、内容引用或 final Blob。结合已有 init resume、重复 chunk、complete/cancel 重放、进程死亡/网络分区、Blob GC/Worker/multipart 恢复证据，Phase 2 重试副作用验收闭环；“所有状态机和事务竞态”仍单独保留。Python 语法、完整构建无增量工作、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 496.35 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、高可用、独立故障域或生产 RTO/RPO 验收。
+> 最近验证（2026-07-26，本轮 Phase 2 状态机与事务竞态）：新增精确分片写后停顿点，两个真实 API 在共享 PostgreSQL/local staging 上分别让 complete、cancel、expire 赢过尚未执行元数据条件写的分片请求；释放后 3/3 迟到请求均返回 `409/10004`，终态/版本不变、分片行归零、配额残差不变、cleanup 唯一且成功，Completed 的文件/内容/ref_count/final Blob 唯一，Cancelled/Expired 无这些副作用。当前可达上传迁移、终态重放、租约接管/旧 owner fencing、内容去重和 Blob GC 排他协议均有真实数据库证据；`Failed` 明确为无生产调用者的兼容保留态。`SafetyUploadInvariantsIntegration` 独立 1/1 通过（114.71 秒），完整运行内再次通过（112.69 秒）；状态机/仓储 GoogleTest 18/18、覆盖相关 CTest 4/4、Python 语法、增量构建、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 498.67 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、高可用、独立故障域或生产 RTO/RPO 验收。
 
 ## 1. 目标与范围
 
@@ -216,7 +216,7 @@ API Instance A  API Instance B ... N
 - [x] 100 个并发重复 `complete` 最多生成一个文件记录、一次配额结算和一个内容引用增量。
 - [x] 并发 `complete/cancel/expire` 最终只有一个合法终态。
 - [x] 任意步骤重试不会造成负配额、重复文件、错误 ref_count 或误删 Blob。
-- [ ] 所有状态机和事务竞态有数据库级集成测试，不只依赖源码字符串断言。
+- [x] 所有状态机和事务竞态有数据库级集成测试，不只依赖源码字符串断言。
 
 ## 8. Phase 3：对象存储原生上传暂存
 

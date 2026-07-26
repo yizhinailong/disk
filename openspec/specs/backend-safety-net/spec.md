@@ -25,6 +25,10 @@ The system SHALL provide integration safety tests that verify upload lifecycle o
 - **WHEN** the deterministic expired-upload cleanup is run again after one target upload has already reached Expired and its staging cleanup has succeeded
 - **THEN** the replay MUST NOT transition that upload again, decrement reserved quota below its settled value, change its state version or finalization timestamp, enqueue another staging-cleanup job, create a file or content reference, or delete any final blob
 
+#### Scenario: A terminal upload transition wins after a chunk object write
+- **WHEN** a real API is paused after persisting one target chunk object but before its PostgreSQL chunk metadata write, and another real API commits complete, cancel, or expire for that upload
+- **THEN** releasing the paused request MUST return a conflict and MUST NOT recreate chunk metadata, change the committed terminal state, settle quota twice, duplicate file or content references, or enqueue more than one staging-cleanup job
+
 ### Requirement: Content reference-count safety invariants
 The system SHALL provide integration safety tests that characterize current content deduplication and reference-count behavior, including upload completion races and permanent cleanup paths that may affect shared content.
 

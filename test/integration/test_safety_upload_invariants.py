@@ -235,6 +235,8 @@ def peer_api_instance(
     *,
     purpose: str = "peer",
     upload_finalize_lease_seconds: int | None = None,
+    pause_after_chunk_write_upload_id: str | None = None,
+    chunk_write_release_file: Path | None = None,
     pause_after_claim_upload_id: str | None = None,
     pause_after_assembly_upload_id: str | None = None,
     pause_after_finalize_commit_upload_id: str | None = None,
@@ -247,6 +249,7 @@ def peer_api_instance(
     pause_targets = [
         upload_id
         for upload_id in (
+            pause_after_chunk_write_upload_id,
             pause_after_claim_upload_id,
             pause_after_assembly_upload_id,
             pause_after_finalize_commit_upload_id,
@@ -260,6 +263,8 @@ def peer_api_instance(
         raise ValueError("peer API database host and port must be overridden together")
     if pause_before_finalize_transaction_upload_id is not None and finalize_transaction_release_file is None:
         raise ValueError("finalize transaction pause requires a release file")
+    if pause_after_chunk_write_upload_id is not None and chunk_write_release_file is None:
+        raise ValueError("chunk write pause requires a release file")
 
     server_bin = Path(
         os.environ.get("SERVER_BIN", REPO_ROOT / "build/linux-debug-clang/src/disk")
@@ -297,6 +302,8 @@ def peer_api_instance(
 
         peer_env = os.environ.copy()
         peer_env.pop("DISK_TEST_FAULT_INJECTION", None)
+        peer_env.pop("DISK_TEST_PAUSE_AFTER_CHUNK_WRITE_UPLOAD_ID", None)
+        peer_env.pop("DISK_TEST_CHUNK_WRITE_RELEASE_FILE", None)
         peer_env.pop("DISK_TEST_PAUSE_AFTER_FINALIZE_CLAIM_UPLOAD_ID", None)
         peer_env.pop("DISK_TEST_PAUSE_AFTER_ASSEMBLY_UPLOAD_ID", None)
         peer_env.pop("DISK_TEST_PAUSE_AFTER_FINALIZE_COMMIT_UPLOAD_ID", None)
@@ -315,6 +322,19 @@ def peer_api_instance(
                 "DISK_INSTANCE_ID": instance_id,
             }
         )
+        if pause_after_chunk_write_upload_id is not None:
+            assert chunk_write_release_file is not None
+            peer_env.update(
+                {
+                    "DISK_TEST_FAULT_INJECTION": "1",
+                    "DISK_TEST_PAUSE_AFTER_CHUNK_WRITE_UPLOAD_ID": str(
+                        uuid.UUID(pause_after_chunk_write_upload_id)
+                    ),
+                    "DISK_TEST_CHUNK_WRITE_RELEASE_FILE": str(
+                        chunk_write_release_file
+                    ),
+                }
+            )
         if pause_after_claim_upload_id is not None:
             peer_env.update(
                 {
@@ -5221,6 +5241,286 @@ def test_missing_staging_object_records_reconciliation() -> None:
             cleanup_failed_finalize_fixture(upload_id, final_blob_path(sha256_bytes(payload)))
 
 
+def test_inflight_chunk_terminal_race_invariants() -> None:
+    """Pause after a chunk object write and let each terminal transaction win."""
+    log_section("In-Flight Chunk Versus Terminal Transition Invariants")
+    redis_delete_pattern(f"rate:upload:{USER_ID}:*")
+
+    def wait_for_chunk_pause(log_path: Path, upload_id: str) -> None:
+        marker = "Test fault injection paused upload after chunk object write"
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if log_path.is_file():
+                log_text = log_path.read_text(encoding="utf-8", errors="replace")
+                if marker in log_text and upload_id in log_text:
+                    log_pass(f"{upload_id}: peer pauses after the chunk object write")
+                    return
+            time.sleep(0.05)
+        log_fail(f"{upload_id}: peer reaches the chunk-write fault pause")
+        print_summary()
+
+    for action, expected_status in (("complete", 1), ("cancel", 2), ("expire", 3)):
+        payload = f"safety-inflight-chunk-{action}-{unique_name()}".encode()
+        filename = f"safety_inflight_chunk_{action}_{unique_name()}.bin"
+        payload_md5 = md5_bytes(payload)
+        payload_sha256 = sha256_bytes(payload)
+        quota_before = user_quota()
+        upload_id, file_hash = init_upload(filename, payload)
+        assert_equal(f"{action} race fixture preserves the MD5 contract", file_hash, payload_md5)
+        quota_after_init = user_quota()
+        assert_numeric_delta(
+            f"{action} race fixture reserves storage once",
+            quota_before["storage_reserved"],
+            quota_after_init["storage_reserved"],
+            len(payload),
+        )
+
+        expected_chunks_before_terminal = 0
+        if action == "complete":
+            upload_single_chunk(upload_id, payload)
+            expected_chunks_before_terminal = 1
+        assert_chunk_row_count(upload_id, expected_chunks_before_terminal)
+
+        chunk_path = (
+            upload_temp_dir(upload_id)
+            / "chunks"
+            / f"0-{payload_md5}.part"
+        )
+        final_path = final_blob_path(payload_sha256)
+        assert_path_absent(f"{action} race fixture starts without a final blob", final_path)
+
+        purpose = f"chunk-{action}"
+        peer_log_path = EVIDENCE_ROOT / f"safety-upload-{purpose}.log"
+        peer_log_path.unlink(missing_ok=True)
+        with tempfile.TemporaryDirectory(prefix=f"disk-chunk-{action}-race-") as temp_dir_raw:
+            release_file = Path(temp_dir_raw) / "release-chunk-write"
+            with peer_api_instance(
+                purpose=purpose,
+                pause_after_chunk_write_upload_id=upload_id,
+                chunk_write_release_file=release_file,
+            ) as (peer_url, peer_instance_id, _peer_process):
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    chunk_future = executor.submit(
+                        fetch,
+                        f"{peer_url}/api/file/upload/chunk?upload_id={upload_id}"
+                        f"&chunk_index=0&chunk_hash={payload_md5}",
+                        method="POST",
+                        headers=auth_headers(TOKEN, "application/octet-stream"),
+                        data=payload,
+                        timeout=120,
+                    )
+                    try:
+                        wait_for_chunk_pause(peer_log_path, upload_id)
+                        assert_path_exists(
+                            f"{action} race persists the chunk object before the pause",
+                            chunk_path,
+                        )
+                        assert_chunk_row_count(upload_id, expected_chunks_before_terminal)
+                        assert_upload_task(upload_id, 0)
+                        quota_balance_before_terminal = user_quota_balance()
+
+                        completed_file_id = None
+                        if action == "complete":
+                            terminal_response = complete_upload_raw(
+                                upload_id,
+                                f"inflight-chunk-complete-{unique_name()}",
+                            )
+                            completed_file_id = json_field(
+                                terminal_response.text,
+                                "data.file.id",
+                            )
+                            assert_equal(
+                                "complete wins while the duplicate chunk is paused",
+                                terminal_response.status_code == 200
+                                and json_field(terminal_response.text, "code") == "0"
+                                and bool(completed_file_id),
+                                True,
+                            )
+                        elif action == "cancel":
+                            terminal_response = cancel_upload_raw(
+                                upload_id,
+                                f"inflight-chunk-cancel-{unique_name()}",
+                            )
+                            assert_equal(
+                                "cancel wins while the new chunk is paused",
+                                terminal_response.status_code == 200
+                                and json_field(terminal_response.text, "code") == "0",
+                                True,
+                            )
+                        else:
+                            affected = execute(
+                                "UPDATE upload_tasks SET expires_at = NOW() - INTERVAL '1 second' "
+                                "WHERE id = %s AND user_id = %s AND status = 0",
+                                (upload_id, USER_ID),
+                            )
+                            assert_equal(
+                                "expire race fixture crosses the PostgreSQL deadline",
+                                affected,
+                                1,
+                            )
+                            cleanup_counts = run_expired_cleanup(
+                                f"inflight-chunk-expire-{unique_name()}"
+                            )
+                            assert_equal(
+                                "expire wins while the new chunk is paused",
+                                cleanup_counts["expired_upload_tasks_cleaned"] >= 1,
+                                True,
+                            )
+
+                        terminal_task = assert_upload_task(upload_id, expected_status)
+                        terminal_snapshot = {
+                            key: terminal_task[key]
+                            for key in (
+                                "status",
+                                "state_version",
+                                "finalized_at",
+                                "completed_file_id",
+                                "lease_owner",
+                                "lease_expires_at",
+                                "finalize_attempts",
+                                "reserved_bytes",
+                                "last_error_code",
+                                "last_error_at",
+                            )
+                        }
+                    finally:
+                        release_file.touch()
+
+                    late_chunk_response = chunk_future.result(timeout=30)
+
+                assert_equal(
+                    f"{action} winner rejects the late chunk with HTTP 409",
+                    late_chunk_response.status_code,
+                    409,
+                )
+                assert_equal(
+                    f"{action} winner returns ResourceConflict to the late chunk",
+                    json_field(late_chunk_response.text, "code"),
+                    "10004",
+                )
+                assert_equal(
+                    f"{action} late chunk response comes from the paused peer",
+                    header_value(late_chunk_response.headers, "X-Disk-Instance-Id"),
+                    peer_instance_id,
+                )
+
+        replayed_task = assert_upload_task(upload_id, expected_status)
+        assert_equal(
+            f"{action} winner fences the late chunk from changing task state",
+            {
+                key: replayed_task[key]
+                for key in terminal_snapshot
+            },
+            terminal_snapshot,
+        )
+        assert_chunk_row_count(upload_id, 0)
+        assert_equal(
+            f"{action} race creates one staging cleanup job",
+            int(
+                scalar(
+                    "SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s",
+                    (f"staging-cleanup:{upload_id}",),
+                )
+                or 0
+            ),
+            1,
+        )
+        assert_storage_job_succeeded(
+            f"{action} race staging cleanup converges",
+            f"staging-cleanup:{upload_id}",
+        )
+        assert_path_absent(f"{action} race removes the staging session", upload_temp_dir(upload_id))
+
+        quota_after_race = user_quota()
+        quota_balance_after_race = user_quota_balance()
+        assert_equal(
+            f"{action} race preserves the authoritative reservation residual",
+            quota_balance_after_race["reservation_residual"],
+            quota_balance_before_terminal["reservation_residual"],
+        )
+        if action == "expire":
+            assert_equal(
+                "expire/chunk race keeps reserved storage nonnegative",
+                quota_after_race["storage_reserved"] >= 0,
+                True,
+            )
+        else:
+            assert_equal(
+                f"{action} race settles reserved storage once",
+                quota_after_race["storage_reserved"],
+                quota_before["storage_reserved"],
+            )
+        expected_used = quota_before["storage_used"] + (
+            len(payload) if action == "complete" else 0
+        )
+        assert_equal(
+            f"{action} race settles used storage once",
+            quota_after_race["storage_used"],
+            expected_used,
+        )
+
+        file_row = query_one(
+            "SELECT file.id, content.ref_count, content.hash_md5, content.hash_sha256 "
+            "FROM files AS file JOIN file_contents AS content ON content.id = file.content_id "
+            "WHERE file.user_id = %s AND file.name = %s",
+            (USER_ID, filename),
+        )
+        content_count = int(
+            scalar(
+                "SELECT COUNT(*) FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+                (payload_md5, payload_sha256),
+            )
+            or 0
+        )
+        if action == "complete":
+            if file_row is None:
+                log_fail("complete/chunk race creates its logical file")
+                print_summary()
+            assert_equal(
+                "complete/chunk race returns the persisted file",
+                int(file_row["id"]),
+                int(completed_file_id),
+            )
+            assert_equal("complete/chunk race creates one content row", content_count, 1)
+            assert_equal(
+                "complete/chunk race increments the content reference once",
+                int(file_row["ref_count"]),
+                1,
+            )
+            assert_path_exists("complete/chunk race preserves the final blob", final_path)
+        else:
+            assert_equal(f"{action}/chunk race creates no logical file", file_row, None)
+            assert_equal(f"{action}/chunk race creates no content row", content_count, 0)
+            assert_path_absent(f"{action}/chunk race creates no final blob", final_path)
+
+        save_evidence(
+            f"{EVIDENCE_PREFIX}-{upload_id}-inflight-chunk-{action}.json",
+            json.dumps(
+                {
+                    "action": action,
+                    "upload_id": upload_id,
+                    "terminal_status": expected_status,
+                    "state_version": int(replayed_task["state_version"]),
+                    "late_chunk_http_status": late_chunk_response.status_code,
+                    "late_chunk_code": json_field(late_chunk_response.text, "code"),
+                    "storage_used_before": quota_before["storage_used"],
+                    "storage_used_after": quota_after_race["storage_used"],
+                    "storage_reserved_before": quota_before["storage_reserved"],
+                    "storage_reserved_after": quota_after_race["storage_reserved"],
+                    "reservation_residual_before_terminal": quota_balance_before_terminal[
+                        "reservation_residual"
+                    ],
+                    "reservation_residual_after": quota_balance_after_race[
+                        "reservation_residual"
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
+
+
 def test_complete_cancel_expire_race_invariants() -> None:
     """Verify concurrent terminal contenders settle quota and metadata exactly once."""
     log_section("Complete/Cancel/Expire Race Invariants")
@@ -5806,6 +6106,7 @@ def main() -> None:
     test_db_failure_after_blob_promotion_retains_created_blob()
     test_db_failure_after_promotion_preserves_preexisting_blob()
     test_missing_staging_object_records_reconciliation()
+    test_inflight_chunk_terminal_race_invariants()
     test_complete_cancel_expire_race_invariants()
     test_cancel_upload_invariants()
     test_expired_upload_cleanup_invariants()
