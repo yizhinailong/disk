@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -22,6 +23,11 @@ from typing import Any
 
 class TestFailure(RuntimeError):
     """Raised when an application-flow invariant fails."""
+
+
+MULTIPART_COPY_PART_BYTES = 5 * 1024 * 1024
+LARGE_PROMOTION_BYTES = MULTIPART_COPY_PART_BYTES + 17
+MAX_PROMOTION_RSS_GROWTH_BYTES = 48 * 1024 * 1024
 
 
 def require(condition: bool, message: str) -> None:
@@ -54,6 +60,29 @@ def require_response_context(
         response.headers.get("x-disk-instance-id") == instance_id,
         f"{label} identifies the handling instance",
     )
+
+
+def process_rss_bytes(pid: int) -> int:
+    try:
+        fields = Path(f"/proc/{pid}/statm").read_text(encoding="utf-8").split()
+        return int(fields[1]) * int(os.sysconf("SC_PAGE_SIZE"))
+    except (FileNotFoundError, IndexError, OSError, ValueError) as exc:
+        raise TestFailure("API RSS sample is unavailable") from exc
+
+
+def write_evidence(path: Path, evidence: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+    )
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        os.fchmod(handle.fileno(), 0o600)
+        json.dump(evidence, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary_name, path)
 
 
 def application_records(log_path: Path) -> list[dict[str, Any]]:
@@ -212,17 +241,34 @@ def main() -> int:
     instance_id = f"s3-app-{run_id}"
     request_ids = {
         "init": f"s3-app-init-{run_id}",
-        "chunk": f"s3-app-chunk-{run_id}",
         "complete": f"s3-app-complete-{run_id}",
         "full": f"s3-app-download-full-{run_id}",
         "range": f"s3-app-download-range-{run_id}",
     }
+    chunk_request_ids = [
+        f"s3-app-chunk-{chunk_index}-{run_id}" for chunk_index in range(2)
+    ]
     object_prefix = f"objects/app-{run_id}"
     staging_prefix = f"staging/app-{run_id}"
-    payload = (f"disk-s3-app-flow-{run_id}-".encode() + bytes(range(256))) * 64
+    payload_seed = f"disk-s3-app-flow-{run_id}-".encode() + bytes(range(256))
+    payload = (
+        payload_seed * ((LARGE_PROMOTION_BYTES + len(payload_seed) - 1) // len(payload_seed))
+    )[:LARGE_PROMOTION_BYTES]
+    chunks = [payload[:MULTIPART_COPY_PART_BYTES], payload[MULTIPART_COPY_PART_BYTES:]]
     payload_hash = hashlib.md5(payload).hexdigest()
     payload_sha256 = hashlib.sha256(payload).hexdigest()
     filename = f"s3_app_{run_id}.bin"
+    evidence_path = repo_root / ".sisyphus/evidence/s3-large-promotion-summary.json"
+    promotion_evidence: dict[str, Any] = {
+        "schema_version": 1,
+        "scenario": "s3_large_multipart_copy_promotion",
+        "payload_size_bytes": len(payload),
+        "multipart_copy_part_bytes": MULTIPART_COPY_PART_BYTES,
+        "expected_copy_parts": len(chunks),
+        "rss_growth_limit_bytes": MAX_PROMOTION_RSS_GROWTH_BYTES,
+        "passed": False,
+    }
+    write_evidence(evidence_path, promotion_evidence)
 
     s3_client = boto3.client(
         "s3",
@@ -417,19 +463,38 @@ def main() -> int:
                 upload_id = str(init_payload["data"]["upload_id"])
                 primary_upload_id = upload_id
 
-                chunk = http.post(
-                    "/api/file/upload/chunk",
-                    params={"upload_id": upload_id, "chunk_index": 0, "chunk_hash": payload_hash},
-                    headers={
-                        **auth_headers,
-                        "Content-Type": "application/octet-stream",
-                        "X-Request-Id": request_ids["chunk"],
-                    },
-                    content=payload,
-                )
-                chunk_payload = require_envelope(chunk, 200, "upload chunk")
-                require_response_context(chunk, request_ids["chunk"], instance_id, "upload chunk")
-                require(chunk_payload["data"]["uploaded"] is True, "upload chunk succeeds")
+                for chunk_index, (chunk_content, chunk_request_id) in enumerate(
+                    zip(chunks, chunk_request_ids, strict=True)
+                ):
+                    chunk = http.post(
+                        "/api/file/upload/chunk",
+                        params={
+                            "upload_id": upload_id,
+                            "chunk_index": chunk_index,
+                            "chunk_hash": hashlib.md5(chunk_content).hexdigest(),
+                        },
+                        headers={
+                            **auth_headers,
+                            "Content-Type": "application/octet-stream",
+                            "X-Request-Id": chunk_request_id,
+                        },
+                        content=chunk_content,
+                    )
+                    chunk_payload = require_envelope(
+                        chunk,
+                        200,
+                        f"upload chunk {chunk_index}",
+                    )
+                    require_response_context(
+                        chunk,
+                        chunk_request_id,
+                        instance_id,
+                        f"upload chunk {chunk_index}",
+                    )
+                    require(
+                        chunk_payload["data"]["uploaded"] is True,
+                        f"upload chunk {chunk_index} succeeds",
+                    )
                 require(
                     not (temp_dir / "staging" / upload_id).exists(),
                     "S3-native chunk upload creates no node-local session directory",
@@ -449,20 +514,67 @@ def main() -> int:
                     bucket,
                     f"{staging_prefix}/{upload_id}/",
                 )
-                require(len(staged_keys) == 1 and "/chunks/0-" in staged_keys[0], "chunk is stored in S3 staging")
-                chunk_row = query_one(
-                    "SELECT object_key FROM upload_task_chunks WHERE task_id = %s AND chunk_index = 0",
-                    (upload_id,),
-                )
                 require(
-                    chunk_row is not None and chunk_row["object_key"] == staged_keys[0],
-                    "PostgreSQL chunk descriptor identifies the S3 staging object",
+                    len(staged_keys) == len(chunks)
+                    and all(
+                        any(f"/chunks/{chunk_index}-" in key for key in staged_keys)
+                        for chunk_index in range(len(chunks))
+                    ),
+                    "both chunks are stored in S3 staging",
                 )
+                for chunk_index in range(len(chunks)):
+                    chunk_row = query_one(
+                        "SELECT object_key FROM upload_task_chunks "
+                        "WHERE task_id = %s AND chunk_index = %s",
+                        (upload_id, chunk_index),
+                    )
+                    require(
+                        chunk_row is not None
+                        and chunk_row["object_key"] in staged_keys
+                        and f"/chunks/{chunk_index}-" in str(chunk_row["object_key"]),
+                        f"PostgreSQL chunk {chunk_index} descriptor identifies its S3 object",
+                    )
 
-                complete = http.post(
-                    "/api/file/upload/complete",
-                    headers={**auth_headers, "X-Request-Id": request_ids["complete"]},
-                    json={"upload_id": upload_id},
+                require(server is not None and server.poll() is None, "Disk server remains running before completion")
+                rss_start_bytes = process_rss_bytes(server.pid)
+                rss_samples = [rss_start_bytes]
+                rss_sampler_stop = threading.Event()
+
+                def sample_completion_rss() -> None:
+                    while not rss_sampler_stop.wait(0.005):
+                        rss_samples.append(process_rss_bytes(server.pid))
+
+                rss_sampler = threading.Thread(
+                    target=sample_completion_rss,
+                    name="s3-promotion-rss-sampler",
+                    daemon=True,
+                )
+                rss_sampler.start()
+                try:
+                    complete = http.post(
+                        "/api/file/upload/complete",
+                        headers={**auth_headers, "X-Request-Id": request_ids["complete"]},
+                        json={"upload_id": upload_id},
+                    )
+                finally:
+                    rss_sampler_stop.set()
+                    rss_sampler.join(timeout=2)
+                    rss_samples.append(process_rss_bytes(server.pid))
+                rss_peak_bytes = max(rss_samples)
+                rss_growth_bytes = max(0, rss_peak_bytes - rss_start_bytes)
+                promotion_evidence.update(
+                    {
+                        "rss_start_bytes": rss_start_bytes,
+                        "rss_peak_bytes": rss_peak_bytes,
+                        "rss_growth_bytes": rss_growth_bytes,
+                        "rss_sample_count": len(rss_samples),
+                    }
+                )
+                write_evidence(evidence_path, promotion_evidence)
+                require(
+                    rss_growth_bytes <= MAX_PROMOTION_RSS_GROWTH_BYTES,
+                    "large S3 completion keeps API RSS growth within 48 MiB "
+                    f"(observed {rss_growth_bytes} bytes)",
                 )
                 complete_payload = require_envelope(complete, 200, "upload complete")
                 require_response_context(
@@ -558,37 +670,38 @@ def main() -> int:
                     )
                     and str(record.get("message", "")).startswith("Upload task created successfully:"),
                 )
-                wait_for_application_record(
-                    log_path,
-                    "upload chunk log retains request and upload correlation",
-                    lambda record: has_context(
-                        record,
-                        request_id=request_ids["chunk"],
-                        instance_id=instance_id,
-                        operation="upload_chunk",
-                        upload_id=upload_id,
-                        job_id=None,
-                        lease_owner=None,
-                        state_version=None,
+                for chunk_index, chunk_request_id in enumerate(chunk_request_ids):
+                    wait_for_application_record(
+                        log_path,
+                        f"upload chunk {chunk_index} log retains request and upload correlation",
+                        lambda record, chunk_request_id=chunk_request_id: has_context(
+                            record,
+                            request_id=chunk_request_id,
+                            instance_id=instance_id,
+                            operation="upload_chunk",
+                            upload_id=upload_id,
+                            job_id=None,
+                            lease_owner=None,
+                            state_version=None,
+                        )
+                        and str(record.get("message", "")).startswith("Chunk upload successful:"),
                     )
-                    and str(record.get("message", "")).startswith("Chunk upload successful:"),
-                )
-                wait_for_application_record(
-                    log_path,
-                    "S3 chunk write retains API correlation across the blocking queue",
-                    lambda record: has_context(
-                        record,
-                        request_id=request_ids["chunk"],
-                        instance_id=instance_id,
-                        operation="upload_chunk",
-                        upload_id=upload_id,
-                        job_id=None,
-                        lease_owner=None,
-                        state_version=None,
+                    wait_for_application_record(
+                        log_path,
+                        f"S3 chunk {chunk_index} write retains API correlation across the blocking queue",
+                        lambda record, chunk_request_id=chunk_request_id: has_context(
+                            record,
+                            request_id=chunk_request_id,
+                            instance_id=instance_id,
+                            operation="upload_chunk",
+                            upload_id=upload_id,
+                            job_id=None,
+                            lease_owner=None,
+                            state_version=None,
+                        )
+                        and record.get("message")
+                        == "S3 SDK call result: sdk_operation=put_object, outcome=success",
                     )
-                    and record.get("message")
-                    == "S3 SDK call result: sdk_operation=put_object, outcome=success",
-                )
                 wait_for_application_record(
                     log_path,
                     "upload completion log uses the committed state version and cleared lease",
@@ -617,6 +730,34 @@ def main() -> int:
                     and 0 < int(record["state_version"]) < completed_version
                     and record.get("message")
                     == "S3 SDK call result: sdk_operation=complete_multipart_upload, outcome=success",
+                )
+                promotion_copy_records = [
+                    record
+                    for record in application_records(log_path)
+                    if record.get("request_id") == request_ids["complete"]
+                    and record.get("instance_id") == instance_id
+                    and record.get("operation") == "upload_complete"
+                    and record.get("upload_id") == upload_id
+                    and record.get("lease_owner") == instance_id
+                    and record.get("message")
+                    == "S3 SDK call result: sdk_operation=upload_part_copy, outcome=success"
+                ]
+                require(
+                    len(promotion_copy_records) == len(chunks),
+                    "large S3 promotion uses exactly two server-side copy parts",
+                )
+                promotion_evidence.update(
+                    {
+                        "observed_copy_parts": len(promotion_copy_records),
+                        "final_size_bytes": int(head["ContentLength"]),
+                        "final_sha256_verified": hashlib.sha256(full.content).hexdigest()
+                        == payload_sha256,
+                        "full_download_verified": full.content == payload,
+                        "range_download_verified": partial.content == payload[7:32],
+                        "rss_start_bytes": rss_start_bytes,
+                        "rss_peak_bytes": rss_peak_bytes,
+                        "rss_growth_bytes": rss_growth_bytes,
+                    }
                 )
                 for request_name, label in (("full", "full"), ("range", "range")):
                     wait_for_application_record(
@@ -797,6 +938,8 @@ def main() -> int:
                     "recovery fixture restores reserved quota",
                 )
 
+            promotion_evidence["passed"] = True
+            write_evidence(evidence_path, promotion_evidence)
             print("PASS: Disk S3-native upload/download/delete/recovery flow succeeded")
             return 0
         except Exception as exc:

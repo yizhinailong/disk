@@ -189,6 +189,12 @@ def main() -> int:
         and "清空节点本地目录后的共享 Blob 下载" in system_test_plan,
         "system test plan is missing the node-local cleanup download gate",
     )
+    require(
+        "S3-PROMOTE-001" in system_test_plan
+        and "`5 MiB + 17 B`" in system_test_plan
+        and "`48 MiB`" in system_test_plan,
+        "system test plan is missing the bounded large S3 promotion gate",
+    )
 
     operations_guide = (root / "docs/design/05-部署运维指南.md").read_text(
         encoding="utf-8"
@@ -930,6 +936,9 @@ def main() -> int:
     distributed_local_source = (root / "test/integration/test_distributed_local.py").read_text(
         encoding="utf-8"
     )
+    s3_app_flow_source = (root / "test/integration/test_s3_app_flow.py").read_text(
+        encoding="utf-8"
+    )
     for marker in (
         "clear_api_local_storage(service)",
         "api_local_storage_is_empty(service)",
@@ -945,6 +954,14 @@ def main() -> int:
         "shutil.rmtree(directory, ignore_errors=True)",
     ):
         require(marker in distributed_local_source, f"local distributed runner is missing {marker}")
+    for marker in (
+        "LARGE_PROMOTION_BYTES = MULTIPART_COPY_PART_BYTES + 17",
+        "MAX_PROMOTION_RSS_GROWTH_BYTES = 48 * 1024 * 1024",
+        "sdk_operation=upload_part_copy, outcome=success",
+        "s3-large-promotion-summary.json",
+        "os.fchmod(handle.fileno(), 0o600)",
+    ):
+        require(marker in s3_app_flow_source, f"S3 application flow is missing {marker}")
 
     transaction_pool_sources = []
     for source_root in (root / "src", root / "scripts", root / "sql"):

@@ -49,6 +49,10 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** an S3-native upload completes and the test removes each API instance's local Blob and temporary-upload directories while leaving Drogon's HTTP request-spooling directory under framework ownership
 - **THEN** both API instances SHALL independently return the complete object and a byte range from the shared final key without recreating or reading node-local business data
 
+#### Scenario: Large S3 promotion remains bounded
+- **WHEN** a real MinIO application flow assembles and promotes a `5 MiB + 17 B` object from two S3 staging chunks
+- **THEN** the flow SHALL observe exactly two successful server-side multipart-copy parts, verify the final size, hash, full download, and Range download, and prove API RSS grows by no more than `48 MiB` during completion without treating that local regression bound as a production capacity result
+
 #### Scenario: Shared-user reservations change during a fault wait
 - **WHEN** a lease-expiry fault scenario waits long enough for an unrelated upload owned by the same test user to expire or settle
 - **THEN** validation SHALL prove the target task's single settlement from its terminal state and persisted accounting fields, and in one database snapshot SHALL calculate the residual between current reserved quota and all Pending and Finalizing task reservations and prove that residual is unchanged from the pre-fault snapshot instead of comparing stale aggregate totals or attributing a pre-existing shared-fixture residual to the target task

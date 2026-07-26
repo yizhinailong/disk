@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-26，本轮 Phase 3 节点本地目录独立性）：完整构建无增量工作，固定 MinIO 驱动的隔离本地双 API/双 Worker 分布式流程 1/1 通过（133.40 秒、18 项检查），A/B 在各自 `storage_base_path`、`temp_upload_path` 删除重建后均从同一 S3 final key 完成全量 200 与 Range 206 下载，后续 S3-native 分片继续跨实例成功；分布式拓扑合同 1/1 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 505.83 秒；OpenSpec 严格校验 24/24 通过。该证据关闭本机 Phase 3 的共享 Blob 读取和业务暂存目录独立性，不把 Drogon 管理请求体的 `app.upload_path` 误当作业务状态；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前主机没有 Kubernetes API Server、Nginx、Docker 或其他容器运行时，因此目标环境仍须执行实际 TTL 后独立小时扫描、V005 设计审批、明确退役日期、镜像构建、服务端 dry-run、真实滚动/扩缩容、双 API 随机路由和依赖故障演练。
+> 最近验证（2026-07-26，本轮 Phase 3 大对象 multipart copy）：固定 MinIO 驱动的 `S3AppFlowIntegration` 1/1 通过（10.99 秒），两个 staging 分片组装 `5 MiB + 17 B` 对象并精确产生 2 次成功 `upload_part_copy`；final 大小、SHA-256、完整/Range 下载均正确，complete 期间 API RSS 增量为 38,334,464 字节，低于 48 MiB 本机回归上界。`0600` 原子证据 SHA-256 为 `8e8d8c3c33ab9dc72a2bdaf7da1d62794eeab9b6085f4deed9d32f4cbe492981`；C++ multipart/promotion 聚焦测试 6/6、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 511.50 秒。该证据关闭本机 Phase 3 的大对象组装/提升与内存上界验收；严格逐请求轮询、对象故障工件收敛仍未完成，环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、独立故障域或生产 RTO/RPO 验收。
 
 ## 1. 目标与范围
 
@@ -258,7 +258,7 @@ API Instance A  API Instance B ... N
 
 - [ ] 初始化、所有分片和完成请求逐次轮询到不同实例仍能成功。
 - [x] API 节点删除本地 `temp_upload_path` 后，S3 暂存流程不受影响。
-- [ ] 大于单次 copy 限制的文件可完成组装/提升，内存占用保持有界。
+- [x] 大于单次 copy 限制的文件可完成组装/提升，内存占用保持有界。
 - [ ] 对象存储故障不会留下无法识别或无法清理的 multipart/staging 工件。
 
 ## 9. Phase 4：Worker、调度与故障恢复
@@ -1450,6 +1450,12 @@ OpenSpec 与系统测试计划先行新增 `DIST-UPLOAD-005`：一个 S3-native 
 探索性运行曾清理 Drogon `app.upload_path`，虽然清理后的双 API 下载均成功，但下一次 1 MiB 分片被框架报告为缺少请求体；即使保留目录 inode，仅删除其中临时文件也会复现。该结果确认 `app.upload_path` 是 Drogon 管理大请求体的传输层 scratch，不能在活跃进程中由业务暂存门禁清理。最终合同把它留给框架管理，只删除真正需要证明无业务依赖的 local Blob 与 `temp_upload_path`，随后同一流程的随机路由上传继续跨 A/B 完成。
 
 固定 MinIO 驱动的 `DistributedLocalFlowIntegration` 1/1 通过（133.40 秒），18 项检查包括 A/B 各自完整下载 200、Range 下载 206、实例响应头和目录保持为空；随机入口后续两次分片尝试命中 A/B，任务、文件、内容引用、配额与 final 对象继续唯一。证据 `.sisyphus/evidence/distributed-flow-summary.json` 的 SHA-256 为 `01660961fba551e66ff278566bade07276f6f1d7cd7e79bc905e726a3dc213e9`，受管进程与临时拓扑已清理。Python 语法、完整构建无增量工作、拓扑合同 1/1、完整 CTest 1451 通过/7 跳过/0 失败（505.83 秒）和 OpenSpec 24/24 均通过。因此 Phase 3 的双 API 共享 Blob 读取与删除 `temp_upload_path` 后 S3 暂存两项完成；严格逐请求轮询、大对象真实 MinIO、对象故障工件收敛及目标环境门禁继续保持未勾选。
+
+### 15.17 大对象 multipart copy 与内存上界验收记录（2026-07-26）
+
+OpenSpec 与系统测试计划先行固定 `S3-PROMOTE-001`：真实 MinIO 应用流必须从两个 staging 分片组装 `5 MiB + 17 B` 对象，观察精确 2 次成功的服务端 multipart copy，校验 final 大小/hash、完整/Range 下载，并把 completion 期间 API RSS 增量限制在 48 MiB 本机回归上界内。初始 32 MiB 阈值低于两次真实运行约 36.4 MiB 的峰值增量，因此按实测基线留出回归余量，不把该数值宣称为生产容量。
+
+固定 MinIO 驱动的 `S3AppFlowIntegration` 1/1 通过（10.99 秒），实测 RSS 起始/峰值/增量为 48,390,144 / 86,724,608 / 38,334,464 字节，final 对象大小为 5,242,897 字节。`0600` 原子证据 `.sisyphus/evidence/s3-large-promotion-summary.json` 的 SHA-256 为 `8e8d8c3c33ab9dc72a2bdaf7da1d62794eeab9b6085f4deed9d32f4cbe492981`；C++ multipart/promotion 聚焦测试 6/6、拓扑合同 1/1、OpenSpec 24/24 和完整 CTest 1451 通过/7 环境门控跳过/0 失败（511.50 秒）均通过。因此 Phase 3 大对象组装/提升与内存上界项已完成；严格逐请求轮询、对象故障 multipart/staging 工件收敛、目标环境 HA 及最终 DoD 仍保持未勾选。
 
 ## 16. 最终 Definition of Done
 
