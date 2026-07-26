@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -107,6 +109,49 @@ def main() -> int:
         "共享 S3/MinIO 暂存和持久孤儿清理仍待实现" not in api_contract,
         "API contract regressed to the obsolete staging implementation status",
     )
+
+    minio_bootstrap = root / "scripts/fetch-minio-test-binaries.sh"
+    minio_bootstrap_source = minio_bootstrap.read_text(encoding="utf-8")
+    require(
+        minio_bootstrap.stat().st_mode & 0o111 != 0,
+        "MinIO test bootstrap is not executable",
+    )
+    for marker in (
+        'MINIO_RELEASE="RELEASE.2025-04-22T22-12-26Z"',
+        "https://dl.min.io/server/minio/release/linux-amd64/archive/minio.${MINIO_RELEASE}",
+        "53e2a2cb16c5366ea6fbbc479c19ddb4c6a0948273e752f740fb1fbf27bb817c",
+        'MC_RELEASE="RELEASE.2025-04-16T18-13-26Z"',
+        "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.${MC_RELEASE}",
+        "ac90da87a35641be5a0ac75d49de5161ddb47d629b5ba01261b0ae9e00aea15f",
+        "--proto '=https'",
+        "only the reviewed linux-amd64 binaries are supported",
+        "refusing to overwrite it",
+        'if ! ln "$TEMP_PATH" "$prepare_destination"',
+    ):
+        require(marker in minio_bootstrap_source, f"MinIO bootstrap is missing {marker}")
+    require(
+        "/release/linux-amd64/minio\"" not in minio_bootstrap_source
+        and "/release/linux-amd64/mc\"" not in minio_bootstrap_source,
+        "MinIO bootstrap uses an unversioned latest binary URL",
+    )
+    with tempfile.TemporaryDirectory(prefix="disk-minio-bootstrap-contract-") as temporary:
+        output_directory = Path(temporary)
+        mismatched_minio = output_directory / "minio"
+        original_bytes = b"not-the-reviewed-minio-binary"
+        mismatched_minio.write_bytes(original_bytes)
+        rejected = subprocess.run(
+            [str(minio_bootstrap), str(output_directory)],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        require(rejected.returncode != 0, "MinIO bootstrap accepted a mismatched existing file")
+        require(
+            mismatched_minio.read_bytes() == original_bytes
+            and not (output_directory / "mc").exists(),
+            "MinIO bootstrap changed output after rejecting a mismatched file",
+        )
 
     decision_record = (root / "docs/backend-refactor-decisions.md").read_text(
         encoding="utf-8"

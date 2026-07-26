@@ -33,6 +33,10 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** Docker is unavailable and `DISK_DISTRIBUTED_LOCAL_INTEGRATION=1` selects the local entry with an executable `DISK_MINIO_BIN`
 - **THEN** the runner SHALL start isolated real dependencies and four application processes, execute the unchanged distributed-flow assertions, preserve evidence, and tear down its temporary topology
 
+#### Scenario: Fixed MinIO test dependencies are prepared
+- **WHEN** a Linux amd64 developer explicitly asks the repository helper to prepare the reviewed MinIO server and client in a chosen output directory
+- **THEN** the helper SHALL fetch only the pinned official HTTPS archive URLs, verify each hard-coded SHA-256 before making or atomically publishing an executable, reuse only an existing file with the exact reviewed digest, and reject an existing mismatch without overwriting it
+
 #### Scenario: Distributed flow gate is not selected
 - **WHEN** either distributed entry is invoked without its required environment gate
 - **THEN** it SHALL report an environment-gated skip that SHALL NOT count as distributed acceptance evidence
