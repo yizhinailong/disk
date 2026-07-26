@@ -19,6 +19,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -277,11 +278,20 @@ def main(
     routed_md5 = hashlib.md5(routed_content).hexdigest()
     routed_sha256 = hashlib.sha256(routed_content).hexdigest()
     routed_object_key = f"objects/sha256/{routed_sha256[:2]}/{routed_sha256}.bin"
+    strict_filename = f"distributed_strict_alternating_{run_id}.bin"
+    strict_prefix = f"disk-strict-alternating-{run_id}:".encode()
+    strict_first_chunk = (strict_prefix + b"S" * 5_242_880)[:5_242_880]
+    strict_second_chunk = b"strict-alternating-tail:" + run_id.encode()
+    strict_content = strict_first_chunk + strict_second_chunk
+    strict_md5 = hashlib.md5(strict_content).hexdigest()
+    strict_sha256 = hashlib.sha256(strict_content).hexdigest()
+    strict_object_key = f"objects/sha256/{strict_sha256[:2]}/{strict_sha256}.bin"
     access_token = ""
     refresh_token = ""
     user_id = 0
     file_id = 0
     routed_file_id = 0
+    strict_file_id = 0
     race_upload_ids: list[str] = []
     race_file_ids: list[int] = []
     race_object_keys: list[str] = []
@@ -299,7 +309,21 @@ def main(
 
     def write_evidence() -> None:
         evidence_path.parent.mkdir(parents=True, exist_ok=True)
-        evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=evidence_path.parent,
+            prefix=f".{evidence_path.name}.",
+        )
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                os.fchmod(handle.fileno(), 0o600)
+                json.dump(evidence, handle, indent=2)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_name, evidence_path)
+        except Exception:
+            Path(temporary_name).unlink(missing_ok=True)
+            raise
 
     def passed(name: str) -> None:
         evidence["checks"].append(name)
@@ -318,6 +342,7 @@ def main(
             minio_url,
             object_key,
             routed_object_key,
+            strict_object_key,
             access_token,
             refresh_token,
         )
@@ -626,6 +651,171 @@ def main(
                 }
             evidence["shared_blob_downloads_after_local_cleanup"] = shared_blob_downloads
             passed("both APIs download one shared blob after clearing node-local storage")
+
+            strict_quota_before = query_one(
+                "SELECT storage_used, storage_reserved FROM users WHERE id = %s",
+                (user_id,),
+            )
+            require(strict_quota_before is not None, "strict alternating upload quota baseline is missing")
+            strict_route_sequence: list[str] = []
+            expected_strict_route_sequence = [
+                "disk-api-a",
+                "disk-api-b",
+                "disk-api-a",
+                "disk-api-b",
+            ]
+
+            def strict_instance(response: Any, expected: str, label: str) -> str:
+                instance_id = response.headers.get("X-Disk-Instance-Id")
+                require(instance_id == expected, f"{label} ran on {instance_id}, expected {expected}")
+                return str(instance_id)
+
+            strict_init = http.post(
+                f"{api_a_url}/api/file/upload/init",
+                headers=auth,
+                json={
+                    "filename": strict_filename,
+                    "file_size": len(strict_content),
+                    "file_hash": strict_md5,
+                    "parent_id": 0,
+                },
+            )
+            strict_init_payload = response_json(strict_init, "strict alternating upload init")
+            require(str(strict_init_payload["code"]) == "0", "strict alternating upload init failed")
+            require(
+                not strict_init_payload["data"].get("instant_upload", False),
+                "strict alternating upload unexpectedly deduplicated",
+            )
+            strict_upload_id = str(strict_init_payload["data"]["upload_id"])
+            strict_route_sequence.append(
+                strict_instance(strict_init, "disk-api-a", "strict alternating upload init")
+            )
+
+            for chunk_index, (base_url, expected_instance, chunk_content) in enumerate(
+                (
+                    (api_b_url, "disk-api-b", strict_first_chunk),
+                    (api_a_url, "disk-api-a", strict_second_chunk),
+                )
+            ):
+                strict_chunk = http.post(
+                    f"{base_url}/api/file/upload/chunk",
+                    params={
+                        "upload_id": strict_upload_id,
+                        "chunk_index": chunk_index,
+                        "chunk_hash": hashlib.md5(chunk_content).hexdigest(),
+                    },
+                    headers={**auth, "Content-Type": "application/octet-stream"},
+                    content=chunk_content,
+                )
+                strict_chunk_payload = response_json(
+                    strict_chunk,
+                    f"strict alternating upload chunk {chunk_index}",
+                )
+                require(
+                    str(strict_chunk_payload["code"]) == "0",
+                    f"strict alternating upload chunk {chunk_index} failed",
+                )
+                strict_route_sequence.append(
+                    strict_instance(
+                        strict_chunk,
+                        expected_instance,
+                        f"strict alternating upload chunk {chunk_index}",
+                    )
+                )
+
+            strict_complete = http.post(
+                f"{api_b_url}/api/file/upload/complete",
+                headers=auth,
+                json={"upload_id": strict_upload_id},
+                timeout=180,
+            )
+            strict_complete_payload = response_json(
+                strict_complete,
+                "strict alternating upload complete",
+            )
+            require(
+                str(strict_complete_payload["code"]) == "0",
+                "strict alternating upload complete failed",
+            )
+            strict_route_sequence.append(
+                strict_instance(
+                    strict_complete,
+                    "disk-api-b",
+                    "strict alternating upload complete",
+                )
+            )
+            require(
+                strict_route_sequence == expected_strict_route_sequence,
+                "upload lifecycle requests did not strictly alternate A/B/A/B",
+            )
+            strict_file = (strict_complete_payload.get("data") or {}).get("file", {})
+            require(strict_file.get("id") is not None, "strict alternating complete omitted its file")
+            strict_file_id = int(strict_file["id"])
+
+            strict_task = query_one(
+                "SELECT status, completed_file_id FROM upload_tasks WHERE id = %s AND user_id = %s",
+                (strict_upload_id, user_id),
+            )
+            require(
+                strict_task is not None
+                and int(strict_task["status"]) == 1
+                and int(strict_task["completed_file_id"]) == strict_file_id,
+                "strict alternating upload task did not persist one completed file",
+            )
+            strict_content_row = query_one(
+                "SELECT COUNT(*) AS count, MAX(content.ref_count) AS ref_count "
+                "FROM files AS file "
+                "JOIN file_contents AS content ON content.id = file.content_id "
+                "WHERE file.user_id = %s AND file.name = %s "
+                "AND content.hash_md5 = %s AND content.hash_sha256 = %s",
+                (user_id, strict_filename, strict_md5, strict_sha256),
+            )
+            require(
+                strict_content_row is not None
+                and int(strict_content_row["count"]) == 1
+                and int(strict_content_row["ref_count"]) == 1,
+                "strict alternating upload did not create one file and content reference",
+            )
+            strict_quota_after = query_one(
+                "SELECT storage_used, storage_reserved FROM users WHERE id = %s",
+                (user_id,),
+            )
+            require(strict_quota_after is not None, "strict alternating upload quota result is missing")
+            require(
+                int(strict_quota_after["storage_reserved"])
+                == int(strict_quota_before["storage_reserved"]),
+                "strict alternating upload did not release reserved quota exactly once",
+            )
+            require(
+                int(strict_quota_after["storage_used"])
+                == int(strict_quota_before["storage_used"]) + len(strict_content),
+                "strict alternating upload did not settle used quota exactly once",
+            )
+            wait_until(lambda: object_exists(strict_object_key), 30, "strict alternating final object")
+            strict_head = s3.head_object(Bucket="disk", Key=strict_object_key)
+            require(
+                int(strict_head["ContentLength"]) == len(strict_content),
+                "strict alternating final object has the wrong size",
+            )
+            strict_download = http.get(
+                f"{api_a_url}/api/file/download/{strict_file_id}",
+                headers=auth,
+            )
+            require(
+                strict_instance(strict_download, "disk-api-a", "strict alternating download")
+                == "disk-api-a"
+                and strict_download.status_code == 200
+                and strict_download.content == strict_content,
+                "strict alternating upload did not download byte-identically from API A",
+            )
+            evidence["strict_alternating_upload"] = {
+                "upload_id": strict_upload_id,
+                "file_id": strict_file_id,
+                "content_sha256": strict_sha256,
+                "operations": ["init", "chunk-0", "chunk-1", "complete"],
+                "route_sequence": strict_route_sequence,
+            }
+            passed("init, every chunk, and complete strictly alternate between APIs")
 
             routed_quota_before = query_one(
                 "SELECT storage_used, storage_reserved FROM users WHERE id = %s",
@@ -1211,7 +1401,7 @@ def main(
             wait_ready(api_a_url, "api", "disk-api-a")
             passed("load balancer continues serving after one API stops")
 
-            file_ids_to_delete = [file_id, routed_file_id, *race_file_ids]
+            file_ids_to_delete = [file_id, strict_file_id, routed_file_id, *race_file_ids]
             soft_delete = http.request(
                 "DELETE",
                 f"{api_b_url}/api/file",
@@ -1242,7 +1432,12 @@ def main(
                 json={"trash_ids": deleted_trash_ids},
             )
             require(str(response_json(permanent, "permanent delete")["code"]) == "0", "permanent delete failed")
-            for deleted_object_key in (object_key, routed_object_key, *race_object_keys):
+            for deleted_object_key in (
+                object_key,
+                strict_object_key,
+                routed_object_key,
+                *race_object_keys,
+            ):
                 wait_until(
                     lambda deleted_object_key=deleted_object_key: not object_exists(deleted_object_key),
                     45,
@@ -1250,6 +1445,7 @@ def main(
                     interval=0.5,
                 )
             file_id = 0
+            strict_file_id = 0
             routed_file_id = 0
             race_file_ids.clear()
 

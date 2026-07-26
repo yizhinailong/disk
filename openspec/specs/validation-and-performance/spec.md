@@ -53,6 +53,10 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** a real MinIO application flow assembles and promotes a `5 MiB + 17 B` object from two S3 staging chunks
 - **THEN** the flow SHALL observe exactly two successful server-side multipart-copy parts, verify the final size, hash, full download, and Range download, and prove API RSS grows by no more than `48 MiB` during completion without treating that local regression bound as a production capacity result
 
+#### Scenario: Every upload lifecycle request alternates API instances
+- **WHEN** one S3-native upload sends init, chunk 0, chunk 1, and complete sequentially to API A, API B, API A, and API B
+- **THEN** every response SHALL identify the expected handling instance and the flow SHALL produce one completed task, one file and content reference, one final object, exact quota settlement, a byte-identical download from the opposite API, and atomically published `0600` evidence of the exact route sequence
+
 #### Scenario: Shared-user reservations change during a fault wait
 - **WHEN** a lease-expiry fault scenario waits long enough for an unrelated upload owned by the same test user to expire or settle
 - **THEN** validation SHALL prove the target task's single settlement from its terminal state and persisted accounting fields, and in one database snapshot SHALL calculate the residual between current reserved quota and all Pending and Finalizing task reservations and prove that residual is unchanged from the pre-fault snapshot instead of comparing stale aggregate totals or attributing a pre-existing shared-fixture residual to the target task

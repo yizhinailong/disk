@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-26，本轮 Phase 3 大对象 multipart copy）：固定 MinIO 驱动的 `S3AppFlowIntegration` 1/1 通过（10.99 秒），两个 staging 分片组装 `5 MiB + 17 B` 对象并精确产生 2 次成功 `upload_part_copy`；final 大小、SHA-256、完整/Range 下载均正确，complete 期间 API RSS 增量为 38,334,464 字节，低于 48 MiB 本机回归上界。`0600` 原子证据 SHA-256 为 `8e8d8c3c33ab9dc72a2bdaf7da1d62794eeab9b6085f4deed9d32f4cbe492981`；C++ multipart/promotion 聚焦测试 6/6、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 511.50 秒。该证据关闭本机 Phase 3 的大对象组装/提升与内存上界验收；严格逐请求轮询、对象故障工件收敛仍未完成，环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、独立故障域或生产 RTO/RPO 验收。
+> 最近验证（2026-07-26，本轮 Phase 3 上传生命周期严格交替）：固定 MinIO 驱动的 `DistributedLocalFlowIntegration` 1/1 通过（133.82 秒、19 项检查），独立两分片 S3-native 上传的 init/chunk 0/chunk 1/complete 逐次命中 `disk-api-a/b/a/b`；任务、文件、内容引用、配额、S3 final 和跨实例下载对账均通过。`0600` 原子证据 SHA-256 为 `bd5604c5792da42ebc085cfd59fc50922c492fe1d6f433da011e057c4a504eea`；Python 语法、完整构建无增量工作、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 495.14 秒。该证据关闭本机 Phase 3 的严格逐请求交替验收；对象故障 multipart/staging 工件收敛仍未完成，环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、独立故障域或生产 RTO/RPO 验收。
 
 ## 1. 目标与范围
 
@@ -256,7 +256,7 @@ API Instance A  API Instance B ... N
 
 ### 8.5 Phase 3 验收
 
-- [ ] 初始化、所有分片和完成请求逐次轮询到不同实例仍能成功。
+- [x] 初始化、所有分片和完成请求逐次轮询到不同实例仍能成功。
 - [x] API 节点删除本地 `temp_upload_path` 后，S3 暂存流程不受影响。
 - [x] 大于单次 copy 限制的文件可完成组装/提升，内存占用保持有界。
 - [ ] 对象存储故障不会留下无法识别或无法清理的 multipart/staging 工件。
@@ -1456,6 +1456,12 @@ OpenSpec 与系统测试计划先行新增 `DIST-UPLOAD-005`：一个 S3-native 
 OpenSpec 与系统测试计划先行固定 `S3-PROMOTE-001`：真实 MinIO 应用流必须从两个 staging 分片组装 `5 MiB + 17 B` 对象，观察精确 2 次成功的服务端 multipart copy，校验 final 大小/hash、完整/Range 下载，并把 completion 期间 API RSS 增量限制在 48 MiB 本机回归上界内。初始 32 MiB 阈值低于两次真实运行约 36.4 MiB 的峰值增量，因此按实测基线留出回归余量，不把该数值宣称为生产容量。
 
 固定 MinIO 驱动的 `S3AppFlowIntegration` 1/1 通过（10.99 秒），实测 RSS 起始/峰值/增量为 48,390,144 / 86,724,608 / 38,334,464 字节，final 对象大小为 5,242,897 字节。`0600` 原子证据 `.sisyphus/evidence/s3-large-promotion-summary.json` 的 SHA-256 为 `8e8d8c3c33ab9dc72a2bdaf7da1d62794eeab9b6085f4deed9d32f4cbe492981`；C++ multipart/promotion 聚焦测试 6/6、拓扑合同 1/1、OpenSpec 24/24 和完整 CTest 1451 通过/7 环境门控跳过/0 失败（511.50 秒）均通过。因此 Phase 3 大对象组装/提升与内存上界项已完成；严格逐请求轮询、对象故障 multipart/staging 工件收敛、目标环境 HA 及最终 DoD 仍保持未勾选。
+
+### 15.18 上传生命周期严格逐请求交替验收记录（2026-07-26）
+
+OpenSpec 与系统测试计划先行新增 `DIST-UPLOAD-006`：同一 S3-native 上传的 init、chunk 0、chunk 1 和 complete 必须按 API A/B/A/B 顺序执行，每次响应头均须证明实际处理实例。流程必须另外对账任务终态、唯一文件/内容引用、reserved-to-used 配额、S3 final 大小和 API A 逐字节下载，不能只凭直连请求返回 200 判定成功。
+
+固定 MinIO 驱动的隔离 PostgreSQL、Redis、双 API、双 Worker 流程 1/1 通过（133.82 秒、19 项检查），精确序列为 `disk-api-a -> disk-api-b -> disk-api-a -> disk-api-b`，最终文件与 Blob 经统一回收路径清理。分布式证据写入同时收敛为同目录临时文件、`fsync`、`0600` 和 `os.replace`；实测文件 mode 为 `0600`，无残留临时文件，SHA-256 为 `bd5604c5792da42ebc085cfd59fc50922c492fe1d6f433da011e057c4a504eea`。Python 语法、完整构建无增量工作、拓扑合同 1/1、OpenSpec 24/24 和完整 CTest 1451 通过/7 环境门控跳过/0 失败（495.14 秒）均通过。因此 Phase 3 严格逐请求交替项已完成；对象故障 multipart/staging 工件收敛、目标环境 HA 及最终 DoD 仍保持未勾选。
 
 ## 16. 最终 Definition of Done
 

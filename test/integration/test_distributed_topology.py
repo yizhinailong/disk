@@ -190,6 +190,12 @@ def main() -> int:
         "system test plan is missing the node-local cleanup download gate",
     )
     require(
+        "DIST-UPLOAD-006" in system_test_plan
+        and "上传生命周期严格逐请求交替" in system_test_plan
+        and "A/B/A/B" in system_test_plan,
+        "system test plan is missing the strict alternating upload gate",
+    )
+    require(
         "S3-PROMOTE-001" in system_test_plan
         and "`5 MiB + 17 B`" in system_test_plan
         and "`48 MiB`" in system_test_plan,
@@ -944,6 +950,11 @@ def main() -> int:
         "api_local_storage_is_empty(service)",
         "shared_blob_downloads_after_local_cleanup",
         "both APIs download one shared blob after clearing node-local storage",
+        "strict_alternating_upload",
+        "expected_strict_route_sequence",
+        "init, every chunk, and complete strictly alternate between APIs",
+        "os.fchmod(handle.fileno(), 0o600)",
+        "os.replace(temporary_name, evidence_path)",
         "/var/lib/disk/blobs",
         "/var/lib/disk/temp",
     ):
