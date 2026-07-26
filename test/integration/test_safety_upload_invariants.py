@@ -5523,6 +5523,11 @@ def test_expired_upload_cleanup_invariants() -> None:
         "SELECT id FROM files WHERE user_id = %s AND name = %s",
         (USER_ID, filename),
     )
+    assert_db_row_absent(
+        "expired upload cleanup creates no content row",
+        "SELECT id FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+        (file_hash, sha256_bytes(payload)),
+    )
     assert_storage_job_succeeded(
         "expired upload cleanup job converges",
         f"staging-cleanup:{upload_id}",
@@ -5530,6 +5535,76 @@ def test_expired_upload_cleanup_invariants() -> None:
     assert_path_absent("temp upload directory cleaned after expiry", upload_temp_dir(upload_id))
     assert_path_absent("assembled temp artifact absent after expiry", upload_temp_dir(upload_id).parent / f"{upload_id}.tmp")
     assert_path_absent("final blob absent after expiry", final_blob_path(sha256_bytes(payload)))
+
+    task_before_replay = {
+        key: task[key]
+        for key in (
+            "status",
+            "state_version",
+            "finalized_at",
+            "fail_reason",
+            "lease_owner",
+            "lease_expires_at",
+            "reserved_bytes",
+        )
+    }
+    cleanup_job_before_replay = query_one(
+        "SELECT id, status, attempts, locked_by, locked_until, last_error, completed_at, "
+        "payload::text AS payload_json FROM storage_jobs WHERE dedupe_key = %s",
+        (f"staging-cleanup:{upload_id}",),
+    )
+    if cleanup_job_before_replay is None:
+        log_fail("expired upload cleanup job exists before replay")
+        print_summary()
+    log_pass("expired upload cleanup job exists before replay")
+
+    replay_counts = run_expired_cleanup(f"safety-cleanup-replay-{unique_name()}")
+    assert_equal(
+        "expired cleanup replay reports no newly expired uploads",
+        replay_counts["expired_upload_tasks_cleaned"],
+        0,
+    )
+    replayed_task = assert_upload_task(upload_id, 3)
+    assert_equal(
+        "expired cleanup replay preserves the task snapshot",
+        {
+            key: replayed_task[key]
+            for key in task_before_replay
+        },
+        task_before_replay,
+    )
+    assert_equal(
+        "expired cleanup replay preserves settled quota",
+        user_quota(),
+        quota_after_cleanup,
+    )
+    assert_equal(
+        "expired cleanup replay keeps reserved quota nonnegative",
+        user_quota()["storage_reserved"] >= 0,
+        True,
+    )
+    assert_chunk_row_count(upload_id, 0)
+    cleanup_job_after_replay = query_one(
+        "SELECT id, status, attempts, locked_by, locked_until, last_error, completed_at, "
+        "payload::text AS payload_json FROM storage_jobs WHERE dedupe_key = %s",
+        (f"staging-cleanup:{upload_id}",),
+    )
+    assert_equal(
+        "expired cleanup replay preserves the unique cleanup job",
+        cleanup_job_after_replay,
+        cleanup_job_before_replay,
+    )
+    assert_db_row_absent(
+        "expired cleanup replay creates no logical file row",
+        "SELECT id FROM files WHERE user_id = %s AND name = %s",
+        (USER_ID, filename),
+    )
+    assert_db_row_absent(
+        "expired cleanup replay creates no content row",
+        "SELECT id FROM file_contents WHERE hash_md5 = %s AND hash_sha256 = %s",
+        (file_hash, sha256_bytes(payload)),
+    )
+    assert_path_absent("final blob remains absent after expiry replay", final_blob_path(sha256_bytes(payload)))
 
 
 def test_init_upload_expires_existing_task_invariants() -> None:

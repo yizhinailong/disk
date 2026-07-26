@@ -21,6 +21,10 @@ The system SHALL provide integration safety tests that verify upload lifecycle o
 - **WHEN** a test prepares or observes an expired in-progress upload and runs the deterministic cleanup trigger for the existing expired-upload cleanup path
 - **THEN** the safety test MUST verify that the upload task is marked expired or otherwise no longer active, reserved quota is released, no `files` row is created, and temporary upload artifacts are removed
 
+#### Scenario: Expired upload cleanup is replayed
+- **WHEN** the deterministic expired-upload cleanup is run again after one target upload has already reached Expired and its staging cleanup has succeeded
+- **THEN** the replay MUST NOT transition that upload again, decrement reserved quota below its settled value, change its state version or finalization timestamp, enqueue another staging-cleanup job, create a file or content reference, or delete any final blob
+
 ### Requirement: Content reference-count safety invariants
 The system SHALL provide integration safety tests that characterize current content deduplication and reference-count behavior, including upload completion races and permanent cleanup paths that may affect shared content.
 

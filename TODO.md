@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-26，本轮 Phase 3 对象故障工件收敛）：固定 MinIO 驱动的 `DistributedLocalFlowIntegration` 1/1 通过（20 项检查）。唯一未完成 multipart 在 MinIO 停机期间由真实 Worker 首次执行进入 Retry，`attempts=1` 且 owner/租约释放、持久 payload 仍可定位；MinIO 恢复后同一任务由未重启 Worker 以 `attempts=2` 收敛到 Succeeded，provider multipart 消失且 staging 前缀对象数为 0。`0600` 原子证据 SHA-256 为 `a409ee1f94a399251e7a761351ddfc0779de4acbf9528805a6e910ea6a5dd725`；Python 语法、完整构建无增量工作、Worker/S3/拓扑聚焦 CTest 59/59 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 500.73 秒。该证据关闭仓库 Phase 3 最后一项验收；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、高可用、独立故障域、lifecycle inventory 或生产 RTO/RPO 验收。
+> 最近验证（2026-07-26，本轮 Phase 2 过期上传清理重放）：`SafetyUploadInvariantsIntegration` 聚焦 1/1 通过（111.68 秒）。已成功 cleanup 的 Expired 上传再次经同一确定性管理入口扫描时，清理数为 0；任务版本/时间/原因/租约/预留字节、用户 reserved/used/quota、零分片和唯一 cleanup 任务完整快照均不变，reserved 保持非负且未创建文件、内容引用或 final Blob。结合已有 init resume、重复 chunk、complete/cancel 重放、进程死亡/网络分区、Blob GC/Worker/multipart 恢复证据，Phase 2 重试副作用验收闭环；“所有状态机和事务竞态”仍单独保留。Python 语法、完整构建无增量工作、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 496.35 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、高可用、独立故障域或生产 RTO/RPO 验收。
 
 ## 1. 目标与范围
 
@@ -215,7 +215,7 @@ API Instance A  API Instance B ... N
 
 - [x] 100 个并发重复 `complete` 最多生成一个文件记录、一次配额结算和一个内容引用增量。
 - [x] 并发 `complete/cancel/expire` 最终只有一个合法终态。
-- [ ] 任意步骤重试不会造成负配额、重复文件、错误 ref_count 或误删 Blob。
+- [x] 任意步骤重试不会造成负配额、重复文件、错误 ref_count 或误删 Blob。
 - [ ] 所有状态机和事务竞态有数据库级集成测试，不只依赖源码字符串断言。
 
 ## 8. Phase 3：对象存储原生上传暂存
