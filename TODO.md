@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-26，本轮 Phase 3 上传生命周期严格交替）：固定 MinIO 驱动的 `DistributedLocalFlowIntegration` 1/1 通过（133.82 秒、19 项检查），独立两分片 S3-native 上传的 init/chunk 0/chunk 1/complete 逐次命中 `disk-api-a/b/a/b`；任务、文件、内容引用、配额、S3 final 和跨实例下载对账均通过。`0600` 原子证据 SHA-256 为 `bd5604c5792da42ebc085cfd59fc50922c492fe1d6f433da011e057c4a504eea`；Python 语法、完整构建无增量工作、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 495.14 秒。该证据关闭本机 Phase 3 的严格逐请求交替验收；对象故障 multipart/staging 工件收敛仍未完成，环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、独立故障域或生产 RTO/RPO 验收。
+> 最近验证（2026-07-26，本轮 Phase 3 对象故障工件收敛）：固定 MinIO 驱动的 `DistributedLocalFlowIntegration` 1/1 通过（20 项检查）。唯一未完成 multipart 在 MinIO 停机期间由真实 Worker 首次执行进入 Retry，`attempts=1` 且 owner/租约释放、持久 payload 仍可定位；MinIO 恢复后同一任务由未重启 Worker 以 `attempts=2` 收敛到 Succeeded，provider multipart 消失且 staging 前缀对象数为 0。`0600` 原子证据 SHA-256 为 `a409ee1f94a399251e7a761351ddfc0779de4acbf9528805a6e910ea6a5dd725`；Python 语法、完整构建无增量工作、Worker/S3/拓扑聚焦 CTest 59/59 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 500.73 秒。该证据关闭仓库 Phase 3 最后一项验收；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、高可用、独立故障域、lifecycle inventory 或生产 RTO/RPO 验收。
 
 ## 1. 目标与范围
 
@@ -259,7 +259,7 @@ API Instance A  API Instance B ... N
 - [x] 初始化、所有分片和完成请求逐次轮询到不同实例仍能成功。
 - [x] API 节点删除本地 `temp_upload_path` 后，S3 暂存流程不受影响。
 - [x] 大于单次 copy 限制的文件可完成组装/提升，内存占用保持有界。
-- [ ] 对象存储故障不会留下无法识别或无法清理的 multipart/staging 工件。
+- [x] 对象存储故障不会留下无法识别或无法清理的 multipart/staging 工件。
 
 ## 9. Phase 4：Worker、调度与故障恢复
 

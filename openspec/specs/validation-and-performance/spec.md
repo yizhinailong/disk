@@ -57,6 +57,10 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** one S3-native upload sends init, chunk 0, chunk 1, and complete sequentially to API A, API B, API A, and API B
 - **THEN** every response SHALL identify the expected handling instance and the flow SHALL produce one completed task, one file and content reference, one final object, exact quota settlement, a byte-identical download from the opposite API, and atomically published `0600` evidence of the exact route sequence
 
+#### Scenario: Multipart cleanup crosses an object-storage outage
+- **WHEN** the distributed flow creates one provider-visible incomplete multipart under its unique staging prefix, stops MinIO, and enqueues its production-format durable abort job while two real Workers remain running
+- **THEN** the job SHALL become an identifiable retry with no active lease during the outage and, after MinIO restarts without restarting the Workers, SHALL be reclaimed and succeed with at least two attempts while provider multipart and staging inventories converge to zero and the multipart-recovery section of atomically published `0600` evidence contains only a bounded status summary
+
 #### Scenario: Shared-user reservations change during a fault wait
 - **WHEN** a lease-expiry fault scenario waits long enough for an unrelated upload owned by the same test user to expire or settle
 - **THEN** validation SHALL prove the target task's single settlement from its terminal state and persisted accounting fields, and in one database snapshot SHALL calculate the residual between current reserved quota and all Pending and Finalizing task reservations and prove that residual is unchanged from the pre-fault snapshot instead of comparing stale aggregate totals or attributing a pre-existing shared-fixture residual to the target task

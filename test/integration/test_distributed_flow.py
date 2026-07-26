@@ -176,6 +176,14 @@ def main(
         region_name="us-east-1",
         config=Config(s3={"addressing_style": "path"}),
     )
+    provider_s3 = boto3.client(
+        "s3",
+        endpoint_url=minio_url,
+        aws_access_key_id=values.get("DISK_MINIO_ROOT_USER", "disk-local"),
+        aws_secret_access_key=values["DISK_MINIO_ROOT_PASSWORD"],
+        region_name="us-east-1",
+        config=Config(s3={"addressing_style": "path"}),
+    )
 
     def object_exists(key: str) -> bool:
         try:
@@ -286,6 +294,8 @@ def main(
     strict_md5 = hashlib.md5(strict_content).hexdigest()
     strict_sha256 = hashlib.sha256(strict_content).hexdigest()
     strict_object_key = f"objects/sha256/{strict_sha256[:2]}/{strict_sha256}.bin"
+    fault_staging_prefix = f"staging/distributed-fault-{run_id}"
+    fault_multipart_key = f"{fault_staging_prefix}/assembled/fault.bin"
     access_token = ""
     refresh_token = ""
     user_id = 0
@@ -1343,6 +1353,32 @@ def main(
             )
             passed("Redis outage fails closed and recovery reconnects")
 
+            multipart = provider_s3.create_multipart_upload(
+                Bucket="disk",
+                Key=fault_multipart_key,
+            )
+            fault_multipart_upload_id = str(multipart["UploadId"])
+            provider_s3.upload_part(
+                Bucket="disk",
+                Key=fault_multipart_key,
+                UploadId=fault_multipart_upload_id,
+                PartNumber=1,
+                Body=b"distributed-fault-part",
+            )
+
+            def fault_multipart_visible() -> bool:
+                inventory = provider_s3.list_multipart_uploads(
+                    Bucket="disk",
+                    Prefix=fault_multipart_key,
+                )
+                return any(
+                    item.get("Key") == fault_multipart_key
+                    and item.get("UploadId") == fault_multipart_upload_id
+                    for item in inventory.get("Uploads", [])
+                )
+
+            require(fault_multipart_visible(), "fault multipart fixture is not provider-visible")
+
             minio_stopped = True
             compose("stop", "minio")
             for base_url, instance_id in (
@@ -1366,10 +1402,122 @@ def main(
                 "MinIO outage did not return the controlled file-read error",
             )
             assert_sensitive_values_absent(unavailable_download, "download during MinIO outage")
+
+            fault_multipart_aggregate_id = hashlib.sha256(
+                f"{fault_multipart_key}\n{fault_multipart_upload_id}".encode()
+            ).hexdigest()
+            fault_multipart_dedupe_key = f"multipart-abort:{fault_multipart_aggregate_id}"
+            require(
+                execute(
+                    "INSERT INTO storage_jobs "
+                    "(job_type, aggregate_id, dedupe_key, payload, status, attempts, max_attempts, available_at) "
+                    "VALUES ('multipart_abort', %s, %s, %s::jsonb, 0, 0, 8, NOW())",
+                    (
+                        fault_multipart_aggregate_id,
+                        fault_multipart_dedupe_key,
+                        json.dumps(
+                            {
+                                "backend": "s3",
+                                "key": fault_multipart_key,
+                                "upload_id": fault_multipart_upload_id,
+                            }
+                        ),
+                    ),
+                )
+                == 1,
+                "fault multipart recovery job was not inserted",
+            )
+
+            def multipart_abort_retried() -> dict[str, Any] | None:
+                row = query_one(
+                    "SELECT status, attempts, locked_by, locked_until, last_error, "
+                    "payload->>'key' AS payload_key, payload->>'upload_id' AS payload_upload_id "
+                    "FROM storage_jobs WHERE dedupe_key = %s",
+                    (fault_multipart_dedupe_key,),
+                )
+                if row is None:
+                    return None
+                require(int(row["status"]) != 4, "fault multipart recovery entered dead letter")
+                if int(row["status"]) != 2:
+                    return None
+                require(int(row["attempts"]) >= 1, "fault multipart recovery did not execute")
+                require(row["locked_by"] is None, "retried multipart recovery retained its owner")
+                require(row["locked_until"] is None, "retried multipart recovery retained its lease")
+                require(
+                    0 < len(str(row["last_error"] or "")) <= 2048,
+                    "retried multipart recovery did not retain a bounded failure",
+                )
+                require(row["payload_key"] == fault_multipart_key, "multipart recovery lost its key")
+                require(
+                    row["payload_upload_id"] == fault_multipart_upload_id,
+                    "multipart recovery lost its provider upload ID",
+                )
+                return row
+
+            retry_row = wait_until(
+                multipart_abort_retried,
+                45,
+                "multipart abort retry during MinIO outage",
+                interval=0.25,
+            )
             compose("start", "minio")
             wait_ready(api_a_url, "api", "disk-api-a")
             wait_ready(api_b_url, "api", "disk-api-b")
             minio_stopped = False
+
+            def multipart_abort_succeeded() -> dict[str, Any] | None:
+                row = query_one(
+                    "SELECT status, attempts, locked_by, locked_until, last_error, completed_at "
+                    "FROM storage_jobs WHERE dedupe_key = %s",
+                    (fault_multipart_dedupe_key,),
+                )
+                if row is None:
+                    return None
+                require(int(row["status"]) != 4, "fault multipart recovery entered dead letter")
+                if int(row["status"]) != 3:
+                    return None
+                require(int(row["attempts"]) >= 2, "multipart recovery did not retry after outage")
+                require(row["locked_by"] is None, "successful multipart recovery retained its owner")
+                require(row["locked_until"] is None, "successful multipart recovery retained its lease")
+                require(row["last_error"] is None, "successful multipart recovery retained an error")
+                require(row["completed_at"] is not None, "successful multipart recovery has no completion time")
+                return row
+
+            succeeded_row = wait_until(
+                multipart_abort_succeeded,
+                45,
+                "multipart abort after MinIO recovery",
+                interval=0.25,
+            )
+            require(not fault_multipart_visible(), "recovered multipart remains provider-visible")
+            staging_inventory = provider_s3.list_objects_v2(
+                Bucket="disk",
+                Prefix=fault_staging_prefix,
+            )
+            require(
+                not staging_inventory.get("Contents"),
+                "recovered multipart left staging objects",
+            )
+            evidence["multipart_abort_recovery"] = {
+                "retry_status": 2,
+                "retry_attempts": int(retry_row["attempts"]),
+                "final_status": 3,
+                "final_attempts": int(succeeded_row["attempts"]),
+                "retry_lease_cleared": True,
+                "multipart_visible_before_outage": True,
+                "multipart_absent_after_recovery": True,
+                "staging_objects_after_recovery": 0,
+            }
+            require(
+                execute(
+                    "DELETE FROM storage_jobs WHERE dedupe_key = %s AND status = 3",
+                    (fault_multipart_dedupe_key,),
+                )
+                == 1,
+                "successful multipart recovery fixture was not cleaned",
+            )
+            passed("MinIO outage keeps multipart identifiable and Worker cleanup converges")
+
             recovered_download = http.get(
                 f"{api_b_url}/api/file/download/{file_id}",
                 headers=auth,
