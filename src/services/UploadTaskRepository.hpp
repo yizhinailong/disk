@@ -79,10 +79,6 @@ namespace disk::file {
         explicit UploadTaskRepository(drogon::orm::DbClientPtr db_client);
 
         [[nodiscard]]
-        auto FindById(const std::string& upload_id) const
-            -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
-
-        [[nodiscard]]
         auto FindByIdForUser(const std::string& upload_id, uint64_t user_id) const
             -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
 
@@ -148,35 +144,12 @@ namespace disk::file {
         ) const -> drogon::Task<bool>;
 
         [[nodiscard]]
-        auto MarkFailedIfLeaseOwned(
-            const drogon::orm::DbClientPtr& client,
-            const std::string& upload_id,
-            uint64_t user_id,
-            const std::string& lease_owner,
-            uint64_t expected_state_version,
-            int error_code,
-            const std::string& fail_reason
-        ) const -> drogon::Task<bool>;
-
-        [[nodiscard]]
         auto RecordFinalizeErrorIfLeaseOwned(
             const std::string& upload_id,
             uint64_t user_id,
             const std::string& lease_owner,
             uint64_t expected_state_version,
             int error_code
-        ) const -> drogon::Task<bool>;
-
-        [[nodiscard]]
-        auto DeleteInProgressById(const std::string& upload_id) const -> drogon::Task<bool>;
-
-        [[nodiscard]]
-        auto MarkCompleted(std::string const& upload_id) const -> drogon::Task<bool>;
-
-        [[nodiscard]]
-        auto MarkCompletedIfInProgress(
-            const drogon::orm::DbClientPtr& client,
-            const std::string& upload_id
         ) const -> drogon::Task<bool>;
 
         [[nodiscard]]
@@ -218,12 +191,6 @@ namespace disk::file {
         [[nodiscard]]
         auto ListUploadedChunkIndices(const std::string& upload_id) const
             -> drogon::Task<std::vector<uint32_t>>;
-
-        [[nodiscard]]
-        auto GetChunkCoverage(const std::string& upload_id) const
-            -> drogon::Task<disk::upload::ChunkCoverage>;
-
-        auto DeleteChunks(std::string const& upload_id) const -> drogon::Task<void>;
 
         auto DeleteChunks(
             const drogon::orm::DbClientPtr& client,

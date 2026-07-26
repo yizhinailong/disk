@@ -38,7 +38,6 @@ namespace disk::file {
         TEST(UploadTaskRepositoryLookupContractTest, LookupMethodsKeepOwnershipAndResumableGuards) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
 
-            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::FindById("));
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::FindByIdForUser("));
             EXPECT_TRUE(Contains(source, "Criteria(UploadTasks::Cols::_id, CompareOperator::EQ, upload_id)"));
             EXPECT_TRUE(Contains(source, "Criteria(UploadTasks::Cols::_user_id, CompareOperator::EQ, user_id)"));
@@ -47,6 +46,27 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::FindInProgressIdByUserAndHash("));
             EXPECT_TRUE(Contains(source, "WHERE user_id = $1 AND file_hash = $2 AND status = $3 LIMIT 1"));
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::InProgress"));
+        }
+
+        TEST(UploadTaskRepositorySurfaceContractTest, DeadRepositoryMethodsStayRemoved) {
+            const auto header = ReadSourceFile("src/services/UploadTaskRepository.hpp");
+            const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
+
+            EXPECT_FALSE(Contains(header, "auto FindById("));
+            EXPECT_FALSE(Contains(header, "auto MarkFailedIfLeaseOwned("));
+            EXPECT_FALSE(Contains(header, "auto DeleteInProgressById("));
+            EXPECT_FALSE(Contains(header, "auto MarkCompleted("));
+            EXPECT_FALSE(Contains(header, "auto MarkCompletedIfInProgress("));
+            EXPECT_FALSE(Contains(header, "auto GetChunkCoverage("));
+            EXPECT_FALSE(Contains(header, "auto DeleteChunks(std::string"));
+
+            EXPECT_FALSE(Contains(source, "UploadTaskRepository::FindById("));
+            EXPECT_FALSE(Contains(source, "UploadTaskRepository::MarkFailedIfLeaseOwned("));
+            EXPECT_FALSE(Contains(source, "UploadTaskRepository::DeleteInProgressById("));
+            EXPECT_FALSE(Contains(source, "UploadTaskRepository::MarkCompleted("));
+            EXPECT_FALSE(Contains(source, "UploadTaskRepository::MarkCompletedIfInProgress("));
+            EXPECT_FALSE(Contains(source, "UploadTaskRepository::GetChunkCoverage("));
+            EXPECT_FALSE(Contains(source, "DeleteChunks(std::string"));
         }
 
         TEST(UploadTaskRepositoryStagingContractTest, CreationPersistsImmutableSessionLocation) {
@@ -103,12 +123,8 @@ namespace disk::file {
             EXPECT_FALSE(disk::storage::ParseUploadStagingBackend("filesystem").has_value());
         }
 
-        TEST(UploadTaskRepositoryStatusTransitionContractTest, TerminalTransitionsAreGuardedByInProgressStatus) {
+        TEST(UploadTaskRepositoryStatusTransitionContractTest, CancellationAndExpiryTransitionsAreGuardedByInProgressStatus) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
-
-            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkCompletedIfInProgress("));
-            EXPECT_TRUE(Contains(source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW() WHERE id = $2 AND status = $3"));
-            EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Completed"));
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkCancelledIfInProgressReturning("));
             EXPECT_TRUE(Contains(source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2, "));
@@ -171,7 +187,6 @@ namespace disk::file {
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::RenewFinalizeLease("));
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkCompletedIfLeaseOwned("));
-            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::MarkFailedIfLeaseOwned("));
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::RecordFinalizeErrorIfLeaseOwned("));
             EXPECT_TRUE(Contains(source, "AND lease_owner = $5 AND state_version = $6 "));
             EXPECT_TRUE(Contains(source, "AND lease_expires_at > NOW()"));
@@ -210,7 +225,7 @@ namespace disk::file {
             EXPECT_FALSE(Contains(source, "m_blob_store->DeleteBlob(final_storage_path)"));
         }
 
-        TEST(UploadTaskRepositoryChunkPrimitiveContractTest, ChunkPersistencePrimitivesKeepIdempotencySortingAndCoverage) {
+        TEST(UploadTaskRepositoryChunkPrimitiveContractTest, ChunkPersistencePrimitivesKeepIdempotencySortingAndTransactionalCleanup) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::RecordChunkIfInProgress("));
@@ -231,12 +246,8 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::ListUploadedChunkIndices("));
             EXPECT_TRUE(Contains(source, "SELECT chunk_index FROM upload_task_chunks WHERE task_id = $1 ORDER BY chunk_index"));
 
-            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::GetChunkCoverage("));
-            EXPECT_TRUE(Contains(source, "SELECT COUNT(*) AS uploaded_count, "));
-            EXPECT_TRUE(Contains(source, "COALESCE(MAX(chunk_index), -1) AS max_chunk_index "));
-            EXPECT_TRUE(Contains(source, "FROM upload_task_chunks WHERE task_id = $1"));
-
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::DeleteChunks("));
+            EXPECT_TRUE(Contains(source, "const drogon::orm::DbClientPtr& client"));
             EXPECT_TRUE(Contains(source, "DELETE FROM upload_task_chunks WHERE task_id = $1"));
         }
 

@@ -86,3 +86,22 @@ The cleanup SHALL preserve existing authentication boundaries, route-level filte
 
 - **WHEN** a rate-limit filter depends on `user_id` populated by JWT authentication
 - **THEN** the cleanup SHALL preserve an execution order in which JWT authentication can populate `user_id` before that rate-limit filter evaluates the request
+
+### Requirement: Repository surfaces follow production use
+
+Backend repository classes SHALL expose only persistence primitives used by production flows, while persisted compatibility contracts remain governed by their separate migration-retirement gates.
+
+#### Scenario: Unused upload-task wrappers are removed
+
+- **WHEN** a whole-repository call-site audit confirms that an upload-task lookup, transition, coverage query, or non-transactional delete wrapper has no production caller
+- **THEN** the declaration, implementation, and obsolete source-contract expectation SHALL be removed together
+
+#### Scenario: Active upload lifecycle primitives remain explicit
+
+- **WHEN** completion, cancellation, expiration, or chunk persistence needs a PostgreSQL primitive
+- **THEN** the repository SHALL retain the owner/version guarded transition or transaction-client overload used by that production flow
+
+#### Scenario: Interface cleanup does not retire persisted compatibility
+
+- **WHEN** unused C++ repository methods are removed before migration-retirement approval
+- **THEN** persisted upload status values, local-staging descriptors, legacy path fallback, and nullable migration fields SHALL remain available until their dedicated retirement contract admits removal

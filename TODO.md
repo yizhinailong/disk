@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-26，本轮 Phase 2 状态机与事务竞态）：新增精确分片写后停顿点，两个真实 API 在共享 PostgreSQL/local staging 上分别让 complete、cancel、expire 赢过尚未执行元数据条件写的分片请求；释放后 3/3 迟到请求均返回 `409/10004`，终态/版本不变、分片行归零、配额残差不变、cleanup 唯一且成功，Completed 的文件/内容/ref_count/final Blob 唯一，Cancelled/Expired 无这些副作用。当前可达上传迁移、终态重放、租约接管/旧 owner fencing、内容去重和 Blob GC 排他协议均有真实数据库证据；`Failed` 明确为无生产调用者的兼容保留态。`SafetyUploadInvariantsIntegration` 独立 1/1 通过（114.71 秒），完整运行内再次通过（112.69 秒）；状态机/仓储 GoogleTest 18/18、覆盖相关 CTest 4/4、Python 语法、增量构建、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1458 项，1451 通过、7 项按环境门控跳过（PgBouncer、`promtool`、3 项 S3/MinIO 门控、2 项分布式拓扑门控），0 失败，总耗时 498.67 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，本轮不替代真实 Nginx、TLS/KMS、高可用、独立故障域或生产 RTO/RPO 验收。
+> 最近验证（2026-07-27，本轮 Phase 3 上传仓储死接口清理）：全仓库调用点审计确认 `UploadTaskRepository` 的 `FindById`、`MarkFailedIfLeaseOwned`、`DeleteInProgressById`、`MarkCompleted`、`MarkCompletedIfInProgress`、`GetChunkCoverage` 和非事务 `DeleteChunks` 重载均无生产调用，已同步删除声明、实现和过时正向测试期望；owner/version CAS、取消/过期迁移、分片记录/列表及事务内删除仍与生产调用对应。`Failed` 持久值、`temp_path` 回退、local staging 和可空迁移字段仍受兼容退役准入保护，因此 Phase 3 总清理项保持未勾选。完整构建、仓储 GoogleTest 11/11、真实 PostgreSQL 状态机 1/1、基础上传流 20/20、上传安全不变量 885/885（112.69 秒聚焦复验，完整运行内 112.66 秒）、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1459 项，1452 通过、7 项按环境门控跳过，0 失败，总耗时 496.96 秒。
 
 ## 1. 目标与范围
 
@@ -1462,6 +1462,14 @@ OpenSpec 与系统测试计划先行固定 `S3-PROMOTE-001`：真实 MinIO 应�
 OpenSpec 与系统测试计划先行新增 `DIST-UPLOAD-006`：同一 S3-native 上传的 init、chunk 0、chunk 1 和 complete 必须按 API A/B/A/B 顺序执行，每次响应头均须证明实际处理实例。流程必须另外对账任务终态、唯一文件/内容引用、reserved-to-used 配额、S3 final 大小和 API A 逐字节下载，不能只凭直连请求返回 200 判定成功。
 
 固定 MinIO 驱动的隔离 PostgreSQL、Redis、双 API、双 Worker 流程 1/1 通过（133.82 秒、19 项检查），精确序列为 `disk-api-a -> disk-api-b -> disk-api-a -> disk-api-b`，最终文件与 Blob 经统一回收路径清理。分布式证据写入同时收敛为同目录临时文件、`fsync`、`0600` 和 `os.replace`；实测文件 mode 为 `0600`，无残留临时文件，SHA-256 为 `bd5604c5792da42ebc085cfd59fc50922c492fe1d6f433da011e057c4a504eea`。Python 语法、完整构建无增量工作、拓扑合同 1/1、OpenSpec 24/24 和完整 CTest 1451 通过/7 环境门控跳过/0 失败（495.14 秒）均通过。因此 Phase 3 严格逐请求交替项已完成；对象故障 multipart/staging 工件收敛、目标环境 HA 及最终 DoD 仍保持未勾选。
+
+### 15.19 上传仓储死接口清理记录（2026-07-27）
+
+ADR、系统测试、单元测试和 OpenSpec 先行固定仓储公开面合同：只保留有生产调用的 PostgreSQL 原语，同时把 C++ 无调用接口清理与数据库/API/存储迁移兼容退役分开。全仓库符号和调用点扫描确认 7 个方法只存在于声明、实现或源码字符串测试，没有业务调用者；其声明与 81 行实现已删除，测试改为防止旧接口回归并继续锁定活跃生命周期原语。
+
+生产路径继续使用所有权查询、完成租约 CAS、取消/过期条件迁移、分片幂等写入/列表及事务连接版 `DeleteChunks`。`Failed` 的数值和读取语义、`temp_path` 兼容回退、local staging 与可空分片描述字段没有删除；`compatibility_removal_allowed=false` 的退役准入仍有效，所以 Phase 3 “迁移完成后删除”总项继续保持未勾选。
+
+完整构建、仓储 GoogleTest 11/11、真实 PostgreSQL 状态机 1/1、基础上传流 20/20、上传安全不变量 885/885、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1459 项，1452 通过、7 项环境门控跳过、0 失败，总耗时 496.96 秒。
 
 ## 16. 最终 Definition of Done
 

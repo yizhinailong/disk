@@ -65,16 +65,6 @@ namespace disk::file {
         : m_db_client(std::move(db_client)) {
     }
 
-    auto UploadTaskRepository::FindById(const std::string& upload_id) const
-        -> drogon::Task<std::optional<UploadTasks>> {
-        try {
-            CoroMapper<UploadTasks> mapper(m_db_client);
-            co_return co_await mapper.findByPrimaryKey(upload_id);
-        } catch (const drogon::orm::DrogonDbException&) {
-            co_return std::nullopt;
-        }
-    }
-
     auto UploadTaskRepository::FindByIdForUser(const std::string& upload_id, uint64_t user_id) const
         -> drogon::Task<std::optional<UploadTasks>> {
         try {
@@ -332,29 +322,6 @@ namespace disk::file {
         co_return result.affectedRows() > 0;
     }
 
-    auto UploadTaskRepository::MarkFailedIfLeaseOwned(
-        const drogon::orm::DbClientPtr& client,
-        const std::string& upload_id,
-        uint64_t user_id,
-        const std::string& lease_owner,
-        uint64_t expected_state_version,
-        int error_code,
-        const std::string& fail_reason
-    ) const -> drogon::Task<bool> {
-        auto result = co_await client->execSqlCoro(
-            "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), " "lease_owner = NULL, lease_expires_at = NULL, " "state_version = state_version + 1, last_error_code = $2, " "last_error_at = NOW(), fail_reason = $3 " "WHERE id = $4 AND user_id = $5 AND status = $6 " "AND lease_owner = $7 AND state_version = $8 " "AND lease_expires_at > NOW()",
-            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Failed),
-            error_code,
-            fail_reason,
-            upload_id,
-            user_id,
-            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),
-            lease_owner,
-            expected_state_version
-        );
-        co_return result.affectedRows() > 0;
-    }
-
     auto UploadTaskRepository::RecordFinalizeErrorIfLeaseOwned(
         const std::string& upload_id,
         uint64_t user_id,
@@ -370,33 +337,6 @@ namespace disk::file {
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),
             lease_owner,
             expected_state_version
-        );
-        co_return result.affectedRows() > 0;
-    }
-
-    auto UploadTaskRepository::DeleteInProgressById(const std::string& upload_id) const
-        -> drogon::Task<bool> {
-        auto result = co_await m_db_client->execSqlCoro(
-            "DELETE FROM upload_tasks WHERE id = $1 AND status = $2",
-            upload_id,
-            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
-        );
-        co_return result.affectedRows() > 0;
-    }
-
-    auto UploadTaskRepository::MarkCompleted(std::string const& upload_id) const -> drogon::Task<bool> {
-        co_return co_await MarkCompletedIfInProgress(m_db_client, upload_id);
-    }
-
-    auto UploadTaskRepository::MarkCompletedIfInProgress(
-        const drogon::orm::DbClientPtr& client,
-        const std::string& upload_id
-    ) const -> drogon::Task<bool> {
-        auto result = co_await client->execSqlCoro(
-            "UPDATE upload_tasks SET status = $1, finalized_at = NOW() WHERE id = $2 AND status = $3",
-            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Completed),
-            upload_id,
-            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
         );
         co_return result.affectedRows() > 0;
     }
@@ -531,27 +471,6 @@ namespace disk::file {
         }
 
         co_return chunk_indices;
-    }
-
-    auto UploadTaskRepository::GetChunkCoverage(const std::string& upload_id) const
-        -> drogon::Task<disk::upload::ChunkCoverage> {
-        auto result = co_await m_db_client->execSqlCoro(
-            "SELECT COUNT(*) AS uploaded_count, " "COALESCE(MAX(chunk_index), -1) AS max_chunk_index " "FROM upload_task_chunks WHERE task_id = $1",
-            upload_id
-        );
-
-        if (result.empty()) {
-            co_return disk::upload::ChunkCoverage{};
-        }
-
-        co_return disk::upload::ChunkCoverage{
-            .uploaded_count = result[0]["uploaded_count"].as<uint64_t>(),
-            .max_chunk_index = result[0]["max_chunk_index"].as<int64_t>(),
-        };
-    }
-
-    auto UploadTaskRepository::DeleteChunks(std::string const& upload_id) const -> drogon::Task<void> {
-        co_await DeleteChunks(m_db_client, upload_id);
     }
 
     auto UploadTaskRepository::DeleteChunks(
