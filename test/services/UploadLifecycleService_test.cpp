@@ -87,7 +87,7 @@ namespace disk::upload {
         }
 
         TEST(UploadLifecycleExpirationTest, RejectsUnboundedBatchBeforeDatabaseAccess) {
-            UploadLifecycleService service(nullptr, nullptr, nullptr, nullptr);
+            UploadLifecycleService service(nullptr, nullptr, nullptr);
 
             auto empty = drogon::sync_wait(service.ExpireInProgressUploads(0));
             auto oversized = drogon::sync_wait(service.ExpireInProgressUploads(501));

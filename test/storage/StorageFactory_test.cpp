@@ -251,6 +251,26 @@ TEST(StorageRuntimeLogContextContractTest, UsesTypedContextAndBoundedDeploymentD
     EXPECT_FALSE(Contains(s3_constructor, "e.what()"));
 }
 
+TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities) {
+    const auto factory_header = ReadSourceFile("src/storage/StorageFactory.hpp");
+    const auto manager_header = ReadSourceFile("src/storage/StorageMgr.hpp");
+    const auto application_header = ReadSourceFile("src/application/ApplicationContext.hpp");
+    const auto upload_header = ReadSourceFile("src/services/UploadService.hpp");
+    const auto lifecycle_header = ReadSourceFile("src/services/UploadLifecycleService.hpp");
+    const auto local_header = ReadSourceFile("src/storage/LocalFileStorage.hpp");
+    const auto s3_header = ReadSourceFile("src/storage/S3ObjectStorage.hpp");
+
+    EXPECT_FALSE(std::filesystem::exists(RepositoryRoot() / "src/storage/IFileStorage.hpp"));
+    EXPECT_TRUE(Contains(factory_header, "std::shared_ptr<UploadStagingStorage> upload_staging_storage;"));
+    EXPECT_TRUE(Contains(manager_header, "SetInstance(std::shared_ptr<UploadStagingStorage> storage)"));
+    EXPECT_FALSE(Contains(manager_header, "GetStorage()"));
+    EXPECT_FALSE(Contains(application_header, "IFileStorage"));
+    EXPECT_FALSE(Contains(upload_header, "IFileStorage"));
+    EXPECT_FALSE(Contains(lifecycle_header, "IFileStorage"));
+    EXPECT_TRUE(Contains(local_header, "class LocalFileStorage : public UploadStagingStorage"));
+    EXPECT_TRUE(Contains(s3_header, "class S3ObjectStorage final : public IBlobStore,"));
+}
+
 TEST_F(StorageFactoryTest, SelectsLocalStorageWithoutCreatingS3Client) {
     auto config_mgr = LoadStorageConfig("local", root);
     bool factory_called = false;
@@ -264,7 +284,10 @@ TEST_F(StorageFactoryTest, SelectsLocalStorageWithoutCreatingS3Client) {
     );
 
     EXPECT_FALSE(factory_called);
-    EXPECT_NE(std::dynamic_pointer_cast<disk::storage::LocalFileStorage>(bundle.storage), nullptr);
+    EXPECT_NE(
+        std::dynamic_pointer_cast<disk::storage::LocalFileStorage>(bundle.upload_staging_storage),
+        nullptr
+    );
     EXPECT_NE(std::dynamic_pointer_cast<disk::storage::LocalBlobStore>(bundle.blob_store), nullptr);
 }
 
@@ -282,7 +305,8 @@ TEST_F(StorageFactoryTest, SelectsOneSharedS3StorageAfterBucketValidation) {
         }
     );
 
-    auto storage_backend = std::dynamic_pointer_cast<disk::storage::S3ObjectStorage>(bundle.storage);
+    auto storage_backend =
+        std::dynamic_pointer_cast<disk::storage::S3ObjectStorage>(bundle.upload_staging_storage);
     auto blob_backend = std::dynamic_pointer_cast<disk::storage::S3ObjectStorage>(bundle.blob_store);
     ASSERT_NE(storage_backend, nullptr);
     ASSERT_NE(blob_backend, nullptr);

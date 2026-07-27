@@ -11,22 +11,18 @@
 
 namespace disk::storage {
 
-    std::shared_ptr<IFileStorage> StorageMgr::s_storage = nullptr;
+    std::shared_ptr<UploadStagingStorage> StorageMgr::s_upload_staging_storage = nullptr;
 
-    void StorageMgr::SetInstance(std::shared_ptr<IFileStorage> storage) {
-        s_storage = std::move(storage);
-    }
-
-    auto StorageMgr::GetStorage() -> IFileStorage* {
-        return s_storage.get();
+    void StorageMgr::SetInstance(std::shared_ptr<UploadStagingStorage> storage) {
+        s_upload_staging_storage = std::move(storage);
     }
 
     auto StorageMgr::GetUploadStagingStorage() -> UploadStagingStorage* {
-        return dynamic_cast<UploadStagingStorage*>(s_storage.get());
+        return s_upload_staging_storage.get();
     }
 
     auto StorageMgr::IsInitialized() -> bool {
-        return s_storage != nullptr;
+        return s_upload_staging_storage != nullptr;
     }
 
-} ///< namespace disk::storage
+} // namespace disk::storage

@@ -86,7 +86,6 @@ namespace disk::services {
         try {
             disk::upload::UploadLifecycleService lifecycle_service(
                 m_db_client,
-                disk::storage::StorageMgr::GetStorage(),
                 disk::storage::StorageMgr::GetUploadStagingStorage(),
                 disk::storage::BlobStoreMgr::GetBlobStore()
             );

@@ -11,7 +11,6 @@
 
 #include <memory>
 
-#include "storage/IFileStorage.hpp"
 #include "storage/UploadStagingStorage.hpp"
 
 namespace disk::storage {
@@ -29,7 +28,7 @@ namespace disk::storage {
      * StorageMgr::SetInstance(std::make_shared<LocalFileStorage>(config));
      *
      * ///< 在控制器中获取
-     * auto storage = StorageMgr::GetStorage();
+     * auto* storage = StorageMgr::GetUploadStagingStorage();
      * @endcode
      */
     class StorageMgr {
@@ -38,14 +37,7 @@ namespace disk::storage {
          * @brief 设置存储实例（在应用启动时调用）
          * @param storage 存储实例
          */
-        static void SetInstance(std::shared_ptr<IFileStorage> storage);
-
-        /**
-         * @brief 获取存储实例
-         * @return IFileStorage* 存储实例指针
-         */
-        [[nodiscard]]
-        static auto GetStorage() -> IFileStorage*;
+        static void SetInstance(std::shared_ptr<UploadStagingStorage> storage);
 
         /**
          * @brief 获取上传暂存存储实例
@@ -62,7 +54,7 @@ namespace disk::storage {
         static auto IsInitialized() -> bool;
 
     private:
-        static std::shared_ptr<IFileStorage> s_storage;
+        static std::shared_ptr<UploadStagingStorage> s_upload_staging_storage;
     };
 
-} ///< namespace disk::storage
+} // namespace disk::storage

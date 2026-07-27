@@ -622,7 +622,6 @@ namespace disk::jobs {
 
         disk::upload::UploadLifecycleService lifecycle_service(
             m_db_client,
-            nullptr,
             m_staging_storage,
             m_blob_store
         );

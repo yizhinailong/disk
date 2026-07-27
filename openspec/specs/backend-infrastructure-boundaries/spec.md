@@ -65,3 +65,11 @@ The backend SHALL distinguish upload staging storage responsibilities from final
 #### Scenario: Blob store is designed
 - **WHEN** final blob storage is specified or implemented
 - **THEN** it SHALL use content/blob-oriented vocabulary and preserve compatibility with the current local blob layout unless a separate migration changes it
+
+#### Scenario: Empty aggregate storage marker is retired
+- **WHEN** upload staging and final blob responsibilities have dedicated capability interfaces
+- **THEN** storage composition and services SHALL depend directly on `UploadStagingStorage` and `IBlobStore` and SHALL NOT retain an empty aggregate storage interface
+
+#### Scenario: Marker retirement preserves migration compatibility
+- **WHEN** the empty aggregate storage interface is removed before local upload migration is admitted for contract cleanup
+- **THEN** local and S3 adapters SHALL retain the descriptor-based legacy local routing required to drain existing tasks

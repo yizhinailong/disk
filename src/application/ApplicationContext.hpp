@@ -10,7 +10,6 @@
 #pragma once
 
 #include <memory>
-
 #include <string>
 
 #include <drogon/drogon.h>
@@ -23,7 +22,6 @@
 #include "services/ShareService.hpp"
 #include "services/UploadService.hpp"
 #include "storage/IBlobStore.hpp"
-#include "storage/IFileStorage.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/Singleton.hpp"
 
@@ -41,7 +39,7 @@ namespace disk::application {
         static auto Initialize(
             drogon::orm::DbClientPtr db_client,
             drogon::nosql::RedisClientPtr redis_client,
-            disk::storage::IFileStorage* storage,
+            disk::storage::UploadStagingStorage* upload_staging_storage,
             disk::storage::IBlobStore* blob_store,
             std::string jwt_secret
         ) -> void;
@@ -65,9 +63,6 @@ namespace disk::application {
         auto Cleanup() -> disk::services::CleanupService&;
 
         [[nodiscard]]
-        auto Storage() -> disk::storage::IFileStorage*;
-
-        [[nodiscard]]
         auto BlobStore() -> disk::storage::IBlobStore*;
 
         [[nodiscard]]
@@ -85,7 +80,7 @@ namespace disk::application {
         auto initialize(
             drogon::orm::DbClientPtr db_client,
             drogon::nosql::RedisClientPtr redis_client,
-            disk::storage::IFileStorage* storage,
+            disk::storage::UploadStagingStorage* upload_staging_storage,
             disk::storage::IBlobStore* blob_store,
             std::string jwt_secret
         ) -> void;
@@ -94,7 +89,6 @@ namespace disk::application {
 
         drogon::orm::DbClientPtr m_db_client{};
         drogon::nosql::RedisClientPtr m_redis_client{};
-        disk::storage::IFileStorage* m_storage{};
         disk::storage::UploadStagingStorage* m_upload_staging_storage{};
         disk::storage::IBlobStore* m_blob_store{};
 
@@ -108,4 +102,4 @@ namespace disk::application {
             m_download_integrity_service{};
     };
 
-} ///< namespace disk::application
+} // namespace disk::application

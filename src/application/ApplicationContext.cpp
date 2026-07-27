@@ -9,26 +9,26 @@
 
 #include "application/ApplicationContext.hpp"
 
+#include <utility>
+
 #include "services/ObservedDbClient.hpp"
 #include "storage/BlobStoreMgr.hpp"
 #include "storage/StorageMgr.hpp"
 #include "utils/ConfigMgr.hpp"
-
-#include <utility>
 
 namespace disk::application {
 
     auto ApplicationContext::Initialize(
         drogon::orm::DbClientPtr db_client,
         drogon::nosql::RedisClientPtr redis_client,
-        disk::storage::IFileStorage* storage,
+        disk::storage::UploadStagingStorage* upload_staging_storage,
         disk::storage::IBlobStore* blob_store,
         std::string jwt_secret
     ) -> void {
         GetInstance()->initialize(
             std::move(db_client),
             std::move(redis_client),
-            storage,
+            upload_staging_storage,
             blob_store,
             std::move(jwt_secret)
         );
@@ -37,7 +37,7 @@ namespace disk::application {
     auto ApplicationContext::initialize(
         drogon::orm::DbClientPtr db_client,
         drogon::nosql::RedisClientPtr redis_client,
-        disk::storage::IFileStorage* storage,
+        disk::storage::UploadStagingStorage* upload_staging_storage,
         disk::storage::IBlobStore* blob_store,
         std::string jwt_secret
     ) -> void {
@@ -47,11 +47,7 @@ namespace disk::application {
 
         m_db_client = std::move(db_client);
         m_redis_client = std::move(redis_client);
-        m_storage = storage;
-        m_upload_staging_storage = disk::storage::StorageMgr::GetUploadStagingStorage();
-        if (m_upload_staging_storage == nullptr) {
-            m_upload_staging_storage = dynamic_cast<disk::storage::UploadStagingStorage*>(m_storage);
-        }
+        m_upload_staging_storage = upload_staging_storage;
         m_blob_store = blob_store;
 
         m_download_integrity_service =
@@ -59,12 +55,11 @@ namespace disk::application {
 
         m_upload_service = std::make_unique<disk::file::UploadService>(
             m_db_client,
-            m_storage,
             m_upload_staging_storage,
             m_blob_store
         );
         m_file_query_service = std::make_unique<disk::file::FileQueryService>(m_db_client);
-        m_file_mutation_service = std::make_unique<disk::file::FileMutationService>(m_db_client, m_storage);
+        m_file_mutation_service = std::make_unique<disk::file::FileMutationService>(m_db_client);
         m_folder_service = std::make_unique<disk::folder::FolderService>(m_db_client);
         m_share_service = std::make_unique<disk::share::ShareService>(
             m_db_client,
@@ -82,7 +77,7 @@ namespace disk::application {
         initialize(
             disk::metrics::ObserveDbClient(drogon::app().getDbClient()),
             drogon::app().getRedisClient(),
-            disk::storage::StorageMgr::GetStorage(),
+            disk::storage::StorageMgr::GetUploadStagingStorage(),
             disk::storage::BlobStoreMgr::GetBlobStore(),
             disk::utils::ConfigMgr::GetInstance()->GetJwtSecret()
         );
@@ -118,11 +113,6 @@ namespace disk::application {
         return *m_cleanup_service;
     }
 
-    auto ApplicationContext::Storage() -> disk::storage::IFileStorage* {
-        ensureInitialized();
-        return m_storage;
-    }
-
     auto ApplicationContext::BlobStore() -> disk::storage::IBlobStore* {
         ensureInitialized();
         return m_blob_store;
@@ -134,4 +124,4 @@ namespace disk::application {
         return m_download_integrity_service.get();
     }
 
-} ///< namespace disk::application
+} // namespace disk::application

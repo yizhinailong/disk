@@ -14,7 +14,7 @@ src/
 ├── filters/          # JWT/share/admin/rate-limit middleware
 ├── models/           # Drogon ORM models; generated-style headers
 ├── services/         # business logic; drogon::Task<Result<T>>
-├── storage/          # IFileStorage, LocalFileStorage, assembly concurrency
+├── storage/          # UploadStagingStorage, IBlobStore, concrete adapters, assembly concurrency
 └── utils/            # ConfigMgr, ErrorCode, Response, hashes, PCH, batch helpers
 ```
 
@@ -26,7 +26,8 @@ src/
 | Add request/response shape | `dtos/*Dto.hpp` | `FromRequest()` validates; `ToJson()` serializes |
 | Add domain logic | `services/*Service.hpp/.cpp` | Return `drogon::Task<Result<T>>`; keep controller thin |
 | Add auth/public access | `filters/`, `controllers/*Controller.hpp`, `config.json` | Protected routes use the single global `JwtAuthFilter`; public paths are explicit filter exemptions; route filters own domain authorization/rate limits |
-| Add file storage operation | `storage/IFileStorage.hpp`, `LocalFileStorage.*` | Storage layer never owns HTTP, DB, auth decisions |
+| Add upload staging operation | `storage/UploadStagingStorage.hpp`, `LocalFileStorage.*`, `S3ObjectStorage.*` | Storage layer never owns HTTP, DB, auth decisions |
+| Add final Blob operation | `storage/IBlobStore.hpp`, `LocalBlobStore.*`, `S3ObjectStorage.*` | Keep final content responsibilities separate from upload sessions |
 | Add shared error | `utils/ErrorCode.hpp` | Keep code ranges: 10xxx common, 40xxx auth, 50xxx file, 60xxx share, 70xxx Redis, 80xxx admin |
 | Add config field | `utils/ConfigMgr.*`, `config.json` | Validate secure/prod behavior |
 
@@ -39,7 +40,7 @@ src/
 | Share domain | `ShareService.*`, `ShareDto.hpp`, `ShareAuthFilter.*` | Owner share CRUD + public access/browse/download via share token |
 | Trash domain | `TrashService.*`, `TrashDto.hpp` | Soft delete, restore with conflict naming, permanent delete, clear |
 | Admin domain | `AdminService.*`, `AdminDto.hpp`, `AdminAuthFilter.*` | User status/role changes and admin safety checks |
-| Storage | `IFileStorage.hpp`, `LocalFileStorage.*`, `AssemblyConcurrencyLimiter.hpp` | Content-addressed paths, temp chunks, promotion, Range-ready reads |
+| Storage | `UploadStagingStorage.hpp`, `IBlobStore.hpp`, concrete adapters, `AssemblyConcurrencyLimiter.hpp` | Session-oriented temp chunks plus content-addressed promotion and Range-ready reads |
 | Utilities | `ErrorCode.hpp`, `Response.hpp`, `BatchUtils.hpp`, `RedisKeyPrefix.hpp`, `StageTimer.hpp` | Cross-cutting contracts used by multiple services |
 
 ## CONVENTIONS

@@ -209,7 +209,6 @@ set(Storage_HEADERS
     storage/BlobDescriptor.hpp
     storage/BlobStoreMgr.hpp
     storage/IBlobStore.hpp
-    storage/IFileStorage.hpp
     storage/LocalBlobStore.hpp
     storage/LocalFileStorage.hpp
     storage/MultipartUploadRecovery.hpp

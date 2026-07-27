@@ -6,7 +6,6 @@
 #include <string>
 
 #include "storage/IBlobStore.hpp"
-#include "storage/IFileStorage.hpp"
 #include "storage/LocalFileStorage.hpp"
 #include "storage/MultipartUploadRecovery.hpp"
 #include "storage/S3Client.hpp"
@@ -19,8 +18,7 @@ namespace trantor {
 
 namespace disk::storage {
 
-    class S3ObjectStorage final : public IFileStorage,
-                                  public IBlobStore,
+    class S3ObjectStorage final : public IBlobStore,
                                   public UploadStagingStorage,
                                   public IMultipartUploadCleaner {
     public:

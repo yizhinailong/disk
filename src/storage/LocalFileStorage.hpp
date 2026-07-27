@@ -15,7 +15,6 @@
 #include <string>
 #include <string_view>
 
-#include "storage/IFileStorage.hpp"
 #include "storage/UploadStagingStorage.hpp"
 
 namespace trantor {
@@ -37,7 +36,7 @@ namespace disk::storage {
      * - 清理上传暂存文件
      * - 不处理最终内容 Blob 的提升、读取和删除
      */
-    class LocalFileStorage : public IFileStorage, public UploadStagingStorage {
+    class LocalFileStorage : public UploadStagingStorage {
     public:
         /**
          * @brief 构造本地文件存储实例

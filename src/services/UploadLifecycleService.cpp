@@ -36,7 +36,6 @@
 #include "services/StorageReconciliationService.hpp"
 #include "services/UploadTaskRepository.hpp"
 #include "storage/IBlobStore.hpp"
-#include "storage/IFileStorage.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/ConfigMgr.hpp"
 
@@ -375,11 +374,9 @@ namespace disk::upload {
 
     UploadLifecycleService::UploadLifecycleService(
         drogon::orm::DbClientPtr db_client,
-        disk::storage::IFileStorage* storage,
         disk::storage::UploadStagingStorage* upload_staging_storage,
         disk::storage::IBlobStore* blob_store
     ) : m_db_client(std::move(db_client)),
-        m_storage(storage),
         m_upload_staging_storage(upload_staging_storage),
         m_blob_store(blob_store) {
         Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=upload_lifecycle";

@@ -4,14 +4,14 @@
 #include <memory>
 
 #include "storage/IBlobStore.hpp"
-#include "storage/IFileStorage.hpp"
 #include "storage/S3Client.hpp"
+#include "storage/UploadStagingStorage.hpp"
 #include "utils/ConfigMgr.hpp"
 
 namespace disk::storage {
 
     struct StorageBundle {
-        std::shared_ptr<IFileStorage> storage;
+        std::shared_ptr<UploadStagingStorage> upload_staging_storage;
         std::shared_ptr<IBlobStore> blob_store;
     };
 

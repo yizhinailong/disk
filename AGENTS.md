@@ -51,7 +51,7 @@ Ignore generated/artifact paths: `build/`, `clients/desktop/build/`, `.sisyphus/
 | `AuthService` | class | `src/services/AuthService.hpp/.cpp` | Register/login/refresh/logout backend business logic |
 | `TokenService` | singleton | `src/services/TokenService.hpp/.cpp` | Access/refresh/share JWT lifecycle; 5s revocation negative cache |
 | `RedisService` | singleton | `src/services/RedisService.hpp/.cpp` | Redis wrapper, batch ops, CAS, rate-limit increments |
-| `IFileStorage` | interface | `src/storage/IFileStorage.hpp` | Filesystem boundary; no HTTP/DB/permission logic |
+| `UploadStagingStorage` / `IBlobStore` | interfaces | `src/storage/` | Upload-session staging and final content Blob boundaries; no HTTP/DB/permission logic |
 | `AssemblyConcurrencyLimiter` | singleton | `src/storage/AssemblyConcurrencyLimiter.hpp` | Identifier-free, process-local upload assembly capacity guard |
 | `Response` | utility | `src/utils/Response.hpp` | Converts `Result<T>` into uniform `{code,message,data}` JSON |
 | `Application` | Qt bridge | `clients/desktop/src/app/Application.*` | Owns/injects managers into QML context and wires auth/session signals |
@@ -85,7 +85,7 @@ Ignore generated/artifact paths: `build/`, `clients/desktop/build/`, `.sisyphus/
 ## UNIQUE STYLES
 
 - JWT/admin authentication is declared on protected routes; `config.json` GlobalFilters is reserved for request tracing and public unauthenticated rate limiters.
-- `StorageMgr::SetInstance()` happens once at startup; services retrieve the active `IFileStorage` through the manager.
+- `StorageMgr::SetInstance()` happens once at startup and owns the active `UploadStagingStorage`; final content access is owned separately by `BlobStoreMgr`.
 - Upload assembly admission is fail-fast: `AssemblyConcurrencyLimiter` rejects when local capacity is exhausted and does not queue; PostgreSQL finalization leases exclusively own same-`upload_id` coordination.
 - Python integration tests use PEP 723 headers and `uv run`; helpers can auto-start the backend and write evidence under `.sisyphus/evidence/`.
 - Desktop QML treats three file views (`myfiles`, `shared`, `trash`) as view modes inside `DriveBrowserPage`, not separate StackView pages.

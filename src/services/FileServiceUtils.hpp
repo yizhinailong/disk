@@ -26,10 +26,6 @@
 #include "utils/ErrorCode.hpp"
 #include "utils/LogHelper.hpp"
 
-namespace disk::storage {
-    class IFileStorage;
-}
-
 namespace disk::file::utils {
 
     using drogon_model::disk::Files;
@@ -165,4 +161,4 @@ namespace disk::file::utils {
         std::string_view prefix = {}
     ) -> std::string;
 
-} ///< namespace disk::file::utils
+} // namespace disk::file::utils

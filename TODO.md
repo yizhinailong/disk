@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 3 上传仓储死接口清理）：全仓库调用点审计确认 `UploadTaskRepository` 的 `FindById`、`MarkFailedIfLeaseOwned`、`DeleteInProgressById`、`MarkCompleted`、`MarkCompletedIfInProgress`、`GetChunkCoverage` 和非事务 `DeleteChunks` 重载均无生产调用，已同步删除声明、实现和过时正向测试期望；owner/version CAS、取消/过期迁移、分片记录/列表及事务内删除仍与生产调用对应。`Failed` 持久值、`temp_path` 回退、local staging 和可空迁移字段仍受兼容退役准入保护，因此 Phase 3 总清理项保持未勾选。完整构建、仓储 GoogleTest 11/11、真实 PostgreSQL 状态机 1/1、基础上传流 20/20、上传安全不变量 885/885（112.69 秒聚焦复验，完整运行内 112.66 秒）、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1459 项，1452 通过、7 项按环境门控跳过，0 失败，总耗时 496.96 秒。
+> 最近验证（2026-07-27，本轮 Phase 3 空聚合存储接口清理）：文档与实现已移除不承载方法的 `IFileStorage` 标记接口，`StorageFactory`、`StorageMgr`、`ApplicationContext` 和上传生命周期改为直接依赖 `UploadStagingStorage` / `IBlobStore`；local/S3 concrete adapter 的持久描述符兼容路由未删除。完整构建、能力边界与上传生命周期聚焦 CTest 17/17、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 495.23 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1470,6 +1470,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定仓储公开面合同�
 生产路径继续使用所有权查询、完成租约 CAS、取消/过期条件迁移、分片幂等写入/列表及事务连接版 `DeleteChunks`。`Failed` 的数值和读取语义、`temp_path` 兼容回退、local staging 与可空分片描述字段没有删除；`compatibility_removal_allowed=false` 的退役准入仍有效，所以 Phase 3 “迁移完成后删除”总项继续保持未勾选。
 
 完整构建、仓储 GoogleTest 11/11、真实 PostgreSQL 状态机 1/1、基础上传流 20/20、上传安全不变量 885/885、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1459 项，1452 通过、7 项环境门控跳过、0 失败，总耗时 496.96 秒。
+
+### 15.20 空聚合存储接口清理记录（2026-07-27）
+
+OpenSpec、ADR、系统测试和单元测试文档先行固定 capability-specific 存储组合合同。全仓库调用点审计确认 `IFileStorage` 只包含虚析构，`ApplicationContext`、`FileMutationService`、`UploadService` 和 `UploadLifecycleService` 对它仅做未使用的指针透传；实际上传暂存与最终内容能力均已由 `UploadStagingStorage` 和 `IBlobStore` 独立表达。
+
+空标记头文件、`StorageMgr::GetStorage()`、服务透传参数和成员现已删除；`StorageFactory::StorageBundle` 与 `StorageMgr` 直接持有 `UploadStagingStorage`，S3 multipart journal/cleaner 通过该 concrete adapter 获取，最终 Blob 继续由 `BlobStoreMgr` 独立持有。`LocalFileStorage` 与 `S3ObjectStorage` 的暂存实现及按持久描述符回退处理 legacy local 任务的兼容路径未改变；`temp_path`、local staging 和可空迁移字段仍受 `compatibility_removal_allowed=false` 准入约束，因此 Phase 3 总清理项保持未勾选。
+
+新增 `StorageCapabilityBoundaryContractTest` 防止空接口、宽泛 accessor 和能力透传参数回归。完整构建、能力边界与上传生命周期聚焦 CTest 17/17、分布式拓扑合同脚本、OpenSpec 24/24 及完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 495.23 秒。首次完整运行只因库存合同仍写死 1458 项而失败，该既有漂移已同步修正到 1460，并由第二次完整回归验证。
 
 ## 16. 最终 Definition of Done
 

@@ -239,7 +239,7 @@ MySQL 的 `ON UPDATE CURRENT_TIMESTAMP` 在 PostgreSQL 中无直接等价语法�
 ### 不包含在迁移范围内
 
 - **Redis**：缓存、令牌、限流状态继续由 Redis 负责，不受本次迁移影响
-- **文件存储**：`IFileStorage` / `LocalFileStorage` 的物理文件存储逻辑不变
+- **文件存储**：`UploadStagingStorage` / `IBlobStore` concrete adapter 的物理文件存储逻辑不变
 - **业务逻辑**：服务层、控制器、DTO 的业务规则不变，仅数据访问层适配
 - **客户端**：桌面客户端、API 契约不受影响
 - **分片上传协议**：上传初始化、分片传输、合并流程不变

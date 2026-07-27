@@ -23,7 +23,6 @@
 #include "services/UploadLifecycleService.hpp"
 #include "services/UploadTaskRepository.hpp"
 #include "storage/IBlobStore.hpp"
-#include "storage/IFileStorage.hpp"
 #include "storage/UploadStagingStorage.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/FileHashUtil.hpp"
@@ -88,11 +87,9 @@ namespace disk::file {
 
     UploadService::UploadService(
         drogon::orm::DbClientPtr db_client,
-        storage::IFileStorage* storage,
         storage::UploadStagingStorage* upload_staging_storage,
         storage::IBlobStore* blob_store
     ) : m_db_client(std::move(db_client)),
-        m_storage(storage),
         m_upload_staging_storage(upload_staging_storage),
         m_blob_store(blob_store) {
         StartUploadTaskCacheMaintenance();
@@ -117,7 +114,6 @@ namespace disk::file {
         auto config = ConfigMgr::GetInstance();
         disk::upload::UploadLifecycleService lifecycle_service(
             m_db_client,
-            m_storage,
             m_upload_staging_storage,
             m_blob_store
         );
@@ -422,7 +418,6 @@ namespace disk::file {
         const auto config = ConfigMgr::GetInstance();
         disk::upload::UploadLifecycleService lifecycle_service(
             m_db_client,
-            m_storage,
             m_upload_staging_storage,
             m_blob_store
         );
@@ -480,7 +475,6 @@ namespace disk::file {
 
         disk::upload::UploadLifecycleService lifecycle_service(
             m_db_client,
-            m_storage,
             m_upload_staging_storage,
             m_blob_store
         );

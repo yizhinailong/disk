@@ -301,7 +301,7 @@ auto main() -> int {
     /// 初始化文件存储和最终 Blob 存储
     try {
         auto storage_bundle = disk::storage::StorageFactory::Create(config);
-        disk::storage::StorageMgr::SetInstance(std::move(storage_bundle.storage));
+        disk::storage::StorageMgr::SetInstance(std::move(storage_bundle.upload_staging_storage));
         disk::storage::BlobStoreMgr::SetInstance(std::move(storage_bundle.blob_store));
     } catch (const std::runtime_error&) {
         disk::utils::Logger::Error(disk::storage::StorageRuntimeLogContext())
@@ -323,7 +323,7 @@ auto main() -> int {
         if (disk::utils::IncludesApi(role)) {
             auto redis_client = drogon::app().getRedisClient();
             if (auto* s3_storage = dynamic_cast<disk::storage::S3ObjectStorage*>(
-                    disk::storage::StorageMgr::GetStorage()
+                    disk::storage::StorageMgr::GetUploadStagingStorage()
                 );
                 s3_storage != nullptr) {
                 s3_storage->SetMultipartUploadJournal(
@@ -341,7 +341,7 @@ auto main() -> int {
             disk::application::ApplicationContext::Initialize(
                 db_client,
                 redis_client,
-                disk::storage::StorageMgr::GetStorage(),
+                disk::storage::StorageMgr::GetUploadStagingStorage(),
                 disk::storage::BlobStoreMgr::GetBlobStore(),
                 config->GetJwtSecret()
             );
@@ -364,7 +364,7 @@ auto main() -> int {
                     .lease_duration_seconds = config->GetWorkerLeaseDurationSeconds(),
                 },
                 dynamic_cast<disk::storage::IMultipartUploadCleaner*>(
-                    disk::storage::StorageMgr::GetStorage()
+                    disk::storage::StorageMgr::GetUploadStagingStorage()
                 )
             );
             auto worker_runtime = std::make_shared<disk::jobs::StorageWorkerRuntime>(

@@ -24,7 +24,7 @@ namespace disk::storage {
             case disk::utils::StorageBackend::Local:
                 Logger::Info(StorageRuntimeLogContext()) << "Storage backend selected: backend=local";
                 return StorageBundle{
-                    .storage = std::make_shared<LocalFileStorage>(config_mgr),
+                    .upload_staging_storage = std::make_shared<LocalFileStorage>(config_mgr),
                     .blob_store = std::make_shared<LocalBlobStore>(std::move(config_mgr)),
                 };
 
@@ -43,7 +43,7 @@ namespace disk::storage {
                     }
                     auto s3_storage = std::make_shared<S3ObjectStorage>(std::move(config_mgr), std::move(client));
                     return StorageBundle{
-                        .storage = s3_storage,
+                        .upload_staging_storage = s3_storage,
                         .blob_store = s3_storage,
                     };
                 } catch (const std::exception& e) {

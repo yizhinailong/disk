@@ -41,11 +41,10 @@ namespace disk::file {
 
     /// ==================== 构造函数 ====================
 
-    FileMutationService::FileMutationService(drogon::orm::DbClientPtr db_client, storage::IFileStorage* storage)
+    FileMutationService::FileMutationService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)),
           m_file_repository(m_db_client),
-          m_folder_repository(m_db_client),
-          m_storage(storage) {
+          m_folder_repository(m_db_client) {
         Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=file_mutation";
     }
 

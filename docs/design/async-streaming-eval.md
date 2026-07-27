@@ -268,7 +268,7 @@ bool send(const std::string &data) {
 
 ```cpp
 // 理想但当前不可行的 API 设计
-auto BuildDownloadStream(DownloadParams params, IFileStorage* storage)
+auto BuildDownloadStream(DownloadParams params, IBlobStore* blob_store)
     -> drogon::Task<AsyncGenerator<std::string_view>>
 {
     auto file = co_await storage->OpenForRead(params.storage_path);
