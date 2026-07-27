@@ -10,7 +10,6 @@
 #include "RedisService.hpp"
 
 #include <string_view>
-#include <vector>
 
 #include "services/MetricsService.hpp"
 #include "utils/ErrorCode.hpp"
@@ -18,47 +17,6 @@
 namespace disk::services {
 
     namespace {
-
-        auto BuildMultiKeyCommand(
-            std::string_view command_name,
-            const std::vector<std::string>& keys
-        ) -> std::string {
-            size_t command_size = command_name.size();
-            for (const auto& key : keys) {
-                command_size += 1 + key.size();
-            }
-
-            std::string command;
-            command.reserve(command_size);
-            command.append(command_name);
-
-            for (const auto& key : keys) {
-                command.push_back(' ');
-                command.append(key);
-            }
-
-            return command;
-        }
-
-        auto BuildMSetCommand(const std::vector<KeyValue>& pairs) -> std::string {
-            size_t command_size = 4;
-            for (const auto& pair : pairs) {
-                command_size += 2 + pair.key.size() + pair.value.size();
-            }
-
-            std::string command;
-            command.reserve(command_size);
-            command.append("MSET");
-
-            for (const auto& pair : pairs) {
-                command.push_back(' ');
-                command.append(pair.key);
-                command.push_back(' ');
-                command.append(pair.value);
-            }
-
-            return command;
-        }
 
         auto WrapRedisResultParseError(
             std::string_view operation,
@@ -275,140 +233,6 @@ namespace disk::services {
         } catch (const std::exception& ex) {
             timer.Finish(disk::metrics::DependencyOutcome::Protocol);
             co_return WrapRedisResultParseError("EXPIRE", ex, log_context);
-        }
-    }
-
-    auto RedisService::MSet(
-        const std::vector<KeyValue>& pairs,
-        int ttl,
-        disk::utils::LogContext log_context
-    )
-        -> drogon::Task<Result<void>> {
-        if (pairs.empty()) {
-            co_return {};
-        }
-
-        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::Redis);
-        try {
-            if (ttl == 0) {
-                const auto command = BuildMSetCommand(pairs);
-                co_await m_redis_client->execCommandCoro(command.c_str());
-            } else {
-                auto transaction = co_await m_redis_client->newTransactionCoro();
-                for (const auto& pair : pairs) {
-                    co_await transaction->execCommandCoro(
-                        "SETEX %s %d %s",
-                        pair.key.c_str(),
-                        ttl,
-                        pair.value.c_str()
-                    );
-                }
-
-                auto exec_result = co_await transaction->executeCoro();
-                const auto exec_results = exec_result.asArray();
-
-                if (exec_results.size() != pairs.size()) {
-                    timer.Finish(disk::metrics::DependencyOutcome::Protocol);
-                    Logger::Error(log_context) << "Redis transaction returned unexpected reply count: expected="
-                                               << pairs.size() << ", actual=" << exec_results.size();
-                    co_return std::unexpected(ErrorInfo(
-                        ErrorCode::RedisOperationFailed,
-                        "Redis operation failed: unexpected transaction reply count"
-                    ));
-                }
-            }
-
-            timer.Finish(disk::metrics::DependencyOutcome::Success);
-            co_return {};
-
-        } catch (const drogon::nosql::RedisException& ex) {
-            timer.Finish(ClassifyRedisError(ex.code()));
-            Logger::Error(log_context) << "Redis operation failed: MSET, count=" << pairs.size();
-            co_return std::unexpected(ErrorInfo(
-                ErrorCode::RedisOperationFailed,
-                "Redis operation failed: " + std::string(ex.what())
-            ));
-        } catch (const std::exception& ex) {
-            timer.Finish(disk::metrics::DependencyOutcome::Protocol);
-            co_return WrapRedisResultParseError("MSET", ex, log_context);
-        }
-    }
-
-    auto RedisService::MGet(
-        const std::vector<std::string>& keys,
-        disk::utils::LogContext log_context
-    )
-        -> drogon::Task<Result<std::vector<std::string>>> {
-        if (keys.empty()) {
-            co_return std::vector<std::string>{};
-        }
-
-        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::Redis);
-        try {
-            const auto command = BuildMultiKeyCommand("MGET", keys);
-            auto result = co_await m_redis_client->execCommandCoro(command.c_str());
-
-            std::vector<std::string> values;
-            values.reserve(keys.size());
-            const auto result_array = result.asArray();
-
-            if (result_array.size() != keys.size()) {
-                timer.Finish(disk::metrics::DependencyOutcome::Protocol);
-                Logger::Error(log_context) << "Redis MGET returned unexpected value count: expected=" << keys.size()
-                                           << ", actual=" << result_array.size();
-                co_return std::unexpected(ErrorInfo(
-                    ErrorCode::RedisOperationFailed,
-                    "Redis operation failed: unexpected MGET reply count"
-                ));
-            }
-
-            for (size_t i = 0; i < result_array.size(); ++i) {
-                values.push_back(result_array[i].isNil() ? "" : result_array[i].asString());
-            }
-
-            timer.Finish(disk::metrics::DependencyOutcome::Success);
-            co_return values;
-
-        } catch (const drogon::nosql::RedisException& ex) {
-            timer.Finish(ClassifyRedisError(ex.code()));
-            Logger::Error(log_context) << "Redis operation failed: MGET, count=" << keys.size();
-            co_return std::unexpected(ErrorInfo(
-                ErrorCode::RedisOperationFailed,
-                "Redis operation failed: " + std::string(ex.what())
-            ));
-        } catch (const std::exception& ex) {
-            timer.Finish(disk::metrics::DependencyOutcome::Protocol);
-            co_return WrapRedisResultParseError("MGET", ex, log_context);
-        }
-    }
-
-    auto RedisService::MDelete(
-        const std::vector<std::string>& keys,
-        disk::utils::LogContext log_context
-    ) -> drogon::Task<Result<int>> {
-        if (keys.empty()) {
-            co_return 0;
-        }
-
-        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::Redis);
-        try {
-            const auto command = BuildMultiKeyCommand("DEL", keys);
-            auto result = co_await m_redis_client->execCommandCoro(command.c_str());
-            const auto deleted = result.asInteger();
-
-            timer.Finish(disk::metrics::DependencyOutcome::Success);
-            co_return deleted;
-
-        } catch (const drogon::nosql::RedisException& ex) {
-            timer.Finish(ClassifyRedisError(ex.code()));
-            Logger::Error(log_context) << "Redis operation failed: MDELETE, count=" << keys.size();
-            co_return std::unexpected(ErrorInfo(
-                ErrorCode::RedisOperationFailed,
-                "Redis operation failed: " + std::string(ex.what())
-            ));
-        } catch (const std::exception& ex) {
-            timer.Finish(disk::metrics::DependencyOutcome::Protocol);
-            co_return WrapRedisResultParseError("MDELETE", ex, log_context);
         }
     }
 

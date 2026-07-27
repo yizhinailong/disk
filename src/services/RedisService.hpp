@@ -10,7 +10,6 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
 #include <drogon/nosql/RedisClient.h>
 
@@ -28,14 +27,6 @@ namespace disk::services {
     enum class TtlType : std::uint8_t {
         Permanent = 0, ///< 永不过期
         Auto           ///< 自动过期（使用参数值）
-    };
-
-    /**
-     * @brief 键值对结构（用于批操作）
-     */
-    struct KeyValue {
-        std::string key;   ///< Redis键
-        std::string value; ///< Redis值
     };
 
     /**
@@ -136,52 +127,6 @@ namespace disk::services {
             int ttl,
             disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<void>>;
-
-        /**
-         * @brief 批量设置键值对
-         *
-         * ttl == 0 时使用单条 MSET 命令；ttl > 0 时使用 Redis 事务批量执行 SETEX。
-         * 该方法保持现有 Result<void> 返回语义，仅减少安全可行的 Redis 往返次数。
-         *
-         * @param pairs 键值对数组
-         * @param ttl 过期时间（0=永久，>0=自动过期）
-         * @return Result<void> 成功返回void，失败返回错误
-         */
-        [[nodiscard]]
-        auto MSet(
-            const std::vector<KeyValue>& pairs,
-            int ttl,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<void>>;
-
-        /**
-         * @brief 批量获取键值
-         *
-         * 使用单条 MGET 命令获取所有键，并按输入顺序返回结果。
-         * 缺失键使用空字符串占位，以保持现有调用方语义。
-         *
-         * @param keys 键数组
-         * @return Result<std::vector<std::string>> 成功返回值数组，失败返回错误
-         */
-        [[nodiscard]]
-        auto MGet(
-            const std::vector<std::string>& keys,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<std::vector<std::string>>>;
-
-        /**
-         * @brief 批量删除键
-         *
-         * 使用单条 DEL 命令删除全部键，并返回 Redis 报告的删除数量。
-         *
-         * @param keys 键数组
-         * @return Result<int> 成功返回删除的键数量，失败返回错误
-         */
-        [[nodiscard]]
-        auto MDelete(
-            const std::vector<std::string>& keys,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<int>>;
 
         /**
          * @brief 原子性递增 Redis 键值（递增 1）

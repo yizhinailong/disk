@@ -110,3 +110,12 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 
 - **WHEN** unused C++ repository methods are removed before migration-retirement approval
 - **THEN** persisted upload status values, local-staging descriptors, legacy path fallback, and nullable migration fields SHALL remain available until their dedicated retirement contract admits removal
+
+### Requirement: Shared service surfaces follow production use
+
+Backend shared services SHALL expose only command capabilities used by production flows, while active command behavior and dependency-failure policy remain unchanged.
+
+#### Scenario: Unused Redis batch-command surface is removed
+
+- **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller
+- **THEN** those declarations, implementations, and placeholder tests SHALL be removed together while active single-key, counter, CAS, and fixed-window operations retain their existing behavior

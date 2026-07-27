@@ -148,10 +148,19 @@ namespace disk::services {
             ASSERT_FALSE(source.empty());
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                13U
+                10U
             );
             EXPECT_EQ(CountOccurrences(source, "Logger::Trace(log_context)"), 7U);
-            EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 16U);
+            EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 11U);
+            EXPECT_FALSE(Contains(header, "struct KeyValue"));
+            EXPECT_FALSE(Contains(header, "auto MSet("));
+            EXPECT_FALSE(Contains(header, "auto MGet("));
+            EXPECT_FALSE(Contains(header, "auto MDelete("));
+            EXPECT_FALSE(Contains(source, "BuildMSetCommand"));
+            EXPECT_FALSE(Contains(source, "BuildMultiKeyCommand"));
+            EXPECT_FALSE(Contains(source, "RedisService::MSet("));
+            EXPECT_FALSE(Contains(source, "RedisService::MGet("));
+            EXPECT_FALSE(Contains(source, "RedisService::MDelete("));
             EXPECT_EQ(
                 CountOccurrences(
                     source,

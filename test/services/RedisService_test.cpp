@@ -321,22 +321,6 @@ namespace {
         SUCCEED();
     }
 
-    TEST(RedisServiceTest, MGetReturnsValuesForAllKeys) {
-        SUCCEED() << "逻辑验证：MGet 应该处理所有键（不是仅第一个键）";
-    }
-
-    TEST(RedisServiceTest, MDeleteDeletesAllKeys) {
-        SUCCEED() << "逻辑验证：MDelete 应该删除所有键（不是仅第一个键）";
-    }
-
-    TEST(RedisServiceTest, MGetHandlesSingleKey) {
-        SUCCEED() << "逻辑验证：MGet 支持单键操作";
-    }
-
-    TEST(RedisServiceTest, MDeleteHandlesSingleKey) {
-        SUCCEED() << "逻辑验证：MDelete 支持单键操作";
-    }
-
 } // namespace
 
 /// 保持 TokenService 专用测试
