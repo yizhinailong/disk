@@ -93,3 +93,7 @@ The backend SHALL distinguish upload staging storage responsibilities from final
 #### Scenario: Final Blob locators are adapter-owned
 - **WHEN** a final Blob is promoted or later accessed
 - **THEN** the storage adapter SHALL return the actual promoted locator for persistence, callers SHALL reuse the persisted descriptor, and `IBlobStore` SHALL NOT expose a hash-to-path construction operation
+
+#### Scenario: Blob size checks use persisted descriptors
+- **WHEN** download preflight or reconciliation observes a final Blob size
+- **THEN** it SHALL pass a `BlobDescriptor` to `GetBlobSize`, the adapter SHALL query actual backend metadata using the persisted locator, and `IBlobStore` SHALL NOT expose a raw-path size operation

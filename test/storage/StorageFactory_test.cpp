@@ -279,6 +279,10 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     EXPECT_FALSE(Contains(blob_store_header, "GetFinalStoragePath("));
     EXPECT_FALSE(Contains(local_blob_header, "GetFinalStoragePath("));
     EXPECT_FALSE(Contains(s3_header, "GetFinalStoragePath("));
+    EXPECT_TRUE(Contains(blob_store_header, "virtual auto GetBlobSize("));
+    EXPECT_FALSE(Contains(blob_store_header, "GetFileSize("));
+    EXPECT_FALSE(Contains(local_blob_header, "GetFileSize("));
+    EXPECT_FALSE(Contains(s3_header, "GetFileSize("));
     EXPECT_FALSE(Contains(application_header, "IFileStorage"));
     EXPECT_FALSE(Contains(upload_header, "IFileStorage"));
     EXPECT_FALSE(Contains(lifecycle_header, "IFileStorage"));

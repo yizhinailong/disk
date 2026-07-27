@@ -117,8 +117,8 @@ namespace disk::storage {
         ) -> drogon::Task<Result<bool>> override;
 
         [[nodiscard]]
-        auto GetFileSize(
-            const std::filesystem::path& storage_path,
+        auto GetBlobSize(
+            const BlobDescriptor& blob,
             disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<uint64_t>> override;
 

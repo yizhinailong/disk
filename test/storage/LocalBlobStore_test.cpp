@@ -266,12 +266,34 @@ namespace disk::storage {
         }
 
         TEST_F(LocalBlobStoreTest, MissingBlobSizeReturnsFileNotFound) {
-            auto result = drogon::sync_wait(
-                m_blob_store->GetFileSize(m_storage_base / "missing.bin")
-            );
+            const BlobDescriptor blob{
+                .content_id = 1,
+                .hash_md5 = "00000000000000000000000000000000",
+                .storage_path = (m_storage_base / "missing.bin").string(),
+                .size = 10,
+            };
+
+            auto result = drogon::sync_wait(m_blob_store->GetBlobSize(blob));
 
             ASSERT_FALSE(result.has_value());
             EXPECT_EQ(result.error().code, ErrorCode::FileNotFound);
+        }
+
+        TEST_F(LocalBlobStoreTest, BlobSizeReadsPersistedObjectMetadata) {
+            const std::string content = "actual-local-blob-size";
+            const auto legacy_path = m_storage_base / "ab" / "legacy-size.bin";
+            WriteBinaryFile(legacy_path, content);
+            const BlobDescriptor blob{
+                .content_id = 1,
+                .hash_md5 = "00000000000000000000000000000000",
+                .storage_path = legacy_path.string(),
+                .size = 1,
+            };
+
+            auto result = drogon::sync_wait(m_blob_store->GetBlobSize(blob));
+
+            ASSERT_TRUE(result.has_value());
+            EXPECT_EQ(*result, content.size());
         }
 
     } // namespace

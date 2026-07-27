@@ -203,8 +203,8 @@ namespace {
             return path_it->second;
         }
 
-        auto GetFileSize(
-            const std::filesystem::path& /*storage_path*/,
+        auto GetBlobSize(
+            const disk::storage::BlobDescriptor& /*blob*/,
             disk::utils::LogContext /*log_context*/
         )
             -> drogon::Task<Result<uint64_t>> override {

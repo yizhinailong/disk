@@ -470,14 +470,15 @@ namespace disk::storage {
         return std::filesystem::path(blob.storage_path);
     }
 
-    auto LocalBlobStore::GetFileSize(
-        const std::filesystem::path& storage_path,
+    auto LocalBlobStore::GetBlobSize(
+        const BlobDescriptor& blob,
         disk::utils::LogContext /*log_context*/
     )
         -> drogon::Task<Result<uint64_t>> {
+        auto storage_path = std::filesystem::path(blob.storage_path);
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
-            [storage_path]() -> Result<uint64_t> {
+            [storage_path = std::move(storage_path)]() -> Result<uint64_t> {
                 std::error_code ec;
                 const auto file_size = std::filesystem::file_size(storage_path, ec);
                 if (ec) {

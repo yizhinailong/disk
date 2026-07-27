@@ -1321,14 +1321,14 @@ TEST_F(S3ObjectStorageTest, BlobExistsSizeRangeAndDeleteUsePersistedObjectKey) {
         .content_id = 1,
         .hash_md5 = "00000000000000000000000000000000",
         .storage_path = key.generic_string(),
-        .size = 10,
+        .size = 999,
     };
 
     auto exists = drogon::sync_wait(storage->BlobExists(blob));
     ASSERT_TRUE(exists.has_value()) << exists.error().message;
     EXPECT_TRUE(*exists);
 
-    auto size = drogon::sync_wait(storage->GetFileSize(key));
+    auto size = drogon::sync_wait(storage->GetBlobSize(blob));
     ASSERT_TRUE(size.has_value()) << size.error().message;
     EXPECT_EQ(*size, 10U);
 
@@ -1354,31 +1354,28 @@ TEST_F(S3ObjectStorageTest, BlobExistsSizeRangeAndDeleteUsePersistedObjectKey) {
 TEST_F(S3ObjectStorageTest, FinalObjectOperationsRejectKeysOutsideConfiguredPrefix) {
     const auto outside = std::filesystem::path("staging/upload-123/assembled/1.bin");
     const auto traversal = std::filesystem::path("objects/../staging/object.bin");
+    const disk::storage::BlobDescriptor outside_blob{
+        .content_id = 1,
+        .hash_md5 = "00000000000000000000000000000000",
+        .storage_path = outside.generic_string(),
+        .size = 1,
+    };
 
-    auto outside_exists = drogon::sync_wait(storage->BlobExists(
-        disk::storage::BlobDescriptor{
-            .content_id = 1,
-            .hash_md5 = "00000000000000000000000000000000",
-            .storage_path = outside.generic_string(),
-            .size = 1,
-        }
-    ));
+    auto outside_exists = drogon::sync_wait(storage->BlobExists(outside_blob));
+    auto outside_size = drogon::sync_wait(storage->GetBlobSize(outside_blob));
     auto traversal_delete = drogon::sync_wait(storage->DeleteBlob(traversal));
     auto range_result = drogon::sync_wait(storage->OpenBlobRangeForRead(
-        disk::storage::BlobDescriptor{
-            .content_id = 1,
-            .hash_md5 = "00000000000000000000000000000000",
-            .storage_path = outside.generic_string(),
-            .size = 1,
-        },
+        outside_blob,
         0,
         1
     ));
 
     ASSERT_FALSE(outside_exists.has_value());
+    ASSERT_FALSE(outside_size.has_value());
     ASSERT_FALSE(traversal_delete.has_value());
     ASSERT_FALSE(range_result.has_value());
     EXPECT_EQ(outside_exists.error().code, ErrorCode::ValidationFailed);
+    EXPECT_EQ(outside_size.error().code, ErrorCode::ValidationFailed);
     EXPECT_EQ(traversal_delete.error().code, ErrorCode::ValidationFailed);
     EXPECT_EQ(range_result.error().code, ErrorCode::ValidationFailed);
     EXPECT_EQ(client->head_calls, 0);

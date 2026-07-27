@@ -96,10 +96,7 @@ namespace disk::download {
         }
 
         try {
-            auto observed_size = co_await m_blob_store->GetFileSize(
-                blob.storage_path,
-                log_context
-            );
+            auto observed_size = co_await m_blob_store->GetBlobSize(blob, log_context);
             if (!observed_size) {
                 if (observed_size.error().code == ErrorCode::FileNotFound) {
                     Json::Value details(Json::objectValue);

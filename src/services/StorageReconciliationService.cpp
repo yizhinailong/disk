@@ -316,7 +316,7 @@ namespace disk::reconciliation {
             }
             co_await ResolveFinding(kMissingFinalBlobFindingType, resource_id);
 
-            auto observed_size = co_await m_blob_store->GetFileSize(storage_path, log_context);
+            auto observed_size = co_await m_blob_store->GetBlobSize(blob, log_context);
             if (!observed_size) {
                 if (observed_size.error().code == ErrorCode::FileNotFound) {
                     auto details = MakeDetails(request.scan_id);

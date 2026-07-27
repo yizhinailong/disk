@@ -118,13 +118,13 @@ namespace disk::storage {
             -> drogon::Task<Result<void>> = 0;
 
         /**
-         * @brief 获取最终 Blob 大小（字节）
-         * @param storage_path 最终 Blob 存储路径
-         * @return 成功返回文件大小，失败返回错误信息
+         * @brief 通过持久化描述符获取最终 Blob 实际大小（字节）
+         * @param blob 最终内容 Blob 描述符
+         * @return 成功返回后端实际大小，失败返回错误信息
          */
         [[nodiscard]]
-        virtual auto GetFileSize(
-            const std::filesystem::path& storage_path,
+        virtual auto GetBlobSize(
+            const BlobDescriptor& blob,
             disk::utils::LogContext log_context = {}
         )
             -> drogon::Task<Result<uint64_t>> = 0;

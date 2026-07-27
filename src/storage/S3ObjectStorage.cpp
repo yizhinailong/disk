@@ -1477,12 +1477,15 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto S3ObjectStorage::GetFileSize(
-        const std::filesystem::path& storage_path,
+    auto S3ObjectStorage::GetBlobSize(
+        const BlobDescriptor& blob,
         disk::utils::LogContext log_context
     )
         -> drogon::Task<Result<uint64_t>> {
-        auto key_result = ResolveFinalObjectKey(storage_path, m_s3_config.object_prefix);
+        auto key_result = ResolveFinalObjectKey(
+            std::filesystem::path(blob.storage_path),
+            m_s3_config.object_prefix
+        );
         if (!key_result) {
             co_return std::unexpected(key_result.error());
         }

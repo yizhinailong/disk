@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 3 final locator 公开构造接口清理）：调用点审计确认 `GetFinalStoragePath(hash)` 没有适配器外的生产调用者，只由 local/S3 实现内部和测试用于预测路径，下载 mock 也被迫提供空洞实现。该方法已从 `IBlobStore`、local/S3 公开头文件及实现删除；适配器在 `PromoteToFinal` 内构造 SHA-256 locator，上传流程继续持久化实际 `BlobPromoteResult.path`，后续下载、对账和迁移继续使用数据库描述符。完整构建、local/S3 Blob、上传路径/一致性、下载响应、存储能力、真实上传流程与分布式拓扑聚焦 CTest 91/91、OpenSpec 24/24 通过。完整 CTest 共 1459 项，1452 通过、7 项按环境门控跳过，0 失败，总耗时 489.63 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-27，本轮 Phase 3 Blob 裸路径大小接口清理）：下载预检与内容对账已经持有完整 `BlobDescriptor`，但仍拆出 locator 调用 `GetFileSize(path)`。通用接口现收敛为 `GetBlobSize(BlobDescriptor)`；local/S3 适配器按持久 locator 查询实际后端元数据，不回显描述符中的期望大小，下载大小不一致 finding、缺失对象和 S3 前缀边界语义保持不变。完整构建、local/S3 Blob、下载响应、存储能力、对账、真实下载流与分布式拓扑聚焦 CTest 66/66、OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 484.43 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1516,6 +1516,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定 final locator 所有�
 该方法已从 `IBlobStore`、`LocalBlobStore`、`S3ObjectStorage` 的公开头文件和实现删除。两个适配器只在 `PromoteToFinal` 内构造 SHA-256 locator，上传完成继续将实际 `BlobPromoteResult.path` 持久化到内容行；下载、对账与迁移继续只使用持久化 `BlobDescriptor.storage_path`。local/S3 测试改从提升结果或明确夹具规则验证路径，原 S3 getter 单测由既有提升行为用例覆盖并删除。存量 locator、兼容读取、持久 Blob GC 和迁移字段均未改变，因此 Phase 3 与 Phase 10 总清理项保持未勾选。
 
 完整构建、local/S3 Blob、上传路径/一致性、下载响应、存储能力、真实上传流程与分布式拓扑聚焦 CTest 91/91、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1459 项，1452 通过、7 项环境门控跳过、0 失败，总耗时 489.63 秒。
+
+### 15.26 Blob 裸路径大小接口清理记录（2026-07-27）
+
+ADR、系统测试、单元测试和 OpenSpec 先行固定最终 Blob 大小查询边界。全仓库调用点审计确认下载预检和内容对账已经持有完整 `BlobDescriptor`，却仍拆出 `storage_path` 调用 `GetFileSize(path)`；其余直接消费者仅为 local/S3 单元测试和下载 mock。
+
+`IBlobStore` 现只暴露 `GetBlobSize(BlobDescriptor)`，下载预检与对账直接传递持久描述符。local/S3 适配器从描述符 locator 查询文件系统或对象存储的实际大小，绝不回显描述符中的期望 `size`；缺失对象、下载大小不一致 finding 和 S3 对象前缀外拒绝语义保持不变。源码合同正向锁定描述符能力并拒绝旧裸路径入口，local/S3 测试分别证明实际元数据优先于错误的期望大小。legacy locator、持久 Blob GC、迁移字段与退役准入均未改变，因此 Phase 3 与 Phase 10 总清理项保持未勾选。
+
+完整构建、local/S3 Blob、下载响应、存储能力、对账、真实下载流与分布式拓扑聚焦 CTest 66/66、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 484.43 秒。首次完整运行中的唯一失败是拓扑合同拒绝上一提交保留的 1459 项库存记录；本节同步权威计数后由定向复验闭环。
 
 ## 16. 最终 Definition of Done
 
