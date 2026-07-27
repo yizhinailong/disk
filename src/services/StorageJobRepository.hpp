@@ -156,9 +156,6 @@ namespace disk::jobs {
             uint32_t retry_delay_seconds
         ) const -> drogon::Task<std::optional<StorageJobStatus>>;
 
-        [[nodiscard]]
-        auto ReplayDeadLetter(uint64_t job_id) const -> drogon::Task<bool>;
-
     private:
         drogon::orm::DbClientPtr m_db_client;
     };

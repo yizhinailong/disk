@@ -324,14 +324,4 @@ namespace disk::jobs {
         co_return ParseStorageJobStatus(result[0]["status"].as<int16_t>());
     }
 
-    auto StorageJobRepository::ReplayDeadLetter(uint64_t job_id) const -> drogon::Task<bool> {
-        auto result = co_await m_db_client->execSqlCoro(
-            "UPDATE storage_jobs SET " "  status = $1, attempts = 0, available_at = NOW(), " "  locked_by = NULL, locked_until = NULL, last_error = NULL, " "  completed_at = NULL, updated_at = NOW() " "WHERE id = $2 AND status = $3",
-            ToStorageValue(StorageJobStatus::Pending),
-            static_cast<int64_t>(job_id),
-            ToStorageValue(StorageJobStatus::DeadLetter)
-        );
-        co_return result.affectedRows() == 1;
-    }
-
 } // namespace disk::jobs

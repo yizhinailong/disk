@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 3 Blob 裸路径大小接口清理）：下载预检与内容对账已经持有完整 `BlobDescriptor`，但仍拆出 locator 调用 `GetFileSize(path)`。通用接口现收敛为 `GetBlobSize(BlobDescriptor)`；local/S3 适配器按持久 locator 查询实际后端元数据，不回显描述符中的期望大小，下载大小不一致 finding、缺失对象和 S3 前缀边界语义保持不变。完整构建、local/S3 Blob、下载响应、存储能力、对账、真实下载流与分布式拓扑聚焦 CTest 66/66、OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 484.43 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-27，本轮 Phase 10 仓储级死信重放入口清理）：全仓库调用点审计确认 `StorageJobRepository::ReplayDeadLetter(job_id)` 只有声明与实现，实际管理员重放由 `StorageJobAdminService` 在同一事务中完成任务重置和操作日志写入。该无调用仓储入口已删除，队列仓储继续只负责 Worker 入队、认领、续租和 owner 条件回写，编译期合同禁止绕过审计的独立重放能力回归。完整构建、仓储/管理重放合同、真实 PostgreSQL 队列与管理员操作、分布式拓扑聚焦 CTest 13/13、OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 483.37 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1524,6 +1524,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定最终 Blob 大小查�
 `IBlobStore` 现只暴露 `GetBlobSize(BlobDescriptor)`，下载预检与对账直接传递持久描述符。local/S3 适配器从描述符 locator 查询文件系统或对象存储的实际大小，绝不回显描述符中的期望 `size`；缺失对象、下载大小不一致 finding 和 S3 对象前缀外拒绝语义保持不变。源码合同正向锁定描述符能力并拒绝旧裸路径入口，local/S3 测试分别证明实际元数据优先于错误的期望大小。legacy locator、持久 Blob GC、迁移字段与退役准入均未改变，因此 Phase 3 与 Phase 10 总清理项保持未勾选。
 
 完整构建、local/S3 Blob、下载响应、存储能力、对账、真实下载流与分布式拓扑聚焦 CTest 66/66、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 484.43 秒。首次完整运行中的唯一失败是拓扑合同拒绝上一提交保留的 1459 项库存记录；本节同步权威计数后由定向复验闭环。
+
+### 15.27 仓储级死信重放入口清理记录（2026-07-27）
+
+ADR、系统测试、单元测试和 OpenSpec 先行固定人工死信重放所有权。全仓库调用点审计确认 `StorageJobRepository::ReplayDeadLetter(job_id)` 只有声明与实现；真实管理员入口早已由 `StorageJobAdminService` 在一个 PostgreSQL 事务内完成 `DeadLetter -> Pending`、字段重置与 `admin.storage_job.replay` 操作日志写入，并通过条件更新保证并发单赢家。
+
+无调用仓储方法及其独立 SQL 已删除。`StorageJobRepository` 继续保留生产 Worker 使用的入队、认领、续租、owner 条件成功/失败回写和引用门禁原语；现有仓储合同通过编译期能力探测拒绝独立重放入口回归，管理员 DTO、上下文、dry-run、确认条件、审计内容和事务实现均未改变。该清理不删除任务状态、表字段、管理 API 或迁移兼容路径，因此 Phase 10 过渡字段/配置/分支总项保持未勾选。
+
+完整构建、仓储/管理重放合同、真实 PostgreSQL 队列与管理员操作、分布式拓扑聚焦 CTest 13/13、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 483.37 秒。
 
 ## 16. 最终 Definition of Done
 

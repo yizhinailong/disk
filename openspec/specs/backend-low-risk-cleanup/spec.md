@@ -101,6 +101,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** completion, cancellation, expiration, or chunk persistence needs a PostgreSQL primitive
 - **THEN** the repository SHALL retain the owner/version guarded transition or transaction-client overload used by that production flow
 
+#### Scenario: Dead-letter replay remains audit-transaction owned
+
+- **WHEN** the only production dead-letter replay flow resets a job and records its administrator audit in one transaction
+- **THEN** `StorageJobAdminService` SHALL retain that atomic flow and `StorageJobRepository` SHALL NOT expose a standalone `ReplayDeadLetter` operation that can bypass the audit write
+
 #### Scenario: Interface cleanup does not retire persisted compatibility
 
 - **WHEN** unused C++ repository methods are removed before migration-retirement approval

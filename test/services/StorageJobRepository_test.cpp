@@ -8,6 +8,11 @@
 
 namespace disk::jobs {
     namespace {
+        template <typename Repository>
+        concept HasStandaloneDeadLetterReplay = requires(const Repository& repository) {
+            repository.ReplayDeadLetter(uint64_t{ 1 });
+        };
+
         TEST(StorageJobStatusTest, RoundTripsPersistedValues) {
             for (const auto status : {
                      StorageJobStatus::Pending,
@@ -86,6 +91,7 @@ namespace disk::jobs {
             EXPECT_TRUE((std::is_same_v<CompleteResult, drogon::Task<bool>>));
             EXPECT_TRUE((std::is_same_v<TransactionalCompleteResult, drogon::Task<bool>>));
             EXPECT_TRUE((std::is_same_v<FailureResult, drogon::Task<std::optional<StorageJobStatus>>>));
+            EXPECT_FALSE(HasStandaloneDeadLetterReplay<StorageJobRepository>);
         }
 
         TEST(StorageJobRepositoryContractTest, DefinesRequiredHandlerTypes) {
