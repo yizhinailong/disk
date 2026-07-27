@@ -77,3 +77,7 @@ The backend SHALL distinguish upload staging storage responsibilities from final
 #### Scenario: Singleton manager probes have no callers
 - **WHEN** a singleton manager initialization probe is not used by production or test callers
 - **THEN** the backend SHALL remove that probe while retaining the manager's required set/get operations and any instance-level runtime readiness state
+
+#### Scenario: Staging cleanup uses descriptor capabilities
+- **WHEN** a local staging assembly must be discarded or an upload session must be cleaned
+- **THEN** callers SHALL use `DiscardAssembly` or `CleanupSession`, and `LocalFileStorage` SHALL NOT expose an arbitrary-path deletion operation

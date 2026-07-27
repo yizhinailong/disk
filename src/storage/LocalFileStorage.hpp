@@ -116,14 +116,6 @@ namespace disk::storage {
             -> drogon::Task<Result<void>> override;
 
         /**
-         * @brief 安全删除上传暂存文件或目录
-         * @param target_path 目标路径
-         * @return 成功返回空，失败返回错误信息
-         */
-        [[nodiscard]]
-        auto DeletePath(const std::filesystem::path& target_path) -> drogon::Task<Result<void>>;
-
-        /**
          * @brief 清理上传会话对应的临时目录及其内容
          * @param upload_id 上传会话 ID
          * @return 成功返回空，失败返回错误信息

@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 3 manager 死探针清理）：调用点审计确认 `StorageMgr::IsInitialized`、`BlobStoreMgr::IsInitialized` 和 `ProcessRuntimeMgr::IsInitialized` 均无生产或测试调用，已删除声明与实现；健康检查和指标实际使用的 `ProcessRuntimeState::IsInitialized` 实例状态保持不变。完整构建、manager 公开面与进程运行时聚焦 CTest 11/11、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 489.95 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-27，本轮 Phase 3 local 暂存任意路径删除入口清理）：调用点审计确认 `LocalFileStorage::DeletePath` 无生产调用，仅由旧测试模拟流程使用；该入口及其专用 timeout awaiter 已删除，测试改用会话/组装描述符约束的 `DiscardAssembly`。`LocalBlobStore::DeleteBlob`、持久 Blob GC、local staging 兼容路由和迁移字段保持不变。完整构建、存储能力/工厂/local 暂存/上传原子性与分布式拓扑聚焦 CTest 38/38、OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 488.14 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1484,6 +1484,14 @@ OpenSpec、ADR、系统测试和单元测试文档先行固定 capability-specif
 OpenSpec、ADR、系统测试和单元测试文档先行要求 singleton manager 公开面与真实调用路径对应。全仓库符号审计确认 `StorageMgr::IsInitialized`、`BlobStoreMgr::IsInitialized` 和 `ProcessRuntimeMgr::IsInitialized` 只存在于各自声明与实现，没有生产或测试调用者；启动装配只需要 set/get 操作，删除这三个静态探针不改变实例生命周期或初始化失败行为。
 
 存储能力合同现同时拒绝两个 storage manager 探针回归，进程初始化合同拒绝 `ProcessRuntimeMgr` 静态探针回归并正向锁定 `ProcessRuntimeState::IsInitialized`。后者仍由 readiness 与 `disk_process_initialized` 指标读取，因此本轮没有删除或替代真实运行时状态。完整构建、聚焦 CTest 11/11、分布式拓扑合同、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 489.95 秒。该清理不涉及 `temp_path`、local staging、feature flag 或 schema 退役，Phase 3 与 Phase 10 对应总项继续保持未勾选。
+
+### 15.22 Local 暂存任意路径删除入口清理记录（2026-07-27）
+
+ADR、系统测试、单元测试和 OpenSpec 先行固定暂存清理公开面：单个组装工件只能通过 `DiscardAssembly(session, assembly)` 丢弃，整个会话只能通过 `CleanupSession(session)` 清理。全仓库调用点审计确认 `LocalFileStorage::DeletePath` 没有生产调用者，只被 `FileServiceAtomicity_test.cpp` 的旧模拟流程用于绕过描述符直接删除组装路径。
+
+该公开方法、实现及其独占的 timeout awaiter、超时常量与原子状态现已删除；原子性模拟器在哈希不匹配和重名失败路径改用 `DiscardAssembly`。存储能力合同同时拒绝 `DeletePath` 和孤立 timeout helper 回归，并正向锁定描述符操作。`LocalBlobStore::DeleteBlob` 的持久 GC 删除能力与超时保护、local staging 兼容路由、`temp_path` 和可空迁移字段均未改变，因此 Phase 3 与 Phase 10 总清理项继续保持未勾选。
+
+完整构建、存储能力/工厂/local 暂存/上传原子性与分布式拓扑聚焦 CTest 38/38、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 488.14 秒。
 
 ## 16. 最终 Definition of Done
 

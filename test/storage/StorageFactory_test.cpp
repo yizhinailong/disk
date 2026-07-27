@@ -259,6 +259,7 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     const auto upload_header = ReadSourceFile("src/services/UploadService.hpp");
     const auto lifecycle_header = ReadSourceFile("src/services/UploadLifecycleService.hpp");
     const auto local_header = ReadSourceFile("src/storage/LocalFileStorage.hpp");
+    const auto local_source = ReadSourceFile("src/storage/LocalFileStorage.cpp");
     const auto s3_header = ReadSourceFile("src/storage/S3ObjectStorage.hpp");
 
     EXPECT_FALSE(std::filesystem::exists(RepositoryRoot() / "src/storage/IFileStorage.hpp"));
@@ -271,6 +272,9 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     EXPECT_FALSE(Contains(upload_header, "IFileStorage"));
     EXPECT_FALSE(Contains(lifecycle_header, "IFileStorage"));
     EXPECT_TRUE(Contains(local_header, "class LocalFileStorage : public UploadStagingStorage"));
+    EXPECT_FALSE(Contains(local_header, "DeletePath("));
+    EXPECT_FALSE(Contains(local_source, "RunBlockingFilesystemTaskWithTimeout"));
+    EXPECT_TRUE(Contains(local_header, "DiscardAssembly("));
     EXPECT_TRUE(Contains(s3_header, "class S3ObjectStorage final : public IBlobStore,"));
 }
 
