@@ -109,10 +109,6 @@ namespace disk::jobs {
         co_return true;
     }
 
-    auto StorageWorkerRuntime::IsStarted() const noexcept -> bool {
-        return m_started.load();
-    }
-
     auto StorageWorkerRuntime::IsAccepting() const noexcept -> bool {
         return m_accepting.load();
     }

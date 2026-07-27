@@ -119,3 +119,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller
 - **THEN** those declarations, implementations, and placeholder tests SHALL be removed together while active single-key, counter, CAS, and fixed-window operations retain their existing behavior
+
+#### Scenario: Unused Worker startup probe is removed
+
+- **WHEN** a whole-repository call-site audit confirms that `StorageWorkerRuntime::IsStarted` has no production or test caller
+- **THEN** the public probe SHALL be removed while the internal atomic startup guard, idempotent `Start`, drain admission, and in-flight drain observation remain unchanged

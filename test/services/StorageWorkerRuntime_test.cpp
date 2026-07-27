@@ -24,6 +24,13 @@ namespace disk::jobs {
         constexpr std::string_view EXCEPTION_SECRET =
             "exception-secret credential=worker-password";
 
+        template <typename T>
+        concept HasIsStarted = requires(const T& runtime) {
+            runtime.IsStarted();
+        };
+
+        static_assert(!HasIsStarted<StorageWorkerRuntime>);
+
         class StorageWorkerRuntimeLogTest : public ::testing::Test {
         protected:
             auto SetUp() -> void override {

@@ -36,9 +36,6 @@ namespace disk::jobs {
         auto PollOnce() -> drogon::Task<bool>;
 
         [[nodiscard]]
-        auto IsStarted() const noexcept -> bool;
-
-        [[nodiscard]]
         auto IsAccepting() const noexcept -> bool;
 
         [[nodiscard]]
