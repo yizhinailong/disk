@@ -134,6 +134,16 @@ namespace disk::storage {
             ASSERT_TRUE(std::filesystem::exists(promote_result->path));
             EXPECT_EQ(ReadBinaryFile(promote_result->path), content);
 
+            const BlobDescriptor blob{
+                .content_id = 1,
+                .hash_md5 = FileHashUtil::HashMd5(content),
+                .storage_path = promote_result->path.string(),
+                .size = content.size(),
+            };
+            auto exists_before_delete = drogon::sync_wait(m_blob_store->BlobExists(blob));
+            ASSERT_TRUE(exists_before_delete.has_value());
+            EXPECT_TRUE(*exists_before_delete);
+
             auto open_result = drogon::sync_wait(m_blob_store->OpenForRead(promote_result->path));
             ASSERT_TRUE(open_result.has_value());
             std::string read_content{
@@ -145,6 +155,10 @@ namespace disk::storage {
             auto delete_result = drogon::sync_wait(m_blob_store->DeleteBlob(promote_result->path));
             ASSERT_TRUE(delete_result.has_value());
             EXPECT_FALSE(std::filesystem::exists(promote_result->path));
+
+            auto exists_after_delete = drogon::sync_wait(m_blob_store->BlobExists(blob));
+            ASSERT_TRUE(exists_after_delete.has_value());
+            EXPECT_FALSE(*exists_after_delete);
         }
 
         TEST_F(LocalBlobStoreTest, PromoteReusesExistingBlobAndPreservesContent) {

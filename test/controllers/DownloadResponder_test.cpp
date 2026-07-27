@@ -86,7 +86,6 @@ namespace {
             blob_exists_count = 0;
             local_path_count = 0;
             open_path_count = 0;
-            exists_path_count = 0;
         }
 
         /// ---- IBlobStore 接口 ----
@@ -136,15 +135,6 @@ namespace {
             co_return Result<void>{};
         }
 
-        auto Exists(
-            const std::filesystem::path& /*storage_path*/,
-            disk::utils::LogContext /*log_context*/
-        )
-            -> drogon::Task<Result<bool>> override {
-            ++exists_path_count;
-            co_return true;
-        }
-
         auto BlobExists(
             const disk::storage::BlobDescriptor& /*blob*/,
             disk::utils::LogContext /*log_context*/
@@ -187,7 +177,6 @@ namespace {
         int open_blob_count{ 0 };
         int blob_exists_count{ 0 };
         int open_path_count{ 0 };
-        int exists_path_count{ 0 };
 
     private:
         [[nodiscard]]
@@ -501,7 +490,6 @@ TEST_F(DownloadResponderTest, InvalidRangeReturns416WithoutTouchingStorage) {
     EXPECT_EQ(m_storage->blob_exists_count, 0);
     EXPECT_EQ(m_storage->local_path_count, 0);
     EXPECT_EQ(m_storage->open_path_count, 0);
-    EXPECT_EQ(m_storage->exists_path_count, 0);
     EXPECT_EQ(m_integrity->preflight_count, 0);
 
     auto json = ParseJsonBody(resp);

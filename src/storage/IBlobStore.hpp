@@ -193,17 +193,7 @@ namespace disk::storage {
         virtual auto BlobExists(
             const BlobDescriptor& blob,
             disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<bool>> {
-            if (blob.storage_path.empty()) {
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::FileReadError, "Blob storage path is empty")
-                );
-            }
-            co_return co_await Exists(
-                std::filesystem::path(blob.storage_path),
-                std::move(log_context)
-            );
-        }
+        ) -> drogon::Task<Result<bool>> = 0;
 
         /**
          * @brief 获取可交给本地文件响应使用的路径（非本地存储可不支持）
@@ -228,17 +218,6 @@ namespace disk::storage {
             disk::utils::LogContext log_context = {}
         )
             -> drogon::Task<Result<void>> = 0;
-
-        /**
-         * @brief 检查最终 Blob 是否存在
-         * @param storage_path 最终 Blob 存储路径
-         * @return 成功返回存在性布尔值，失败返回错误信息
-         */
-        [[nodiscard]]
-        virtual auto Exists(
-            const std::filesystem::path& storage_path,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<bool>> = 0;
 
         /**
          * @brief 根据 SHA-256 内容哈希计算新 Blob 的最终存储路径

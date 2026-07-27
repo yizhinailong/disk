@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 3 local 暂存任意路径删除入口清理）：调用点审计确认 `LocalFileStorage::DeletePath` 无生产调用，仅由旧测试模拟流程使用；该入口及其专用 timeout awaiter 已删除，测试改用会话/组装描述符约束的 `DiscardAssembly`。`LocalBlobStore::DeleteBlob`、持久 Blob GC、local staging 兼容路由和迁移字段保持不变。完整构建、存储能力/工厂/local 暂存/上传原子性与分布式拓扑聚焦 CTest 38/38、OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 488.14 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-27，本轮 Phase 3 Blob 裸路径存在性接口清理）：调用点审计确认生产代码只调用 `IBlobStore::BlobExists(BlobDescriptor)`；`Exists(path)` 仅供接口默认转发和两个 S3 单测使用，现已删除并由 local/S3 直接实现描述符能力。`DeleteBlob(storage_path)`、持久 Blob GC、final inventory、local/S3 兼容路由和迁移字段保持不变。完整构建、对账合同、local/S3 Blob、下载响应与存储能力聚焦 CTest 64/64、OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 486.10 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1492,6 +1492,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定暂存清理公开面�
 该公开方法、实现及其独占的 timeout awaiter、超时常量与原子状态现已删除；原子性模拟器在哈希不匹配和重名失败路径改用 `DiscardAssembly`。存储能力合同同时拒绝 `DeletePath` 和孤立 timeout helper 回归，并正向锁定描述符操作。`LocalBlobStore::DeleteBlob` 的持久 GC 删除能力与超时保护、local staging 兼容路由、`temp_path` 和可空迁移字段均未改变，因此 Phase 3 与 Phase 10 总清理项继续保持未勾选。
 
 完整构建、存储能力/工厂/local 暂存/上传原子性与分布式拓扑聚焦 CTest 38/38、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 488.14 秒。
+
+### 15.23 Blob 裸路径存在性接口清理记录（2026-07-27）
+
+ADR、系统测试、单元测试和 OpenSpec 先行固定最终 Blob 存在性公开面。全仓库调用点审计确认生产对账只调用 `IBlobStore::BlobExists(BlobDescriptor)`；并行存在的 `Exists(std::filesystem::path)` 没有直接生产消费者，只被 `BlobExists` 默认实现转发以及两个 S3 单元测试调用。
+
+`BlobExists` 现改为纯虚描述符能力，由 `LocalBlobStore` 和 `S3ObjectStorage` 直接实现；裸路径 `Exists` 声明和实现已删除，S3/local 测试统一提交持久化描述符，下载 mock 也不再维护旧入口及其无调用计数。能力合同同时要求 `BlobExists` 存在并拒绝 `IBlobStore::Exists(path)` 回归。持久 `blob_gc` 在内容行删除后继续从任务 payload 调用幂等 `DeleteBlob(storage_path)`；final inventory、legacy local 读取、迁移字段和退役准入均未改变，因此 Phase 3 与 Phase 10 总清理项保持未勾选。
+
+完整构建、对账合同、local/S3 Blob、下载响应与存储能力聚焦 CTest 64/64、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 486.10 秒。
 
 ## 16. 最终 Definition of Done
 

@@ -119,8 +119,8 @@ namespace disk::storage {
         ) -> drogon::Task<Result<void>> override;
 
         [[nodiscard]]
-        auto Exists(
-            const std::filesystem::path& storage_path,
+        auto BlobExists(
+            const BlobDescriptor& blob,
             disk::utils::LogContext log_context = {}
         ) -> drogon::Task<Result<bool>> override;
 

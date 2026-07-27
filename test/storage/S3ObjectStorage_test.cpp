@@ -1322,11 +1322,17 @@ TEST_F(S3ObjectStorageTest, PromotionRejectsExistingFinalSizeMismatchWithoutOver
     EXPECT_EQ(client->create_multipart_calls, 0);
 }
 
-TEST_F(S3ObjectStorageTest, ExistsSizeRangeAndDeleteUsePersistedObjectKey) {
+TEST_F(S3ObjectStorageTest, BlobExistsSizeRangeAndDeleteUsePersistedObjectKey) {
     client->objects["objects/ab/abcdef0123456789abcdef0123456789.bin"] = "0123456789";
     const auto key = std::filesystem::path("objects/ab/abcdef0123456789abcdef0123456789.bin");
+    const disk::storage::BlobDescriptor blob{
+        .content_id = 1,
+        .hash_md5 = "00000000000000000000000000000000",
+        .storage_path = key.generic_string(),
+        .size = 10,
+    };
 
-    auto exists = drogon::sync_wait(storage->Exists(key));
+    auto exists = drogon::sync_wait(storage->BlobExists(blob));
     ASSERT_TRUE(exists.has_value()) << exists.error().message;
     EXPECT_TRUE(*exists);
 
@@ -1335,12 +1341,7 @@ TEST_F(S3ObjectStorageTest, ExistsSizeRangeAndDeleteUsePersistedObjectKey) {
     EXPECT_EQ(*size, 10U);
 
     auto stream_result = drogon::sync_wait(storage->OpenBlobRangeForRead(
-        disk::storage::BlobDescriptor{
-            .content_id = 1,
-            .hash_md5 = "00000000000000000000000000000000",
-            .storage_path = key.generic_string(),
-            .size = 10,
-        },
+        blob,
         2,
         4
     ));
@@ -1362,7 +1363,14 @@ TEST_F(S3ObjectStorageTest, FinalObjectOperationsRejectKeysOutsideConfiguredPref
     const auto outside = std::filesystem::path("staging/upload-123/assembled/1.bin");
     const auto traversal = std::filesystem::path("objects/../staging/object.bin");
 
-    auto outside_exists = drogon::sync_wait(storage->Exists(outside));
+    auto outside_exists = drogon::sync_wait(storage->BlobExists(
+        disk::storage::BlobDescriptor{
+            .content_id = 1,
+            .hash_md5 = "00000000000000000000000000000000",
+            .storage_path = outside.generic_string(),
+            .size = 1,
+        }
+    ));
     auto traversal_delete = drogon::sync_wait(storage->DeleteBlob(traversal));
     auto range_result = drogon::sync_wait(storage->OpenBlobRangeForRead(
         disk::storage::BlobDescriptor{

@@ -1454,12 +1454,20 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto S3ObjectStorage::Exists(
-        const std::filesystem::path& storage_path,
+    auto S3ObjectStorage::BlobExists(
+        const BlobDescriptor& blob,
         disk::utils::LogContext log_context
     )
         -> drogon::Task<Result<bool>> {
-        auto key_result = ResolveFinalObjectKey(storage_path, m_s3_config.object_prefix);
+        if (blob.storage_path.empty()) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::FileReadError, "Blob storage path is empty")
+            );
+        }
+        auto key_result = ResolveFinalObjectKey(
+            std::filesystem::path(blob.storage_path),
+            m_s3_config.object_prefix
+        );
         if (!key_result) {
             co_return std::unexpected(key_result.error());
         }

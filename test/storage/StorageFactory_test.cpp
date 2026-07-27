@@ -255,6 +255,7 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     const auto factory_header = ReadSourceFile("src/storage/StorageFactory.hpp");
     const auto manager_header = ReadSourceFile("src/storage/StorageMgr.hpp");
     const auto blob_manager_header = ReadSourceFile("src/storage/BlobStoreMgr.hpp");
+    const auto blob_store_header = ReadSourceFile("src/storage/IBlobStore.hpp");
     const auto application_header = ReadSourceFile("src/application/ApplicationContext.hpp");
     const auto upload_header = ReadSourceFile("src/services/UploadService.hpp");
     const auto lifecycle_header = ReadSourceFile("src/services/UploadLifecycleService.hpp");
@@ -268,6 +269,8 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     EXPECT_FALSE(Contains(manager_header, "GetStorage()"));
     EXPECT_FALSE(Contains(manager_header, "IsInitialized()"));
     EXPECT_FALSE(Contains(blob_manager_header, "IsInitialized()"));
+    EXPECT_TRUE(Contains(blob_store_header, "virtual auto BlobExists("));
+    EXPECT_FALSE(Contains(blob_store_header, "virtual auto Exists("));
     EXPECT_FALSE(Contains(application_header, "IFileStorage"));
     EXPECT_FALSE(Contains(upload_header, "IFileStorage"));
     EXPECT_FALSE(Contains(lifecycle_header, "IFileStorage"));

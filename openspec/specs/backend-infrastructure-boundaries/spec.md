@@ -81,3 +81,7 @@ The backend SHALL distinguish upload staging storage responsibilities from final
 #### Scenario: Staging cleanup uses descriptor capabilities
 - **WHEN** a local staging assembly must be discarded or an upload session must be cleaned
 - **THEN** callers SHALL use `DiscardAssembly` or `CleanupSession`, and `LocalFileStorage` SHALL NOT expose an arbitrary-path deletion operation
+
+#### Scenario: Blob existence uses persisted descriptors
+- **WHEN** a caller checks whether a final Blob exists
+- **THEN** it SHALL pass a `BlobDescriptor` to `BlobExists`, and `IBlobStore` SHALL NOT expose a second raw-path existence operation

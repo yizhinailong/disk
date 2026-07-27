@@ -365,14 +365,20 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto LocalBlobStore::Exists(
-        const std::filesystem::path& storage_path,
+    auto LocalBlobStore::BlobExists(
+        const BlobDescriptor& blob,
         disk::utils::LogContext /*log_context*/
     )
         -> drogon::Task<Result<bool>> {
+        if (blob.storage_path.empty()) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::FileReadError, "Blob storage path is empty")
+            );
+        }
+        auto storage_path = std::filesystem::path(blob.storage_path);
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
-            [storage_path]() -> Result<bool> {
+            [storage_path = std::move(storage_path)]() -> Result<bool> {
                 std::error_code ec;
                 const bool exists = std::filesystem::exists(storage_path, ec);
                 if (ec) {
