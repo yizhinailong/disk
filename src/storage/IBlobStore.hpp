@@ -118,14 +118,6 @@ namespace disk::storage {
             -> drogon::Task<Result<void>> = 0;
 
         /**
-         * @brief 根据 SHA-256 内容哈希计算新 Blob 的最终存储路径
-         * @param sha256_hash 64 位小写十六进制 SHA-256 内容哈希
-         * @return 最终 Blob 存储路径
-         */
-        [[nodiscard]]
-        virtual auto GetFinalStoragePath(const std::string& sha256_hash) const -> std::filesystem::path = 0;
-
-        /**
          * @brief 获取最终 Blob 大小（字节）
          * @param storage_path 最终 Blob 存储路径
          * @return 成功返回文件大小，失败返回错误信息

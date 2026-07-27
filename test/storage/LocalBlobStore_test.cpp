@@ -112,6 +112,10 @@ namespace disk::storage {
                 return m_temp_base / name;
             }
 
+            auto FinalStoragePath(const std::string& hash) const -> std::filesystem::path {
+                return m_storage_base / "sha256" / hash.substr(0, 2) / (hash + ".bin");
+            }
+
             std::filesystem::path m_root;
             std::filesystem::path m_storage_base;
             std::filesystem::path m_temp_base;
@@ -182,7 +186,7 @@ namespace disk::storage {
         TEST_F(LocalBlobStoreTest, PromoteReusesExistingBlobAndPreservesContent) {
             const std::string content = "existing-final-content";
             const auto hash = FileHashUtil::HashSha256(content);
-            const auto final_path = m_blob_store->GetFinalStoragePath(hash);
+            const auto final_path = FinalStoragePath(hash);
             const auto temp_path = TempPath("dedup.tmp");
 
             WriteBinaryFile(final_path, content);
@@ -203,7 +207,7 @@ namespace disk::storage {
         TEST_F(LocalBlobStoreTest, PromoteRejectsCorruptExistingBlob) {
             const std::string content = "expected-final-content";
             const auto hash = FileHashUtil::HashSha256(content);
-            const auto final_path = m_blob_store->GetFinalStoragePath(hash);
+            const auto final_path = FinalStoragePath(hash);
             const auto temp_path = TempPath("conflict.tmp");
             WriteBinaryFile(final_path, "corrupt-final-content");
             WriteBinaryFile(temp_path, content);
@@ -221,7 +225,7 @@ namespace disk::storage {
         TEST_F(LocalBlobStoreTest, DeleteBlobIsIdempotent) {
             const std::string content = "delete-idempotent";
             const auto hash = FileHashUtil::HashSha256(content);
-            const auto final_path = m_blob_store->GetFinalStoragePath(hash);
+            const auto final_path = FinalStoragePath(hash);
             WriteBinaryFile(final_path, content);
 
             auto first_result = drogon::sync_wait(m_blob_store->DeleteBlob(final_path));
@@ -232,12 +236,18 @@ namespace disk::storage {
             EXPECT_FALSE(std::filesystem::exists(final_path));
         }
 
-        TEST_F(LocalBlobStoreTest, GetFinalStoragePathUsesSha256Namespace) {
-            const std::string hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        TEST_F(LocalBlobStoreTest, PromoteUsesSha256Namespace) {
+            const std::string content = "sha256-namespace-content";
+            const auto hash = FileHashUtil::HashSha256(content);
+            const auto temp_path = TempPath("sha256-namespace.tmp");
+            WriteBinaryFile(temp_path, content);
 
-            const auto final_path = m_blob_store->GetFinalStoragePath(hash);
+            auto promote_result = drogon::sync_wait(
+                m_blob_store->PromoteToFinal(LocalAssembly(temp_path, content), hash)
+            );
 
-            EXPECT_EQ(final_path, m_storage_base / "sha256" / "01" / (hash + ".bin"));
+            ASSERT_TRUE(promote_result.has_value());
+            EXPECT_EQ(promote_result->path, FinalStoragePath(hash));
         }
 
         TEST_F(LocalBlobStoreTest, DownloadPathUsesPersistedStoragePath) {

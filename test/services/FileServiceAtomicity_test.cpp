@@ -244,7 +244,7 @@ namespace disk::file {
             }
 
             auto FinalStoragePath(const std::string& hash) const -> std::filesystem::path {
-                return m_blob_store->GetFinalStoragePath(hash);
+                return m_storage_base / "sha256" / hash.substr(0, 2) / (hash + ".bin");
             }
 
             auto WriteChunks(

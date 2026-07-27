@@ -89,3 +89,7 @@ The backend SHALL distinguish upload staging storage responsibilities from final
 #### Scenario: Blob reads use storage-neutral range streams
 - **WHEN** a caller opens final Blob content for download
 - **THEN** it SHALL pass a `BlobDescriptor`, start, and length to `OpenBlobRangeForRead`, and `IBlobStore` SHALL NOT expose raw-path or `std::ifstream` read operations
+
+#### Scenario: Final Blob locators are adapter-owned
+- **WHEN** a final Blob is promoted or later accessed
+- **THEN** the storage adapter SHALL return the actual promoted locator for persistence, callers SHALL reuse the persisted descriptor, and `IBlobStore` SHALL NOT expose a hash-to-path construction operation

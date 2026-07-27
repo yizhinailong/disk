@@ -1193,7 +1193,8 @@ namespace disk::storage {
         }
 
         const auto local_source_path = std::filesystem::path(assembly.locator);
-        const auto object_key = GetFinalStoragePath(sha256_hash);
+        const auto object_key = std::filesystem::path(m_s3_config.object_prefix) / "sha256" /
+                                sha256_hash.substr(0, 2) / (sha256_hash + ".bin");
         const auto key = object_key.generic_string();
         const auto expected_size = assembly.size_bytes;
         auto client = m_s3_client;
@@ -1474,12 +1475,6 @@ namespace disk::storage {
             }
         );
         co_return result;
-    }
-
-    auto S3ObjectStorage::GetFinalStoragePath(const std::string& sha256_hash) const
-        -> std::filesystem::path {
-        return std::filesystem::path(m_s3_config.object_prefix) / "sha256" /
-               sha256_hash.substr(0, 2) / (sha256_hash + ".bin");
     }
 
     auto S3ObjectStorage::GetFileSize(

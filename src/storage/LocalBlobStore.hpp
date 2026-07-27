@@ -80,9 +80,6 @@ namespace disk::storage {
             -> std::optional<std::filesystem::path> override;
 
         [[nodiscard]]
-        auto GetFinalStoragePath(const std::string& sha256_hash) const -> std::filesystem::path override;
-
-        [[nodiscard]]
         auto GetFileSize(
             const std::filesystem::path& storage_path,
             disk::utils::LogContext log_context = {}

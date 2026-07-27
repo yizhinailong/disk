@@ -1110,14 +1110,6 @@ TEST_F(S3ObjectStorageTest, S3SessionCleanupRejectsOutOfPrefixListResult) {
     EXPECT_TRUE(client->objects.contains(session.prefix + "/chunks/0"));
 }
 
-TEST_F(S3ObjectStorageTest, GetFinalStoragePathUsesSha256Namespace) {
-    const std::string sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-    EXPECT_EQ(
-        storage->GetFinalStoragePath(sha256).generic_string(),
-        "objects/sha256/ab/" + sha256 + ".bin"
-    );
-}
-
 TEST_F(S3ObjectStorageTest, LocalAssemblyPromotionConditionallyCreatesSha256Object) {
     const std::string content = "hello s3";
     const auto sha256 = disk::utils::FileHashUtil::HashSha256(content);

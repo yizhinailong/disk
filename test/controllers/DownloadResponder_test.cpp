@@ -203,11 +203,6 @@ namespace {
             return path_it->second;
         }
 
-        auto GetFinalStoragePath(const std::string& hash) const
-            -> std::filesystem::path override {
-            return m_temp_dir / (hash + ".bin");
-        }
-
         auto GetFileSize(
             const std::filesystem::path& /*storage_path*/,
             disk::utils::LogContext /*log_context*/

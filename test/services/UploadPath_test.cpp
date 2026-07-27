@@ -200,6 +200,10 @@ namespace disk::file {
                 return m_temp_base / (upload_id + ".tmp");
             }
 
+            auto FinalStoragePath(const std::string& hash) const -> std::filesystem::path {
+                return m_storage_base / "sha256" / hash.substr(0, 2) / (hash + ".bin");
+            }
+
             std::filesystem::path m_root;
             std::filesystem::path m_storage_base;
             std::filesystem::path m_temp_base;
@@ -646,7 +650,7 @@ namespace disk::file {
             EXPECT_EQ(ReadBinaryFile(final_path), expected_content);
 
             /// Verify final storage path matches expected pattern
-            const auto expected_final = m_blob_store->GetFinalStoragePath(expected_sha256);
+            const auto expected_final = FinalStoragePath(expected_sha256);
             EXPECT_EQ(final_path, expected_final);
 
             /// Step 5: Cleanup temp

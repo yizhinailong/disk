@@ -260,6 +260,7 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     const auto upload_header = ReadSourceFile("src/services/UploadService.hpp");
     const auto lifecycle_header = ReadSourceFile("src/services/UploadLifecycleService.hpp");
     const auto local_header = ReadSourceFile("src/storage/LocalFileStorage.hpp");
+    const auto local_blob_header = ReadSourceFile("src/storage/LocalBlobStore.hpp");
     const auto local_source = ReadSourceFile("src/storage/LocalFileStorage.cpp");
     const auto s3_header = ReadSourceFile("src/storage/S3ObjectStorage.hpp");
 
@@ -275,6 +276,9 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     EXPECT_FALSE(Contains(blob_store_header, "virtual auto OpenForRead("));
     EXPECT_FALSE(Contains(blob_store_header, "virtual auto OpenBlobForRead("));
     EXPECT_FALSE(Contains(blob_store_header, "class FileStorageReadStream"));
+    EXPECT_FALSE(Contains(blob_store_header, "GetFinalStoragePath("));
+    EXPECT_FALSE(Contains(local_blob_header, "GetFinalStoragePath("));
+    EXPECT_FALSE(Contains(s3_header, "GetFinalStoragePath("));
     EXPECT_FALSE(Contains(application_header, "IFileStorage"));
     EXPECT_FALSE(Contains(upload_header, "IFileStorage"));
     EXPECT_FALSE(Contains(lifecycle_header, "IFileStorage"));

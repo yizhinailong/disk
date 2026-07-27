@@ -112,6 +112,10 @@ namespace disk::file {
                 return m_temp_base / (upload_id + ".tmp");
             }
 
+            auto FinalStoragePath(const std::string& hash) const -> std::filesystem::path {
+                return m_storage_base / "sha256" / hash.substr(0, 2) / (hash + ".bin");
+            }
+
             std::filesystem::path m_root;
             std::filesystem::path m_storage_base;
             std::filesystem::path m_temp_base;
@@ -515,7 +519,7 @@ namespace disk::file {
 
             ASSERT_TRUE(promote_result.has_value());
             EXPECT_TRUE(promote_result->created);
-            EXPECT_EQ(promote_result->path, m_blob_store->GetFinalStoragePath(hash));
+            EXPECT_EQ(promote_result->path, FinalStoragePath(hash));
             EXPECT_TRUE(std::filesystem::exists(temp_path));
             ASSERT_TRUE(std::filesystem::exists(promote_result->path));
             EXPECT_EQ(ReadBinaryFile(promote_result->path), content);
@@ -525,7 +529,7 @@ namespace disk::file {
             const std::string upload_id = "promote-reused";
             const std::string content = "pre-existing-final-blob";
             const auto hash = FileHashUtil::HashSha256(content);
-            const auto final_path = m_blob_store->GetFinalStoragePath(hash);
+            const auto final_path = FinalStoragePath(hash);
             const auto temp_path = AssembledPath(upload_id);
 
             std::error_code ec;

@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 3 Blob 文件专用读取接口清理）：调用点审计确认生产下载只调用 `IBlobStore::OpenBlobRangeForRead(BlobDescriptor, start, length)`；`OpenForRead(path)` 仅供一个 local 单测使用，`OpenBlobForRead` 没有直接调用者，S3 旧实现只返回不支持错误。通用边界现只保留存储中立 Range 流，local 文件适配移入实现内部，S3 继续直接执行对象 Range Get；本地大文件快速路径、下载完整性、持久 Blob GC、兼容路由和迁移字段保持不变。完整构建、local/S3 Blob、下载响应、存储能力、下载流程与分布式拓扑聚焦 CTest 60/60、local Range 定向复验 1/1、OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 487.78 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-27，本轮 Phase 3 final locator 公开构造接口清理）：调用点审计确认 `GetFinalStoragePath(hash)` 没有适配器外的生产调用者，只由 local/S3 实现内部和测试用于预测路径，下载 mock 也被迫提供空洞实现。该方法已从 `IBlobStore`、local/S3 公开头文件及实现删除；适配器在 `PromoteToFinal` 内构造 SHA-256 locator，上传流程继续持久化实际 `BlobPromoteResult.path`，后续下载、对账和迁移继续使用数据库描述符。完整构建、local/S3 Blob、上传路径/一致性、下载响应、存储能力、真实上传流程与分布式拓扑聚焦 CTest 91/91、OpenSpec 24/24 通过。完整 CTest 共 1459 项，1452 通过、7 项按环境门控跳过，0 失败，总耗时 489.63 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1508,6 +1508,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定最终 Blob 读取公�
 `IBlobStore` 现只保留纯虚、存储中立的描述符 Range 流能力；两个文件专用读取方法和公开 `FileStorageReadStream` 已删除。local 适配器在私有实现中完成文件打开、定位和限定长度读取，S3 继续直接使用持久化对象 key 执行 Range Get；源码合同拒绝旧入口和公开文件流适配器回归，local 测试新增偏移、长度截断和 EOF 断言，下载 mock 也只实现 Range 流。本地大文件 sendfile 快速路径、下载完整性检查、持久 Blob GC、local/S3 兼容路由和迁移字段均未改变，因此 Phase 3 与 Phase 10 总清理项保持未勾选。
 
 完整构建、local/S3 Blob、下载响应、存储能力、下载流程与分布式拓扑聚焦 CTest 60/60、local Range 定向复验 1/1、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 487.78 秒。
+
+### 15.25 Final locator 公开构造接口清理记录（2026-07-27）
+
+ADR、系统测试、单元测试和 OpenSpec 先行固定 final locator 所有权。全仓库调用点审计确认 `GetFinalStoragePath(hash)` 没有适配器外的生产调用者，只由 local/S3 实现内部和测试用于预测目标路径；下载 mock 也因纯虚接口被迫提供无业务意义的实现。
+
+该方法已从 `IBlobStore`、`LocalBlobStore`、`S3ObjectStorage` 的公开头文件和实现删除。两个适配器只在 `PromoteToFinal` 内构造 SHA-256 locator，上传完成继续将实际 `BlobPromoteResult.path` 持久化到内容行；下载、对账与迁移继续只使用持久化 `BlobDescriptor.storage_path`。local/S3 测试改从提升结果或明确夹具规则验证路径，原 S3 getter 单测由既有提升行为用例覆盖并删除。存量 locator、兼容读取、持久 Blob GC 和迁移字段均未改变，因此 Phase 3 与 Phase 10 总清理项保持未勾选。
+
+完整构建、local/S3 Blob、上传路径/一致性、下载响应、存储能力、真实上传流程与分布式拓扑聚焦 CTest 91/91、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1459 项，1452 通过、7 项环境门控跳过、0 失败，总耗时 489.63 秒。
 
 ## 16. 最终 Definition of Done
 

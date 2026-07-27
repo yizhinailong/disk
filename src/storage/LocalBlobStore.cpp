@@ -273,7 +273,9 @@ namespace disk::storage {
         }
 
         const auto temp_path = std::filesystem::path(assembly.locator);
-        const auto final_path = GetFinalStoragePath(sha256_hash);
+        const auto final_path = std::filesystem::path(m_config_mgr->GetStorageBasePath()) /
+                                "sha256" / sha256_hash.substr(0, 2) /
+                                (sha256_hash + ".bin");
         const auto final_dir = final_path.parent_path();
         const auto expected_size = assembly.size_bytes;
 
@@ -466,12 +468,6 @@ namespace disk::storage {
             return std::nullopt;
         }
         return std::filesystem::path(blob.storage_path);
-    }
-
-    auto LocalBlobStore::GetFinalStoragePath(const std::string& sha256_hash) const
-        -> std::filesystem::path {
-        return std::filesystem::path(m_config_mgr->GetStorageBasePath()) / "sha256" /
-               sha256_hash.substr(0, 2) / (sha256_hash + ".bin");
     }
 
     auto LocalBlobStore::GetFileSize(
