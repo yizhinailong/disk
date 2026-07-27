@@ -21,8 +21,4 @@ namespace disk::storage {
         return s_upload_staging_storage.get();
     }
 
-    auto StorageMgr::IsInitialized() -> bool {
-        return s_upload_staging_storage != nullptr;
-    }
-
 } // namespace disk::storage

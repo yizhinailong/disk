@@ -21,8 +21,4 @@ namespace disk::storage {
         return s_blob_store.get();
     }
 
-    auto BlobStoreMgr::IsInitialized() -> bool {
-        return s_blob_store != nullptr;
-    }
-
-} ///< namespace disk::storage
+} // namespace disk::storage

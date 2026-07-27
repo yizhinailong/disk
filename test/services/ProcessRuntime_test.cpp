@@ -319,6 +319,13 @@ namespace disk::runtime {
             EXPECT_FALSE(Contains(combined_service_sources, "initialization completed"));
             EXPECT_FALSE(Contains(combined_service_sources, "RedisService initialized"));
             EXPECT_FALSE(Contains(combined_service_sources, "instance_id="));
+
+            const auto process_runtime_header = ReadSourceFile("src/services/ProcessRuntime.hpp");
+            EXPECT_TRUE(Contains(process_runtime_header, "auto IsInitialized() const noexcept -> bool;"));
+            EXPECT_FALSE(Contains(
+                process_runtime_header,
+                "static auto IsInitialized() noexcept -> bool;"
+            ));
         }
 
         TEST(ProcessRuntimeTest, RecognizesOnlyDocumentedHealthPaths) {

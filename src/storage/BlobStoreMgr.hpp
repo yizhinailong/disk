@@ -37,15 +37,8 @@ namespace disk::storage {
         [[nodiscard]]
         static auto GetBlobStore() -> IBlobStore*;
 
-        /**
-         * @brief 检查 Blob 存储实例是否已初始化
-         * @return bool 是否已初始化
-         */
-        [[nodiscard]]
-        static auto IsInitialized() -> bool;
-
     private:
         static std::shared_ptr<IBlobStore> s_blob_store;
     };
 
-} ///< namespace disk::storage
+} // namespace disk::storage

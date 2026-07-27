@@ -133,8 +133,4 @@ namespace disk::runtime {
         return s_state;
     }
 
-    auto ProcessRuntimeMgr::IsInitialized() noexcept -> bool {
-        return s_state != nullptr;
-    }
-
 } // namespace disk::runtime

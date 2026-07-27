@@ -254,6 +254,7 @@ TEST(StorageRuntimeLogContextContractTest, UsesTypedContextAndBoundedDeploymentD
 TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities) {
     const auto factory_header = ReadSourceFile("src/storage/StorageFactory.hpp");
     const auto manager_header = ReadSourceFile("src/storage/StorageMgr.hpp");
+    const auto blob_manager_header = ReadSourceFile("src/storage/BlobStoreMgr.hpp");
     const auto application_header = ReadSourceFile("src/application/ApplicationContext.hpp");
     const auto upload_header = ReadSourceFile("src/services/UploadService.hpp");
     const auto lifecycle_header = ReadSourceFile("src/services/UploadLifecycleService.hpp");
@@ -264,6 +265,8 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     EXPECT_TRUE(Contains(factory_header, "std::shared_ptr<UploadStagingStorage> upload_staging_storage;"));
     EXPECT_TRUE(Contains(manager_header, "SetInstance(std::shared_ptr<UploadStagingStorage> storage)"));
     EXPECT_FALSE(Contains(manager_header, "GetStorage()"));
+    EXPECT_FALSE(Contains(manager_header, "IsInitialized()"));
+    EXPECT_FALSE(Contains(blob_manager_header, "IsInitialized()"));
     EXPECT_FALSE(Contains(application_header, "IFileStorage"));
     EXPECT_FALSE(Contains(upload_header, "IFileStorage"));
     EXPECT_FALSE(Contains(lifecycle_header, "IFileStorage"));

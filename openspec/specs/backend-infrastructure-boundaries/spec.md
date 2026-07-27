@@ -73,3 +73,7 @@ The backend SHALL distinguish upload staging storage responsibilities from final
 #### Scenario: Marker retirement preserves migration compatibility
 - **WHEN** the empty aggregate storage interface is removed before local upload migration is admitted for contract cleanup
 - **THEN** local and S3 adapters SHALL retain the descriptor-based legacy local routing required to drain existing tasks
+
+#### Scenario: Singleton manager probes have no callers
+- **WHEN** a singleton manager initialization probe is not used by production or test callers
+- **THEN** the backend SHALL remove that probe while retaining the manager's required set/get operations and any instance-level runtime readiness state

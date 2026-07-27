@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 3 空聚合存储接口清理）：文档与实现已移除不承载方法的 `IFileStorage` 标记接口，`StorageFactory`、`StorageMgr`、`ApplicationContext` 和上传生命周期改为直接依赖 `UploadStagingStorage` / `IBlobStore`；local/S3 concrete adapter 的持久描述符兼容路由未删除。完整构建、能力边界与上传生命周期聚焦 CTest 17/17、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 495.23 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-27，本轮 Phase 3 manager 死探针清理）：调用点审计确认 `StorageMgr::IsInitialized`、`BlobStoreMgr::IsInitialized` 和 `ProcessRuntimeMgr::IsInitialized` 均无生产或测试调用，已删除声明与实现；健康检查和指标实际使用的 `ProcessRuntimeState::IsInitialized` 实例状态保持不变。完整构建、manager 公开面与进程运行时聚焦 CTest 11/11、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 489.95 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1478,6 +1478,12 @@ OpenSpec、ADR、系统测试和单元测试文档先行固定 capability-specif
 空标记头文件、`StorageMgr::GetStorage()`、服务透传参数和成员现已删除；`StorageFactory::StorageBundle` 与 `StorageMgr` 直接持有 `UploadStagingStorage`，S3 multipart journal/cleaner 通过该 concrete adapter 获取，最终 Blob 继续由 `BlobStoreMgr` 独立持有。`LocalFileStorage` 与 `S3ObjectStorage` 的暂存实现及按持久描述符回退处理 legacy local 任务的兼容路径未改变；`temp_path`、local staging 和可空迁移字段仍受 `compatibility_removal_allowed=false` 准入约束，因此 Phase 3 总清理项保持未勾选。
 
 新增 `StorageCapabilityBoundaryContractTest` 防止空接口、宽泛 accessor 和能力透传参数回归。完整构建、能力边界与上传生命周期聚焦 CTest 17/17、分布式拓扑合同脚本、OpenSpec 24/24 及完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 495.23 秒。首次完整运行只因库存合同仍写死 1458 项而失败，该既有漂移已同步修正到 1460，并由第二次完整回归验证。
+
+### 15.21 Manager 死探针清理记录（2026-07-27）
+
+OpenSpec、ADR、系统测试和单元测试文档先行要求 singleton manager 公开面与真实调用路径对应。全仓库符号审计确认 `StorageMgr::IsInitialized`、`BlobStoreMgr::IsInitialized` 和 `ProcessRuntimeMgr::IsInitialized` 只存在于各自声明与实现，没有生产或测试调用者；启动装配只需要 set/get 操作，删除这三个静态探针不改变实例生命周期或初始化失败行为。
+
+存储能力合同现同时拒绝两个 storage manager 探针回归，进程初始化合同拒绝 `ProcessRuntimeMgr` 静态探针回归并正向锁定 `ProcessRuntimeState::IsInitialized`。后者仍由 readiness 与 `disk_process_initialized` 指标读取，因此本轮没有删除或替代真实运行时状态。完整构建、聚焦 CTest 11/11、分布式拓扑合同、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 489.95 秒。该清理不涉及 `temp_path`、local staging、feature flag 或 schema 退役，Phase 3 与 Phase 10 对应总项继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

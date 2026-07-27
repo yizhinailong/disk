@@ -97,9 +97,6 @@ namespace disk::runtime {
         [[nodiscard]]
         static auto GetInstance() -> std::shared_ptr<ProcessRuntimeState>;
 
-        [[nodiscard]]
-        static auto IsInitialized() noexcept -> bool;
-
     private:
         static std::shared_ptr<ProcessRuntimeState> s_state;
     };

@@ -46,13 +46,6 @@ namespace disk::storage {
         [[nodiscard]]
         static auto GetUploadStagingStorage() -> UploadStagingStorage*;
 
-        /**
-         * @brief 检查存储实例是否已初始化
-         * @return bool 是否已初始化
-         */
-        [[nodiscard]]
-        static auto IsInitialized() -> bool;
-
     private:
         static std::shared_ptr<UploadStagingStorage> s_upload_staging_storage;
     };
