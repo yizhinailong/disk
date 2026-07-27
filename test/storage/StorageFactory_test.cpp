@@ -271,6 +271,10 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     EXPECT_FALSE(Contains(blob_manager_header, "IsInitialized()"));
     EXPECT_TRUE(Contains(blob_store_header, "virtual auto BlobExists("));
     EXPECT_FALSE(Contains(blob_store_header, "virtual auto Exists("));
+    EXPECT_TRUE(Contains(blob_store_header, "virtual auto OpenBlobRangeForRead("));
+    EXPECT_FALSE(Contains(blob_store_header, "virtual auto OpenForRead("));
+    EXPECT_FALSE(Contains(blob_store_header, "virtual auto OpenBlobForRead("));
+    EXPECT_FALSE(Contains(blob_store_header, "class FileStorageReadStream"));
     EXPECT_FALSE(Contains(application_header, "IFileStorage"));
     EXPECT_FALSE(Contains(upload_header, "IFileStorage"));
     EXPECT_FALSE(Contains(lifecycle_header, "IFileStorage"));

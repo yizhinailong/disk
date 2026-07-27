@@ -14,11 +14,13 @@
 
 #include "../../src/controllers/DownloadResponder.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -54,6 +56,39 @@ namespace {
         return root;
     }
 
+    class MockFileReadStream final : public disk::storage::StorageReadStream {
+    public:
+        MockFileReadStream(std::ifstream stream, uint64_t remaining)
+            : m_stream(std::move(stream)), m_remaining(remaining) {}
+
+        auto Read(char* buffer, std::size_t length) -> std::size_t override {
+            if (buffer == nullptr || !m_stream.is_open() || m_remaining == 0) {
+                return 0;
+            }
+            const auto read_size = static_cast<std::size_t>(std::min<uint64_t>(
+                std::min<uint64_t>(length, m_remaining),
+                static_cast<uint64_t>(std::numeric_limits<std::streamsize>::max())
+            ));
+            m_stream.read(buffer, static_cast<std::streamsize>(read_size));
+            const auto read_bytes = static_cast<std::size_t>(m_stream.gcount());
+            m_remaining -= read_bytes;
+            if (read_bytes == 0 || m_remaining == 0) {
+                Close();
+            }
+            return read_bytes;
+        }
+
+        auto Close() -> void override {
+            if (m_stream.is_open()) {
+                m_stream.close();
+            }
+        }
+
+    private:
+        std::ifstream m_stream;
+        uint64_t m_remaining{ 0 };
+    };
+
     /// ============================================================
     /// MockBlobStore — 仅实现下载读取所需行为，其他返回默认成功值
     /// ============================================================
@@ -85,7 +120,6 @@ namespace {
             open_blob_count = 0;
             blob_exists_count = 0;
             local_path_count = 0;
-            open_path_count = 0;
         }
 
         /// ---- IBlobStore 接口 ----
@@ -98,20 +132,12 @@ namespace {
             co_return disk::storage::BlobPromoteResult{ .path = m_temp_dir / "final", .created = true };
         }
 
-        auto OpenForRead(
-            const std::filesystem::path& storage_path,
-            disk::utils::LogContext /*log_context*/
-        )
-            -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override {
-            ++open_path_count;
-            co_return OpenPath(storage_path);
-        }
-
-        auto OpenBlobForRead(
+        auto OpenBlobRangeForRead(
             const disk::storage::BlobDescriptor& blob,
+            uint64_t start,
+            uint64_t length,
             disk::utils::LogContext /*log_context*/
-        )
-            -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override {
+        ) -> drogon::Task<Result<std::shared_ptr<disk::storage::StorageReadStream>>> override {
             ++open_blob_count;
             if (open_blob_should_fail) {
                 co_return std::unexpected(
@@ -124,7 +150,27 @@ namespace {
                     ErrorInfo(ErrorCode::FileReadError, "Failed to open blob for reading")
                 );
             }
-            co_return OpenPath(path_it->second);
+            if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range")
+                );
+            }
+
+            std::ifstream stream(path_it->second, std::ios::binary);
+            if (!stream) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileReadError, "Failed to open file for reading")
+                );
+            }
+            stream.seekg(static_cast<std::streamoff>(start));
+            if (!stream) {
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::FileReadError, "Failed to seek blob for reading")
+                );
+            }
+            co_return std::shared_ptr<disk::storage::StorageReadStream>(
+                std::make_shared<MockFileReadStream>(std::move(stream), length)
+            );
         }
 
         auto DeleteBlob(
@@ -176,21 +222,8 @@ namespace {
         mutable int local_path_count{ 0 };
         int open_blob_count{ 0 };
         int blob_exists_count{ 0 };
-        int open_path_count{ 0 };
 
     private:
-        [[nodiscard]]
-        static auto OpenPath(const std::filesystem::path& path)
-            -> Result<std::shared_ptr<std::ifstream>> {
-            auto stream = std::make_shared<std::ifstream>(path, std::ios::binary);
-            if (!*stream) {
-                return std::unexpected(
-                    ErrorInfo(ErrorCode::FileReadError, "Failed to open file for reading")
-                );
-            }
-            return stream;
-        }
-
         std::filesystem::path m_temp_dir;
         std::unordered_map<std::string, std::filesystem::path> m_blob_paths;
     };
@@ -489,7 +522,6 @@ TEST_F(DownloadResponderTest, InvalidRangeReturns416WithoutTouchingStorage) {
     EXPECT_EQ(m_storage->open_blob_count, 0);
     EXPECT_EQ(m_storage->blob_exists_count, 0);
     EXPECT_EQ(m_storage->local_path_count, 0);
-    EXPECT_EQ(m_storage->open_path_count, 0);
     EXPECT_EQ(m_integrity->preflight_count, 0);
 
     auto json = ParseJsonBody(resp);

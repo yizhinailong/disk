@@ -9,15 +9,12 @@
 
 #pragma once
 
-#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
-#include <utility>
 
 #include <drogon/orm/DbClient.h>
 
@@ -42,48 +39,6 @@ namespace disk::storage {
         virtual auto Read(char* buffer, std::size_t length) -> std::size_t = 0;
 
         virtual auto Close() -> void = 0;
-    };
-
-    class FileStorageReadStream final : public StorageReadStream {
-    public:
-        FileStorageReadStream(std::shared_ptr<std::ifstream> stream, uint64_t remaining)
-            : m_stream(std::move(stream)), m_remaining(remaining) {}
-
-        [[nodiscard]]
-        auto Read(char* buffer, std::size_t length) -> std::size_t override {
-            if (buffer == nullptr || m_stream == nullptr || !m_stream->is_open() || m_remaining == 0) {
-                return 0;
-            }
-
-            const auto bounded_remaining = static_cast<std::size_t>(std::min<uint64_t>(
-                m_remaining,
-                static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())
-            ));
-            const auto read_size = std::min(length, bounded_remaining);
-            m_stream->read(buffer, static_cast<std::streamsize>(read_size));
-            const auto read_bytes = static_cast<std::size_t>(m_stream->gcount());
-            if (read_bytes == 0) {
-                m_remaining = 0;
-                Close();
-                return 0;
-            }
-
-            m_remaining -= read_bytes;
-            if (m_remaining == 0) {
-                Close();
-            }
-            return read_bytes;
-        }
-
-        auto Close() -> void override {
-            if (m_stream != nullptr && m_stream->is_open()) {
-                m_stream->close();
-            }
-        }
-
-    private:
-        std::shared_ptr<std::ifstream> m_stream;
-        uint64_t m_remaining{ 0 };
     };
 
     /**
@@ -113,40 +68,6 @@ namespace disk::storage {
             -> drogon::Task<Result<BlobPromoteResult>> = 0;
 
         /**
-         * @brief 打开最终 Blob 读取句柄用于下载流
-         * @param storage_path 最终 Blob 存储路径
-         * @return 成功返回可读文件流，失败返回错误信息
-         */
-        [[nodiscard]]
-        virtual auto OpenForRead(
-            const std::filesystem::path& storage_path,
-            disk::utils::LogContext log_context = {}
-        )
-            -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> = 0;
-
-        /**
-         * @brief 通过最终 Blob 描述符打开读取句柄用于下载流
-         * @param blob 最终内容 Blob 描述符
-         * @return 成功返回可读文件流，失败返回错误信息
-         */
-        [[nodiscard]]
-        virtual auto OpenBlobForRead(
-            const BlobDescriptor& blob,
-            disk::utils::LogContext log_context = {}
-        )
-            -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
-            if (blob.storage_path.empty()) {
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::FileReadError, "Blob storage path is empty")
-                );
-            }
-            co_return co_await OpenForRead(
-                std::filesystem::path(blob.storage_path),
-                std::move(log_context)
-            );
-        }
-
-        /**
          * @brief 通过最终 Blob 描述符打开限定范围的读取流
          * @param blob 最终内容 Blob 描述符
          * @param start 起始字节偏移
@@ -159,30 +80,7 @@ namespace disk::storage {
             uint64_t start,
             uint64_t length,
             disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<std::shared_ptr<StorageReadStream>>> {
-            auto open_result = co_await OpenBlobForRead(blob, std::move(log_context));
-            if (!open_result) {
-                co_return std::unexpected(open_result.error());
-            }
-
-            if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range")
-                );
-            }
-
-            auto stream = std::move(*open_result);
-            stream->seekg(static_cast<std::streamoff>(start));
-            if (!*stream) {
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::FileReadError, "Failed to seek blob for reading")
-                );
-            }
-
-            co_return std::shared_ptr<StorageReadStream>(
-                std::make_shared<FileStorageReadStream>(std::move(stream), length)
-            );
-        }
+        ) -> drogon::Task<Result<std::shared_ptr<StorageReadStream>>> = 0;
 
         /**
          * @brief 通过最终 Blob 描述符检查内容是否存在

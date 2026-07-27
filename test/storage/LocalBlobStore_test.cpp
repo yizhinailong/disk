@@ -144,13 +144,31 @@ namespace disk::storage {
             ASSERT_TRUE(exists_before_delete.has_value());
             EXPECT_TRUE(*exists_before_delete);
 
-            auto open_result = drogon::sync_wait(m_blob_store->OpenForRead(promote_result->path));
+            auto open_result = drogon::sync_wait(
+                m_blob_store->OpenBlobRangeForRead(blob, 0, content.size())
+            );
             ASSERT_TRUE(open_result.has_value());
-            std::string read_content{
-                std::istreambuf_iterator<char>(**open_result),
-                std::istreambuf_iterator<char>()
-            };
+            std::string read_content(content.size(), '\0');
+            EXPECT_EQ(
+                (*open_result)->Read(read_content.data(), read_content.size()),
+                content.size()
+            );
             EXPECT_EQ(read_content, content);
+            EXPECT_EQ((*open_result)->Read(read_content.data(), read_content.size()), 0U);
+
+            constexpr uint64_t range_start = 8;
+            constexpr uint64_t range_length = 4;
+            auto range_result = drogon::sync_wait(
+                m_blob_store->OpenBlobRangeForRead(blob, range_start, range_length)
+            );
+            ASSERT_TRUE(range_result.has_value());
+            std::string range_content(range_length, '\0');
+            EXPECT_EQ(
+                (*range_result)->Read(range_content.data(), range_content.size()),
+                range_length
+            );
+            EXPECT_EQ(range_content, content.substr(range_start, range_length));
+            EXPECT_EQ((*range_result)->Read(range_content.data(), range_content.size()), 0U);
 
             auto delete_result = drogon::sync_wait(m_blob_store->DeleteBlob(promote_result->path));
             ASSERT_TRUE(delete_result.has_value());

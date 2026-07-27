@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <functional>
+#include <limits>
 #include <string_view>
 #include <system_error>
 #include <type_traits>
@@ -28,6 +30,48 @@ namespace disk::storage {
         constexpr size_t DEFAULT_LOCAL_BLOB_IO_THREADS = 4;
         constexpr size_t DEFAULT_DELETE_TIMEOUT_SECONDS = 30;
         constexpr std::string_view LOCAL_BLOB_IO_QUEUE_NAME = "local-blob-store";
+
+        class LocalFileReadStream final : public StorageReadStream {
+        public:
+            LocalFileReadStream(std::ifstream stream, uint64_t remaining)
+                : m_stream(std::move(stream)), m_remaining(remaining) {}
+
+            [[nodiscard]]
+            auto Read(char* buffer, std::size_t length) -> std::size_t override {
+                if (buffer == nullptr || !m_stream.is_open() || m_remaining == 0) {
+                    return 0;
+                }
+
+                const auto bounded_remaining = static_cast<std::size_t>(std::min<uint64_t>(
+                    m_remaining,
+                    static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())
+                ));
+                const auto read_size = std::min(length, bounded_remaining);
+                m_stream.read(buffer, static_cast<std::streamsize>(read_size));
+                const auto read_bytes = static_cast<std::size_t>(m_stream.gcount());
+                if (read_bytes == 0) {
+                    m_remaining = 0;
+                    Close();
+                    return 0;
+                }
+
+                m_remaining -= read_bytes;
+                if (m_remaining == 0) {
+                    Close();
+                }
+                return read_bytes;
+            }
+
+            auto Close() -> void override {
+                if (m_stream.is_open()) {
+                    m_stream.close();
+                }
+            }
+
+        private:
+            std::ifstream m_stream;
+            uint64_t m_remaining{ 0 };
+        };
 
         [[nodiscard]] auto IsSha256Hash(std::string_view value) -> bool {
             return value.size() == 64 && std::ranges::all_of(value, [](char character) {
@@ -298,22 +342,44 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto LocalBlobStore::OpenForRead(
-        const std::filesystem::path& storage_path,
+    auto LocalBlobStore::OpenBlobRangeForRead(
+        const BlobDescriptor& blob,
+        uint64_t start,
+        uint64_t length,
         disk::utils::LogContext /*log_context*/
-    )
-        -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
+    ) -> drogon::Task<Result<std::shared_ptr<StorageReadStream>>> {
+        if (blob.storage_path.empty()) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::FileReadError, "Blob storage path is empty")
+            );
+        }
+        if (start > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max())) {
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::ValidationFailed, "Invalid request range")
+            );
+        }
+
+        auto storage_path = std::filesystem::path(blob.storage_path);
         auto result = co_await RunBlockingFilesystemTask(
             m_worker_queue,
-            [storage_path]() -> Result<std::shared_ptr<std::ifstream>> {
-                auto stream = std::make_shared<std::ifstream>(storage_path, std::ios::binary);
-                if (!*stream) {
+            [storage_path = std::move(storage_path), start, length]()
+                -> Result<std::shared_ptr<StorageReadStream>> {
+                std::ifstream stream(storage_path, std::ios::binary);
+                if (!stream) {
                     return std::unexpected(
                         ErrorInfo(ErrorCode::FileReadError, "Failed to open file for reading")
                     );
                 }
+                stream.seekg(static_cast<std::streamoff>(start));
+                if (!stream) {
+                    return std::unexpected(
+                        ErrorInfo(ErrorCode::FileReadError, "Failed to seek blob for reading")
+                    );
+                }
 
-                return stream;
+                return std::shared_ptr<StorageReadStream>(
+                    std::make_shared<LocalFileReadStream>(std::move(stream), length)
+                );
             }
         );
 

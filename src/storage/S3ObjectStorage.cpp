@@ -1377,16 +1377,6 @@ namespace disk::storage {
         co_return result;
     }
 
-    auto S3ObjectStorage::OpenForRead(
-        const std::filesystem::path& /*storage_path*/,
-        disk::utils::LogContext /*log_context*/
-    )
-        -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> {
-        co_return std::unexpected(
-            ErrorInfo(ErrorCode::FileReadError, "S3 storage does not support direct ifstream reads")
-        );
-    }
-
     auto S3ObjectStorage::OpenBlobRangeForRead(
         const BlobDescriptor& blob,
         uint64_t start,

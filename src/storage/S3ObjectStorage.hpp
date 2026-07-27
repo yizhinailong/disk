@@ -1,7 +1,6 @@
 #pragma once
 
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 
@@ -96,13 +95,6 @@ namespace disk::storage {
             disk::utils::LogContext log_context = {}
         )
             -> drogon::Task<Result<BlobPromoteResult>> override;
-
-        [[nodiscard]]
-        auto OpenForRead(
-            const std::filesystem::path& storage_path,
-            disk::utils::LogContext log_context = {}
-        )
-            -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override;
 
         [[nodiscard]]
         auto OpenBlobRangeForRead(

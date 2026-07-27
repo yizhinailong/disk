@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 3 Blob 裸路径存在性接口清理）：调用点审计确认生产代码只调用 `IBlobStore::BlobExists(BlobDescriptor)`；`Exists(path)` 仅供接口默认转发和两个 S3 单测使用，现已删除并由 local/S3 直接实现描述符能力。`DeleteBlob(storage_path)`、持久 Blob GC、final inventory、local/S3 兼容路由和迁移字段保持不变。完整构建、对账合同、local/S3 Blob、下载响应与存储能力聚焦 CTest 64/64、OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 486.10 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-27，本轮 Phase 3 Blob 文件专用读取接口清理）：调用点审计确认生产下载只调用 `IBlobStore::OpenBlobRangeForRead(BlobDescriptor, start, length)`；`OpenForRead(path)` 仅供一个 local 单测使用，`OpenBlobForRead` 没有直接调用者，S3 旧实现只返回不支持错误。通用边界现只保留存储中立 Range 流，local 文件适配移入实现内部，S3 继续直接执行对象 Range Get；本地大文件快速路径、下载完整性、持久 Blob GC、兼容路由和迁移字段保持不变。完整构建、local/S3 Blob、下载响应、存储能力、下载流程与分布式拓扑聚焦 CTest 60/60、local Range 定向复验 1/1、OpenSpec 24/24 通过。完整 CTest 共 1460 项，1453 通过、7 项按环境门控跳过，0 失败，总耗时 487.78 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1500,6 +1500,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定最终 Blob 存在性�
 `BlobExists` 现改为纯虚描述符能力，由 `LocalBlobStore` 和 `S3ObjectStorage` 直接实现；裸路径 `Exists` 声明和实现已删除，S3/local 测试统一提交持久化描述符，下载 mock 也不再维护旧入口及其无调用计数。能力合同同时要求 `BlobExists` 存在并拒绝 `IBlobStore::Exists(path)` 回归。持久 `blob_gc` 在内容行删除后继续从任务 payload 调用幂等 `DeleteBlob(storage_path)`；final inventory、legacy local 读取、迁移字段和退役准入均未改变，因此 Phase 3 与 Phase 10 总清理项保持未勾选。
 
 完整构建、对账合同、local/S3 Blob、下载响应与存储能力聚焦 CTest 64/64、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 486.10 秒。
+
+### 15.24 Blob 文件专用读取接口清理记录（2026-07-27）
+
+ADR、系统测试、单元测试和 OpenSpec 先行固定最终 Blob 读取公开面。全仓库调用点审计确认生产下载只调用 `OpenBlobRangeForRead(BlobDescriptor, start, length)`；`OpenForRead(path)` 仅由一个 local 单测使用，`OpenBlobForRead` 没有直接调用者，S3 的旧 `OpenForRead` 只返回不支持错误。
+
+`IBlobStore` 现只保留纯虚、存储中立的描述符 Range 流能力；两个文件专用读取方法和公开 `FileStorageReadStream` 已删除。local 适配器在私有实现中完成文件打开、定位和限定长度读取，S3 继续直接使用持久化对象 key 执行 Range Get；源码合同拒绝旧入口和公开文件流适配器回归，local 测试新增偏移、长度截断和 EOF 断言，下载 mock 也只实现 Range 流。本地大文件 sendfile 快速路径、下载完整性检查、持久 Blob GC、local/S3 兼容路由和迁移字段均未改变，因此 Phase 3 与 Phase 10 总清理项保持未勾选。
+
+完整构建、local/S3 Blob、下载响应、存储能力、下载流程与分布式拓扑聚焦 CTest 60/60、local Range 定向复验 1/1、OpenSpec 24/24 和完整 CTest 均通过；完整 CTest 共 1460 项，1453 通过、7 项环境门控跳过、0 失败，总耗时 487.78 秒。
 
 ## 16. 最终 Definition of Done
 

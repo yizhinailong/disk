@@ -116,13 +116,11 @@ auto BuildDownloadResponse(...) -> drogon::Task<drogon::HttpResponsePtr> {
             true, params.filename, drogon::CT_CUSTOM, params.mime_type);
     } else {
         // Path B: newStreamResponse — 流式下载
-        auto file = co_await storage->OpenForRead(params.storage_path);
-        file->seekg(start);
-
-        auto remaining = std::make_shared<uint64_t>(content_length);
+        auto stream = co_await blob_store->OpenBlobRangeForRead(
+            params.blob, start, content_length);
         auto resp = drogon::HttpResponse::newStreamResponse(
-            [file, remaining](char* buffer, std::size_t suggested_length) -> std::size_t {
-                // 从文件读取到 buffer，更新 remaining 计数
+            [stream](char* buffer, std::size_t suggested_length) -> std::size_t {
+                // 从存储中立的 Range 流读取到 buffer
                 // 返回读取字节数，0 表示结束
             });
     }
@@ -271,8 +269,9 @@ bool send(const std::string &data) {
 auto BuildDownloadStream(DownloadParams params, IBlobStore* blob_store)
     -> drogon::Task<AsyncGenerator<std::string_view>>
 {
-    auto file = co_await storage->OpenForRead(params.storage_path);
-    while (auto chunk = co_await file->ReadChunk(64 * 1024)) {
+    auto stream = co_await blob_store->OpenBlobRangeForRead(
+        params.blob, 0, params.file_size);
+    while (auto chunk = co_await stream->ReadChunk(64 * 1024)) {
         co_yield *chunk;
     }
 }

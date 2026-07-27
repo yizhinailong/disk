@@ -10,7 +10,6 @@
 #pragma once
 
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -57,11 +56,12 @@ namespace disk::storage {
             -> drogon::Task<Result<BlobPromoteResult>> override;
 
         [[nodiscard]]
-        auto OpenForRead(
-            const std::filesystem::path& storage_path,
+        auto OpenBlobRangeForRead(
+            const BlobDescriptor& blob,
+            uint64_t start,
+            uint64_t length,
             disk::utils::LogContext log_context = {}
-        )
-            -> drogon::Task<Result<std::shared_ptr<std::ifstream>>> override;
+        ) -> drogon::Task<Result<std::shared_ptr<StorageReadStream>>> override;
 
         [[nodiscard]]
         auto DeleteBlob(
