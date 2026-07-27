@@ -38,13 +38,6 @@ namespace disk {
             [[nodiscard]]
             auto GetAuthCpuWorkLoop() -> trantor::EventLoop*;
 
-            /// Start periodic AuthCpuPool metrics logging (call once at startup).
-            auto StartAuthCpuPoolMetricsTimer(int interval_seconds) -> void;
-
-            /// Get current AuthCpuPool active task count (for testing/observability).
-            [[nodiscard]]
-            auto GetAuthCpuPoolActiveTaskCount() -> size_t;
-
         } // namespace detail
     } // namespace services
 } // namespace disk

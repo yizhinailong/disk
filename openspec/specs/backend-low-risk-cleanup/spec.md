@@ -134,3 +134,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that `ConfigMgr::GetDatabasePassword` and `ConfigMgr::GetRedisPassword` have no production or test caller
 - **THEN** those getters SHALL be removed while startup environment overrides continue to inject credentials into Drogon client configuration and secure-mode validation retains its existing fail-closed checks
+
+#### Scenario: Unused Auth CPU metrics wrappers are removed
+
+- **WHEN** a whole-repository call-site audit confirms that `detail::StartAuthCpuPoolMetricsTimer` and `detail::GetAuthCpuPoolActiveTaskCount` have no production or test caller
+- **THEN** those wrappers SHALL be removed while the Auth CPU work-loop bridge, startup-owned metrics timer, atomic counters, periodic metrics, and request execution behavior remain unchanged

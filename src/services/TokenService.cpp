@@ -84,14 +84,6 @@ namespace disk::services {
             return pool->getNextLoop();
         }
 
-        auto StartAuthCpuPoolMetricsTimer(int interval_seconds) -> void {
-            TokenService::GetInstance()->StartPoolMetricsTimer(interval_seconds);
-        }
-
-        auto GetAuthCpuPoolActiveTaskCount() -> size_t {
-            return g_pool_metrics.active_tasks.load(std::memory_order_relaxed);
-        }
-
     } // namespace detail
 
     /// TokenService 私有构造函数（单例模式）

@@ -119,6 +119,8 @@ namespace disk::services {
         TEST(TokenServiceLogContextContractTest, RequestAndProcessEventsHaveExplicitOwnership) {
             const auto header = ReadSourceFile("src/services/TokenService.hpp");
             const auto source = ReadSourceFile("src/services/TokenService.cpp");
+            const auto auth_cpu_pool = ReadSourceFile("src/utils/AuthCpuPool.hpp");
+            const auto main_source = ReadSourceFile("src/main.cpp");
             const auto auth_service = ReadSourceFile("src/services/AuthService.cpp");
             const auto jwt_filter = ReadSourceFile("src/filters/JwtAuthFilter.cpp");
             const auto share_filter = ReadSourceFile("src/filters/ShareAuthFilter.cpp");
@@ -126,6 +128,18 @@ namespace disk::services {
 
             ASSERT_FALSE(header.empty());
             ASSERT_FALSE(source.empty());
+            EXPECT_TRUE(Contains(header, "auto GetAuthCpuWorkLoop()"));
+            EXPECT_FALSE(Contains(header, "StartAuthCpuPoolMetricsTimer"));
+            EXPECT_FALSE(Contains(header, "GetAuthCpuPoolActiveTaskCount"));
+            EXPECT_FALSE(Contains(source, "auto StartAuthCpuPoolMetricsTimer("));
+            EXPECT_FALSE(Contains(source, "auto GetAuthCpuPoolActiveTaskCount("));
+            EXPECT_TRUE(Contains(auth_cpu_pool, "detail::GetAuthCpuWorkLoop()"));
+            EXPECT_TRUE(Contains(
+                main_source,
+                "TokenService::GetInstance()->StartCacheMaintenance();"
+            ));
+            EXPECT_TRUE(Contains(source, "StartPoolMetricsTimer(metrics_interval);"));
+            EXPECT_TRUE(Contains(source, "[this]() { LogPoolMetrics(); }"));
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
                 13U

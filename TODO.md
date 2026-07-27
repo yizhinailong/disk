@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 10 配置凭据死 getter 清理）：全仓库精确调用点审计确认 `ConfigMgr::GetDatabasePassword()` 与 `GetRedisPassword()` 都只有公开声明与实现，没有生产、测试或文档调用者；实际凭据仍由 `RuntimeConfig::ApplyEnvironmentOverrides()` 在 Drogon 加载配置前注入，并由 `ValidateSecureConfig()` 执行安全模式非空门禁。两个无调用 getter 已删除，源码合同禁止其回归；环境覆盖、单一数据库客户端路由、PostgreSQL/Redis 连接和跨实例会话语义不变。完整构建、配置/安全模式/真实 PostgreSQL 与 Redis 聚焦 CTest 69/69、OpenSpec 24/24 通过。完整 CTest 共 1456 项，1449 通过、7 项按环境门控跳过，0 失败，总耗时 495.22 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-27，本轮 Phase 10 Auth CPU 指标死包装器清理）：全仓库精确调用点审计确认 `detail::StartAuthCpuPoolMetricsTimer()` 与 `GetAuthCpuPoolActiveTaskCount()` 都只有声明与实现，没有生产、测试或文档调用者；实际工作循环仍由 `GetAuthCpuWorkLoop()` 提供，指标 timer 仍由 `StartCacheMaintenance()` 直接启动并通过 `LogPoolMetrics()` 读取原子计数。两个无调用包装器已删除，源码合同禁止其回归；submitted/completed/active/peak 计数、指标重置、结构化日志和认证请求行为不变。完整构建、Token/认证过滤器/真实双 API auth runtime 指标聚焦 CTest 127/127、OpenSpec 24/24 通过。完整 CTest 共 1456 项，1449 通过、7 项按环境门控跳过，0 失败，总耗时 488.09 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1564,6 +1564,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定人工死信重放所�
 两个无调用 getter 的声明与实现已删除，`ConfigMgr_test.cpp` 通过头文件和实现四项否定断言拒绝旧凭据读取面回归。`RuntimeConfig::ApplyEnvironmentOverrides()` 的注入、唯一数据库客户端门禁和 `ValidateSecureConfig()` 的安全模式非空检查均未改变；真实 PostgreSQL/Redis 连接、跨实例认证一致性和 Redis 会话持久化保持原语义。本轮不删除环境变量、部署 Secret、Drogon 客户端字段、兼容配置或迁移分支，因此 Phase 10 总清理项继续保持未勾选。
 
 完整构建、配置/安全模式/真实 PostgreSQL 与 Redis 聚焦 CTest 69/69 和 OpenSpec 24/24 通过。完整 CTest 共 1456 项，1449 项通过、7 项环境门控跳过、0 失败，总耗时 495.22 秒。
+
+### 15.32 Auth CPU 指标死包装器清理记录（2026-07-27）
+
+系统测试、单元测试、部署运维和 OpenSpec 先行固定 Auth CPU pool 指标所有权。全仓库精确符号与调用点审计确认 `detail::StartAuthCpuPoolMetricsTimer()` 与 `GetAuthCpuPoolActiveTaskCount()` 都只有声明与实现，没有生产、测试或文档调用者；`RunOnAuthCpuPool` 继续通过 `GetAuthCpuWorkLoop()` 取得工作循环，API beginning advice 继续通过 `StartCacheMaintenance()` 启动维护与指标 timer。
+
+两个无调用包装器的声明与实现已删除，`TokenServiceLogContext_test.cpp` 通过头文件/实现否定断言拒绝旧符号回归，并正向锁定工作循环、`StartPoolMetricsTimer(metrics_interval)` 和 `LogPoolMetrics()` 周期回调。TokenService 内部 submitted/completed/active/peak 原子计数、周期重置、`auth_runtime` 日志和请求跨 CPU pool 执行均未改变；真实双 API 仍产生 pool 初始化、1 秒 timer 启动和周期指标。本轮不删除线程池、配置键、指标字段、认证 API 或迁移兼容路径，因此 Phase 10 总清理项继续保持未勾选。
+
+完整构建、Token/认证过滤器/真实双 API auth runtime 指标聚焦 CTest 127/127 和 OpenSpec 24/24 通过。完整 CTest 共 1456 项，1449 项通过、7 项环境门控跳过、0 失败，总耗时 488.09 秒。
 
 ## 16. 最终 Definition of Done
 
