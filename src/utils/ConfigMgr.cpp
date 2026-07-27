@@ -954,22 +954,6 @@ namespace disk::utils {
 
     /// ==================== 数据库配置 ====================
 
-    auto ConfigMgr::GetDatabasePassword() const -> std::string {
-        const auto* env_password = std::getenv("DATABASE_PASSWORD");
-        if (env_password != nullptr && std::strlen(env_password) > 0) {
-            return env_password;
-        }
-        return "";
-    }
-
-    auto ConfigMgr::GetRedisPassword() const -> std::string {
-        const auto* env_password = std::getenv("REDIS_PASSWORD");
-        if (env_password != nullptr && std::strlen(env_password) > 0) {
-            return env_password;
-        }
-        return "";
-    }
-
     auto ConfigMgr::IsSecureMode() const -> bool {
         const auto* secure_mode = std::getenv("DISK_SECURE_MODE");
         return secure_mode != nullptr && (std::strcmp(secure_mode, "true") == 0 || std::strcmp(secure_mode, "1") == 0);

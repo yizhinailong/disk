@@ -129,3 +129,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that `ShareService::UpdateTimestamp` has no production or test caller
 - **THEN** the private helper SHALL be removed while share update and cancellation continue to own their timestamp writes and access or download flows retain their existing counter semantics
+
+#### Scenario: Unused credential getters are removed
+
+- **WHEN** a whole-repository call-site audit confirms that `ConfigMgr::GetDatabasePassword` and `ConfigMgr::GetRedisPassword` have no production or test caller
+- **THEN** those getters SHALL be removed while startup environment overrides continue to inject credentials into Drogon client configuration and secure-mode validation retains its existing fail-closed checks

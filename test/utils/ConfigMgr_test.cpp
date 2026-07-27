@@ -57,8 +57,13 @@ namespace {
     }
 
     TEST(ConfigMgrLogContextContractTest, UsesTypedContextAndBoundedDeploymentDetails) {
+        const auto header = ReadSourceFile("src/utils/ConfigMgr.hpp");
         const auto source = ReadSourceFile("src/utils/ConfigMgr.cpp");
 
+        EXPECT_FALSE(Contains(header, "auto GetDatabasePassword()"));
+        EXPECT_FALSE(Contains(header, "auto GetRedisPassword()"));
+        EXPECT_FALSE(Contains(source, "ConfigMgr::GetDatabasePassword()"));
+        EXPECT_FALSE(Contains(source, "ConfigMgr::GetRedisPassword()"));
         EXPECT_EQ(CountOccurrences(source, "Logger::Info(RuntimeConfigLogContext())"), 15U);
         EXPECT_EQ(CountOccurrences(source, "Logger::Warn(RuntimeConfigLogContext())"), 3U);
         EXPECT_EQ(CountOccurrences(source, "Logger::Error(RuntimeConfigLogContext())"), 6U);

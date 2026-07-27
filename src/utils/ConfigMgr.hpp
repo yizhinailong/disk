@@ -298,20 +298,6 @@ namespace disk::utils {
         /// ==================== 数据库配置 ====================
 
         /**
-         * @brief 获取数据库密码（从环境变量DATABASE_PASSWORD读取）
-         * @return std::string 数据库密码，开发环境可返回空字符串
-         */
-        [[nodiscard]]
-        auto GetDatabasePassword() const -> std::string;
-
-        /**
-         * @brief 获取Redis密码（从环境变量REDIS_PASSWORD读取）
-         * @return std::string Redis密码，开发环境可返回空字符串
-         */
-        [[nodiscard]]
-        auto GetRedisPassword() const -> std::string;
-
-        /**
          * @brief 检查是否为安全模式
          * @return bool 当DISK_SECURE_MODE=true时返回true
          */
