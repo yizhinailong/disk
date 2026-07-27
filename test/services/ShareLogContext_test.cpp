@@ -121,12 +121,14 @@ namespace disk::share {
             );
             EXPECT_EQ(
                 CountOccurrences(service_header, "disk::utils::LogContext log_context"),
-                23
+                22
             );
             EXPECT_EQ(
                 CountOccurrences(request_service_body, "disk::utils::LogContext log_context"),
-                23
+                22
             );
+            EXPECT_FALSE(Contains(service_header, "auto UpdateTimestamp("));
+            EXPECT_FALSE(Contains(service_source, "ShareService::UpdateTimestamp("));
 
             for (const auto* call_marker : {
                      "co_await ValidateFileOwnership(",

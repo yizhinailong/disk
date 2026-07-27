@@ -409,14 +409,6 @@ namespace disk::share {
         ) -> drogon::Task<void>;
 
         /**
-         * @brief 更新分享的 updated_at 时间戳
-         * @param share_id 分享内部ID
-         * @return drogon::Task<void>
-         */
-        auto UpdateTimestamp(uint64_t share_id, disk::utils::LogContext log_context)
-            -> drogon::Task<void>;
-
-        /**
          * @brief 获取状态过滤条件
          * @param status 状态字符串
          * @return std::optional<int8_t> 状态值（nullopt表示不过滤）

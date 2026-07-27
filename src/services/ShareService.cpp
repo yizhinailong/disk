@@ -1863,21 +1863,6 @@ namespace disk::share {
         }
     }
 
-    auto ShareService::UpdateTimestamp(
-        uint64_t share_id,
-        disk::utils::LogContext log_context
-    ) -> drogon::Task<void> {
-        try {
-            co_await m_db_client->execSqlCoro(
-                "UPDATE shares SET updated_at = $1 WHERE id = $2",
-                trantor::Date::now(),
-                share_id
-            );
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to update timestamp: " << e.base().what();
-        }
-    }
-
     auto ShareService::GetStatusFilter(const std::string& status) -> std::optional<int8_t> {
         if (status == "all") {
             return std::nullopt;
