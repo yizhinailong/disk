@@ -30,8 +30,6 @@ namespace disk::file {
      */
     class FileRepository {
     public:
-        explicit FileRepository(drogon::orm::DbClientPtr db_client);
-
         [[nodiscard]]
         auto FindOwnedFile(
             const drogon::orm::DbClientPtr& client,
@@ -82,9 +80,6 @@ namespace disk::file {
             const std::string& new_path,
             const trantor::Date& updated_at
         ) const -> drogon::Task<bool>;
-
-    private:
-        drogon::orm::DbClientPtr m_db_client;
     };
 
 } ///< namespace disk::file

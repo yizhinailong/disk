@@ -5,6 +5,7 @@
  * @copyright Copyright (c) 2026
  */
 
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -35,6 +36,16 @@ namespace disk::file {
             return source.find(expected) != std::string::npos;
         }
 
+        auto CountOccurrences(const std::string& source, const std::string& expected) -> std::size_t {
+            std::size_t count = 0;
+            std::size_t offset = 0;
+            while ((offset = source.find(expected, offset)) != std::string::npos) {
+                ++count;
+                offset += expected.size();
+            }
+            return count;
+        }
+
         TEST(FileRepositorySignatureContractTest, ExposesTransactionAwarePersistencePrimitives) {
             using FindOwnedSignature = drogon::Task<std::optional<drogon_model::disk::Files>> (
                 FileRepository::*
@@ -55,6 +66,27 @@ namespace disk::file {
             static_assert(std::is_same_v<decltype(&FileRepository::FindOwnedFile), FindOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::FetchOwnedFilesByIds), FetchOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::RenameOwnedFile), RenameSignature>);
+            static_assert(std::is_default_constructible_v<FileRepository>);
+            static_assert(std::is_empty_v<FileRepository>);
+        }
+
+        TEST(FileRepositorySignatureContractTest, CarriesNoUnusedDefaultClientState) {
+            const auto header = ReadSourceFile("src/services/FileRepository.hpp");
+            const auto source = ReadSourceFile("src/services/FileRepository.cpp");
+            const auto folder_repository = ReadSourceFile("src/services/FolderRepository.cpp");
+            const auto folder_service = ReadSourceFile("src/services/FolderService.cpp");
+            const auto file_mutation_service = ReadSourceFile("src/services/FileMutationService.cpp");
+
+            EXPECT_EQ(CountOccurrences(header, "const drogon::orm::DbClientPtr& client,"), 6U);
+            EXPECT_EQ(CountOccurrences(source, "const drogon::orm::DbClientPtr& client,"), 6U);
+            EXPECT_FALSE(Contains(header, "m_db_client"));
+            EXPECT_FALSE(Contains(header, "FileRepository(drogon::orm::DbClientPtr"));
+            EXPECT_FALSE(Contains(source, "FileRepository::FileRepository("));
+            EXPECT_FALSE(Contains(folder_repository, "FileRepository file_repository(m_db_client)"));
+            EXPECT_FALSE(Contains(folder_service, "FileRepository file_repository(m_db_client)"));
+            EXPECT_FALSE(Contains(file_mutation_service, "m_file_repository(m_db_client)"));
+            EXPECT_EQ(CountOccurrences(folder_repository, "FileRepository file_repository;"), 2U);
+            EXPECT_TRUE(Contains(folder_service, "FileRepository file_repository;"));
         }
 
         TEST(FileRepositorySqlContractTest, OwnershipQueriesStayUserScopedAndBatchSafe) {

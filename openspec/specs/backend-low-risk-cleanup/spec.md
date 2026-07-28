@@ -106,6 +106,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** a whole-repository call-site audit confirms that `FileRepository::UpdateDescendantFilePathsForFolderMove` and its dedicated SQL have no production or behavioral-test caller
 - **THEN** the declaration, implementation, obsolete positive source-contract expectation, and dedicated SQL SHALL be removed while folder rename and move flows continue to update each descendant file through transaction-bound `UpdateFilePath` calls
 
+#### Scenario: File repository retains no unused default client
+
+- **WHEN** every `FileRepository` operation already receives the standalone client or active transaction explicitly and the constructor-injected client is never read
+- **THEN** the repository SHALL be default-constructible and stateless, its unused constructor and client field SHALL be removed, and every production call SHALL continue to supply its operation-scoped client
+
 #### Scenario: Dead-letter replay remains audit-transaction owned
 
 - **WHEN** the only production dead-letter replay flow resets a job and records its administrator audit in one transaction

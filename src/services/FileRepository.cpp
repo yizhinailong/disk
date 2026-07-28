@@ -9,8 +9,6 @@
 
 #include "FileRepository.hpp"
 
-#include <utility>
-
 #include "utils/BatchUtils.hpp"
 
 namespace disk::file {
@@ -47,10 +45,6 @@ namespace disk::file {
             "UPDATE files SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4";
 
     } ///< namespace
-
-    FileRepository::FileRepository(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)) {
-    }
 
     auto FileRepository::FindOwnedFile(
         const drogon::orm::DbClientPtr& client,

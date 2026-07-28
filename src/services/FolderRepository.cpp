@@ -179,7 +179,7 @@ namespace disk::folder {
             folder_ids.push_back(folder.getValueOfId());
         }
 
-        FileRepository file_repository(m_db_client);
+        FileRepository file_repository;
         plan.files = co_await file_repository.FetchFilesInFolders(client, folder_ids, user_id);
         for (const auto& file : plan.files) {
             plan.item_size += file.getValueOfSize();
@@ -223,7 +223,7 @@ namespace disk::folder {
         std::sort(all_folder_ids.begin(), all_folder_ids.end());
         all_folder_ids.erase(std::unique(all_folder_ids.begin(), all_folder_ids.end()), all_folder_ids.end());
 
-        FileRepository file_repository(m_db_client);
+        FileRepository file_repository;
         auto files = co_await file_repository.FetchFilesInFolders(client, all_folder_ids, user_id);
 
         std::unordered_map<uint64_t, std::vector<uint64_t>> root_to_folder_ids;

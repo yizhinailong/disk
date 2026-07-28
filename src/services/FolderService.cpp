@@ -226,7 +226,7 @@ namespace disk::folder {
                     for (const auto& [id, _] : folder_paths) {
                         folder_ids.push_back(id);
                     }
-                    disk::file::FileRepository file_repository(m_db_client);
+                    disk::file::FileRepository file_repository;
                     auto files = co_await file_repository.FetchFilesInFolders(txn, folder_ids, user_id);
                     for (const auto& file : files) {
                         auto path_it = folder_paths.find(file.getValueOfFolderId());
