@@ -81,6 +81,39 @@ namespace disk::folder {
             static_assert(std::is_same_v<decltype(&FolderRepository::FindOwnedFolder), FindOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::FetchFolderSubtree), SubtreeSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::FetchBatchFolderDeletePlans), BatchPlanSignature>);
+            static_assert(std::is_default_constructible_v<FolderRepository>);
+            static_assert(std::is_empty_v<FolderRepository>);
+
+            const auto header = ReadSourceFile("src/services/FolderRepository.hpp");
+            const auto source = ReadSourceFile("src/services/FolderRepository.cpp");
+            const auto utils = ReadSourceFile("src/services/FileServiceUtils.cpp");
+            const auto upload_lifecycle =
+                ReadSourceFile("src/services/UploadLifecycleService.cpp");
+            const auto folder_service = ReadSourceFile("src/services/FolderService.cpp");
+            const auto file_mutation =
+                ReadSourceFile("src/services/FileMutationService.cpp");
+
+            EXPECT_EQ(
+                CountOccurrences(header, "const drogon::orm::DbClientPtr& client,"),
+                13U
+            );
+            EXPECT_EQ(
+                CountOccurrences(source, "const drogon::orm::DbClientPtr& client,"),
+                13U
+            );
+            EXPECT_FALSE(Contains(header, "m_db_client"));
+            EXPECT_FALSE(Contains(header, "FolderRepository(drogon::orm::DbClientPtr"));
+            EXPECT_FALSE(Contains(source, "FolderRepository::FolderRepository("));
+            EXPECT_EQ(CountOccurrences(utils, "FolderRepository repository;"), 3U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    upload_lifecycle,
+                    "FolderRepository folder_repository;"
+                ),
+                2U
+            );
+            EXPECT_FALSE(Contains(folder_service, "m_folder_repository(m_db_client)"));
+            EXPECT_FALSE(Contains(file_mutation, "m_folder_repository(m_db_client)"));
         }
 
         TEST(FolderRepositorySqlContractTest, OwnershipAndLocationQueriesStayUserScoped) {

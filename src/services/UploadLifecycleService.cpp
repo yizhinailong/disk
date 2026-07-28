@@ -584,7 +584,7 @@ namespace disk::upload {
                     file = std::move(file_result.value());
 
                     if (command.parent_id > 0) {
-                        disk::folder::FolderRepository folder_repository(m_db_client);
+                        disk::folder::FolderRepository folder_repository;
                         co_await folder_repository.ApplyItemCountDelta(
                             transaction,
                             command.parent_id,
@@ -1348,7 +1348,7 @@ namespace disk::upload {
                 file = std::move(file_result.value());
 
                 if (upload_task.getValueOfFolderId() > 0) {
-                    disk::folder::FolderRepository folder_repository(m_db_client);
+                    disk::folder::FolderRepository folder_repository;
                     co_await folder_repository.ApplyItemCountDelta(
                         transaction,
                         upload_task.getValueOfFolderId(),

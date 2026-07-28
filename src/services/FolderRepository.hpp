@@ -37,8 +37,6 @@ namespace disk::folder {
      */
     class FolderRepository {
     public:
-        explicit FolderRepository(drogon::orm::DbClientPtr db_client);
-
         [[nodiscard]]
         auto FindOwnedFolder(
             const drogon::orm::DbClientPtr& client,
@@ -142,9 +140,6 @@ namespace disk::folder {
             const drogon::orm::DbClientPtr& client,
             uint64_t folder_id
         ) const -> drogon::Task<void>;
-
-    private:
-        drogon::orm::DbClientPtr m_db_client;
     };
 
 } ///< namespace disk::folder

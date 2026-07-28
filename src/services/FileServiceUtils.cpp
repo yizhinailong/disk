@@ -37,7 +37,7 @@ namespace disk::file::utils {
         uint64_t user_id,
         disk::utils::LogContext log_context
     ) -> drogon::Task<Result<FolderLocation>> {
-        disk::folder::FolderRepository repository(client);
+        disk::folder::FolderRepository repository;
         co_return co_await repository.ResolveOwnedFolderLocation(
             client,
             folder_id,
@@ -232,7 +232,7 @@ namespace disk::file::utils {
         uint64_t folder_id,
         uint64_t user_id
     ) -> drogon::Task<std::optional<FolderDeletePlan>> {
-        disk::folder::FolderRepository repository(client);
+        disk::folder::FolderRepository repository;
         co_return co_await repository.FetchFolderDeletePlan(client, folder_id, user_id);
     }
 
@@ -241,7 +241,7 @@ namespace disk::file::utils {
         const std::vector<uint64_t>& folder_ids,
         uint64_t user_id
     ) -> drogon::Task<std::unordered_map<uint64_t, FolderDeletePlan>> {
-        disk::folder::FolderRepository repository(client);
+        disk::folder::FolderRepository repository;
         co_return co_await repository.FetchBatchFolderDeletePlans(client, folder_ids, user_id);
     }
 

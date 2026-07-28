@@ -111,6 +111,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** every `FileRepository` operation already receives the standalone client or active transaction explicitly and the constructor-injected client is never read
 - **THEN** the repository SHALL be default-constructible and stateless, its unused constructor and client field SHALL be removed, and every production call SHALL continue to supply its operation-scoped client
 
+#### Scenario: Folder repository retains no unused default client
+
+- **WHEN** every `FolderRepository` operation already receives the standalone client or active transaction explicitly and the constructor-injected client is never read
+- **THEN** the repository SHALL be default-constructible and stateless, its unused constructor and client field SHALL be removed, and every production call SHALL continue to supply its operation-scoped client
+
 #### Scenario: Dead-letter replay remains audit-transaction owned
 
 - **WHEN** the only production dead-letter replay flow resets a job and records its administrator audit in one transaction

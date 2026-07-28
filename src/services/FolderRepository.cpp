@@ -101,10 +101,6 @@ namespace disk::folder {
             "UPDATE folders SET item_count = item_count + 1 WHERE id = $1";
     } ///< namespace
 
-    FolderRepository::FolderRepository(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)) {
-    }
-
     auto FolderRepository::FindOwnedFolder(
         const drogon::orm::DbClientPtr& client,
         uint64_t folder_id,
