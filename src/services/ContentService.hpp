@@ -94,14 +94,6 @@ namespace disk::content {
         ) const -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
-        auto IncrementRefCounts(
-            const drogon::orm::DbClientPtr& client,
-            const std::unordered_map<uint64_t, uint64_t>& increments,
-            const std::unordered_set<uint64_t>& existing_content_ids,
-            disk::utils::LogContext log_context = {}
-        ) const -> drogon::Task<std::unordered_set<uint64_t>>;
-
-        [[nodiscard]]
         auto IncrementRefCountsChecked(
             const drogon::orm::DbClientPtr& client,
             const std::unordered_map<uint64_t, uint64_t>& increments,

@@ -243,25 +243,6 @@ namespace disk::content {
         }
     }
 
-    auto ContentService::IncrementRefCounts(
-        const drogon::orm::DbClientPtr& client,
-        const std::unordered_map<uint64_t, uint64_t>& increments,
-        const std::unordered_set<uint64_t>& existing_content_ids,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<std::unordered_set<uint64_t>> {
-        auto result = co_await IncrementRefCountsChecked(
-            client,
-            increments,
-            existing_content_ids,
-            log_context
-        );
-        if (!result) {
-            Logger::Warn(log_context) << "File content batch reference increment rejected";
-            co_return std::unordered_set<uint64_t>{};
-        }
-        co_return result.value();
-    }
-
     auto ContentService::IncrementRefCountsChecked(
         const drogon::orm::DbClientPtr& client,
         const std::unordered_map<uint64_t, uint64_t>& increments,

@@ -130,6 +130,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller
 - **THEN** those declarations, implementations, and placeholder tests SHALL be removed together while active single-key, counter, CAS, and fixed-window operations retain their existing behavior
 
+#### Scenario: Unused unchecked content-reference wrapper is removed
+
+- **WHEN** a whole-repository call-site audit confirms that `ContentService::IncrementRefCounts` has no production caller and only converts `IncrementRefCountsChecked` failures into an empty set
+- **THEN** the unchecked wrapper and its dead warning event SHALL be removed while copy transactions continue to call the checked operation directly and propagate failures for rollback
+
 #### Scenario: Unused Worker startup probe is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `StorageWorkerRuntime::IsStarted` has no production or test caller

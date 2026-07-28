@@ -103,11 +103,6 @@ namespace disk::content {
                 uint64_t{ 1 },
                 uint64_t{ 1 }
             ));
-            using BatchIncrementResult = decltype(std::declval<ContentService&>().IncrementRefCounts(
-                std::declval<const drogon::orm::DbClientPtr&>(),
-                std::declval<const std::unordered_map<uint64_t, uint64_t>&>(),
-                std::declval<const std::unordered_set<uint64_t>&>()
-            ));
             using CheckedBatchIncrementResult = decltype(std::declval<ContentService&>().IncrementRefCountsChecked(
                 std::declval<const drogon::orm::DbClientPtr&>(),
                 std::declval<const std::unordered_map<uint64_t, uint64_t>&>(),
@@ -123,7 +118,6 @@ namespace disk::content {
             EXPECT_TRUE((std::is_same_v<FindExistingIdsResult, drogon::Task<std::unordered_set<uint64_t>>>));
             EXPECT_TRUE((std::is_same_v<AcquireReferenceResult, drogon::Task<Result<ContentMetadata>>>));
             EXPECT_TRUE((std::is_same_v<IncrementResult, drogon::Task<Result<void>>>));
-            EXPECT_TRUE((std::is_same_v<BatchIncrementResult, drogon::Task<std::unordered_set<uint64_t>>>));
             EXPECT_TRUE((std::is_same_v<CheckedBatchIncrementResult, drogon::Task<Result<std::unordered_set<uint64_t>>>>));
             EXPECT_TRUE((std::is_same_v<DecrementResult, drogon::Task<Result<size_t>>>));
         }
@@ -146,9 +140,9 @@ namespace disk::content {
 
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                8U
+                7U
             );
-            EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 8U);
+            EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 7U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 2U);
             EXPECT_EQ(
                 CountOccurrences(
@@ -166,7 +160,6 @@ namespace disk::content {
                      "\"File content batch ID lookup failed\"",
                      "\"File content reference acquisition failed\"",
                      "\"File content reference increment failed\"",
-                     "\"File content batch reference increment rejected\"",
                      "\"File content batch reference increment row mismatch\"",
                      "\"File content batch reference increment failed\"",
                      "\"File content decrement and Blob GC enqueue failed\"",
@@ -179,11 +172,6 @@ namespace disk::content {
             EXPECT_TRUE(EveryCallContainsContext(
                 source,
                 "co_return co_await FindByMd5(",
-                1U
-            ));
-            EXPECT_TRUE(EveryCallContainsContext(
-                source,
-                "co_await IncrementRefCountsChecked(",
                 1U
             ));
             EXPECT_TRUE(EveryCallContainsContext(
@@ -227,6 +215,10 @@ namespace disk::content {
                 "content_service.DecrementRefCountsAndEnqueueGc(",
                 1U
             ));
+
+            EXPECT_FALSE(Contains(header, "auto IncrementRefCounts("));
+            EXPECT_FALSE(Contains(source, "auto ContentService::IncrementRefCounts("));
+            EXPECT_FALSE(Contains(source, "File content batch reference increment rejected"));
 
             EXPECT_FALSE(Contains(source, "log_context."));
             EXPECT_FALSE(Contains(source, ".what()"));
