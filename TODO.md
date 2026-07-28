@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-28，本轮 Phase 10 文件夹仓储死客户端状态清理）：全仓库精确读写与实例化审计确认 `FolderRepository` 构造参数只写入 `m_db_client`，该字段从未被任何方法读取；全部 13 个仓储操作都显式接收 standalone client 或当前 transaction。无读取字段和注入构造已删除，7 个生产构造点改为默认构造；编译期/源码合同要求仓储保持可默认构造且为空类型，并锁定全部 13 个显式 client 参数及生产构造点。完整构建、文件/文件夹仓储与移动合同、真实文件变更/文件夹生命周期/上传流程、配额/移动安全网与分布式拓扑聚焦 CTest 19/19、OpenSpec 24/24 通过。完整 CTest 共 1457 项，1450 通过、7 项按环境门控跳过，0 失败，总耗时 518.21 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-28，本轮 Phase 10 操作日志通用死写入子图清理）：全仓库精确符号与调用点审计确认 `OperationLogService::Log()` 及其专属 DTO、枚举、IP 归一化和转换 helper 没有生产消费者。整个通用死写入子图与 9 个只测死代码的用例已删除；`GetList()` 用户分页查询及 Auth、ShareAudit、Admin、StorageJobAdmin 和 StorageRecoveryAdmin 五条领域审计写入链保持不变。完整构建、日志查询/运行时/领域审计/安全上传聚焦 CTest 23/23、OpenSpec 24/24 通过。完整 CTest 共 1448 项，1441 通过、7 项按环境门控跳过，0 失败，总耗时 518.96 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1604,6 +1604,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定人工死信重放所�
 无读取字段与注入构造已删除，`FileServiceUtils`、`UploadLifecycleService`、`FolderService` 和 `FileMutationService` 的 7 个生产构造点改为默认构造。`FolderRepository_test.cpp` 通过编译期断言要求仓储可默认构造且为空类型，通过源码合同拒绝旧字段/构造回归并核对头文件与实现各 13 个显式 client 参数及全部生产构造点。参数化 SQL、用户谓词、事务连接、路径/计数更新、日志上下文和公开响应均未改变；Phase 10 总清理项继续保持未勾选。
 
 完整构建、文件/文件夹仓储与移动合同、真实文件变更/文件夹生命周期/上传流程、配额/移动安全网与分布式拓扑聚焦 CTest 19/19 和 OpenSpec 24/24 通过。完整 CTest 共 1457 项，1450 项通过、7 项环境门控跳过、0 失败，总耗时 518.21 秒。
+
+### 15.37 操作日志通用死写入子图清理记录（2026-07-28）
+
+系统测试、单元测试、部署运维和 OpenSpec 先行固定操作日志的查询边界与写入所有权。全仓库精确符号与调用点审计确认 `OperationLogService::Log()` 只有声明和实现；其专属 `OperationLogEntry`、`ActionType`、`TargetType`、IP 归一化和枚举转换 helper 也没有生产消费者。
+
+通用死写入子图与 9 个只测死代码的用例已删除，`OperationLogService` 收敛为用户可见的 `GetList()` 分页查询。源码合同拒绝旧符号回归，并正向锁定 `AuthService`、`ShareAuditService`、`AdminService`、`StorageJobAdminService` 和 `StorageRecoveryAdminService` 的真实审计写入。`/api/logs` 请求/响应、已存审计数据、各领域事务归属及 fail-open/fail-closed 策略均未改变；Phase 10 总清理项继续保持未勾选。
+
+完整构建、日志查询/运行时/领域审计/安全上传聚焦 CTest 23/23 和 OpenSpec 24/24 通过。完整 CTest 共 1448 项，1441 项通过、7 项环境门控跳过、0 失败，总耗时 518.96 秒。
 
 ## 16. 最终 Definition of Done
 

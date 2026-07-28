@@ -9,51 +9,11 @@
 
 #include "OperationLogService.hpp"
 
-#include <drogon/orm/CoroMapper.h>
-
-#include "models/OperationLogs.hpp"
-
 namespace disk::log {
 
     OperationLogService::OperationLogService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
         Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=operation_log";
-    }
-
-    auto OperationLogService::Log(
-        const OperationLogEntry& entry,
-        disk::utils::LogContext log_context
-    ) -> drogon::Task<Result<void>> {
-        try {
-            drogon_model::disk::OperationLogs log;
-            log.setUserId(entry.user_id);
-            log.setAction(ActionTypeToString(entry.action));
-            log.setTargetType(TargetTypeToString(entry.target_type));
-
-            if (entry.target_id > 0) {
-                log.setTargetId(entry.target_id);
-            }
-            if (!entry.target_name.empty()) {
-                log.setTargetName(entry.target_name);
-            }
-            if (!entry.details.empty()) {
-                log.setDetails(entry.details);
-            }
-            log.setIpAddress(NormalizeIpAddress(entry.ip_address));
-            if (!entry.user_agent.empty()) {
-                log.setUserAgent(entry.user_agent);
-            }
-
-            drogon::orm::CoroMapper<drogon_model::disk::OperationLogs> mapper(m_db_client);
-            co_await mapper.insert(log);
-
-            co_return {};
-        } catch (const drogon::orm::DrogonDbException&) {
-            Logger::Error(log_context) << "Failed to record operation log";
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to record operation log")
-            );
-        }
     }
 
     auto OperationLogService::GetList(
@@ -110,32 +70,6 @@ namespace disk::log {
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to query operation logs")
             );
-        }
-    }
-
-    auto OperationLogService::ActionTypeToString(ActionType action) -> std::string {
-        switch (action) {
-            case ActionType::Login   : return "login";
-            case ActionType::Logout  : return "logout";
-            case ActionType::Upload  : return "upload";
-            case ActionType::Download: return "download";
-            case ActionType::Delete  : return "delete";
-            case ActionType::Rename  : return "rename";
-            case ActionType::Move    : return "move";
-            case ActionType::Copy    : return "copy";
-            case ActionType::Share   : return "share";
-            case ActionType::Restore : return "restore";
-            default                  : return "unknown";
-        }
-    }
-
-    auto OperationLogService::TargetTypeToString(TargetType type) -> std::string {
-        switch (type) {
-            case TargetType::File  : return "file";
-            case TargetType::Folder: return "folder";
-            case TargetType::Share : return "share";
-            case TargetType::User  : return "user";
-            default                : return "unknown";
         }
     }
 

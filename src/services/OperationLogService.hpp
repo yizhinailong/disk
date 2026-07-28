@@ -20,37 +20,6 @@
 
 namespace disk::log {
 
-    enum class ActionType : uint8_t {
-        Login,
-        Logout,
-        Upload,
-        Download,
-        Delete,
-        Rename,
-        Move,
-        Copy,
-        Share,
-        Restore,
-    };
-
-    enum class TargetType : uint8_t {
-        File,
-        Folder,
-        Share,
-        User,
-    };
-
-    struct OperationLogEntry {
-        uint64_t user_id{ 0 };
-        ActionType action;
-        TargetType target_type;
-        uint64_t target_id{ 0 };
-        std::string target_name;
-        std::string details;
-        std::string ip_address;
-        std::string user_agent;
-    };
-
     struct OperationLogItem {
         uint64_t id{ 0 };
         uint64_t user_id{ 0 };
@@ -87,12 +56,6 @@ namespace disk::log {
         explicit OperationLogService(drogon::orm::DbClientPtr db_client);
 
         [[nodiscard]]
-        auto Log(
-            const OperationLogEntry& entry,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<void>>;
-
-        [[nodiscard]]
         auto GetList(
             uint64_t user_id,
             int page,
@@ -101,15 +64,7 @@ namespace disk::log {
         )
             -> drogon::Task<Result<OperationLogListResponse>>;
 
-        [[nodiscard]]
-        static auto NormalizeIpAddress(const std::string& ip) -> std::string {
-            return ip.empty() ? "unknown" : ip;
-        }
-
     private:
-        static auto ActionTypeToString(ActionType action) -> std::string;
-        static auto TargetTypeToString(TargetType type) -> std::string;
-
         drogon::orm::DbClientPtr m_db_client;
     };
 

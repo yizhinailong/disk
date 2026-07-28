@@ -140,6 +140,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site audit confirms that `ContentService::IncrementRefCounts` has no production caller and only converts `IncrementRefCountsChecked` failures into an empty set
 - **THEN** the unchecked wrapper and its dead warning event SHALL be removed while copy transactions continue to call the checked operation directly and propagate failures for rollback
 
+#### Scenario: Unused generic operation-log writer is removed
+
+- **WHEN** a whole-repository call-site audit confirms that `OperationLogService::Log` and its entry, enum, normalization, and conversion helpers have no production caller while authentication, sharing, administrator, storage-job, and recovery domains own active audit writes
+- **THEN** the generic write subgraph SHALL be removed while `OperationLogService::GetList` retains the user-visible query contract and each active domain write retains its existing transaction and failure policy
+
 #### Scenario: Unused Worker startup probe is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `StorageWorkerRuntime::IsStarted` has no production or test caller
