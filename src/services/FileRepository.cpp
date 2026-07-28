@@ -46,9 +46,6 @@ namespace disk::file {
         constexpr auto kUpdateFilePathSql =
             "UPDATE files SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4";
 
-        constexpr auto kUpdateDescendantFilePathsForFolderMoveSql =
-            "UPDATE files SET path = $1 || SUBSTRING(path FROM LENGTH($2) + 1), updated_at = $3 "
-            "WHERE user_id = $4 AND path LIKE $2 || '%'";
     } ///< namespace
 
     FileRepository::FileRepository(drogon::orm::DbClientPtr db_client)
@@ -174,23 +171,6 @@ namespace disk::file {
             user_id
         );
         co_return result.affectedRows() > 0;
-    }
-
-    auto FileRepository::UpdateDescendantFilePathsForFolderMove(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t user_id,
-        const std::string& old_folder_path_prefix,
-        const std::string& new_folder_path_prefix,
-        const trantor::Date& updated_at
-    ) const -> drogon::Task<uint64_t> {
-        auto result = co_await client->execSqlCoro(
-            kUpdateDescendantFilePathsForFolderMoveSql,
-            new_folder_path_prefix,
-            old_folder_path_prefix,
-            updated_at,
-            user_id
-        );
-        co_return static_cast<uint64_t>(result.affectedRows());
     }
 
 } ///< namespace disk::file

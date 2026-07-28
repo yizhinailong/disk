@@ -83,15 +83,6 @@ namespace disk::file {
             const trantor::Date& updated_at
         ) const -> drogon::Task<bool>;
 
-        [[nodiscard]]
-        auto UpdateDescendantFilePathsForFolderMove(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t user_id,
-            const std::string& old_folder_path_prefix,
-            const std::string& new_folder_path_prefix,
-            const trantor::Date& updated_at
-        ) const -> drogon::Task<uint64_t>;
-
     private:
         drogon::orm::DbClientPtr m_db_client;
     };

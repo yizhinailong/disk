@@ -84,12 +84,20 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "WHERE id = $3 AND user_id = $4"));
         }
 
-        TEST(FileRepositorySqlContractTest, DescendantPathUpdateSqlRemainsNamedAndVisible) {
+        TEST(FileRepositorySqlContractTest, UnusedDescendantPathUpdatePrimitiveDoesNotReturn) {
+            const auto header = ReadSourceFile("src/services/FileRepository.hpp");
             const auto source = ReadSourceFile("src/services/FileRepository.cpp");
+            const auto folder_service = ReadSourceFile("src/services/FolderService.cpp");
+            const auto file_mutation_service = ReadSourceFile("src/services/FileMutationService.cpp");
 
-            EXPECT_TRUE(Contains(source, "kUpdateDescendantFilePathsForFolderMoveSql"));
-            EXPECT_TRUE(Contains(source, "SUBSTRING(path FROM LENGTH($2) + 1)"));
-            EXPECT_TRUE(Contains(source, "WHERE user_id = $4 AND path LIKE $2 || '%'"));
+            EXPECT_FALSE(Contains(header, "UpdateDescendantFilePathsForFolderMove"));
+            EXPECT_FALSE(Contains(source, "UpdateDescendantFilePathsForFolderMove"));
+            EXPECT_FALSE(Contains(source, "SUBSTRING(path FROM LENGTH($2) + 1)"));
+            EXPECT_TRUE(Contains(source, "auto FileRepository::UpdateFilePath("));
+            EXPECT_TRUE(Contains(folder_service, "file_repository.UpdateFilePath("));
+            EXPECT_TRUE(Contains(file_mutation_service, "m_file_repository.UpdateFilePath("));
+            EXPECT_TRUE(Contains(folder_service, "BuildFilePath(path_it->second, file.getValueOfName())"));
+            EXPECT_TRUE(Contains(file_mutation_service, "utils::BuildFilePath(path_it->second, file.getValueOfName())"));
         }
 
     } ///< namespace

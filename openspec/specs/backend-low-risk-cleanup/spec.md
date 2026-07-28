@@ -101,6 +101,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** completion, cancellation, expiration, or chunk persistence needs a PostgreSQL primitive
 - **THEN** the repository SHALL retain the owner/version guarded transition or transaction-client overload used by that production flow
 
+#### Scenario: Unused descendant file-path update primitive is removed
+
+- **WHEN** a whole-repository call-site audit confirms that `FileRepository::UpdateDescendantFilePathsForFolderMove` and its dedicated SQL have no production or behavioral-test caller
+- **THEN** the declaration, implementation, obsolete positive source-contract expectation, and dedicated SQL SHALL be removed while folder rename and move flows continue to update each descendant file through transaction-bound `UpdateFilePath` calls
+
 #### Scenario: Dead-letter replay remains audit-transaction owned
 
 - **WHEN** the only production dead-letter replay flow resets a job and records its administrator audit in one transaction

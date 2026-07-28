@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-27，本轮 Phase 10 Auth CPU 指标死包装器清理）：全仓库精确调用点审计确认 `detail::StartAuthCpuPoolMetricsTimer()` 与 `GetAuthCpuPoolActiveTaskCount()` 都只有声明与实现，没有生产、测试或文档调用者；实际工作循环仍由 `GetAuthCpuWorkLoop()` 提供，指标 timer 仍由 `StartCacheMaintenance()` 直接启动并通过 `LogPoolMetrics()` 读取原子计数。两个无调用包装器已删除，源码合同禁止其回归；submitted/completed/active/peak 计数、指标重置、结构化日志和认证请求行为不变。完整构建、Token/认证过滤器/真实双 API auth runtime 指标聚焦 CTest 127/127、OpenSpec 24/24 通过。完整 CTest 共 1456 项，1449 通过、7 项按环境门控跳过，0 失败，总耗时 488.09 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-28，本轮 Phase 10 文件仓储后代路径死原语清理）：全仓库精确调用点审计确认 `FileRepository::UpdateDescendantFilePathsForFolderMove()` 只有声明与实现，专属路径前缀 SQL 只由该方法引用，没有生产或行为测试调用者；文件夹重命名与移动继续在同一事务内按已验证子树逐个调用 `UpdateFilePath()`。无调用方法、专属 SQL 与过时正向断言已删除，源码合同禁止其回归并锁定两条真实调用链；嵌套文件夹移动的根/后代文件夹及后代文件路径、用户谓词、item count 和公开响应不变。完整构建、文件/文件夹仓储与移动合同、真实文件夹生命周期/嵌套移动安全网、分布式拓扑聚焦 CTest 14/14、OpenSpec 24/24 通过。完整 CTest 共 1456 项，1449 通过、7 项按环境门控跳过，0 失败，总耗时 499.45 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1572,6 +1572,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定人工死信重放所�
 两个无调用包装器的声明与实现已删除，`TokenServiceLogContext_test.cpp` 通过头文件/实现否定断言拒绝旧符号回归，并正向锁定工作循环、`StartPoolMetricsTimer(metrics_interval)` 和 `LogPoolMetrics()` 周期回调。TokenService 内部 submitted/completed/active/peak 原子计数、周期重置、`auth_runtime` 日志和请求跨 CPU pool 执行均未改变；真实双 API 仍产生 pool 初始化、1 秒 timer 启动和周期指标。本轮不删除线程池、配置键、指标字段、认证 API 或迁移兼容路径，因此 Phase 10 总清理项继续保持未勾选。
 
 完整构建、Token/认证过滤器/真实双 API auth runtime 指标聚焦 CTest 127/127 和 OpenSpec 24/24 通过。完整 CTest 共 1456 项，1449 项通过、7 项环境门控跳过、0 失败，总耗时 488.09 秒。
+
+### 15.33 文件仓储后代路径死原语清理记录（2026-07-28）
+
+系统测试、单元测试、部署运维和 OpenSpec 先行固定文件仓储路径更新职责。全仓库精确符号与调用点审计确认 `FileRepository::UpdateDescendantFilePathsForFolderMove()` 只有声明与实现，其专属路径前缀 SQL 也只由该方法引用，没有生产或行为测试调用者；既有测试只是正向断言该孤立 SQL 存在。
+
+无调用方法、专属 SQL 与过时正向断言已删除。`FileRepository_test.cpp` 现在通过头文件/实现否定断言拒绝旧入口与 SQL 回归，并正向锁定 `FolderService` 重命名和 `FileMutationService` 移动在事务内逐个调用 `UpdateFilePath()`、按当前文件名重建路径。真实嵌套文件夹移动继续对账根与后代文件夹路径、后代文件路径和 item count；用户谓词、事务边界、公开响应、迁移字段与兼容路径均未改变，因此 Phase 10 总清理项继续保持未勾选。
+
+完整构建、文件/文件夹仓储与移动合同、真实文件夹生命周期/嵌套移动安全网、分布式拓扑聚焦 CTest 14/14 和 OpenSpec 24/24 通过。完整 CTest 共 1456 项，1449 项通过、7 项环境门控跳过、0 失败，总耗时 499.45 秒。
 
 ## 16. 最终 Definition of Done
 
