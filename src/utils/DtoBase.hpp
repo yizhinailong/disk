@@ -120,24 +120,6 @@ protected:
         return json[key].asInt();
     }
 
-    /// 必填 bool 字段
-    [[nodiscard]]
-    static auto RequireBool(const Json::Value& json, const char* key) -> Result<bool> {
-        if (!json.isMember(key)) {
-            return std::unexpected(ErrorInfo(
-                ErrorCode::ValidationFailed,
-                std::string("Missing required parameter: ") + key
-            ));
-        }
-        if (!json[key].isBool()) {
-            return std::unexpected(ErrorInfo(
-                ErrorCode::ValidationFailed,
-                std::string("Parameter '") + key + "' type error: expected boolean"
-            ));
-        }
-        return json[key].asBool();
-    }
-
     /// 可选 string 字段，不存在返回 nullopt
     [[nodiscard]]
     static auto OptionalString(const Json::Value& json, const char* key)
@@ -168,22 +150,6 @@ protected:
             ));
         }
         return json[key].asUInt64();
-    }
-
-    /// 可选 int 字段
-    [[nodiscard]]
-    static auto OptionalInt(const Json::Value& json, const char* key)
-        -> Result<std::optional<int>> {
-        if (!json.isMember(key)) {
-            return std::optional<int>(std::nullopt);
-        }
-        if (!json[key].isIntegral()) {
-            return std::unexpected(ErrorInfo(
-                ErrorCode::ValidationFailed,
-                std::string("Parameter '") + key + "' type error: expected integer"
-            ));
-        }
-        return json[key].asInt();
     }
 
     /// 可选 bool 字段

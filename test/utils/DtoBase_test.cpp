@@ -27,14 +27,12 @@ namespace disk::test {
         class DtoBaseProbe final : public DtoBase<DtoBaseProbe> {
         public:
             using DtoBase<DtoBaseProbe>::OptionalBool;
-            using DtoBase<DtoBaseProbe>::OptionalInt;
             using DtoBase<DtoBaseProbe>::OptionalPositiveIdArray;
             using DtoBase<DtoBaseProbe>::OptionalString;
             using DtoBase<DtoBaseProbe>::OptionalUInt64;
             using DtoBase<DtoBaseProbe>::ParsePositiveUInt64;
             using DtoBase<DtoBaseProbe>::QueryPositiveInt;
             using DtoBase<DtoBaseProbe>::QueryUInt64;
-            using DtoBase<DtoBaseProbe>::RequireBool;
             using DtoBase<DtoBaseProbe>::RequireInt;
             using DtoBase<DtoBaseProbe>::RequireJsonBody;
             using DtoBase<DtoBaseProbe>::RequirePositiveIdArray;
@@ -109,6 +107,8 @@ namespace disk::test {
             ASSERT_FALSE(source.empty());
             EXPECT_EQ(source.find("Logger::"), std::string::npos);
             EXPECT_EQ(source.find("LogHelper.hpp"), std::string::npos);
+            EXPECT_EQ(source.find("static auto RequireBool("), std::string::npos);
+            EXPECT_EQ(source.find("static auto OptionalInt("), std::string::npos);
 
             ScopedLogCapture capture;
 
@@ -139,11 +139,6 @@ namespace disk::test {
                 "Parameter 'int' type error: expected integer"
             );
             ExpectError(
-                DtoBaseProbe::RequireBool(fields, "bool"),
-                ErrorCode::ValidationFailed,
-                "Parameter 'bool' type error: expected boolean"
-            );
-            ExpectError(
                 DtoBaseProbe::OptionalString(fields, "string"),
                 ErrorCode::ValidationFailed,
                 "Parameter 'string' type error: expected string"
@@ -152,11 +147,6 @@ namespace disk::test {
                 DtoBaseProbe::OptionalUInt64(fields, "uint"),
                 ErrorCode::ValidationFailed,
                 "Parameter 'uint' type error: expected unsigned integer"
-            );
-            ExpectError(
-                DtoBaseProbe::OptionalInt(fields, "int"),
-                ErrorCode::ValidationFailed,
-                "Parameter 'int' type error: expected integer"
             );
             ExpectError(
                 DtoBaseProbe::OptionalBool(fields, "bool"),
