@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-30，固定 Prometheus 规则测试依赖引导）：新增 `scripts/fetch-promtool-test-binary.sh`，仅在 Linux amd64 上从官方 Prometheus `v3.13.1` 版本化 HTTPS release 获取归档，依次校验固定归档与 `promtool` 双 SHA-256，再以同目录硬链接无覆盖原子发布 `0755` 普通文件；已有文件只在摘要精确匹配时复用，符号链接、非普通文件或摘要不符均拒绝且不覆盖。真实首次下载/二次复用、错误目标拒绝、Shell 语法、分布式拓扑合同 1/1、固定 `promtool 3.13.1` 规则门禁 1/1 和 OpenSpec 24/24 通过，临时产物已清理。最新候选已显式复验 7 个常规环境门禁中的 5 个，`PgBouncerTransactionPoolIntegration` 与容器拓扑 `DistributedFlowIntegration` 仍待复验。最近完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 511.27 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。目标环境告警投递/值班链路、真实 Nginx/TLS/KMS、高可用依赖、负载/长稳、迁移与兼容路径退役验收未因本地规则单测而完成，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-30，最新候选 PgBouncer 事务池复验）：官方 SHA-256 匹配的 PgBouncer `1.25.2` release 源码在忽略目录内临时构建，`PgBouncerTransactionPoolIntegration` 1/1 通过（CTest 3.54 秒，总耗时 3.56 秒）。两个真实 API 的 8 条 Drogon 客户端连接精确复用到 2 条 PostgreSQL 后端连接，跨实例 ORM/`TransactionRunner`、事务内 `SET LOCAL`/`ON COMMIT DROP`、`pg_advisory_xact_lock` 提交前互斥与提交后释放全部通过，client/server parse 为 27/20、bind 为 54。`0600` 原子证据 SHA-256 已记录，不含端口、路径、凭据或业务标识，受管进程已清理。至此最新候选已显式复验 7 个常规环境门禁中的 6 个，仅容器拓扑 `DistributedFlowIntegration` 未在该候选上复验。最近完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 511.27 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。本地单 PgBouncer/单 PostgreSQL 不替代生产认证/TLS、稳定写端点 HA、独立故障域、连接/内存容量和版本升级回归；Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1710,6 +1710,14 @@ OpenSpec、系统测试、部署运维和单元测试文档先行固定 Promethe
 已有 `promtool` 只在二进制摘要精确匹配时复用；符号链接、非普通文件或摘要不符时在下载前拒绝且不覆盖。`DistributedTopologyContract` 锁定版本、URL、双摘要、平台、HTTPS、精确提取和无覆盖发布原语，并以预置错误文件证明拒绝后字节与目录内容均不变。
 
 全新临时目录的真实首次下载、二次复用、二进制摘要/权限/无临时文件检查均通过；固定 `promtool 3.13.1` 驱动 `PrometheusAlertRulesIntegration` 1/1 通过（0.12 秒，总耗时 0.15 秒）。Shell 语法、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过，临时下载及提取产物已清理。最新候选已显式复验 7 个常规环境门禁中的 5 个；`PgBouncerTransactionPoolIntegration` 与容器拓扑 `DistributedFlowIntegration` 仍待复验，目标环境告警投递/值班链路和长稳故障演练也未因规则单测自动完成。Phase 6/9/10 和最终 Definition of Done 相关项继续保持未勾选。
+
+### 15.50 最新候选 PgBouncer 事务池门禁复验记录（2026-07-30）
+
+候选提交 `7a35ada7` 上，从 pgbouncer.org 官方版本化 HTTPS 路径下载 PgBouncer `1.25.2` release tarball，官方校验文件与 GitHub release API 公布的 SHA-256 均为 `924ad35113fd0a71c8e2dbe85b5d03445532e2b7b37a9f8a48983beea238b332`。归档摘要和路径边界复核后，在忽略目录内以 Autotools/GCC、libevent `2.1.13`、c-ares `1.34.8` 和 OpenSSL `3.6.3` 临时构建，二进制版本探针精确返回 `PgBouncer 1.25.2`。
+
+该二进制驱动 `PgBouncerTransactionPoolIntegration` 1/1 通过（CTest 3.54 秒，总耗时 3.56 秒）。两个真实 API 的 8 条 Drogon 客户端连接精确复用到 2 条 PostgreSQL 后端连接；跨实例 ORM 与 `TransactionRunner` 工作流、事务内 `SET LOCAL`/`ON COMMIT DROP` 临时表和 `pg_advisory_xact_lock` 提交前互斥/提交后释放全部通过，`SHOW STATS` 记录 client parse 27、server parse 20、bind 54。
+
+`0600` 原子证据 `.sisyphus/evidence/pgbouncer-transaction-pool-summary.json` 的 SHA-256 为 `93492ee81be9052d71093ffeb6e273e80b8ced06cf84f0481ea73f6235a5a278`，不含端口、路径、凭据或业务标识，受管测试进程均已清理。至此最新候选已显式复验 7 个常规环境门禁中的 6 个，仅容器拓扑 `DistributedFlowIntegration` 未在该候选上复验。本地单 PgBouncer/单 PostgreSQL 流程不替代生产认证/TLS、稳定写端点 HA、独立故障域、连接/内存容量和版本升级回归验收。Phase 6/9/10 和最终 Definition of Done 相关项继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 
