@@ -50,11 +50,6 @@ namespace disk::upload {
         uint64_t expected_size{ 0 };
     };
 
-    struct ChunkCoverage {
-        uint64_t uploaded_count{ 0 };
-        int64_t max_chunk_index{ -1 };
-    };
-
     enum class FinalizeStorageDecisionType {
         ReuseExistingContent,
         PromoteAsNewContent,
@@ -138,11 +133,6 @@ namespace disk::upload {
         uint32_t chunk_size,
         uint32_t total_chunks
     ) -> std::expected<ChunkAcceptance, ChunkAcceptanceError>;
-
-    [[nodiscard]] auto IsCompleteCoverage(
-        uint32_t total_chunks,
-        const ChunkCoverage& coverage
-    ) -> bool;
 
     [[nodiscard]] auto DecideFinalizeStorage(std::optional<uint64_t> existing_content_id)
         -> FinalizeStorageDecision;

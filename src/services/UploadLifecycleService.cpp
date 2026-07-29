@@ -425,18 +425,6 @@ namespace disk::upload {
         return ChunkAcceptance{ .expected_size = expected_size };
     }
 
-    auto IsCompleteCoverage(
-        uint32_t total_chunks,
-        const ChunkCoverage& coverage
-    ) -> bool {
-        if (total_chunks == 0) {
-            return coverage.uploaded_count == 0;
-        }
-
-        return coverage.uploaded_count == static_cast<uint64_t>(total_chunks) &&
-               coverage.max_chunk_index == static_cast<int64_t>(total_chunks - 1);
-    }
-
     auto DecideFinalizeStorage(std::optional<uint64_t> existing_content_id)
         -> FinalizeStorageDecision {
         if (existing_content_id.has_value()) {

@@ -60,19 +60,6 @@ namespace disk::upload {
             EXPECT_EQ(result.error().expected_size, 5);
         }
 
-        TEST(UploadLifecycleCoverageTest, CompleteCoverageRequiresCountAndMaxIndex) {
-            EXPECT_TRUE(IsCompleteCoverage(3, ChunkCoverage{ .uploaded_count = 3, .max_chunk_index = 2 }));
-            EXPECT_FALSE(IsCompleteCoverage(3, ChunkCoverage{ .uploaded_count = 2, .max_chunk_index = 2 }));
-            EXPECT_FALSE(IsCompleteCoverage(3, ChunkCoverage{ .uploaded_count = 3, .max_chunk_index = 1 }));
-            EXPECT_FALSE(IsCompleteCoverage(3, ChunkCoverage{ .uploaded_count = 3, .max_chunk_index = 3 }));
-            EXPECT_FALSE(IsCompleteCoverage(3, ChunkCoverage{}));
-        }
-
-        TEST(UploadLifecycleCoverageTest, EmptyTaskCoverageRequiresZeroUploadedCount) {
-            EXPECT_TRUE(IsCompleteCoverage(0, ChunkCoverage{ .uploaded_count = 0, .max_chunk_index = -1 }));
-            EXPECT_FALSE(IsCompleteCoverage(0, ChunkCoverage{ .uploaded_count = 1, .max_chunk_index = 0 }));
-        }
-
         TEST(UploadLifecycleFinalizeDecisionTest, ReusesExistingContentWhenPresent) {
             auto decision = DecideFinalizeStorage(42);
             EXPECT_EQ(decision.type, FinalizeStorageDecisionType::ReuseExistingContent);

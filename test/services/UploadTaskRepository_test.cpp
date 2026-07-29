@@ -53,6 +53,8 @@ namespace disk::file {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
             const auto state_header = ReadSourceFile("src/services/UploadStateMachine.hpp");
             const auto state_source = ReadSourceFile("src/services/UploadStateMachine.cpp");
+            const auto lifecycle_header = ReadSourceFile("src/services/UploadLifecycleService.hpp");
+            const auto lifecycle_source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
 
             EXPECT_FALSE(Contains(header, "auto FindById("));
             EXPECT_FALSE(Contains(header, "auto MarkFailedIfLeaseOwned("));
@@ -69,6 +71,10 @@ namespace disk::file {
             EXPECT_FALSE(Contains(source, "UploadTaskRepository::MarkCompletedIfInProgress("));
             EXPECT_FALSE(Contains(source, "UploadTaskRepository::GetChunkCoverage("));
             EXPECT_FALSE(Contains(source, "DeleteChunks(std::string"));
+
+            EXPECT_FALSE(Contains(lifecycle_header, "struct ChunkCoverage"));
+            EXPECT_FALSE(Contains(lifecycle_header, "auto IsCompleteCoverage("));
+            EXPECT_FALSE(Contains(lifecycle_source, "auto IsCompleteCoverage("));
 
             for (const auto marker : {
                      "auto IsAllowedTransition(",

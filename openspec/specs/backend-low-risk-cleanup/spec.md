@@ -131,6 +131,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** a whole-repository call-site audit confirms that generic transition, in-memory lease, and legacy complete/cancel/expire guards are called only by `UploadStateMachine` unit tests while production uses request decisions and PostgreSQL conditional mutations
 - **THEN** those parallel pure-function rules and their dedicated tests SHALL be removed while active status parsing, terminal classification, finalize/cancel decisions, and database owner/version fencing retain direct coverage
 
+#### Scenario: Test-only chunk-coverage rule is removed
+
+- **WHEN** a whole-repository call-site audit confirms that `ChunkCoverage` and `IsCompleteCoverage` are used only by dedicated pure-function unit tests while production completion admission validates chunk count and maximum index inside `UploadTaskRepository::ClaimFinalizeLease`
+- **THEN** the unused snapshot type, parallel rule, and dedicated tests SHALL be removed while source contracts and real PostgreSQL tests retain direct coverage of the atomic finalize-claim predicate
+
 ### Requirement: Shared service surfaces follow production use
 
 Backend shared services SHALL expose only command capabilities used by production flows, while active command behavior and dependency-failure policy remain unchanged.
