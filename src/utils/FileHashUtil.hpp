@@ -25,20 +25,11 @@
 namespace disk::utils {
 
     /**
-     * @brief 文件哈希对（MD5 + SHA256 同时计算的结果）
-     */
-    struct FileHashPair {
-        std::string md5;    ///< 32 字符小写十六进制 MD5
-        std::string sha256; ///< 64 字符小写十六进制 SHA256
-    };
-
-    /**
      * @brief 文件内容哈希工具类
      *
      * 提供文件内容的哈希计算功能：
      * - MD5 哈希：纯 C++ 实现，用于快速校验
      * - SHA256 哈希：使用 libsodium 实现，用于安全校验
-     * - MD5+SHA256 联合计算：单次文件读取同时计算两种哈希
      */
     class FileHashUtil {
     public:
@@ -174,57 +165,6 @@ namespace disk::utils {
         static auto VerifyHash(const std::string& data, const std::string& expected_md5) -> bool {
             auto actual = HashMd5(data);
             return actual == expected_md5;
-        }
-
-        /// ==================== 联合哈希 ====================
-
-        /**
-         * @brief 单次文件读取同时计算 MD5 和 SHA256
-         *
-         * @param path 文件路径
-         * @return Result<FileHashPair> 成功返回哈希对，失败返回错误
-         */
-        [[nodiscard]]
-        static auto HashFileMd5AndSha256(const std::filesystem::path& path) -> Result<FileHashPair> {
-            if (!std::filesystem::exists(path)) {
-                return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
-            }
-
-            std::ifstream file(path, std::ios::binary);
-            if (!file) {
-                return std::unexpected(ErrorInfo(ErrorCode::FileReadError));
-            }
-
-            Md5Context md5_ctx;
-            Md5Init(md5_ctx);
-
-            crypto_hash_sha256_state sha256_state;
-            crypto_hash_sha256_init(&sha256_state);
-
-            std::array<char, 65536> buffer{};
-            while (file.read(buffer.data(), static_cast<std::streamsize>(buffer.size())) || file.gcount() > 0) {
-                auto bytes_read = static_cast<size_t>(file.gcount());
-                Md5Update(md5_ctx, reinterpret_cast<const uint8_t*>(buffer.data()), bytes_read);
-                crypto_hash_sha256_update(
-                    &sha256_state,
-                    reinterpret_cast<const unsigned char*>(buffer.data()),
-                    bytes_read
-                );
-                if (file.eof()) {
-                    break;
-                }
-            }
-
-            uint8_t md5_digest[16];
-            Md5Final(md5_ctx, md5_digest);
-
-            std::array<uint8_t, crypto_hash_sha256_BYTES> sha256_digest{};
-            crypto_hash_sha256_final(&sha256_state, sha256_digest.data());
-
-            return FileHashPair{
-                .md5 = BytesToHex(md5_digest, 16),
-                .sha256 = BytesToHex(sha256_digest.data(), sha256_digest.size())
-            };
         }
 
     public:

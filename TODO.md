@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-29，本轮 Phase 10 分享令牌 allowlist 死 key 清理）：全仓库精确读写与调用点审计确认 `SHARE_TOKEN_PREFIX` 与 `RedisKeyPrefix::BuildShareTokenKey()` 只被三个 key-format 单测读取，没有生产、集成、工具、部署或迁移消费者。该 `share_token:{share_code}:{token_hash}` allowlist namespace、builder 及专属单测已删除；编译期合同拒绝旧公开面回归，自包含分享 JWT、单 token blacklist、PostgreSQL 实时分享状态和三类限流 key 保持不变。完整构建、聚焦 CTest 63/63 和 OpenSpec 24/24 通过。完整 CTest 共 1442 项，1435 通过、7 项按环境门控跳过，0 失败，总耗时 499.95 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-29，本轮 Phase 10 文件联合哈希测试专用死子图清理）：全仓库精确符号与调用点审计确认 `FileHashPair` 与 `FileHashUtil::HashFileMd5AndSha256()` 只有定义和四个专用单测，没有生产、集成、工具、客户端或迁移消费者。联合结果类型、平行 helper 及专属单测已删除；编译期合同拒绝旧 helper 回归，Local/S3 在各自有界单次流式组装中计算整文件 MD5/SHA-256 的生产路径保持不变。完整构建、聚焦 CTest 108/108 和 OpenSpec 24/24 通过。完整 CTest 共 1438 项，1431 通过、7 项按环境门控跳过，0 失败，总耗时 509.58 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1636,6 +1636,14 @@ ADR、API、系统测试、单元测试和 OpenSpec 先行固定分享令牌的 
 旧常量、builder 与三个只测死代码的用例已删除。`RedisKeyPrefix_test.cpp` 新增编译期 concept 断言，同时拒绝常量和可调用 builder 回归；既有活跃用例继续锁定 refresh、access/share blacklist、文件列表缓存、登录/分享/API/上传限流 key 格式。分享 JWT 签名/scope/TTL、blacklist fail-closed、取消后 PostgreSQL 实时状态失效和公开 API 响应均未改变；Phase 10 旧 schema/feature flag/迁移分支总清理项继续保持未勾选。
 
 完整构建、分享 JWT/blacklist/限流、双 API 取消、Redis 持久化/故障切换聚焦 CTest 63/63 和 OpenSpec 24/24 通过。完整 CTest 共 1442 项，1435 项通过、7 项环境门控跳过、0 失败，总耗时 499.95 秒。
+
+### 15.41 文件联合哈希测试专用死子图清理记录（2026-07-29）
+
+ADR、系统测试、单元测试和 OpenSpec 先行固定文件完整性计算的生产所有权。全仓库精确符号与调用点审计确认 `FileHashPair` 与 `FileHashUtil::HashFileMd5AndSha256()` 只有定义和四个专用单元测试，没有生产、集成、工具、客户端或迁移消费者；Local 与 S3 组装实现已在各自的有界单次流式读取中同时计算整文件 MD5 和 SHA-256。
+
+联合结果类型、平行 helper 及四个只测死代码的用例已删除。`FileHashUtil_test.cpp` 通过编译期 concept 断言拒绝旧 helper 回归；生产仍保留 `HashFileMd5()`、`HashFileSha256()` 和增量 MD5 API，Local/S3 `AssembleChunks()` 仍由直接行为用例覆盖。本轮不删除 local staging、schema、feature flag 或迁移兼容分支，因此 Phase 3 与 Phase 10 总清理项继续保持未勾选。
+
+完整构建、文件哈希/Local/S3 组装/真实上传与安全网聚焦 CTest 108/108 和 OpenSpec 24/24 通过。完整 CTest 共 1438 项，1431 项通过、7 项环境门控跳过、0 失败，总耗时 509.58 秒；有界单次流式读取、分片/整文件 MD5、整文件 SHA-256 与最终内容寻址合同保持不变。
 
 ## 16. 最终 Definition of Done
 

@@ -17,6 +17,13 @@
 
 using disk::utils::FileHashUtil;
 
+template <typename HashUtility>
+concept HasCombinedFileHash = requires(const std::filesystem::path& path) {
+    HashUtility::HashFileMd5AndSha256(path);
+};
+
+static_assert(!HasCombinedFileHash<FileHashUtil>);
+
 /// ==================== MD5 哈希测试 ====================
 
 TEST(FileHashUtil, HashMd5EmptyString) {
@@ -186,53 +193,4 @@ TEST_F(FileHashUtilFileTest, HashFileSha256LargerFile) {
 
     ASSERT_TRUE(result.has_value()) << "Hash should succeed for larger file";
     EXPECT_EQ(result->length(), 64) << "SHA256 hash should be 64 characters";
-}
-
-/// ==================== HashFileMd5AndSha256 测试 ====================
-
-TEST_F(FileHashUtilFileTest, HashFileMd5AndSha256Consistent) {
-    auto file_path = CreateTempFile("The quick brown fox jumps over the lazy dog");
-    auto pair_result = FileHashUtil::HashFileMd5AndSha256(file_path);
-    auto md5_result = FileHashUtil::HashFileMd5(file_path);
-    auto sha256_result = FileHashUtil::HashFileSha256(file_path);
-
-    ASSERT_TRUE(pair_result.has_value());
-    ASSERT_TRUE(md5_result.has_value());
-    ASSERT_TRUE(sha256_result.has_value());
-
-    EXPECT_EQ(pair_result->md5, md5_result.value())
-        << "MD5 from HashFileMd5AndSha256 should match HashFileMd5";
-    EXPECT_EQ(pair_result->sha256, sha256_result.value())
-        << "SHA256 from HashFileMd5AndSha256 should match HashFileSha256";
-}
-
-TEST_F(FileHashUtilFileTest, HashFileMd5AndSha256EmptyFile) {
-    auto file_path = CreateTempFile("");
-    auto result = FileHashUtil::HashFileMd5AndSha256(file_path);
-
-    ASSERT_TRUE(result.has_value()) << "Hash should succeed for empty file";
-    EXPECT_EQ(result->md5, "d41d8cd98f00b204e9800998ecf8427e");
-    EXPECT_EQ(result->sha256, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-}
-
-TEST_F(FileHashUtilFileTest, HashFileMd5AndSha256LargeFile) {
-    /// 创建一个 >64KB 的文件来测试缓冲区边界
-    std::string content(100 * 1024, 'X');
-    auto file_path = CreateTempFile(content);
-
-    auto pair_result = FileHashUtil::HashFileMd5AndSha256(file_path);
-    auto md5_result = FileHashUtil::HashFileMd5(file_path);
-    auto sha256_result = FileHashUtil::HashFileSha256(file_path);
-
-    ASSERT_TRUE(pair_result.has_value());
-    ASSERT_TRUE(md5_result.has_value());
-    ASSERT_TRUE(sha256_result.has_value());
-
-    EXPECT_EQ(pair_result->md5, md5_result.value());
-    EXPECT_EQ(pair_result->sha256, sha256_result.value());
-}
-
-TEST_F(FileHashUtilFileTest, HashFileMd5AndSha256NonexistentFile) {
-    auto result = FileHashUtil::HashFileMd5AndSha256("/nonexistent/path/file.txt");
-    EXPECT_FALSE(result.has_value()) << "Hash should fail for non-existent file";
 }

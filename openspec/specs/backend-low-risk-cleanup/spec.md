@@ -140,6 +140,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository audit confirms that the `share_token:{share_code}:{token_hash}` prefix and builder are used only by key-format unit tests while share issuance returns a self-contained JWT and production verification uses the optional blacklist plus live database state
 - **THEN** the unused allowlist namespace, builder, and dedicated tests SHALL be removed while refresh-token, access/share blacklist, file-list cache, and rate-limit key builders retain their existing formats and behavior
 
+#### Scenario: Test-only combined file hash helper is removed
+
+- **WHEN** a whole-repository audit confirms that `FileHashPair` and `FileHashUtil::HashFileMd5AndSha256` are used only by dedicated unit tests while Local and S3 assembly compute whole-file MD5 and SHA-256 during their own bounded streaming pass
+- **THEN** the unused result type, helper, and dedicated tests SHALL be removed while active string/file hash helpers, incremental MD5 primitives, and both storage assembly integrity paths retain direct coverage
+
 #### Scenario: Unused Redis batch-command surface is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller
