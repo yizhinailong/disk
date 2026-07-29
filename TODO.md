@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-28，本轮 Phase 10 操作日志通用死写入子图清理）：全仓库精确符号与调用点审计确认 `OperationLogService::Log()` 及其专属 DTO、枚举、IP 归一化和转换 helper 没有生产消费者。整个通用死写入子图与 9 个只测死代码的用例已删除；`GetList()` 用户分页查询及 Auth、ShareAudit、Admin、StorageJobAdmin 和 StorageRecoveryAdmin 五条领域审计写入链保持不变。完整构建、日志查询/运行时/领域审计/安全上传聚焦 CTest 23/23、OpenSpec 24/24 通过。完整 CTest 共 1448 项，1441 通过、7 项按环境门控跳过，0 失败，总耗时 518.96 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-29，本轮 Phase 10 配置令牌 TTL 死公开面清理）：全仓库精确读写与调用点审计确认 `ConfigMgr::GetAccessTokenExpireSeconds()`、`GetRefreshTokenExpireSeconds()` 只返回各自的固定成员，四个符号都没有生产或测试消费者，也没有 JSON/环境加载路径。这组平行死 getter、成员与过时示例已删除；`TokenService` 继续唯一所有 access 7200 秒/refresh 604800 秒的签发、认证响应和撤销缓存 TTL 合同。完整构建、配置/Token/认证集群/Redis 会话与故障切换聚焦 CTest 121/121、OpenSpec 24/24 通过。完整 CTest 共 1448 项，1441 通过、7 项按环境门控跳过，0 失败，总耗时 501.85 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1612,6 +1612,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定人工死信重放所�
 通用死写入子图与 9 个只测死代码的用例已删除，`OperationLogService` 收敛为用户可见的 `GetList()` 分页查询。源码合同拒绝旧符号回归，并正向锁定 `AuthService`、`ShareAuditService`、`AdminService`、`StorageJobAdminService` 和 `StorageRecoveryAdminService` 的真实审计写入。`/api/logs` 请求/响应、已存审计数据、各领域事务归属及 fail-open/fail-closed 策略均未改变；Phase 10 总清理项继续保持未勾选。
 
 完整构建、日志查询/运行时/领域审计/安全上传聚焦 CTest 23/23 和 OpenSpec 24/24 通过。完整 CTest 共 1448 项，1441 项通过、7 项环境门控跳过、0 失败，总耗时 518.96 秒。
+
+### 15.38 配置令牌 TTL 死公开面清理记录（2026-07-29）
+
+系统测试、单元测试、部署运维和 OpenSpec 先行固定 access/refresh token 寿命的唯一所有权。全仓库精确读写与调用点审计确认 `ConfigMgr::GetAccessTokenExpireSeconds()`、`GetRefreshTokenExpireSeconds()` 只返回各自的固定成员；两个 getter 与两个成员都没有生产或测试消费者，也没有 JSON/环境加载路径。
+
+这组平行死 getter、成员与头文件中误导为可配置 TTL 的过时示例已删除。`ConfigMgr_test.cpp` 通过头文件/实现否定断言拒绝旧配置面回归，并正向锁定 `TokenService` 的 7200/604800 秒常量及签发、认证响应和撤销缓存调用链。JWT 签名/验证、Redis key 寿命、refresh CAS、API `expires_in`、安全模式、迁移字段和兼容分支均未改变；Phase 10 总清理项继续保持未勾选。
+
+完整构建、配置/Token/认证集群/Redis 会话与故障切换聚焦 CTest 121/121 和 OpenSpec 24/24 通过。完整 CTest 共 1448 项，1441 项通过、7 项环境门控跳过、0 失败，总耗时 501.85 秒。
 
 ## 16. 最终 Definition of Done
 

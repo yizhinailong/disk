@@ -59,11 +59,25 @@ namespace {
     TEST(ConfigMgrLogContextContractTest, UsesTypedContextAndBoundedDeploymentDetails) {
         const auto header = ReadSourceFile("src/utils/ConfigMgr.hpp");
         const auto source = ReadSourceFile("src/utils/ConfigMgr.cpp");
+        const auto token_header = ReadSourceFile("src/services/TokenService.hpp");
+        const auto token_source = ReadSourceFile("src/services/TokenService.cpp");
+        const auto auth_source = ReadSourceFile("src/services/AuthService.cpp");
 
         EXPECT_FALSE(Contains(header, "auto GetDatabasePassword()"));
         EXPECT_FALSE(Contains(header, "auto GetRedisPassword()"));
         EXPECT_FALSE(Contains(source, "ConfigMgr::GetDatabasePassword()"));
         EXPECT_FALSE(Contains(source, "ConfigMgr::GetRedisPassword()"));
+        EXPECT_FALSE(Contains(header, "auto GetAccessTokenExpireSeconds() const"));
+        EXPECT_FALSE(Contains(header, "auto GetRefreshTokenExpireSeconds() const"));
+        EXPECT_FALSE(Contains(header, "m_access_token_expire_seconds"));
+        EXPECT_FALSE(Contains(header, "m_refresh_token_expire_seconds"));
+        EXPECT_FALSE(Contains(source, "ConfigMgr::GetAccessTokenExpireSeconds()"));
+        EXPECT_FALSE(Contains(source, "ConfigMgr::GetRefreshTokenExpireSeconds()"));
+        EXPECT_TRUE(Contains(token_header, "return 7200;"));
+        EXPECT_TRUE(Contains(token_header, "return 604800;"));
+        EXPECT_TRUE(Contains(token_source, "GetAccessTokenExpireSeconds()"));
+        EXPECT_TRUE(Contains(token_source, "GetRefreshTokenExpireSeconds()"));
+        EXPECT_TRUE(Contains(auth_source, "TokenService::GetAccessTokenExpireSeconds()"));
         EXPECT_EQ(CountOccurrences(source, "Logger::Info(RuntimeConfigLogContext())"), 15U);
         EXPECT_EQ(CountOccurrences(source, "Logger::Warn(RuntimeConfigLogContext())"), 3U);
         EXPECT_EQ(CountOccurrences(source, "Logger::Error(RuntimeConfigLogContext())"), 6U);

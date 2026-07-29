@@ -71,18 +71,16 @@ namespace disk::utils {
      * @brief 配置管理类（单例）
      *
      * 职责：
-     * - 管理应用配置参数（JWT密钥、令牌过期时间等）
+     * - 管理应用运行时配置参数
      * - 提供统一的配置访问接口
      *
      * 配置来源：
      * - JWT密钥: 环境变量 JWT_SECRET (最小32字符，所有环境必须设置)
-     * - 令牌过期时间: 默认值
      * - 存储路径: config.json 中的 custom_config.disk.* 字段或默认值
      *
      * 使用方式：
      * @code
      * auto jwt_secret = ConfigMgr::GetInstance()->GetJwtSecret();
-     * auto expire_time = ConfigMgr::GetInstance()->GetAccessTokenExpireSeconds();
      * @endcode
      *
      * 线程安全：
@@ -128,20 +126,6 @@ namespace disk::utils {
          */
         [[nodiscard]]
         auto GetJwtSecret() const -> std::string;
-
-        /**
-         * @brief 获取访问令牌过期时间（秒）
-         * @return int 过期时间（秒）
-         */
-        [[nodiscard]]
-        auto GetAccessTokenExpireSeconds() const -> int;
-
-        /**
-         * @brief 获取刷新令牌过期时间（秒）
-         * @return int 过期时间（秒）
-         */
-        [[nodiscard]]
-        auto GetRefreshTokenExpireSeconds() const -> int;
 
         [[nodiscard]]
         auto GetAuthCpuPoolThreads() const noexcept -> uint32_t;
@@ -333,9 +317,7 @@ namespace disk::utils {
         static constexpr uint32_t DEFAULT_WORKER_DRAIN_TIMEOUT_SECONDS = 30;
         static constexpr uint32_t DEFAULT_AUTH_CPU_POOL_THREADS = 4;
 
-        /// JWT 配置
-        int m_access_token_expire_seconds{ 7200 };
-        int m_refresh_token_expire_seconds{ 604800 };
+        /// Auth CPU pool 配置
         uint32_t m_auth_cpu_pool_threads{ DEFAULT_AUTH_CPU_POOL_THREADS };
 
         /// 分布式进程配置

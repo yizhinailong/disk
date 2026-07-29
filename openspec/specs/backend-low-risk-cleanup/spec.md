@@ -160,6 +160,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site audit confirms that `ConfigMgr::GetDatabasePassword` and `ConfigMgr::GetRedisPassword` have no production or test caller
 - **THEN** those getters SHALL be removed while startup environment overrides continue to inject credentials into Drogon client configuration and secure-mode validation retains its existing fail-closed checks
 
+#### Scenario: Unused token-lifetime config facade is removed
+
+- **WHEN** a whole-repository read/write audit confirms that the `ConfigMgr` access/refresh token lifetime getters and fixed members have no production or test caller and no JSON or environment loading path
+- **THEN** that parallel config facade SHALL be removed while `TokenService` remains the single owner of the access/refresh signing, response, and revocation-cache lifetime contract
+
 #### Scenario: Unused Auth CPU metrics wrappers are removed
 
 - **WHEN** a whole-repository call-site audit confirms that `detail::StartAuthCpuPoolMetricsTimer` and `detail::GetAuthCpuPoolActiveTaskCount` have no production or test caller

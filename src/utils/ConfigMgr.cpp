@@ -790,14 +790,6 @@ namespace disk::utils {
         throw std::runtime_error(error_msg);
     }
 
-    auto ConfigMgr::GetAccessTokenExpireSeconds() const -> int {
-        return m_access_token_expire_seconds;
-    }
-
-    auto ConfigMgr::GetRefreshTokenExpireSeconds() const -> int {
-        return m_refresh_token_expire_seconds;
-    }
-
     auto ConfigMgr::GetAuthCpuPoolThreads() const noexcept -> uint32_t {
         return m_auth_cpu_pool_threads;
     }
