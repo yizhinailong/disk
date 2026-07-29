@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-29，本轮 Phase 10 上传状态机测试专用死规则清理）：全仓库精确调用点审计确认 `IsAllowedTransition`、`CanRenewFinalizeLease`、`CanCommitFinalizeLease`、`CanComplete` 和 `CanCancelOrExpire` 只被三个专属单测调用，没有生产、集成或工具消费者。这组未接入运行时的平行纯函数规则及专属单测已删除；生产状态解析、终态判定、finalize/cancel 请求决策与 PostgreSQL 状态/owner/version/租约条件写继续由直接合同覆盖。完整构建、相关聚焦回归闭环和 OpenSpec 24/24 通过。完整 CTest 共 1445 项，1438 通过、7 项按环境门控跳过，0 失败，总耗时 501.00 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-29，本轮 Phase 10 分享令牌 allowlist 死 key 清理）：全仓库精确读写与调用点审计确认 `SHARE_TOKEN_PREFIX` 与 `RedisKeyPrefix::BuildShareTokenKey()` 只被三个 key-format 单测读取，没有生产、集成、工具、部署或迁移消费者。该 `share_token:{share_code}:{token_hash}` allowlist namespace、builder 及专属单测已删除；编译期合同拒绝旧公开面回归，自包含分享 JWT、单 token blacklist、PostgreSQL 实时分享状态和三类限流 key 保持不变。完整构建、聚焦 CTest 63/63 和 OpenSpec 24/24 通过。完整 CTest 共 1442 项，1435 通过、7 项按环境门控跳过，0 失败，总耗时 499.95 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1628,6 +1628,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定上传状态机的生�
 五个未接入运行时的平行纯函数规则及三个专属单测已删除。`UploadTaskRepository_test.cpp` 通过头文件/实现否定断言拒绝旧符号回归，并正向锁定 `DecideFinalizeRequest`、`DecideCancelRequest` 与真实仓储调用。状态解析、诊断名称、终态判定、完成认领/接管/重放与取消幂等语义保持不变；真实租约续期和提交仍由 PostgreSQL 状态/owner/version/到期条件写执行，并由真实数据库竞态测试直接覆盖。Phase 10 过渡字段/配置/分支总清理项继续保持未勾选。
 
 完整构建与 OpenSpec 24/24 通过。聚焦 CTest 首轮 33/34 通过，唯一失败是前次运行残留的 Redis 管理员限流计数在预期 409 分支前拦截 `StorageJobOperationsIntegration`；限流窗口到期后该用例定向复验 1/1 通过，随后完整 CTest 也包含其通过结果。完整 CTest 共 1445 项，1438 项通过、7 项环境门控跳过、0 失败，总耗时 501.00 秒。
+
+### 15.40 分享令牌 allowlist 死 key 清理记录（2026-07-29）
+
+ADR、API、系统测试、单元测试和 OpenSpec 先行固定分享令牌的 Redis 状态边界。全仓库精确读写与调用点审计确认 `SHARE_TOKEN_PREFIX` 与 `RedisKeyPrefix::BuildShareTokenKey()` 只被 `RedisKeyPrefix_test.cpp` 的三个格式用例读取，没有生产、集成、工具、部署或迁移消费者；运行时签发自包含分享 JWT，从未写入或查询 `share_token:{share_code}:{token_hash}` allowlist。
+
+旧常量、builder 与三个只测死代码的用例已删除。`RedisKeyPrefix_test.cpp` 新增编译期 concept 断言，同时拒绝常量和可调用 builder 回归；既有活跃用例继续锁定 refresh、access/share blacklist、文件列表缓存、登录/分享/API/上传限流 key 格式。分享 JWT 签名/scope/TTL、blacklist fail-closed、取消后 PostgreSQL 实时状态失效和公开 API 响应均未改变；Phase 10 旧 schema/feature flag/迁移分支总清理项继续保持未勾选。
+
+完整构建、分享 JWT/blacklist/限流、双 API 取消、Redis 持久化/故障切换聚焦 CTest 63/63 和 OpenSpec 24/24 通过。完整 CTest 共 1442 项，1435 项通过、7 项环境门控跳过、0 失败，总耗时 499.95 秒。
 
 ## 16. 最终 Definition of Done
 

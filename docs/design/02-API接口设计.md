@@ -4107,6 +4107,8 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 
 各 API 实例只正缓存已撤销的 token hash，不缓存“未撤销”结果；缓存未命中必须查询共享 Redis。Redis 校验失败返回 `70002` / HTTP 500，且不得把错误降级为“未撤销”。
 
+分享令牌签发返回自包含 JWT，不向 Redis 写入 `share_token:{share_code}:{token_hash}` allowlist，验证也不依赖该 namespace。这与可选的单 token blacklist 是两个不同概念，不得为死 allowlist builder 创造或保留 Redis 状态。
+
 取消分享采用分享记录状态撤销语义：取消操作把 `shares.status` 更新为 cancelled 后，所有已签发 token 在下一次访客操作的数据库状态检查中立即失效，不要求枚举 token，也不要求把每个 token hash 写入 Redis。Redis `share_token_blacklist:{token_hash}` 仅用于撤销某一个具体 token，不能替代业务路径的实时分享状态检查。
 
 **撤销响应语义**：

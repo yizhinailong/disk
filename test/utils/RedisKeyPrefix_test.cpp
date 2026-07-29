@@ -15,6 +15,17 @@
 
 using disk::redis::RedisKeyPrefix;
 
+template <typename Prefix>
+concept HasShareTokenPrefix = requires { Prefix::SHARE_TOKEN_PREFIX; };
+
+template <typename Prefix>
+concept HasShareTokenKeyBuilder = requires {
+    Prefix::BuildShareTokenKey(std::string{}, std::string{});
+};
+
+static_assert(!HasShareTokenPrefix<RedisKeyPrefix>);
+static_assert(!HasShareTokenKeyBuilder<RedisKeyPrefix>);
+
 TEST(RedisKeyPrefix, BuildRefreshTokenKeyValidUserId) {
     uint64_t user_id = 12345;
     auto result = RedisKeyPrefix::BuildRefreshTokenKey(user_id);
@@ -95,27 +106,6 @@ TEST(RedisKeyPrefix, BuildFileListCacheVersionKey) {
 }
 
 /// ==================== Share Token Redis Key Tests ====================
-
-TEST(RedisKeyPrefix, BuildShareTokenKeyValidShareCodeAndHash) {
-    std::string share_code = "AbCd1234";
-    std::string token_hash = "a1b2c3d4e5f6";
-    auto result = RedisKeyPrefix::BuildShareTokenKey(share_code, token_hash);
-    EXPECT_EQ(result, "share_token:AbCd1234:a1b2c3d4e5f6");
-}
-
-TEST(RedisKeyPrefix, BuildShareTokenKeyEmptyTokenHash) {
-    std::string share_code = "XyZ999";
-    std::string token_hash;
-    auto result = RedisKeyPrefix::BuildShareTokenKey(share_code, token_hash);
-    EXPECT_EQ(result, "share_token:XyZ999:");
-}
-
-TEST(RedisKeyPrefix, BuildShareTokenKeyEmptyShareCode) {
-    std::string share_code;
-    std::string token_hash = "hash123";
-    auto result = RedisKeyPrefix::BuildShareTokenKey(share_code, token_hash);
-    EXPECT_EQ(result, "share_token::hash123");
-}
 
 TEST(RedisKeyPrefix, BuildShareTokenBlacklistKeyValidHash) {
     std::string token_hash = "revoked_token_hash_abc";

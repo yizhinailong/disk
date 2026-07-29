@@ -135,6 +135,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 
 Backend shared services SHALL expose only command capabilities used by production flows, while active command behavior and dependency-failure policy remain unchanged.
 
+#### Scenario: Unused share-token allowlist key is removed
+
+- **WHEN** a whole-repository audit confirms that the `share_token:{share_code}:{token_hash}` prefix and builder are used only by key-format unit tests while share issuance returns a self-contained JWT and production verification uses the optional blacklist plus live database state
+- **THEN** the unused allowlist namespace, builder, and dedicated tests SHALL be removed while refresh-token, access/share blacklist, file-list cache, and rate-limit key builders retain their existing formats and behavior
+
 #### Scenario: Unused Redis batch-command surface is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller
