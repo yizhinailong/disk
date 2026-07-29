@@ -7,7 +7,6 @@
 
 #include <array>
 #include <cstdint>
-#include <string_view>
 
 #include <gtest/gtest.h>
 
@@ -55,23 +54,6 @@ namespace disk::upload {
             EXPECT_TRUE(IsTerminalStatus(UploadTaskStatus::Expired));
             EXPECT_TRUE(IsTerminalStatus(UploadTaskStatus::Failed));
             EXPECT_FALSE(IsTerminalStatus(99));
-        }
-
-        TEST(UploadStateMachineTest, AllowsOnlyDocumentedStateTransitions) {
-            for (const auto from : kStatuses) {
-                for (const auto to : kStatuses) {
-                    const bool expected =
-                        (from == UploadTaskStatus::InProgress &&
-                         (to == UploadTaskStatus::Finalizing ||
-                          to == UploadTaskStatus::Cancelled ||
-                          to == UploadTaskStatus::Expired)) ||
-                        (from == UploadTaskStatus::Finalizing &&
-                         (to == UploadTaskStatus::Completed ||
-                          to == UploadTaskStatus::Failed));
-                    EXPECT_EQ(IsAllowedTransition(from, to), expected)
-                        << "from=" << ToStorageValue(from) << ", to=" << ToStorageValue(to);
-                }
-            }
         }
 
         TEST(UploadStateMachineTest, FinalizeDecisionCoversClaimTakeoverReplayAndRejection) {
@@ -131,78 +113,6 @@ namespace disk::upload {
                 CancelRequestAction::RejectTerminal
             );
             EXPECT_EQ(DecideCancelRequest(99), CancelRequestAction::RejectTerminal);
-        }
-
-        TEST(UploadStateMachineTest, LeaseMutationRequiresCurrentOwnerAndVersion) {
-            constexpr std::string_view current_owner = "api-a";
-            constexpr uint64_t current_version = 7;
-            const auto finalizing = ToStorageValue(UploadTaskStatus::Finalizing);
-
-            EXPECT_TRUE(CanRenewFinalizeLease(
-                finalizing,
-                current_owner,
-                current_version,
-                current_owner,
-                current_version
-            ));
-            EXPECT_FALSE(CanRenewFinalizeLease(
-                finalizing,
-                current_owner,
-                current_version,
-                "api-b",
-                current_version
-            ));
-            EXPECT_FALSE(CanRenewFinalizeLease(
-                finalizing,
-                current_owner,
-                current_version,
-                "",
-                current_version
-            ));
-            EXPECT_FALSE(CanRenewFinalizeLease(
-                finalizing,
-                current_owner,
-                current_version,
-                current_owner,
-                current_version - 1
-            ));
-            EXPECT_FALSE(CanRenewFinalizeLease(
-                ToStorageValue(UploadTaskStatus::Completed),
-                current_owner,
-                current_version,
-                current_owner,
-                current_version
-            ));
-
-            EXPECT_TRUE(CanCommitFinalizeLease(
-                finalizing,
-                current_owner,
-                current_version,
-                current_owner,
-                current_version
-            ));
-            EXPECT_FALSE(CanCommitFinalizeLease(
-                finalizing,
-                current_owner,
-                current_version,
-                "api-b",
-                current_version
-            ));
-            EXPECT_FALSE(CanCommitFinalizeLease(
-                finalizing,
-                current_owner,
-                current_version,
-                current_owner,
-                current_version - 1
-            ));
-        }
-
-        TEST(UploadStateMachineTest, CompatibilityGuardsOnlyAllowInProgress) {
-            for (const auto status : kStatuses) {
-                const bool expected = status == UploadTaskStatus::InProgress;
-                EXPECT_EQ(CanComplete(ToStorageValue(status)), expected);
-                EXPECT_EQ(CanCancelOrExpire(ToStorageValue(status)), expected);
-            }
         }
 
     } // namespace

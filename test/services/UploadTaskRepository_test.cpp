@@ -51,6 +51,8 @@ namespace disk::file {
         TEST(UploadTaskRepositorySurfaceContractTest, DeadRepositoryMethodsStayRemoved) {
             const auto header = ReadSourceFile("src/services/UploadTaskRepository.hpp");
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
+            const auto state_header = ReadSourceFile("src/services/UploadStateMachine.hpp");
+            const auto state_source = ReadSourceFile("src/services/UploadStateMachine.cpp");
 
             EXPECT_FALSE(Contains(header, "auto FindById("));
             EXPECT_FALSE(Contains(header, "auto MarkFailedIfLeaseOwned("));
@@ -67,6 +69,28 @@ namespace disk::file {
             EXPECT_FALSE(Contains(source, "UploadTaskRepository::MarkCompletedIfInProgress("));
             EXPECT_FALSE(Contains(source, "UploadTaskRepository::GetChunkCoverage("));
             EXPECT_FALSE(Contains(source, "DeleteChunks(std::string"));
+
+            for (const auto marker : {
+                     "auto IsAllowedTransition(",
+                     "auto CanRenewFinalizeLease(",
+                     "auto CanCommitFinalizeLease(",
+                     "auto CanComplete(",
+                     "auto CanCancelOrExpire(",
+                 }) {
+                EXPECT_FALSE(Contains(state_header, marker));
+            }
+            for (const auto marker : {
+                     "auto IsAllowedTransition(",
+                     "auto CanRenewFinalizeLease(",
+                     "auto CanCommitFinalizeLease(",
+                     "auto CanComplete(",
+                     "auto CanCancelOrExpire(",
+                 }) {
+                EXPECT_FALSE(Contains(state_source, marker));
+            }
+            EXPECT_TRUE(Contains(state_header, "auto DecideFinalizeRequest("));
+            EXPECT_TRUE(Contains(state_header, "auto DecideCancelRequest("));
+            EXPECT_TRUE(Contains(source, "disk::upload::DecideFinalizeRequest("));
         }
 
         TEST(UploadTaskRepositoryStagingContractTest, CreationPersistsImmutableSessionLocation) {

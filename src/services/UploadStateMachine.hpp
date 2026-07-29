@@ -43,30 +43,9 @@ namespace disk::upload {
     [[nodiscard]] auto UploadTaskStatusName(UploadTaskStatus status) noexcept -> std::string_view;
     [[nodiscard]] auto IsTerminalStatus(UploadTaskStatus status) -> bool;
     [[nodiscard]] auto IsTerminalStatus(int status) -> bool;
-    [[nodiscard]] auto IsAllowedTransition(UploadTaskStatus from, UploadTaskStatus to) -> bool;
 
     [[nodiscard]] auto DecideFinalizeRequest(int current_status, bool lease_expired)
         -> FinalizeRequestAction;
     [[nodiscard]] auto DecideCancelRequest(int current_status) -> CancelRequestAction;
-
-    [[nodiscard]] auto CanRenewFinalizeLease(
-        int current_status,
-        std::string_view current_owner,
-        uint64_t current_version,
-        std::string_view requester,
-        uint64_t expected_version
-    ) -> bool;
-
-    [[nodiscard]] auto CanCommitFinalizeLease(
-        int current_status,
-        std::string_view current_owner,
-        uint64_t current_version,
-        std::string_view requester,
-        uint64_t expected_version
-    ) -> bool;
-
-    // Compatibility guards for current callers while persistence moves to CAS primitives.
-    [[nodiscard]] auto CanComplete(int current_status) -> bool;
-    [[nodiscard]] auto CanCancelOrExpire(int current_status) -> bool;
 
 } // namespace disk::upload

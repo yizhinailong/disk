@@ -63,23 +63,6 @@ namespace disk::upload {
         return parsed.has_value() && IsTerminalStatus(parsed.value());
     }
 
-    auto IsAllowedTransition(UploadTaskStatus from, UploadTaskStatus to) -> bool {
-        switch (from) {
-            case UploadTaskStatus::InProgress:
-                return to == UploadTaskStatus::Finalizing ||
-                       to == UploadTaskStatus::Cancelled ||
-                       to == UploadTaskStatus::Expired;
-            case UploadTaskStatus::Finalizing:
-                return to == UploadTaskStatus::Completed || to == UploadTaskStatus::Failed;
-            case UploadTaskStatus::Completed:
-            case UploadTaskStatus::Cancelled:
-            case UploadTaskStatus::Expired:
-            case UploadTaskStatus::Failed:
-                return false;
-        }
-        return false;
-    }
-
     auto DecideFinalizeRequest(int current_status, bool lease_expired)
         -> FinalizeRequestAction {
         const auto parsed = UploadTaskStatusFromStorage(current_status);
@@ -121,42 +104,6 @@ namespace disk::upload {
                 return CancelRequestAction::RejectTerminal;
         }
         return CancelRequestAction::RejectTerminal;
-    }
-
-    auto CanRenewFinalizeLease(
-        int current_status,
-        std::string_view current_owner,
-        uint64_t current_version,
-        std::string_view requester,
-        uint64_t expected_version
-    ) -> bool {
-        return current_status == ToStorageValue(UploadTaskStatus::Finalizing) &&
-               !requester.empty() && current_owner == requester &&
-               current_version == expected_version;
-    }
-
-    auto CanCommitFinalizeLease(
-        int current_status,
-        std::string_view current_owner,
-        uint64_t current_version,
-        std::string_view requester,
-        uint64_t expected_version
-    ) -> bool {
-        return CanRenewFinalizeLease(
-            current_status,
-            current_owner,
-            current_version,
-            requester,
-            expected_version
-        );
-    }
-
-    auto CanComplete(int current_status) -> bool {
-        return DecideFinalizeRequest(current_status, false) == FinalizeRequestAction::ClaimLease;
-    }
-
-    auto CanCancelOrExpire(int current_status) -> bool {
-        return current_status == ToStorageValue(UploadTaskStatus::InProgress);
     }
 
 } // namespace disk::upload
