@@ -581,14 +581,6 @@ namespace disk::file {
             EXPECT_NE(hash, "d41d8cd98f00b204e9800998ecf8427e");
         }
 
-        TEST_F(UploadPathTest, VerifyHashMatchesCorrectly) {
-            const std::string data = MakePattern(4096);
-            const auto expected_hash = FileHashUtil::HashMd5(data);
-
-            EXPECT_TRUE(FileHashUtil::VerifyHash(data, expected_hash));
-            EXPECT_FALSE(FileHashUtil::VerifyHash(data, "0123456789abcdef0123456789abcdef"));
-        }
-
         /// =====================================================================
         /// 6. End-to-end: full init → chunk → assemble → promote pipeline
         /// =====================================================================

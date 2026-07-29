@@ -152,21 +152,6 @@ namespace disk::utils {
             return BytesToHex(hash.data(), hash.size());
         }
 
-        /// ==================== 哈希验证 ====================
-
-        /**
-         * @brief 验证数据的 MD5 哈希
-         *
-         * @param data 输入数据
-         * @param expected_md5 预期的 MD5 哈希（小写）
-         * @return bool 哈希是否匹配
-         */
-        [[nodiscard]]
-        static auto VerifyHash(const std::string& data, const std::string& expected_md5) -> bool {
-            auto actual = HashMd5(data);
-            return actual == expected_md5;
-        }
-
     public:
         /// ==================== MD5 增量 API ====================
 

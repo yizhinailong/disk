@@ -22,7 +22,13 @@ concept HasCombinedFileHash = requires(const std::filesystem::path& path) {
     HashUtility::HashFileMd5AndSha256(path);
 };
 
+template <typename HashUtility>
+concept HasHashVerification = requires(const std::string& data, const std::string& expected_hash) {
+    HashUtility::VerifyHash(data, expected_hash);
+};
+
 static_assert(!HasCombinedFileHash<FileHashUtil>);
+static_assert(!HasHashVerification<FileHashUtil>);
 
 /// ==================== MD5 哈希测试 ====================
 
@@ -84,25 +90,6 @@ TEST(FileHashUtil, HashSha256LowerCase) {
     for (char c : result) {
         EXPECT_TRUE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'));
     }
-}
-
-/// ==================== 哈希验证测试 ====================
-
-TEST(FileHashUtil, VerifyHashCorrect) {
-    EXPECT_TRUE(FileHashUtil::VerifyHash("hello", "5d41402abc4b2a76b9719d911017c592"));
-}
-
-TEST(FileHashUtil, VerifyHashIncorrect) {
-    EXPECT_FALSE(FileHashUtil::VerifyHash("hello", "wrong_hash"));
-}
-
-TEST(FileHashUtil, VerifyHashEmptyString) {
-    EXPECT_TRUE(FileHashUtil::VerifyHash("", "d41d8cd98f00b204e9800998ecf8427e"));
-}
-
-TEST(FileHashUtil, VerifyHashWrongCase) {
-    /// MD5 哈希比较应不区分大小写或始终为小写
-    EXPECT_FALSE(FileHashUtil::VerifyHash("hello", "5D41402ABC4B2A76B9719D911017C592"));
 }
 
 /// ==================== 文件哈希测试 ====================

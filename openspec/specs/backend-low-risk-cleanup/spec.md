@@ -145,6 +145,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository audit confirms that `FileHashPair` and `FileHashUtil::HashFileMd5AndSha256` are used only by dedicated unit tests while Local and S3 assembly compute whole-file MD5 and SHA-256 during their own bounded streaming pass
 - **THEN** the unused result type, helper, and dedicated tests SHALL be removed while active string/file hash helpers, incremental MD5 primitives, and both storage assembly integrity paths retain direct coverage
 
+#### Scenario: Test-only MD5 verification wrapper is removed
+
+- **WHEN** a whole-repository audit confirms that `FileHashUtil::VerifyHash` only wraps `HashMd5(data) == expected_md5` and is called only by dedicated unit tests while `UploadService` directly computes and compares each production chunk hash
+- **THEN** the unused wrapper and dedicated tests SHALL be removed while `HashMd5`, the single-hash upload path, mismatch errors, and storage handoff of the computed hash retain direct coverage
+
 #### Scenario: Unused Redis batch-command surface is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller
