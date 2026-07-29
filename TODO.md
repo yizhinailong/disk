@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-29，本轮 Phase 10 分片覆盖测试专用规则清理）：全仓库精确符号与调用点审计确认 `ChunkCoverage` 与 `IsCompleteCoverage()` 只有声明、实现和两条纯函数单测，没有生产、集成、工具、客户端或迁移消费者。快照类型、平行规则与只测死代码的用例已删除，源码合同拒绝旧符号回归；完整分片覆盖仍由 PostgreSQL `ClaimFinalizeLease` 原子条件唯一裁决，并由真实状态机测试直接覆盖。完整构建、聚焦 CTest 26/26 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过，0 失败，总耗时 504.91 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-29，本轮 Phase 10 服务校验死异常类型清理）：全仓库精确符号审计确认 `ServiceValidationException` 只在 `FileServiceUtils.hpp` 定义，没有构造、抛出、捕获、生产、集成、工具或客户端消费者。该死类型已删除，源码合同直接拒绝公开定义回归；文件变更校验与事务失败继续通过 `std::unexpected(ErrorInfo(...))` 显式传播。完整构建、聚焦 CTest 11/11 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过，0 失败，总耗时 508.33 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1668,6 +1668,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定完整分片覆盖的�
 快照类型、平行覆盖规则和两条只测死代码的用例已删除。`UploadTaskRepository_test.cpp` 通过源码否定断言拒绝旧符号回归，并继续正向锁定活跃认领 SQL；`test_upload_state_machine.py` 继续使用真实 PostgreSQL 直接覆盖缺片拒绝、完整覆盖认领和并发唯一 owner。认领 SQL、租约、状态版本、公开完成响应、schema 与迁移兼容合同未改变；Phase 10 过渡字段/配置/分支总清理项继续保持未勾选。
 
 完整构建、上传生命周期/仓储/真实状态机与安全网聚焦 CTest 26/26 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 504.91 秒。
+
+### 15.45 服务校验死异常类型清理记录（2026-07-29）
+
+系统概述、系统测试、单元测试和 OpenSpec 先行固定服务层业务错误边界。全仓库精确符号审计确认 `ServiceValidationException` 只在 `FileServiceUtils.hpp` 定义，没有构造、抛出、捕获、生产、集成、工具或客户端消费者；既有源码测试只间接检查 `Move` 函数体未使用它。
+
+该死异常类型已删除。`FileMutationServiceMove_test.cpp` 现在直接读取 `FileServiceUtils.hpp` 并拒绝旧结构回归，同时继续正向锁定 `TransactionRunner` 边界与 `std::unexpected(ErrorInfo(...))` 传播。参数化 SQL、事务回滚、错误码/消息、公开 API、schema 与迁移兼容合同未改变；Phase 10 过渡字段/配置/分支总清理项继续保持未勾选。
+
+完整构建、文件变更/文件夹仓储/真实移动安全网与拓扑库存聚焦 CTest 11/11 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 508.33 秒。
 
 ## 16. 最终 Definition of Done
 

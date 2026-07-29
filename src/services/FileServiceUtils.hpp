@@ -65,14 +65,6 @@ namespace disk::file::utils {
         uint32_t depth{ 0 };
     };
 
-    struct ServiceValidationException : std::runtime_error {
-        explicit ServiceValidationException(ErrorInfo error_info)
-            : std::runtime_error(error_info.message), error(std::move(error_info)) {
-        }
-
-        ErrorInfo error;
-    };
-
     [[nodiscard]] auto BuildFilePath(const std::string& folder_path, const std::string& filename)
         -> std::string;
 

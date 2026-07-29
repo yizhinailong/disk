@@ -64,9 +64,11 @@ namespace disk::file {
 
         TEST(FileMutationServiceMoveContractTest, MoveUsesTransactionRunnerBoundary) {
             const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
             const auto move_body = ExtractMoveBody(source);
 
             ASSERT_FALSE(move_body.empty());
+            ASSERT_FALSE(utils_header.empty());
             EXPECT_TRUE(Contains(source, "#include \"TransactionRunner.hpp\""));
             EXPECT_TRUE(Contains(move_body, "TransactionRunner transaction_runner("));
             EXPECT_TRUE(Contains(move_body, "transaction_runner.Run("));
@@ -74,7 +76,7 @@ namespace disk::file {
 
             EXPECT_FALSE(Contains(move_body, "newTransactionCoro"));
             EXPECT_FALSE(Contains(move_body, "txn->rollback"));
-            EXPECT_FALSE(Contains(move_body, "ServiceValidationException"));
+            EXPECT_FALSE(Contains(utils_header, "struct ServiceValidationException"));
         }
 
         TEST(FileMutationServiceMoveContractTest, MovePreservesValidationAndInvalidatesSharedCacheGeneration) {

@@ -140,6 +140,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 
 Backend shared services SHALL expose only command capabilities used by production flows, while active command behavior and dependency-failure policy remain unchanged.
 
+#### Scenario: Unused service validation exception is removed
+
+- **WHEN** a whole-repository audit confirms that `ServiceValidationException` is only defined in `FileServiceUtils.hpp` and has no construction, throw, catch, production, integration, tool, or client consumer
+- **THEN** the unused exception type SHALL be removed while file mutation validation continues to return `ErrorInfo` through `Result<T>`/`std::unexpected` and preserves its transaction rollback and public error behavior
+
 #### Scenario: Unused share-token allowlist key is removed
 
 - **WHEN** a whole-repository audit confirms that the `share_token:{share_code}:{token_hash}` prefix and builder are used only by key-format unit tests while share issuance returns a self-contained JWT and production verification uses the optional blacklist plus live database state
