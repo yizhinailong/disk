@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-30，本轮 Phase 10 DTO 序列化死重载清理）：全仓库精确调用点与已构建对象符号审计确认，`DtoBase::SetField` 的 `std::string_view`/`const char*` 重载以及 `DtoBase::SetArray` 的 `std::vector<uint64_t>`/`std::vector<std::string>` 重载只有基类定义，没有生产 DTO、测试、集成、工具、客户端或迁移消费者。四个死重载和无用 include 已删除，源码合同拒绝旧签名回归；其余 12 个生产序列化重载/模板保持现有响应 JSON 形状。完整构建、聚焦 CTest 133/133 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过，0 失败，总耗时 511.27 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-30，最新候选本地多实例与固定 MinIO 复验）：候选提交 `aad7cf55` 上，`DistributedLocalFlowIntegration`、`S3ProvisioningIntegration`、`S3StorageAdapterIntegration` 和 `S3AppFlowIntegration` 四个显式环境门禁全部通过，其中本地隔离 PostgreSQL/Redis/MinIO、双 API/双 Worker 和随机代理流程完成 20 项跨实例、竞态、故障与原进程恢复检查；最小权限供应完成 15 项检查，S3 适配器与 `5 MiB + 17 B` 大对象 multipart copy/下载/清理链路也完整通过。三份 `0600` 原子证据已记录 SHA-256，受管进程与临时拓扑已清理。上一轮完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 511.27 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前单节点 HTTP MinIO/测试代理不等于目标 Nginx/TLS/KMS、高可用依赖、独立故障域、负载/长稳、真实迁移数据和兼容路径退役验收，相关 Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1692,6 +1692,16 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定完整分片覆盖的�
 四个死重载和随之无用的 `<string_view>` include 已删除。`DtoBase_test.cpp` 通过源码否定断言拒绝旧签名回归；其余 12 个生产序列化重载/模板继续覆盖标量、嵌套对象、可选/nullable、对象数组和 `uint32_t` 数组。请求/响应字段、JSON 类型、null/省略语义、错误码/消息、公开 API、schema 与迁移兼容合同未改变；Phase 10 过渡字段/配置/分支总清理项继续保持未勾选。
 
 完整构建、DTO 序列化/响应与拓扑聚焦 CTest 133/133 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 511.27 秒。
+
+### 15.48 最新候选本地多实例与固定 MinIO 门禁复验记录（2026-07-30）
+
+候选提交 `aad7cf55` 上，仓库固定且通过 SHA-256 校验的 MinIO `RELEASE.2025-04-22T22-12-26Z` 与 mc `RELEASE.2025-04-16T18-13-26Z` 驱动四个显式环境门禁：`DistributedLocalFlowIntegration` 1/1 通过（140.20 秒、20 项检查），`S3ProvisioningIntegration` 1/1 通过（2.60 秒、15 项检查），`S3StorageAdapterIntegration` 1/1 通过（0.38 秒），`S3AppFlowIntegration` 1/1 通过（11.04 秒）。
+
+本地隔离拓扑覆盖无粘性认证/上传/下载、严格逐请求 A/B 交替、并发 complete/cancel/expire、Worker 租约接管、PostgreSQL/Redis/MinIO 停机后两个 API 原进程恢复、单 API 停机后入口继续服务，以及 multipart abort 持久重试收敛。S3 应用门禁复验 `5 MiB + 17 B` 的 2-part server-side copy、全量/Range 下载、持久清理与 48 MiB RSS 增量上界。
+
+三份 `0600` 原子证据的 SHA-256 依次为：`distributed-flow-summary.json` = `ce29f212bd6442293c94c13def468dae43601d400eb7466149ebb9e593198e7b`，`s3-provisioning-summary.json` = `e96c82c3986de1ad1ef57999c535aebaff84c7237938d773c47f7cd3d8681dbf`，`s3-large-promotion-summary.json` = `52413aaed2328e98585389f965d42169bf54e42af47bb7ec4e6bbfd3711c20e8`。受管进程和临时拓扑已清理。
+
+本轮只执行 7 个常规环境门禁中的上述 4 个；`PgBouncerTransactionPoolIntegration`、`PrometheusAlertRulesIntegration` 和容器拓扑 `DistributedFlowIntegration` 未在该候选上复验。单节点 HTTP MinIO 与测试随机代理不替代目标 Nginx/TLS/KMS、高可用 PostgreSQL/Redis/S3、独立故障域、备份恢复、负载/长稳、真实迁移数据与兼容路径退役验收，因此 Phase 6/9/10 和最终 Definition of Done 相关项继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 
