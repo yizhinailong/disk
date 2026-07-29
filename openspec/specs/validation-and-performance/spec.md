@@ -37,6 +37,10 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** a Linux amd64 developer explicitly asks the repository helper to prepare the reviewed MinIO server and client in a chosen output directory
 - **THEN** the helper SHALL fetch only the pinned official HTTPS archive URLs, verify each hard-coded SHA-256 before making or atomically publishing an executable, reuse only an existing file with the exact reviewed digest, and reject an existing mismatch without overwriting it
 
+#### Scenario: Fixed Prometheus rule-test dependency is prepared
+- **WHEN** a Linux amd64 developer explicitly asks the repository helper to prepare the reviewed `promtool` in a chosen output directory
+- **THEN** the helper SHALL fetch only the pinned official Prometheus HTTPS release archive, verify the hard-coded archive SHA-256 before extraction and the hard-coded `promtool` SHA-256 before atomic executable publication, reuse only an existing file with the exact reviewed binary digest, and reject an existing mismatch without overwriting it
+
 #### Scenario: Distributed flow gate is not selected
 - **WHEN** either distributed entry is invoked without its required environment gate
 - **THEN** it SHALL report an environment-gated skip that SHALL NOT count as distributed acceptance evidence

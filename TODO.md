@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-30，最新候选本地多实例与固定 MinIO 复验）：候选提交 `aad7cf55` 上，`DistributedLocalFlowIntegration`、`S3ProvisioningIntegration`、`S3StorageAdapterIntegration` 和 `S3AppFlowIntegration` 四个显式环境门禁全部通过，其中本地隔离 PostgreSQL/Redis/MinIO、双 API/双 Worker 和随机代理流程完成 20 项跨实例、竞态、故障与原进程恢复检查；最小权限供应完成 15 项检查，S3 适配器与 `5 MiB + 17 B` 大对象 multipart copy/下载/清理链路也完整通过。三份 `0600` 原子证据已记录 SHA-256，受管进程与临时拓扑已清理。上一轮完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 511.27 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。当前单节点 HTTP MinIO/测试代理不等于目标 Nginx/TLS/KMS、高可用依赖、独立故障域、负载/长稳、真实迁移数据和兼容路径退役验收，相关 Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-30，固定 Prometheus 规则测试依赖引导）：新增 `scripts/fetch-promtool-test-binary.sh`，仅在 Linux amd64 上从官方 Prometheus `v3.13.1` 版本化 HTTPS release 获取归档，依次校验固定归档与 `promtool` 双 SHA-256，再以同目录硬链接无覆盖原子发布 `0755` 普通文件；已有文件只在摘要精确匹配时复用，符号链接、非普通文件或摘要不符均拒绝且不覆盖。真实首次下载/二次复用、错误目标拒绝、Shell 语法、分布式拓扑合同 1/1、固定 `promtool 3.13.1` 规则门禁 1/1 和 OpenSpec 24/24 通过，临时产物已清理。最新候选已显式复验 7 个常规环境门禁中的 5 个，`PgBouncerTransactionPoolIntegration` 与容器拓扑 `DistributedFlowIntegration` 仍待复验。最近完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 511.27 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。目标环境告警投递/值班链路、真实 Nginx/TLS/KMS、高可用依赖、负载/长稳、迁移与兼容路径退役验收未因本地规则单测而完成，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1702,6 +1702,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定完整分片覆盖的�
 三份 `0600` 原子证据的 SHA-256 依次为：`distributed-flow-summary.json` = `ce29f212bd6442293c94c13def468dae43601d400eb7466149ebb9e593198e7b`，`s3-provisioning-summary.json` = `e96c82c3986de1ad1ef57999c535aebaff84c7237938d773c47f7cd3d8681dbf`，`s3-large-promotion-summary.json` = `52413aaed2328e98585389f965d42169bf54e42af47bb7ec4e6bbfd3711c20e8`。受管进程和临时拓扑已清理。
 
 本轮只执行 7 个常规环境门禁中的上述 4 个；`PgBouncerTransactionPoolIntegration`、`PrometheusAlertRulesIntegration` 和容器拓扑 `DistributedFlowIntegration` 未在该候选上复验。单节点 HTTP MinIO 与测试随机代理不替代目标 Nginx/TLS/KMS、高可用 PostgreSQL/Redis/S3、独立故障域、备份恢复、负载/长稳、真实迁移数据与兼容路径退役验收，因此 Phase 6/9/10 和最终 Definition of Done 相关项继续保持未勾选。
+
+### 15.49 固定 Prometheus 规则测试依赖引导记录（2026-07-30）
+
+OpenSpec、系统测试、部署运维和单元测试文档先行固定 Prometheus 规则发布门禁的依赖获取合同。新增 `scripts/fetch-promtool-test-binary.sh` 只接受显式输出目录和 Linux amd64，只下载官方 Prometheus `v3.13.1` 版本化 HTTPS release 归档。脚本先校验归档 SHA-256 `962b812371aff838d152b6ff2d56fdb7a6396f5542f48ebf73421b9721f0d103`，再校验精确提取的 `promtool` SHA-256 `d2344bad40fbd10b8e4dd9ae712e69bab7add68feeed22675cb0b6f1d9e741d8`，两者均匹配后才以同目录硬链接无覆盖原子发布 `0755` 普通文件。
+
+已有 `promtool` 只在二进制摘要精确匹配时复用；符号链接、非普通文件或摘要不符时在下载前拒绝且不覆盖。`DistributedTopologyContract` 锁定版本、URL、双摘要、平台、HTTPS、精确提取和无覆盖发布原语，并以预置错误文件证明拒绝后字节与目录内容均不变。
+
+全新临时目录的真实首次下载、二次复用、二进制摘要/权限/无临时文件检查均通过；固定 `promtool 3.13.1` 驱动 `PrometheusAlertRulesIntegration` 1/1 通过（0.12 秒，总耗时 0.15 秒）。Shell 语法、分布式拓扑合同 1/1 和 OpenSpec 24/24 通过，临时下载及提取产物已清理。最新候选已显式复验 7 个常规环境门禁中的 5 个；`PgBouncerTransactionPoolIntegration` 与容器拓扑 `DistributedFlowIntegration` 仍待复验，目标环境告警投递/值班链路和长稳故障演练也未因规则单测自动完成。Phase 6/9/10 和最终 Definition of Done 相关项继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

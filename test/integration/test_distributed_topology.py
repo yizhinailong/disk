@@ -153,6 +153,52 @@ def main() -> int:
             "MinIO bootstrap changed output after rejecting a mismatched file",
         )
 
+    promtool_bootstrap = root / "scripts/fetch-promtool-test-binary.sh"
+    promtool_bootstrap_source = promtool_bootstrap.read_text(encoding="utf-8")
+    require(
+        promtool_bootstrap.stat().st_mode & 0o111 != 0,
+        "promtool test bootstrap is not executable",
+    )
+    for marker in (
+        'PROMETHEUS_VERSION="3.13.1"',
+        "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}",
+        "962b812371aff838d152b6ff2d56fdb7a6396f5542f48ebf73421b9721f0d103",
+        "d2344bad40fbd10b8e4dd9ae712e69bab7add68feeed22675cb0b6f1d9e741d8",
+        "prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool",
+        "--proto '=https'",
+        "only the reviewed linux-amd64 binary is supported",
+        "--to-stdout",
+        "refusing to overwrite it",
+        '[ ! -L "$destination" ]',
+        'resolved output directory must not be the filesystem root',
+        'if ! ln "$BINARY_TEMP_PATH" "$destination"',
+        "PROMTOOL_BIN=%s",
+    ):
+        require(marker in promtool_bootstrap_source, f"promtool bootstrap is missing {marker}")
+    require(
+        "releases/latest" not in promtool_bootstrap_source
+        and "/download/latest/" not in promtool_bootstrap_source,
+        "promtool bootstrap uses an unversioned latest release URL",
+    )
+    with tempfile.TemporaryDirectory(prefix="disk-promtool-bootstrap-contract-") as temporary:
+        output_directory = Path(temporary)
+        mismatched_promtool = output_directory / "promtool"
+        original_bytes = b"not-the-reviewed-promtool-binary"
+        mismatched_promtool.write_bytes(original_bytes)
+        rejected = subprocess.run(
+            [str(promtool_bootstrap), str(output_directory)],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        require(rejected.returncode != 0, "promtool bootstrap accepted a mismatched existing file")
+        require(
+            mismatched_promtool.read_bytes() == original_bytes
+            and list(output_directory.iterdir()) == [mismatched_promtool],
+            "promtool bootstrap changed output after rejecting a mismatched file",
+        )
+
     decision_record = (root / "docs/backend-refactor-decisions.md").read_text(
         encoding="utf-8"
     )
