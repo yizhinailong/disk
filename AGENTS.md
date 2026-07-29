@@ -66,7 +66,7 @@ Ignore generated/artifact paths: `build/`, `clients/desktop/build/`, `.sisyphus/
 - Naming: classes/structs `PascalCase`; backend public methods usually `PascalCase`; private members `m_` + `snake_case`; constants mostly `UPPER_SNAKE_CASE` or Qt-style `kName`.
 - Services return `drogon::Task<Result<T>>` / `Result<T>`; business errors are `std::expected` values, not exceptions.
 - DTOs are contracts: request DTOs expose `static FromRequest(...) -> Result<DTO>`; response DTOs expose `ToJson()`.
-- Controllers inherit `drogon::HttpController<>`, register routes in `METHOD_LIST_BEGIN/END`, delegate to services, and use `Response::FromResult()`.
+- Controllers inherit `drogon::HttpController<>`, register routes in `METHOD_LIST_BEGIN/END`, delegate to services, and explicitly choose `Response::Success()`, `Response::Error()`, or `Response::Paginated()` at the HTTP boundary.
 - Drogon ORM model `.hpp` files are generated-style and large; put custom logic in `.cpp`, not headers.
 - Third-party/backend framework includes are centralized through `src/utils/Pch.hpp` for the main target.
 

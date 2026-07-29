@@ -150,6 +150,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository audit confirms that `FileHashUtil::VerifyHash` only wraps `HashMd5(data) == expected_md5` and is called only by dedicated unit tests while `UploadService` directly computes and compares each production chunk hash
 - **THEN** the unused wrapper and dedicated tests SHALL be removed while `HashMd5`, the single-hash upload path, mismatch errors, and storage handoff of the computed hash retain direct coverage
 
+#### Scenario: Unused generic Result response adapters are removed
+
+- **WHEN** a whole-repository audit confirms that both `Response::FromResult` overloads have no production caller and only the void overload is exercised by dedicated unit tests while controllers explicitly select success, pagination, or error responses at the HTTP boundary
+- **THEN** the unused adapters and dedicated tests SHALL be removed while active success, pagination, error, and startup-failure response builders retain their existing envelope and status behavior
+
 #### Scenario: Unused Redis batch-command surface is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller

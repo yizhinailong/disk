@@ -17,41 +17,24 @@
 
 using disk::Response;
 
-TEST(Response, FromResultVoidSuccess) {
-    Result<void> result;
+struct IntToJson {
+    auto operator()(int value) const -> Json::Value {
+        return Json::Value(value);
+    }
+};
 
-    auto response = Response::FromResult(result);
+template <typename ResponseFactory>
+concept HasValueFromResult = requires(const Result<int>& result) {
+    ResponseFactory::FromResult(result, IntToJson{});
+};
 
-    ASSERT_NE(response, nullptr) << "Response should not be null";
-    EXPECT_EQ(response->getStatusCode(), drogon::k200OK) << "Status should be 200 OK";
+template <typename ResponseFactory>
+concept HasVoidFromResult = requires(const Result<void>& result) {
+    ResponseFactory::FromResult(result);
+};
 
-    auto json = response->getJsonObject();
-    ASSERT_NE(json, nullptr) << "JSON object should not be null";
-
-    EXPECT_EQ((*json)["code"].asInt(), 0) << "Code should be 0 for success";
-    EXPECT_EQ((*json)["message"].asString(), "success") << "Message should be success";
-    EXPECT_TRUE((*json)["data"].isNull()) << "Data should be null for void result";
-}
-
-TEST(Response, FromResultVoidError) {
-    Result<void> result = std::unexpected(ErrorInfo(ErrorCode::UsernameExists));
-
-    auto response = Response::FromResult(result);
-
-    ASSERT_NE(response, nullptr) << "Response should not be null";
-    EXPECT_EQ(response->getStatusCode(), drogon::k400BadRequest)
-        << "Status should match error code mapping";
-
-    auto json = response->getJsonObject();
-    ASSERT_NE(json, nullptr) << "JSON object should not be null";
-
-    EXPECT_EQ((*json)["code"].asInt(), static_cast<int>(ErrorCode::UsernameExists))
-        << "Code should match error code";
-    EXPECT_EQ((*json)["message"].asString(), Error::GetErrorMessage(ErrorCode::UsernameExists))
-        << "Message should match error code default";
-
-    EXPECT_TRUE((*json)["data"].isNull()) << "Data should be null for error response";
-}
+static_assert(!HasValueFromResult<Response>);
+static_assert(!HasVoidFromResult<Response>);
 
 TEST(Response, InternalErrorUsesStableEnvelope) {
     auto response = Response::Error(ErrorInfo(ErrorCode::InternalError));

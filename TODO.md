@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-29，本轮 Phase 10 MD5 验证测试专用包装器清理）：全仓库精确调用点审计确认 `FileHashUtil::VerifyHash()` 只被四个工具单测和一个 UploadPath 单测调用，没有生产、集成、工具、客户端或迁移消费者。该只包装 `HashMd5(data) == expected_md5` 的公开 helper 及五个重复单测已删除；编译期合同拒绝旧 helper 回归，`UploadService` 仍直接计算、比较并复用分片 MD5。完整构建、聚焦 CTest 55/55 和 OpenSpec 24/24 通过。完整 CTest 共 1433 项，1426 通过、7 项按环境门控跳过，0 失败，总耗时 505.03 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-29，本轮 Phase 10 通用 Result 响应死适配器清理）：全仓库精确调用点审计确认两个 `Response::FromResult` 重载都没有生产、集成、工具、客户端或迁移消费者；只有 void 重载被两条专属单测调用，泛型重载没有调用者。两个死适配器与只测死代码的用例已删除，编译期合同拒绝旧入口回归；Controller 继续显式选择成功、错误或分页响应。完整构建、聚焦 CTest 15/15 和 OpenSpec 24/24 通过。完整 CTest 共 1431 项，1424 通过、7 项按环境门控跳过，0 失败，总耗时 506.93 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1652,6 +1652,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定分片 MD5 验证的�
 该只包装 `HashMd5(data) == expected_md5` 的公开 helper 及五个只测死代码的用例已删除。`FileHashUtil_test.cpp` 通过编译期 concept 断言拒绝旧 helper 回归；活跃 `HashMd5()` 原语、分片哈希不匹配的 `ChunkVerifyFailed` 错误、计算值向 staging 落盘路径的传递和公开 API 响应均未改变。本轮不删除 local staging、schema、feature flag 或迁移兼容分支，因此 Phase 3 与 Phase 10 总清理项继续保持未勾选。
 
 完整构建、文件哈希/UploadPath/真实上传/授权与安全网聚焦 CTest 55/55 和 OpenSpec 24/24 通过。完整 CTest 共 1433 项，1426 项通过、7 项环境门控跳过、0 失败，总耗时 505.03 秒。
+
+### 15.43 通用 Result 响应死适配器清理记录（2026-07-29）
+
+OpenSpec、系统测试、单元测试和项目知识库先行固定 Controller 响应边界。全仓库精确符号与调用点审计确认两个 `Response::FromResult` 重载都没有生产、集成、工具、客户端或迁移消费者；只有 `Result<void>` 重载被两条专属单元测试直接调用，泛型重载没有任何调用者。全部 Controller 已在 HTTP 边界显式选择 `Response::Success()`、`Response::Error()` 或 `Response::Paginated()`，启动失败继续使用 `Response::Fail()`。
+
+两个死适配器、只为泛型转发使用的 `<utility>` include 及两条只测死代码的用例已删除。`Response_test.cpp` 通过泛型与 void 两项编译期 concept 断言拒绝旧入口回归；活跃错误信封用例继续锁定稳定业务码、消息、空 data 和 HTTP 状态。统一 JSON 信封、分页、启动失败、Controller 分支及公开 API 响应均未改变；Phase 10 旧 schema/feature flag/迁移分支总清理项继续保持未勾选。
+
+完整构建、响应与 Controller 真实 HTTP 聚焦 CTest 15/15 和 OpenSpec 24/24 通过。完整 CTest 共 1431 项，1424 项通过、7 项环境门控跳过、0 失败，总耗时 506.93 秒。
 
 ## 16. 最终 Definition of Done
 

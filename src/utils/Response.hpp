@@ -10,7 +10,6 @@
 #pragma once
 
 #include <string>
-#include <utility>
 
 #include <drogon/HttpResponse.h>
 #include <json/json.h>
@@ -142,37 +141,5 @@ namespace disk {
         static auto Fail(ErrorCode code, const std::string& message) -> drogon::HttpResponsePtr {
             return Error(ErrorInfo(code, message));
         }
-
-        /// ==================== Result 类型支持 ====================
-
-        /// 从 Result<T> 构造响应
-        /**
-         * @brief 从Result构造HTTP响应
-         * @param result Result对象
-         * @param func 转换函数
-         * @return drogon::HttpResponsePtr 从Result构造的HTTP响应对象
-         */
-        template <typename T, typename Func>
-        [[nodiscard]]
-        static auto FromResult(const Result<T>& result, Func&& to_json) -> drogon::HttpResponsePtr {
-            if (result.has_value()) {
-                return Success(std::forward<Func>(to_json)(result.value()));
-            }
-            return Error(result.error());
-        }
-
-        /// 从 Result<void> 构造响应
-        /**
-         * @brief 从Result<void>构造HTTP响应
-         * @param result Result<void>对象
-         * @return drogon::HttpResponsePtr 从Result<void>构造的HTTP响应对象
-         */
-        [[nodiscard]]
-        static auto FromResult(const Result<void>& result) -> drogon::HttpResponsePtr {
-            if (result.has_value()) {
-                return Success();
-            }
-            return Error(result.error());
-        }
     };
-} ///< namespace disk
+} // namespace disk
