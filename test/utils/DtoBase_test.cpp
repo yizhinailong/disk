@@ -1,6 +1,6 @@
 /**
  * @file DtoBase_test.cpp
- * @brief Shared DTO validation purity and error contract tests
+ * @brief Shared DTO validation and serialization contract tests
  *
  * @copyright Copyright (c) 2026
  */
@@ -109,6 +109,11 @@ namespace disk::test {
             EXPECT_EQ(source.find("LogHelper.hpp"), std::string::npos);
             EXPECT_EQ(source.find("static auto RequireBool("), std::string::npos);
             EXPECT_EQ(source.find("static auto OptionalInt("), std::string::npos);
+            EXPECT_EQ(source.find("#include <string_view>"), std::string::npos);
+            EXPECT_EQ(source.find("std::string_view value"), std::string::npos);
+            EXPECT_EQ(source.find("const char* value"), std::string::npos);
+            EXPECT_EQ(source.find("const std::vector<uint64_t>& items"), std::string::npos);
+            EXPECT_EQ(source.find("const std::vector<std::string>& items"), std::string::npos);
 
             ScopedLogCapture capture;
 

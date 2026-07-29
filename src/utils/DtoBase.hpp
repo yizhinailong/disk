@@ -20,7 +20,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -376,16 +375,6 @@ protected:
         json[key] = value;
     }
 
-    /// 设置 string_view 字段
-    static void SetField(Json::Value& json, const char* key, std::string_view value) {
-        json[key] = std::string(value);
-    }
-
-    /// 设置 const char* 字段
-    static void SetField(Json::Value& json, const char* key, const char* value) {
-        json[key] = value;
-    }
-
     /// 设置 int 字段
     static void SetField(Json::Value& json, const char* key, int value) {
         json[key] = value;
@@ -453,28 +442,8 @@ protected:
         json[key] = arr;
     }
 
-    /// 设置 uint64 数组
-    static void SetArray(Json::Value& json, const char* key, const std::vector<uint64_t>& items) {
-        Json::Value arr(Json::arrayValue);
-        arr.resize(items.size());
-        for (Json::ArrayIndex i = 0; i < items.size(); ++i) {
-            arr[i] = static_cast<Json::UInt64>(items[i]);
-        }
-        json[key] = arr;
-    }
-
     /// 设置 uint32 数组
     static void SetArray(Json::Value& json, const char* key, const std::vector<uint32_t>& items) {
-        Json::Value arr(Json::arrayValue);
-        arr.resize(items.size());
-        for (Json::ArrayIndex i = 0; i < items.size(); ++i) {
-            arr[i] = items[i];
-        }
-        json[key] = arr;
-    }
-
-    /// 设置 string 数组
-    static void SetArray(Json::Value& json, const char* key, const std::vector<std::string>& items) {
         Json::Value arr(Json::arrayValue);
         arr.resize(items.size());
         for (Json::ArrayIndex i = 0; i < items.size(); ++i) {

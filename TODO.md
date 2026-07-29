@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-30，本轮 Phase 10 DTO 标量测试专用 helper 清理）：全仓库精确调用点审计确认 `DtoBase::RequireBool` 与 `DtoBase::OptionalInt` 只有基类定义和单元测试直接调用，没有生产请求 DTO、集成、工具、客户端或迁移消费者。两个死 helper 及其专属断言已删除，源码合同拒绝旧符号回归；12 个活跃 JSON/path/query/ID-array helper 继续保留既有 `Result<T>`/`ErrorInfo` 行为。完整构建、聚焦 CTest 3/3 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过，0 失败，总耗时 499.06 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
+> 最近验证（2026-07-30，本轮 Phase 10 DTO 序列化死重载清理）：全仓库精确调用点与已构建对象符号审计确认，`DtoBase::SetField` 的 `std::string_view`/`const char*` 重载以及 `DtoBase::SetArray` 的 `std::vector<uint64_t>`/`std::vector<std::string>` 重载只有基类定义，没有生产 DTO、测试、集成、工具、客户端或迁移消费者。四个死重载和无用 include 已删除，源码合同拒绝旧签名回归；其余 12 个生产序列化重载/模板保持现有响应 JSON 形状。完整构建、聚焦 CTest 133/133 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过，0 失败，总耗时 511.27 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。
 
 ## 1. 目标与范围
 
@@ -1684,6 +1684,14 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定完整分片覆盖的�
 两个测试专用 helper 及其专属断言已删除。`DtoBase_test.cpp` 通过源码否定断言拒绝旧符号回归；12 个活跃 JSON/path/query/ID-array helper 继续返回既有 `Result<T>`/`ErrorInfo` 且不产生日志。请求字段、错误码/消息、公开 API、schema 与迁移兼容合同未改变；Phase 10 过渡字段/配置/分支总清理项继续保持未勾选。
 
 完整构建、DTO 行为/源码合同/真实校验失败链聚焦 CTest 3/3 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 499.06 秒。
+
+### 15.47 DTO 序列化死重载清理记录（2026-07-30）
+
+系统概述、系统测试、单元测试和 OpenSpec 先行固定 DTO 基类共享序列化边界。全仓库精确调用点与已构建对象符号审计确认，`DtoBase::SetField` 的 `std::string_view`/`const char*` 重载以及 `DtoBase::SetArray` 的 `std::vector<uint64_t>`/`std::vector<std::string>` 重载只有基类定义，没有生产 DTO、测试、集成、工具、客户端或迁移消费者，也没有对象代码实例化。
+
+四个死重载和随之无用的 `<string_view>` include 已删除。`DtoBase_test.cpp` 通过源码否定断言拒绝旧签名回归；其余 12 个生产序列化重载/模板继续覆盖标量、嵌套对象、可选/nullable、对象数组和 `uint32_t` 数组。请求/响应字段、JSON 类型、null/省略语义、错误码/消息、公开 API、schema 与迁移兼容合同未改变；Phase 10 过渡字段/配置/分支总清理项继续保持未勾选。
+
+完整构建、DTO 序列化/响应与拓扑聚焦 CTest 133/133 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 511.27 秒。
 
 ## 16. 最终 Definition of Done
 
