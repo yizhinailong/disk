@@ -154,24 +154,6 @@ namespace disk::utils {
             }
             return oss.str();
         }
-
-        /// ==================== 批量验证 ====================
-
-        /**
-         * @brief 验证批量操作的输入参数
-         *
-         * 检查向量是否为空或超过合理的批处理限制。
-         *
-         * @tparam T 元素类型
-         * @param items 要验证的向量
-         * @param max_limit 最大允许的批处理数量（默认 10000）
-         * @return bool 是否有效（非空且未超过限制）
-         */
-        template <typename T>
-        [[nodiscard]]
-        static auto ValidateBatchInput(const std::vector<T>& items, size_t max_limit = 10000) -> bool {
-            return !items.empty() && items.size() <= max_limit;
-        }
     };
 
 } ///< namespace disk::utils

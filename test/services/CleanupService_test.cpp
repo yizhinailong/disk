@@ -12,6 +12,13 @@
 namespace disk::services {
     namespace {
 
+        template <typename Utility>
+        concept HasBatchInputValidator = requires(const std::vector<uint64_t>& items) {
+            Utility::ValidateBatchInput(items);
+        };
+
+        static_assert(!HasBatchInputValidator<utils::BatchUtils>);
+
         TEST(CleanupServiceCompileTest, CanConstructWithNullDbClient) {
             CleanupService service(nullptr);
             SUCCEED();

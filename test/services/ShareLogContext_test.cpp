@@ -130,6 +130,14 @@ namespace disk::share {
             EXPECT_FALSE(Contains(service_header, "auto UpdateTimestamp("));
             EXPECT_FALSE(Contains(service_source, "ShareService::UpdateTimestamp("));
             EXPECT_FALSE(Contains(dto_source, "ShareStatusToString"));
+            EXPECT_FALSE(Contains(service_source, "BatchUtils::ValidateBatchInput("));
+            EXPECT_FALSE(Contains(service_source, "std::numeric_limits<size_t>::max()"));
+            EXPECT_TRUE(Contains(service_source, "if (request.share_ids.empty())"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "BatchUtils::Chunk(request.share_ids, DEFAULT_BATCH_CHUNK_SIZE)"
+            ));
+            EXPECT_TRUE(Contains(service_source, "BatchUtils::BuildInPlaceholders(chunk)"));
 
             for (const auto* call_marker : {
                      "co_await ValidateFileOwnership(",

@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，单用途失败响应别名清理）：全仓库精确符号、调用点与已编译对象审计确认 `Response::Fail()` 只由 `main.cpp` 的进程排空拒绝路径调用，且只包装 `Response::Error(ErrorInfo(code, message))`；唯一调用点已改为规范错误构造，该公开别名与不再需要的 include 已删除。编译期否定合同拒绝旧入口回归，排空源码合同正向锁定自定义消息、HTTP 503 与 `Retry-After: 1`。完整构建、Response/ProcessRuntime/HealthService/Worker drain 接管/分布式拓扑聚焦 CTest 23/23 和 OpenSpec 24/24 通过；完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 504.14 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；统一 JSON 信封、业务码、请求计数、优雅退出、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，单用途批量输入验证器清理）：全仓库精确调用点和已编译对象审计确认 `BatchUtils::ValidateBatchInput()` 只在 `ShareService::Cancel()` 中以 `std::numeric_limits<size_t>::max()` 为上限实例化一次，该上限对 `vector::size()` 恒成立，实际只判断集合是否为空。唯一调用点已改为 `request.share_ids.empty()`，泛型验证器和不再需要的 `<limits>` include 已删除；编译期与源码合同拒绝旧入口回归，同时保留 `Chunk`、`BuildInPlaceholders` 和 `BuildSafeNumericInClause` 三类活跃原语。完整构建、分享批量特征/清理合同/DTO/真实分享管理与审计/分布式拓扑聚焦 CTest 26/26 和 OpenSpec 24/24 通过；完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 507.28 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；空输入服务语义、DTO 拒绝 HTTP 空数组、批量取消副作用、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1832,6 +1832,14 @@ utility 转发与仓储单项方法已一并删除，`FolderRepository` 从 13 �
 唯一调用点已改为显式调用 `Response::Error(ErrorInfo(...))`，单用途公开别名与不再需要的 `<string>` include 已删除。`Response_test.cpp` 以 C++23 concept 拒绝旧入口回归，`ProcessRuntime_test.cpp` 正向锁定规范错误构造、`Service is not accepting new requests`、HTTP 503 与 `Retry-After: 1`。统一 JSON 错误信封、`10001` 业务码、请求计数、排空准入、readiness、优雅退出、schema、迁移与 REST 合同未改变。
 
 完整构建、Response/ProcessRuntime/HealthService/Worker drain 接管/分布式拓扑聚焦 CTest 23/23 和 OpenSpec 24/24 通过。重建后的后端可执行文件不再包含 `Response::Fail` 符号；完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 504.14 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.65 单用途批量输入验证器清理记录（2026-07-31）
+
+系统测试、单元测试和 OpenSpec 先行固定分享批量取消边界。全仓库精确调用点与已编译对象审计确认 `BatchUtils::ValidateBatchInput()` 只在 `ShareService::Cancel()` 中以 `std::numeric_limits<size_t>::max()` 作为上限实例化一次，没有其他生产、测试、工具、客户端或迁移消费者。由于该上限对 `vector::size()` 恒成立，这个通用入口在生产中实际只判断分享 ID 集合是否为空。
+
+唯一调用点已改为直接检查 `request.share_ids.empty()`，泛型验证器与不再需要的 `<limits>` include 已删除。`CleanupService_test.cpp` 以 C++23 concept 拒绝旧入口回归，`ShareLogContext_test.cpp` 正向锁定直接空集合分支和活跃 `BatchUtils::Chunk`/`BuildInPlaceholders` 路径；`BuildSafeNumericInClause` 也继续保留。服务直接调用的空成功响应、DTO 拒绝 HTTP 空数组、批量取消的分块、所有权、状态、审计、数据库副作用与 REST 合同均未改变。
+
+完整构建、分享批量特征/清理合同/DTO/真实分享管理与审计/分布式拓扑聚焦 CTest 26/26 和 OpenSpec 24/24 通过。重建后的 `ShareService.cpp.o` 和后端可执行文件不再包含 `ValidateBatchInput` 符号；完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 507.28 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

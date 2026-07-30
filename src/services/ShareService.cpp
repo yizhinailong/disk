@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <limits>
 #include <random>
 #include <stdexcept>
 #include <string_view>
@@ -576,10 +575,7 @@ namespace disk::share {
         response.summary.succeeded = 0;
         response.summary.failed = 0;
 
-        if (!BatchUtils::ValidateBatchInput(
-                request.share_ids,
-                std::numeric_limits<size_t>::max()
-            )) {
+        if (request.share_ids.empty()) {
             Logger::Info(log_context)
                 << "Batch cancel shares completed: succeeded=" << response.summary.succeeded
                 << ", failed=" << response.summary.failed;

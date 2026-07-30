@@ -210,6 +210,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository and compiled-object audit confirms that `Response::Fail` only forwards to `Response::Error(ErrorInfo(code, message))` and has exactly one production caller in the process-drain rejection path
 - **THEN** that caller SHALL use the canonical `ErrorInfo` path and the alias SHALL be removed while the custom message, uniform error envelope, HTTP 503 override, `Retry-After` header, and process-drain behavior retain direct regression contracts
 
+#### Scenario: Single-use batch-input validator is removed
+
+- **WHEN** a whole-repository and compiled-object audit confirms that `BatchUtils::ValidateBatchInput` has one string-vector instantiation whose sole caller passes `size_t::max()` so the upper-bound predicate is tautological
+- **THEN** `ShareService::Cancel` SHALL retain its empty-input success branch directly and the generic validator SHALL be removed while active chunking, parameterized placeholder construction, DTO rejection of empty HTTP arrays, and non-empty batch-cancel behavior retain direct coverage
+
 #### Scenario: Unused Redis batch-command surface is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller
