@@ -22,6 +22,14 @@ namespace disk::upload {
             UploadTaskStatus::Failed,
         };
 
+        template <typename Status>
+        concept HasTerminalStatusClassifier = requires(Status status) {
+            IsTerminalStatus(status);
+        };
+
+        static_assert(HasTerminalStatusClassifier<UploadTaskStatus>);
+        static_assert(!HasTerminalStatusClassifier<int>);
+
         TEST(UploadStateMachineTest, StorageValuesMatchV003Schema) {
             EXPECT_EQ(ToStorageValue(UploadTaskStatus::InProgress), 0);
             EXPECT_EQ(ToStorageValue(UploadTaskStatus::Completed), 1);
@@ -53,7 +61,6 @@ namespace disk::upload {
             EXPECT_TRUE(IsTerminalStatus(UploadTaskStatus::Cancelled));
             EXPECT_TRUE(IsTerminalStatus(UploadTaskStatus::Expired));
             EXPECT_TRUE(IsTerminalStatus(UploadTaskStatus::Failed));
-            EXPECT_FALSE(IsTerminalStatus(99));
         }
 
         TEST(UploadStateMachineTest, FinalizeDecisionCoversClaimTakeoverReplayAndRejection) {

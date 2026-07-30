@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，单用途批量输入验证器清理）：全仓库精确调用点和已编译对象审计确认 `BatchUtils::ValidateBatchInput()` 只在 `ShareService::Cancel()` 中以 `std::numeric_limits<size_t>::max()` 为上限实例化一次，该上限对 `vector::size()` 恒成立，实际只判断集合是否为空。唯一调用点已改为 `request.share_ids.empty()`，泛型验证器和不再需要的 `<limits>` include 已删除；编译期与源码合同拒绝旧入口回归，同时保留 `Chunk`、`BuildInPlaceholders` 和 `BuildSafeNumericInClause` 三类活跃原语。完整构建、分享批量特征/清理合同/DTO/真实分享管理与审计/分布式拓扑聚焦 CTest 26/26 和 OpenSpec 24/24 通过；完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 507.28 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；空输入服务语义、DTO 拒绝 HTTP 空数组、批量取消副作用、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，上传状态机整数终态死重载清理）：全仓库精确调用点和已编译对象审计确认 `IsTerminalStatus(int)` 只有声明、实现与 `UploadStateMachine_test.cpp` 的非法值断言，没有生产消费者；类型化 `IsTerminalStatus(UploadTaskStatus)` 仍由 `StorageRecoveryAdminService` 生产路径调用。整数重载的公开声明、实现与专用断言已删除；编译期与源码合同拒绝旧形状回归，正向保留类型化终态、未知存储值拒绝和恢复计划准入。完整构建、状态机/上传仓储/恢复管理/真实 PostgreSQL 状态机与存储任务/分布式拓扑聚焦 CTest 20/20 和 OpenSpec 24/24 通过；完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 504.72 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；状态数值、诊断名称、finalize/cancel 决策、PostgreSQL 条件写、恢复响应、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1840,6 +1840,14 @@ utility 转发与仓储单项方法已一并删除，`FolderRepository` 从 13 �
 唯一调用点已改为直接检查 `request.share_ids.empty()`，泛型验证器与不再需要的 `<limits>` include 已删除。`CleanupService_test.cpp` 以 C++23 concept 拒绝旧入口回归，`ShareLogContext_test.cpp` 正向锁定直接空集合分支和活跃 `BatchUtils::Chunk`/`BuildInPlaceholders` 路径；`BuildSafeNumericInClause` 也继续保留。服务直接调用的空成功响应、DTO 拒绝 HTTP 空数组、批量取消的分块、所有权、状态、审计、数据库副作用与 REST 合同均未改变。
 
 完整构建、分享批量特征/清理合同/DTO/真实分享管理与审计/分布式拓扑聚焦 CTest 26/26 和 OpenSpec 24/24 通过。重建后的 `ShareService.cpp.o` 和后端可执行文件不再包含 `ValidateBatchInput` 符号；完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 507.28 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.66 上传状态机整数终态死重载清理记录（2026-07-31）
+
+系统测试、单元测试和 OpenSpec 先行固定上传终态分类边界。全仓库精确调用点审计确认 `IsTerminalStatus(int)` 只有公开声明、实现与 `UploadStateMachine_test.cpp` 的非法值断言，没有生产、集成、工具、客户端或迁移消费者。已编译对象进一步确认生产对象没有该整数符号的未定义引用，唯一外部引用来自测试对象；反之，`StorageRecoveryAdminService` 明确消费类型化 `IsTerminalStatus(UploadTaskStatus)`，因此该生产重载必须保留。
+
+整数重载的公开声明、五行包装实现和专用非法值断言已删除。`UploadStateMachine_test.cpp` 以 C++23 concept 拒绝整数调用形状回归并正向保留类型化能力；状态机/仓储源码合同拒绝旧声明与实现，恢复管理源码合同锁定生产类型化调用。`UploadTaskStatusFromStorage` 继续拒绝未知值，六种状态的终态分类、数值、诊断名称、finalize/cancel 决策、PostgreSQL 条件写、恢复响应与 REST 合同均未改变。
+
+完整构建、状态机/上传仓储/恢复管理/真实 PostgreSQL 状态机与存储任务/分布式拓扑聚焦 CTest 20/20 和 OpenSpec 24/24 通过。重建后的状态机对象、后端与测试二进制不再包含 `IsTerminalStatus(int)` 符号，而类型化符号仍存在；完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 504.72 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

@@ -136,6 +136,9 @@ namespace disk::file {
             }
             EXPECT_TRUE(Contains(state_header, "auto DecideFinalizeRequest("));
             EXPECT_TRUE(Contains(state_header, "auto DecideCancelRequest("));
+            EXPECT_TRUE(Contains(state_header, "auto IsTerminalStatus(UploadTaskStatus status)"));
+            EXPECT_FALSE(Contains(state_header, "auto IsTerminalStatus(int status)"));
+            EXPECT_FALSE(Contains(state_source, "auto IsTerminalStatus(int status)"));
             EXPECT_TRUE(Contains(source, "disk::upload::DecideFinalizeRequest("));
         }
 

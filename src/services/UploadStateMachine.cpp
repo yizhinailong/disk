@@ -58,11 +58,6 @@ namespace disk::upload {
         return false;
     }
 
-    auto IsTerminalStatus(int status) -> bool {
-        const auto parsed = UploadTaskStatusFromStorage(status);
-        return parsed.has_value() && IsTerminalStatus(parsed.value());
-    }
-
     auto DecideFinalizeRequest(int current_status, bool lease_expired)
         -> FinalizeRequestAction {
         const auto parsed = UploadTaskStatusFromStorage(current_status);

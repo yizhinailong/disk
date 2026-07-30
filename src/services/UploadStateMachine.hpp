@@ -42,7 +42,6 @@ namespace disk::upload {
     [[nodiscard]] auto UploadTaskStatusFromStorage(int status) -> std::optional<UploadTaskStatus>;
     [[nodiscard]] auto UploadTaskStatusName(UploadTaskStatus status) noexcept -> std::string_view;
     [[nodiscard]] auto IsTerminalStatus(UploadTaskStatus status) -> bool;
-    [[nodiscard]] auto IsTerminalStatus(int status) -> bool;
 
     [[nodiscard]] auto DecideFinalizeRequest(int current_status, bool lease_expired)
         -> FinalizeRequestAction;

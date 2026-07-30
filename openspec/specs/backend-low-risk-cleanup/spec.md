@@ -141,6 +141,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** a whole-repository call-site audit confirms that generic transition, in-memory lease, and legacy complete/cancel/expire guards are called only by `UploadStateMachine` unit tests while production uses request decisions and PostgreSQL conditional mutations
 - **THEN** those parallel pure-function rules and their dedicated tests SHALL be removed while active status parsing, terminal classification, finalize/cancel decisions, and database owner/version fencing retain direct coverage
 
+#### Scenario: Test-only integer terminal wrapper is removed
+
+- **WHEN** whole-repository and compiled-object audits confirm that `IsTerminalStatus(int)` is referenced only by its dedicated unit-test assertion while recovery management consumes `IsTerminalStatus(UploadTaskStatus)`
+- **THEN** the integer overload SHALL be removed while unknown storage-value rejection, typed terminal classification, recovery-plan admission, and PostgreSQL-guarded lifecycle decisions retain direct coverage
+
 #### Scenario: Test-only chunk-coverage rule is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `ChunkCoverage` and `IsCompleteCoverage` are used only by dedicated pure-function unit tests while production completion admission validates chunk count and maximum index inside `UploadTaskRepository::ClaimFinalizeLease`
