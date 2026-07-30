@@ -79,6 +79,22 @@ namespace disk::quota {
             return false;
         }
 
+        template <typename Service>
+        concept HasStandaloneReconciliation = requires(const Service& service) {
+            service.GetReconciliation(uint64_t{ 1 });
+        };
+
+        template <typename Service>
+        concept HasClientReconciliation = requires(const Service& service) {
+            service.GetReconciliation(
+                std::declval<const drogon::orm::DbClientPtr&>(),
+                uint64_t{ 1 }
+            );
+        };
+
+        static_assert(!HasStandaloneReconciliation<QuotaService>);
+        static_assert(!HasClientReconciliation<QuotaService>);
+
         TEST(QuotaServiceCompileTest, CanConstructWithNullDbClient) {
             QuotaService service(nullptr);
             SUCCEED();
@@ -104,23 +120,19 @@ namespace disk::quota {
             EXPECT_TRUE((std::is_same_v<CheckedAdjustResult, drogon::Task<Result<void>>>));
         }
 
-        TEST(QuotaServiceContractTest, ReconciliationCarriesPersistedAndObservedAccounting) {
-            AccountingReconciliation reconciliation;
-            reconciliation.user_id = 7;
-            reconciliation.storage_used = 100;
-            reconciliation.storage_reserved = 20;
-            reconciliation.storage_quota = 1000;
-            reconciliation.active_file_bytes = 60;
-            reconciliation.trash_item_bytes = 40;
-            reconciliation.in_progress_reserved_bytes = 20;
+        TEST(QuotaServiceContractTest, RejectsUnusedReconciliationFacade) {
+            const auto header = ReadSourceFile("src/services/QuotaService.hpp");
+            const auto source = ReadSourceFile("src/services/QuotaService.cpp");
+            const auto reconciliation =
+                ReadSourceFile("src/services/StorageReconciliationService.cpp");
 
-            EXPECT_EQ(reconciliation.user_id, 7u);
-            EXPECT_EQ(reconciliation.storage_used, 100u);
-            EXPECT_EQ(reconciliation.storage_reserved, 20u);
-            EXPECT_EQ(reconciliation.storage_quota, 1000u);
-            EXPECT_EQ(reconciliation.active_file_bytes, 60u);
-            EXPECT_EQ(reconciliation.trash_item_bytes, 40u);
-            EXPECT_EQ(reconciliation.in_progress_reserved_bytes, 20u);
+            EXPECT_FALSE(Contains(header, "AccountingReconciliation"));
+            EXPECT_FALSE(Contains(header, "GetReconciliation("));
+            EXPECT_FALSE(Contains(source, "GetReconciliation("));
+            EXPECT_FALSE(Contains(source, "Storage accounting reconciliation query failed"));
+            EXPECT_TRUE(Contains(reconciliation, "StorageReconciliationService::RunUserPage("));
+            EXPECT_TRUE(Contains(reconciliation, "kQuotaUsedMismatch"));
+            EXPECT_TRUE(Contains(reconciliation, "kQuotaReservedMismatch"));
         }
 
         TEST(QuotaServiceContractTest, PropagatesTypedLogContextWithoutInference) {
@@ -146,10 +158,10 @@ namespace disk::quota {
 
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                13U
+                11U
             );
             EXPECT_EQ(CountOccurrences(source, "Logger::Debug(log_context)"), 5U);
-            EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 4U);
+            EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 3U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 9U);
             EXPECT_EQ(
                 CountOccurrences(
@@ -182,12 +194,6 @@ namespace disk::quota {
                 "co_await AdjustUsedStorageChecked(",
                 1U
             ));
-            EXPECT_TRUE(EveryCallContainsContext(
-                source,
-                "co_return co_await GetReconciliation(",
-                1U
-            ));
-
             EXPECT_TRUE(EveryCallContainsContext(
                 upload_lifecycle,
                 "quota_service.",

@@ -10,7 +10,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 
 #include <drogon/orm/DbClient.h>
 
@@ -19,21 +18,11 @@
 
 namespace disk::quota {
 
-    struct AccountingReconciliation {
-        uint64_t user_id{ 0 };
-        uint64_t storage_used{ 0 };
-        uint64_t storage_reserved{ 0 };
-        uint64_t storage_quota{ 0 };
-        uint64_t active_file_bytes{ 0 };
-        uint64_t trash_item_bytes{ 0 };
-        uint64_t in_progress_reserved_bytes{ 0 };
-    };
-
     /**
      * @brief 存储配额与容量核算领域服务
      *
      * 集中封装 users.storage_used 与 users.storage_reserved 的配额检查、预留、
-     * 释放、预留转已用、已用空间调整，以及只读诊断对账查询。
+     * 释放、预留转已用与已用空间调整。
      */
     class QuotaService {
     public:
@@ -128,20 +117,6 @@ namespace disk::quota {
             int64_t delta,
             disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
-
-        [[nodiscard]]
-        auto GetReconciliation(
-            uint64_t user_id,
-            disk::utils::LogContext log_context = {}
-        ) const
-            -> drogon::Task<std::optional<AccountingReconciliation>>;
-
-        [[nodiscard]]
-        auto GetReconciliation(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t user_id,
-            disk::utils::LogContext log_context = {}
-        ) const -> drogon::Task<std::optional<AccountingReconciliation>>;
 
     private:
         drogon::orm::DbClientPtr m_db_client;

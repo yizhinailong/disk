@@ -271,42 +271,4 @@ namespace disk::quota {
         }
     }
 
-    auto QuotaService::GetReconciliation(
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) const
-        -> drogon::Task<std::optional<AccountingReconciliation>> {
-        co_return co_await GetReconciliation(m_db_client, user_id, log_context);
-    }
-
-    auto QuotaService::GetReconciliation(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<std::optional<AccountingReconciliation>> {
-        try {
-            auto rows = co_await client->execSqlCoro(
-                "SELECT u.id AS user_id, u.storage_used, u.storage_reserved, u.storage_quota, " "COALESCE((SELECT SUM(size) FROM files WHERE user_id = u.id), 0) AS active_file_bytes, " "COALESCE((SELECT SUM(item_size) FROM trash WHERE user_id = u.id), 0) AS trash_item_bytes, " "COALESCE((SELECT SUM(reserved_bytes) FROM upload_tasks " "          WHERE user_id = u.id AND status IN (0, 4)), 0) AS in_progress_reserved_bytes " "FROM users u WHERE u.id = $1",
-                user_id
-            );
-
-            if (rows.empty()) {
-                co_return std::nullopt;
-            }
-
-            AccountingReconciliation reconciliation;
-            reconciliation.user_id = rows[0]["user_id"].as<uint64_t>();
-            reconciliation.storage_used = rows[0]["storage_used"].as<uint64_t>();
-            reconciliation.storage_reserved = rows[0]["storage_reserved"].as<uint64_t>();
-            reconciliation.storage_quota = rows[0]["storage_quota"].as<uint64_t>();
-            reconciliation.active_file_bytes = rows[0]["active_file_bytes"].as<uint64_t>();
-            reconciliation.trash_item_bytes = rows[0]["trash_item_bytes"].as<uint64_t>();
-            reconciliation.in_progress_reserved_bytes = rows[0]["in_progress_reserved_bytes"].as<uint64_t>();
-            co_return reconciliation;
-        } catch (const drogon::orm::DrogonDbException&) {
-            Logger::Warn(log_context) << "Storage accounting reconciliation query failed";
-            co_return std::nullopt;
-        }
-    }
-
 } // namespace disk::quota

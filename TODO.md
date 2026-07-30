@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，RuntimeConfig 单一公开管线清理）：全仓库精确调用点与已编译对象符号审计确认 `ValidateDatabaseRouting()` 和 `ApplyEnvironmentOverrides()` 在生产中只由同一实现单元的 `LoadFromEnvironment()` 调用，其他直接消费者仅为单元测试。两个阶段已与文件加载一起下沉为 `.cpp` 本地 helper，`RuntimeConfig` 现在只公开完整的 `LoadFromEnvironment()` 管线；9 项行为测试全部通过临时 JSON、`DISK_CONFIG_FILE` 和真实环境变量执行该入口。完整构建、RuntimeConfig 聚焦 GoogleTest 9/9、关键分布式/安全聚焦 CTest 5/5 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 505.24 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；配置验证/覆盖顺序、错误语义、Drogon 输入、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，配额对账死公开面清理）：全仓库精确调用点与已编译对象重定位审计确认 `QuotaService::GetReconciliation` 的两个重载除内部转发外没有消费者，专属 `AccountingReconciliation` 仅被字段赋值测试使用；两个重载、专属结构、SQL 和独占日志事件已删除，活跃配额合同收敛为 11 个写入入口和 17 条固定操作事件，持久对账继续唯一归属 `StorageReconciliationService`。完整构建、配额/存储对账聚焦 GoogleTest 11/11、`BackupRestoreReconciliationIntegration` 与 `SafetyContentQuotaIntegration` 2/2 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 504.40 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；活跃配额 SQL、事务、错误码、日志上下文、REST 响应、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -782,9 +782,9 @@ OpenSpec、部署运维、系统测试和单元测试文档先行固定管理员
 
 ### 12.42 配额服务日志关联记录（2026-07-22）
 
-OpenSpec、部署运维、系统测试和单元测试文档先行固定共享配额边界的显式关联合同。`QuotaService` 的独立客户端与事务客户端共 13 个入口现在按值接收可选 `LogContext`，内部重载逐层原样转发；预留、释放、预留转已用、直接消费、已用量调整和对账查询的 18 条操作事件统一保留调用方已有的 request/instance/operation/upload/job/lease/version。`UploadLifecycleService` 的 8 个、`FileMutationService` 的 4 个以及 `TrashService` 的 1 个生产调用点均传入原上下文；构造事件继续是无请求归属的进程事件。
+OpenSpec、部署运维、系统测试和单元测试文档先行固定共享配额边界的显式关联合同。`QuotaService` 的独立客户端与事务客户端当前共 11 个活跃写入入口，均按值接收可选 `LogContext`，内部重载逐层原样转发；预留、释放、预留转已用、直接消费和已用量调整的 17 条操作事件统一保留调用方已有的 request/instance/operation/upload/job/lease/version。最初纳入的两个对账查询入口及其独占事件随后按 15.62 清理。`UploadLifecycleService` 的 8 个、`FileMutationService` 的 4 个以及 `TrashService` 的 1 个生产调用点均传入原上下文；构造事件继续是无请求归属的进程事件。
 
-配额日志只使用固定事件消息，不记录用户 ID、字节数、调整量、SQL、连接信息、业务错误正文或异常正文，也不从配额输入、影响行数、数据库结果、线程局部状态或消息文本推断类型化字段；数据库语句、事务边界、配额错误码和响应语义未改变。同步删除 `FileMutationService` 的两个以及 `TrashService`、`CleanupService` 各一个从未调用的私有配额转发器，避免保留绕过显式上下文的平行路径。`QuotaServiceContractTest` 锁定 13 个入口、18 条事件、内部重载和全部生产调用点；`TrashLogContextContractTest` 不再以已删除 helper 作为源码截取边界，并明确禁止该 helper 回归。
+配额日志只使用固定事件消息，不记录用户 ID、字节数、调整量、SQL、连接信息、业务错误正文或异常正文，也不从配额输入、影响行数、数据库结果、线程局部状态或消息文本推断类型化字段；数据库语句、事务边界、配额错误码和响应语义未改变。同步删除 `FileMutationService` 的两个以及 `TrashService`、`CleanupService` 各一个从未调用的私有配额转发器，避免保留绕过显式上下文的平行路径。`QuotaServiceContractTest` 锁定 11 个活跃入口、17 条事件、内部重载和全部生产调用点，并拒绝无调用对账外观回归；`TrashLogContextContractTest` 不再以已删除 helper 作为源码截取边界，并明确禁止该 helper 回归。
 
 `SafetyUploadInvariantsIntegration` 临时把当前用户 quota 收紧到已用量加预留量，以唯一 request ID 发起真实非去重上传初始化；它核对 HTTP 400、业务码 `50004`、配额层与上传层两条固定 warning 的同一 `upload_init` 关联、四个所有权字段为空、数据库未创建任务或预留，并在 `finally` 中恢复且复核完整 quota。完整构建、Python 语法检查、配额/回收站日志合同聚焦 GoogleTest 6/6、相邻清理/文件变更聚焦 GoogleTest 30/30、直接 safety 集成 790/790 项断言和 OpenSpec 严格校验 24/24 通过。首次完整 CTest 的唯一失败是旧 `TrashLogContextContractTest` 仍以已删除转发器作为源码终点；同步合同后第二次完整 CTest 共 1447 项，1440 通过、7 项环境门控跳过、0 失败，总耗时 482.46 秒。`ContentService`、`FolderRepository`、`FileServiceUtils` 等其他共享数据库 helper 与目标 S3/多实例环境门控仍未全部收敛，因此 12.1 的两个总任务继续保持未勾选。
 
@@ -1808,6 +1808,14 @@ API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享�
 两个成员声明与成员定义已删除，原函数体不改逻辑地下沉到 `RuntimeConfig.cpp` 匿名命名空间。重建后 `nm` 只将 `RuntimeConfig::LoadFromEnvironment()` 标记为全局 `T` 符号，文件加载、路由验证和环境覆盖均为本地 `t` 符号。`RuntimeConfig_test.cpp` 通过三项 C++23 concept 拒绝独立公开能力回归，9 项行为测试全部改用唯一临时 JSON、`DISK_CONFIG_FILE` 和真实环境变量执行完整管线。数据库验证位于环境覆盖之前的顺序、类型/范围检查、敏感值排除、缺失目标 section 失败、Drogon 输入和启动失败语义均未改变。
 
 完整构建、RuntimeConfig 聚焦 GoogleTest 9/9、`WorkerObservationModeIntegration`/`SecureLocalStagingCutoffIntegration`/`DistributedTopologyContract`/`AuthClusterConsistencyIntegration`/`RedisSessionPersistenceIntegration` 聚焦 CTest 5/5 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 505.24 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；本轮不删除环境变量、配置字段、部署 Secret、schema 或迁移分支，Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.62 配额对账死公开面清理记录（2026-07-31）
+
+系统测试、部署运维、单元测试和 OpenSpec 先行固定配额对账唯一所有权。全仓库精确调用点与已编译对象重定位审计确认 `QuotaService::GetReconciliation` 的 standalone 与 transaction-client 重载除内部转发外没有生产、测试、工具、客户端或迁移消费者，专属 `AccountingReconciliation` 仅被一条字段赋值测试使用；持久 users scope 分页扫描以及 `quota_used_mismatch`/`quota_reserved_mismatch` finding 的创建与消解已有且唯一归属 `StorageReconciliationService::RunUserPage`。
+
+两个无调用重载、专属结构、SQL、独占 warning 和死字段测试已删除。`QuotaService_test.cpp` 通过两个 C++23 concept 与源码否定合同拒绝旧调用形状、类型、SQL 和事件回归，同时正向锁定持久对账所有者；活跃配额合同从 13 个入口/18 条事件收敛为 11 个写入入口/17 条事件。上传、复制和回收站的配额 SQL、事务连接、错误码、日志上下文与 REST 响应均未改变。
+
+完整构建、配额/存储对账聚焦 GoogleTest 11/11、`BackupRestoreReconciliationIntegration`/`SafetyContentQuotaIntegration` 2/2 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 504.40 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

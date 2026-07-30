@@ -250,6 +250,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** call-site and object-relocation audits confirm that `RuntimeConfig::ValidateDatabaseRouting` and `RuntimeConfig::ApplyEnvironmentOverrides` have no production consumer outside `LoadFromEnvironment` and are otherwise called only by unit tests
 - **THEN** both stages SHALL become implementation-local, tests SHALL exercise them through temporary files and the composite loader, and `RuntimeConfig` SHALL expose only `LoadFromEnvironment` without changing validation, override, or failure behavior
 
+#### Scenario: Unused quota reconciliation facade is removed
+
+- **WHEN** whole-repository call-site and object-relocation audits confirm that both `QuotaService::GetReconciliation` overloads only reference each other, their result type is only exercised by a field-assignment test, and `StorageReconciliationService` owns the durable users-scope reconciliation flow
+- **THEN** both overloads, their dedicated result type, SQL, log event, and dead test SHALL be removed while active quota mutations and durable quota findings retain their existing transaction, context, and failure behavior
+
 #### Scenario: Unused token-lifetime config facade is removed
 
 - **WHEN** a whole-repository read/write audit confirms that the `ConfigMgr` access/refresh token lifetime getters and fixed members have no production or test caller and no JSON or environment loading path
