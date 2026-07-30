@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-30，最新候选 PgBouncer 事务池复验）：官方 SHA-256 匹配的 PgBouncer `1.25.2` release 源码在忽略目录内临时构建，`PgBouncerTransactionPoolIntegration` 1/1 通过（CTest 3.54 秒，总耗时 3.56 秒）。两个真实 API 的 8 条 Drogon 客户端连接精确复用到 2 条 PostgreSQL 后端连接，跨实例 ORM/`TransactionRunner`、事务内 `SET LOCAL`/`ON COMMIT DROP`、`pg_advisory_xact_lock` 提交前互斥与提交后释放全部通过，client/server parse 为 27/20、bind 为 54。`0600` 原子证据 SHA-256 已记录，不含端口、路径、凭据或业务标识，受管进程已清理。至此最新候选已显式复验 7 个常规环境门禁中的 6 个，仅容器拓扑 `DistributedFlowIntegration` 未在该候选上复验。最近完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 511.27 秒；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。本地单 PgBouncer/单 PostgreSQL 不替代生产认证/TLS、稳定写端点 HA、独立故障域、连接/内存容量和版本升级回归；Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-30，最新候选容器拓扑复验）：从仓库 `Dockerfile` 完整构建 `disk-distributed:local`，修复清洁构建发现的 vcpkg `libpq` 工具闭包、C++23 编译器混用和 Ubuntu 预置 `disk` 组冲突。最终镜像 ID 为 `sha256:829c4aedd6f86c14f4252c72773cc4ea6ec60125a3802d7249d6a45df3790d2d`，大小 71664902 字节，以 `10001:10001` 运行，容器身份为 `disk:disk-app`。启用 KVM 的隔离 Docker daemon 以该单一镜像启动 PostgreSQL、Redis、MinIO、两 API、两 Worker 和真实 Nginx 入口，`DistributedFlowIntegration` 1/1 通过（CTest 122.29 秒，总耗时 122.31 秒，20 项检查）。`0600` 原子证据 SHA-256 为 `f129db467a5a84944136e9c59340b333582141b5b2b4f4888d2ae37fb5e30451`，受管拓扑、数据卷、测试密钥、虚拟机磁盘和临时工具已清理。至此最新候选链路的 7 个常规环境门禁均已显式复验。最近完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 511.27 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -341,7 +341,7 @@ A 取消分享后，B 立即拒绝此前签发的 Share Token；A 登出后，B 
 
 ### 11.1 可重复环境
 
-- [x] 提供 `docker-compose.distributed.yml`：PostgreSQL、Redis、MinIO、两个 API、两个 Worker 和无粘性负载均衡器；当前主机无 Docker，真实启动验收仍由 Phase 6/8 验收项跟踪。
+- [x] 提供 `docker-compose.distributed.yml`：PostgreSQL、Redis、MinIO、两个 API、两个 Worker 和无粘性负载均衡器；最新候选镜像的真实启动与完整 Compose 流程已由 15.51 记录。
 - [x] 四个应用实例使用同一 `disk-distributed:local` 镜像，通过 `DISK_PROCESS_ROLE` 和 `DISK_INSTANCE_ID` 区分职责。
 - [x] 分布式 JSON 的密码字段为空；S3、数据库、Redis 密钥只从环境或 Secret 注入，占位 `.env.distributed` 不入库。
 - [x] 启动校验覆盖 role、S3 staging/final 组合、bucket、endpoint scheme、TLS 校验和成对 S3 凭据。
@@ -931,7 +931,7 @@ Python 语法检查、完整构建 421/421、日志/上传生命周期/Worker/S3
 - [x] 多实例脚本在 A 登出/取消分享后从 B 立即验证 access/share token 撤销，并并发验证 refresh CAS。
 - [x] 多实例脚本验证两个 Worker 共享队列，并在 A 停止后由 B 接管过期租约；周期任务去重继续由数据库集成测试覆盖。
 
-`test_safety_upload_invariants.py` 对未过期和按 PostgreSQL 截止时间过期的任务分别从同一屏障并发发起 complete、cancel 与 expire，已在完整 CTest 中通过；它验证唯一合法终态、租约/分片清零、唯一 staging cleanup，以及 reserved/used、文件、内容行和 ref_count 不变量。`test_distributed_flow.py` 使用 API A 完成/过期扫描、API B 取消，并重复同一套数据库与 S3 对账；该 Compose/本地多实例入口仍受环境变量门控，本次只确认脚本合同存在，不把未执行的环境门控项计作目标环境验收。
+`test_safety_upload_invariants.py` 对未过期和按 PostgreSQL 截止时间过期的任务分别从同一屏障并发发起 complete、cancel 与 expire，已在完整 CTest 中通过；它验证唯一合法终态、租约/分片清零、唯一 staging cleanup，以及 reserved/used、文件、内容行和 ref_count 不变量。`test_distributed_flow.py` 使用 API A 完成/过期扫描、API B 取消，并重复同一套数据库与 S3 对账；Compose/本地多实例入口始终受显式环境变量门控。2026-07-30 已在启用 KVM 的隔离 Docker daemon 中用完整候选镜像执行 Compose 入口并通过 20 项检查；该容器门禁不计作目标环境的 TLS/KMS、依赖高可用、独立故障域或长稳验收。
 
 ### 13.3 故障注入
 
@@ -1718,6 +1718,16 @@ OpenSpec、系统测试、部署运维和单元测试文档先行固定 Promethe
 该二进制驱动 `PgBouncerTransactionPoolIntegration` 1/1 通过（CTest 3.54 秒，总耗时 3.56 秒）。两个真实 API 的 8 条 Drogon 客户端连接精确复用到 2 条 PostgreSQL 后端连接；跨实例 ORM 与 `TransactionRunner` 工作流、事务内 `SET LOCAL`/`ON COMMIT DROP` 临时表和 `pg_advisory_xact_lock` 提交前互斥/提交后释放全部通过，`SHOW STATS` 记录 client parse 27、server parse 20、bind 54。
 
 `0600` 原子证据 `.sisyphus/evidence/pgbouncer-transaction-pool-summary.json` 的 SHA-256 为 `93492ee81be9052d71093ffeb6e273e80b8ced06cf84f0481ea73f6235a5a278`，不含端口、路径、凭据或业务标识，受管测试进程均已清理。至此最新候选已显式复验 7 个常规环境门禁中的 6 个，仅容器拓扑 `DistributedFlowIntegration` 未在该候选上复验。本地单 PgBouncer/单 PostgreSQL 流程不替代生产认证/TLS、稳定写端点 HA、独立故障域、连接/内存容量和版本升级回归验收。Phase 6/9/10 和最终 Definition of Done 相关项继续保持未勾选。
+
+### 15.51 最新候选容器拓扑门禁复验记录（2026-07-30）
+
+系统测试与部署运维文档先行固定候选镜像的完整构建合同。`Dockerfile` 构建层显式补齐固定 vcpkg `libpq` port 需要的 `bison`、`flex` 和 `perl`，并把 vcpkg 与项目统一到 `gcc-14`/`g++-14`，避免 Clang 18 与 GCC 14 标准库混用时缺失项目所需的完整 C++23 能力。runtime 账户保留用户名 `disk`，但使用容器专属组 `disk-app` 和数值身份 `10001:10001`，不再与 Ubuntu 预置系统组 `disk` 冲突。`DIST-DEPLOY-004` 同时锁定工具清单、编译器标记、独立组和数值 `USER`。
+
+以候选基线 `86d8e9a9` 的工作树从仓库 `Dockerfile` 完整构建成功；最终 `disk-distributed:local` 镜像 ID 为 `sha256:829c4aedd6f86c14f4252c72773cc4ea6ec60125a3802d7249d6a45df3790d2d`，大小 71664902 字节，`Config.User` 为 `10001:10001`，容器内 `id` 返回 `uid=10001(disk) gid=10001(disk-app) groups=10001(disk-app)`。这一清洁构建实际暴露并关闭了缺少 parser 工具、混用编译器和 runtime 组名冲突三个静态合同未曾证明的可执行制品缺陷。
+
+在启用 KVM 的隔离 Linux Docker daemon 中，Compose 使用该单一镜像启动 PostgreSQL、Redis、MinIO、两个 API、两个 Worker 和真实 Nginx 无粘性入口。`DistributedFlowIntegration` 1/1 通过（CTest 122.29 秒，总耗时 122.31 秒，20 项检查）；严格 A/B 交替、单入口随机路由、终态竞态、Worker 租约接管、PostgreSQL/Redis/MinIO 故障后原 API 进程恢复、multipart abort 持久重试收敛和单 API 停止后入口继续服务均通过。`0600` 原子证据 `.sisyphus/evidence/distributed-flow-summary.json` 的 SHA-256 为 `f129db467a5a84944136e9c59340b333582141b5b2b4f4888d2ae37fb5e30451`，状态为 `passed`，不包含令牌或凭据字段。
+
+Compose 容器、网络、数据卷、失败构建容器、测试密钥文件、端口转发、虚拟机磁盘和临时 Docker 工具均已清理。至此最新候选链路的 7 个常规环境门禁均已显式复验，但隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役验收。Phase 6/9/10 和最终 Definition of Done 相关项继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

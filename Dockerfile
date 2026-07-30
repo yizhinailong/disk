@@ -8,14 +8,17 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         autoconf \
         automake \
+        bison \
         build-essential \
         ca-certificates \
         ccache \
-        clang \
         curl \
+        flex \
+        g++-14 \
         git \
         libtool \
         ninja-build \
+        perl \
         pkg-config \
         python3 \
         python3-venv \
@@ -31,7 +34,9 @@ RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
     && git -C /opt/vcpkg checkout "${VCPKG_COMMIT}" \
     && /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
-ENV PATH="/opt/cmake/bin:${PATH}" \
+ENV CC=gcc-14 \
+    CXX=g++-14 \
+    PATH="/opt/cmake/bin:${PATH}" \
     VCPKG_ROOT=/opt/vcpkg \
     VCPKG_DEFAULT_TRIPLET=x64-linux
 
@@ -40,7 +45,7 @@ COPY . .
 
 RUN cmake -S . -B build/container -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CXX_COMPILER=clang++ \
+        -DCMAKE_CXX_COMPILER=g++-14 \
         -DCMAKE_TOOLCHAIN_FILE=/opt/vcpkg/scripts/buildsystems/vcpkg.cmake \
     && cmake --build build/container --target disk --parallel "${BUILD_JOBS}"
 
@@ -50,8 +55,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl libgcc-s1 libstdc++6 postgresql-client \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --gid 10001 disk \
-    && useradd --uid 10001 --gid disk --create-home --home-dir /var/lib/disk --shell /usr/sbin/nologin disk
+    && groupadd --gid 10001 disk-app \
+    && useradd --uid 10001 --gid disk-app --create-home --home-dir /var/lib/disk --shell /usr/sbin/nologin disk
 
 COPY --from=builder /workspace/build/container/src/disk /app/disk
 COPY deploy/config.distributed.json /app/config.json
@@ -59,7 +64,7 @@ COPY scripts/migrate-db.sh /app/scripts/migrate-db.sh
 COPY sql/migrations/manifest.tsv sql/migrations/*_forward.sql /app/sql/migrations/
 
 RUN chmod 0555 /app/scripts/migrate-db.sh \
-    && chown -R disk:disk /app /var/lib/disk
+    && chown -R disk:disk-app /app /var/lib/disk
 
 USER 10001:10001
 WORKDIR /app

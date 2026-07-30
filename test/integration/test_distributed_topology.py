@@ -501,13 +501,37 @@ def main() -> int:
     )
 
     dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
+    for build_tool in ("bison", "flex", "g++-14", "perl"):
+        require(
+            re.search(
+                rf"^\s+{re.escape(build_tool)}\s+\\$", dockerfile, re.MULTILINE
+            )
+            is not None,
+            f"candidate image build is missing explicit {build_tool}",
+        )
+    require(
+        re.search(r"^ENV CC=gcc-14 \\$", dockerfile, re.MULTILINE) is not None,
+        "candidate image build does not pin CC to gcc-14",
+    )
+    require(
+        re.search(r"^\s+CXX=g\+\+-14 \\$", dockerfile, re.MULTILINE) is not None,
+        "candidate image build does not pin CXX to g++-14",
+    )
+    require(
+        re.search(
+            r"^\s+-DCMAKE_CXX_COMPILER=g\+\+-14 \\$", dockerfile, re.MULTILINE
+        )
+        is not None,
+        "candidate image CMake configure does not use g++-14",
+    )
     for marker in (
         "postgresql-client",
         "COPY scripts/migrate-db.sh /app/scripts/migrate-db.sh",
         "COPY sql/migrations/manifest.tsv sql/migrations/*_forward.sql /app/sql/migrations/",
         "chmod 0555 /app/scripts/migrate-db.sh",
-        "groupadd --gid 10001 disk",
-        "useradd --uid 10001 --gid disk",
+        "groupadd --gid 10001 disk-app",
+        "useradd --uid 10001 --gid disk-app",
+        "chown -R disk:disk-app /app /var/lib/disk",
         "USER 10001:10001",
     ):
         require(marker in dockerfile, f"migration-capable image is missing {marker}")
