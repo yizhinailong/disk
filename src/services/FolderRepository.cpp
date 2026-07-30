@@ -155,35 +155,6 @@ namespace disk::folder {
         co_return folders;
     }
 
-    auto FolderRepository::FetchFolderDeletePlan(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t folder_id,
-        uint64_t user_id
-    ) const -> drogon::Task<std::optional<FolderDeletePlan>> {
-        auto folders = co_await FetchFolderSubtree(client, folder_id, user_id);
-        if (folders.empty()) {
-            co_return std::nullopt;
-        }
-
-        FolderDeletePlan plan;
-        plan.folders = std::move(folders);
-        plan.root = plan.folders.front();
-
-        std::vector<uint64_t> folder_ids;
-        folder_ids.reserve(plan.folders.size());
-        for (const auto& folder : plan.folders) {
-            folder_ids.push_back(folder.getValueOfId());
-        }
-
-        FileRepository file_repository;
-        plan.files = co_await file_repository.FetchFilesInFolders(client, folder_ids, user_id);
-        for (const auto& file : plan.files) {
-            plan.item_size += file.getValueOfSize();
-        }
-
-        co_return plan;
-    }
-
     auto FolderRepository::FetchBatchFolderDeletePlans(
         const drogon::orm::DbClientPtr& client,
         const std::vector<uint64_t>& folder_ids,

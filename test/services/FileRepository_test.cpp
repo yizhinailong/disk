@@ -85,7 +85,7 @@ namespace disk::file {
             EXPECT_FALSE(Contains(folder_repository, "FileRepository file_repository(m_db_client)"));
             EXPECT_FALSE(Contains(folder_service, "FileRepository file_repository(m_db_client)"));
             EXPECT_FALSE(Contains(file_mutation_service, "m_file_repository(m_db_client)"));
-            EXPECT_EQ(CountOccurrences(folder_repository, "FileRepository file_repository;"), 2U);
+            EXPECT_EQ(CountOccurrences(folder_repository, "FileRepository file_repository;"), 1U);
             EXPECT_TRUE(Contains(folder_service, "FileRepository file_repository;"));
         }
 

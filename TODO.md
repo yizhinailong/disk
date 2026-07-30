@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，配额对账死公开面清理）：全仓库精确调用点与已编译对象重定位审计确认 `QuotaService::GetReconciliation` 的两个重载除内部转发外没有消费者，专属 `AccountingReconciliation` 仅被字段赋值测试使用；两个重载、专属结构、SQL 和独占日志事件已删除，活跃配额合同收敛为 11 个写入入口和 17 条固定操作事件，持久对账继续唯一归属 `StorageReconciliationService`。完整构建、配额/存储对账聚焦 GoogleTest 11/11、`BackupRestoreReconciliationIntegration` 与 `SafetyContentQuotaIntegration` 2/2 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 504.40 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；活跃配额 SQL、事务、错误码、日志上下文、REST 响应、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，单项文件夹删除计划死路径清理）：全仓库精确调用点与已编译对象重定位审计确认 `disk::file::utils::FetchFolderDeletePlan` 只转发到 `FolderRepository::FetchFolderDeletePlan`，仓储方法没有其他消费者；两层入口已删除，`FolderRepository` 收敛为 12 个活跃显式 client 原语，`FetchFolderSubtree` 与 FileMutation/Trash 的三条 `FetchBatchFolderDeletePlans` 路径保留。完整构建、相邻仓储聚焦 GoogleTest 6/6、文件变更/文件夹/回收站/内容配额/嵌套移动真实集成 5/5 和 OpenSpec 24/24 通过；首次完整回归发现并修正 `FileRepositorySignatureContractTest` 的旧构造次数，第二轮完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 508.06 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；递归用户谓词、批量覆盖消重、事务连接、回收站快照、配额/ref_count、REST 响应、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1599,9 +1599,9 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定人工死信重放所�
 
 ### 15.36 文件夹仓储死客户端状态清理记录（2026-07-28）
 
-系统测试、单元测试、部署运维和 OpenSpec 先行固定文件夹仓储的连接所有权。全仓库精确读写与实例化审计确认 `FolderRepository` 构造参数只写入 `m_db_client`，该字段从未被任何方法读取；全部 13 个归属/子树/删除计划/树形/面包屑/路径/计数操作都已显式接收调用级 standalone client 或当前 transaction。
+系统测试、单元测试、部署运维和 OpenSpec 先行固定文件夹仓储的连接所有权。全仓库精确读写与实例化审计确认 `FolderRepository` 构造参数只写入 `m_db_client`，该字段从未被任何方法读取；当前 12 个活跃归属/子树/批量删除计划/树形/面包屑/路径/计数操作都显式接收调用级 standalone client 或当前 transaction。最初计入的单项删除计划原语随后按 15.63 清理。
 
-无读取字段与注入构造已删除，`FileServiceUtils`、`UploadLifecycleService`、`FolderService` 和 `FileMutationService` 的 7 个生产构造点改为默认构造。`FolderRepository_test.cpp` 通过编译期断言要求仓储可默认构造且为空类型，通过源码合同拒绝旧字段/构造回归并核对头文件与实现各 13 个显式 client 参数及全部生产构造点。参数化 SQL、用户谓词、事务连接、路径/计数更新、日志上下文和公开响应均未改变；Phase 10 总清理项继续保持未勾选。
+无读取字段与注入构造已删除，当时 `FileServiceUtils`、`UploadLifecycleService`、`FolderService` 和 `FileMutationService` 的 7 个生产构造点改为默认构造；清理单项删除计划后现存 6 个构造点。`FolderRepository_test.cpp` 通过编译期断言要求仓储可默认构造且为空类型，通过源码合同拒绝旧字段/构造与单项删除计划回归，并核对头文件与实现各 12 个显式 client 参数及全部现存生产构造点。参数化 SQL、用户谓词、事务连接、路径/计数更新、日志上下文和公开响应均未改变；Phase 10 总清理项继续保持未勾选。
 
 完整构建、文件/文件夹仓储与移动合同、真实文件变更/文件夹生命周期/上传流程、配额/移动安全网与分布式拓扑聚焦 CTest 19/19 和 OpenSpec 24/24 通过。完整 CTest 共 1457 项，1450 项通过、7 项环境门控跳过、0 失败，总耗时 518.21 秒。
 
@@ -1816,6 +1816,14 @@ API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享�
 两个无调用重载、专属结构、SQL、独占 warning 和死字段测试已删除。`QuotaService_test.cpp` 通过两个 C++23 concept 与源码否定合同拒绝旧调用形状、类型、SQL 和事件回归，同时正向锁定持久对账所有者；活跃配额合同从 13 个入口/18 条事件收敛为 11 个写入入口/17 条事件。上传、复制和回收站的配额 SQL、事务连接、错误码、日志上下文与 REST 响应均未改变。
 
 完整构建、配额/存储对账聚焦 GoogleTest 11/11、`BackupRestoreReconciliationIntegration`/`SafetyContentQuotaIntegration` 2/2 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 504.40 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.63 单项文件夹删除计划死路径清理记录（2026-07-31）
+
+系统测试、部署运维、单元测试和 OpenSpec 先行固定文件夹删除计划唯一活跃边界。全仓库精确调用点审计确认 `disk::file::utils::FetchFolderDeletePlan` 只转发到 `FolderRepository::FetchFolderDeletePlan`，仓储方法除该转发外没有生产、测试、工具、客户端或迁移消费者；已编译对象重定位也只在 utility 包装器内指向仓储方法。`FolderService::FetchFolderSubtree` 仍有独立业务调用，FileMutation/Trash 则有三条活跃 `FetchBatchFolderDeletePlans` 路径。
+
+utility 转发与仓储单项方法已一并删除，`FolderRepository` 从 13 个原语收敛为 12 个活跃显式 client 原语。`FolderRepository_test.cpp` 通过 C++23 concept 与源码否定合同拒绝两层旧入口回归，并正向锁定单项子树读取、三条批量计划调用、无状态仓储及连接所有权；相邻 `FileRepository_test.cpp` 同步把仓储内默认构造点从 2 调整为 1。递归用户谓词、批量覆盖消重、事务连接、回收站快照、配额/ref_count、REST 响应、schema 和迁移兼容合同未改变。
+
+完整构建、相邻仓储聚焦 GoogleTest 6/6、`FileMutationOpsIntegration`/`FolderLifecycleIntegration`/`TrashLifecycleIntegration`/`SafetyContentQuotaIntegration`/`SafetyMoveCopyPathIntegration` 5/5 和 OpenSpec 24/24 通过。首次完整 CTest 的唯一失败是相邻文件仓储源码合同仍锁定已删除路径带来的第二个默认构造点；计数同步并定向复验后，第二轮完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 508.06 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

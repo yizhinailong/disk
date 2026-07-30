@@ -111,6 +111,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** a whole-repository call-site audit confirms that `FileRepository::UpdateDescendantFilePathsForFolderMove` and its dedicated SQL have no production or behavioral-test caller
 - **THEN** the declaration, implementation, obsolete positive source-contract expectation, and dedicated SQL SHALL be removed while folder rename and move flows continue to update each descendant file through transaction-bound `UpdateFilePath` calls
 
+#### Scenario: Unused single-folder delete plan path is removed
+
+- **WHEN** whole-repository call-site and built-object relocation audits confirm that `file::utils::FetchFolderDeletePlan` only forwards to `FolderRepository::FetchFolderDeletePlan` and that repository operation has no other production, test, tool, client, or migration consumer
+- **THEN** both layers SHALL be removed while `FetchFolderSubtree` and all transaction-bound or standalone `FetchBatchFolderDeletePlans` flows retain their ownership predicates, connection scope, snapshots, and failure behavior
+
 #### Scenario: File repository retains no unused default client
 
 - **WHEN** every `FileRepository` operation already receives the standalone client or active transaction explicitly and the constructor-injected client is never read

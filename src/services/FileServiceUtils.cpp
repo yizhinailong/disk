@@ -227,15 +227,6 @@ namespace disk::file::utils {
         return Json::writeString(builder, item_data);
     }
 
-    auto FetchFolderDeletePlan(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t folder_id,
-        uint64_t user_id
-    ) -> drogon::Task<std::optional<FolderDeletePlan>> {
-        disk::folder::FolderRepository repository;
-        co_return co_await repository.FetchFolderDeletePlan(client, folder_id, user_id);
-    }
-
     auto FetchBatchFolderDeletePlans(
         const drogon::orm::DbClientPtr& client,
         const std::vector<uint64_t>& folder_ids,

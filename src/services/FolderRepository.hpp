@@ -60,13 +60,6 @@ namespace disk::folder {
         ) const -> drogon::Task<std::vector<drogon_model::disk::Folders>>;
 
         [[nodiscard]]
-        auto FetchFolderDeletePlan(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t folder_id,
-            uint64_t user_id
-        ) const -> drogon::Task<std::optional<FolderDeletePlan>>;
-
-        [[nodiscard]]
         auto FetchBatchFolderDeletePlans(
             const drogon::orm::DbClientPtr& client,
             const std::vector<uint64_t>& folder_ids,

@@ -67,6 +67,16 @@ namespace disk::folder {
             return count == expected_count;
         }
 
+        template <typename Repository>
+        concept HasSingleFolderDeletePlan = requires(
+            const Repository& repository,
+            const drogon::orm::DbClientPtr& client
+        ) {
+            repository.FetchFolderDeletePlan(client, uint64_t{ 1 }, uint64_t{ 1 });
+        };
+
+        static_assert(!HasSingleFolderDeletePlan<FolderRepository>);
+
         TEST(FolderRepositorySignatureContractTest, ExposesTransactionAwareOwnershipAndSubtreePrimitives) {
             using FindOwnedSignature = drogon::Task<std::optional<drogon_model::disk::Folders>> (
                 FolderRepository::*
@@ -86,25 +96,31 @@ namespace disk::folder {
 
             const auto header = ReadSourceFile("src/services/FolderRepository.hpp");
             const auto source = ReadSourceFile("src/services/FolderRepository.cpp");
+            const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
             const auto utils = ReadSourceFile("src/services/FileServiceUtils.cpp");
             const auto upload_lifecycle =
                 ReadSourceFile("src/services/UploadLifecycleService.cpp");
             const auto folder_service = ReadSourceFile("src/services/FolderService.cpp");
             const auto file_mutation =
                 ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto trash_service = ReadSourceFile("src/services/TrashService.cpp");
 
             EXPECT_EQ(
                 CountOccurrences(header, "const drogon::orm::DbClientPtr& client,"),
-                13U
+                12U
             );
             EXPECT_EQ(
                 CountOccurrences(source, "const drogon::orm::DbClientPtr& client,"),
-                13U
+                12U
             );
             EXPECT_FALSE(Contains(header, "m_db_client"));
             EXPECT_FALSE(Contains(header, "FolderRepository(drogon::orm::DbClientPtr"));
             EXPECT_FALSE(Contains(source, "FolderRepository::FolderRepository("));
-            EXPECT_EQ(CountOccurrences(utils, "FolderRepository repository;"), 3U);
+            EXPECT_FALSE(Contains(header, "FetchFolderDeletePlan("));
+            EXPECT_FALSE(Contains(source, "FolderRepository::FetchFolderDeletePlan("));
+            EXPECT_FALSE(Contains(utils_header, "FetchFolderDeletePlan("));
+            EXPECT_FALSE(Contains(utils, "auto FetchFolderDeletePlan("));
+            EXPECT_EQ(CountOccurrences(utils, "FolderRepository repository;"), 2U);
             EXPECT_EQ(
                 CountOccurrences(
                     upload_lifecycle,
@@ -114,6 +130,12 @@ namespace disk::folder {
             );
             EXPECT_FALSE(Contains(folder_service, "m_folder_repository(m_db_client)"));
             EXPECT_FALSE(Contains(file_mutation, "m_folder_repository(m_db_client)"));
+            EXPECT_TRUE(Contains(
+                folder_service,
+                "m_folder_repository.FetchFolderSubtree("
+            ));
+            EXPECT_EQ(CountOccurrences(file_mutation, "FetchBatchFolderDeletePlans("), 2U);
+            EXPECT_EQ(CountOccurrences(trash_service, "FetchBatchFolderDeletePlans("), 1U);
         }
 
         TEST(FolderRepositorySqlContractTest, OwnershipAndLocationQueriesStayUserScoped) {
