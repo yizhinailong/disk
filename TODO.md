@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，运行时配置文件加载公开面清理）：全仓库精确调用点与已编译对象重定位审计确认 `RuntimeConfig::LoadFile()` 只被同一实现单元内的 `LoadFromEnvironment()` 调用，没有其他生产、测试、工具、客户端或迁移消费者。公开声明与成员定义已删除，原文件打开/JSON 解析逻辑下沉为 `.cpp` 匿名命名空间的本地 helper，编译期合同拒绝旧公开入口回归。完整构建、RuntimeConfig 聚焦 GoogleTest 9/9、Worker 观察启动/安全 local staging 拒绝/分布式拓扑聚焦 CTest 3/3 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 502.22 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；配置加载顺序、错误语义、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，RuntimeConfig 单一公开管线清理）：全仓库精确调用点与已编译对象符号审计确认 `ValidateDatabaseRouting()` 和 `ApplyEnvironmentOverrides()` 在生产中只由同一实现单元的 `LoadFromEnvironment()` 调用，其他直接消费者仅为单元测试。两个阶段已与文件加载一起下沉为 `.cpp` 本地 helper，`RuntimeConfig` 现在只公开完整的 `LoadFromEnvironment()` 管线；9 项行为测试全部通过临时 JSON、`DISK_CONFIG_FILE` 和真实环境变量执行该入口。完整构建、RuntimeConfig 聚焦 GoogleTest 9/9、关键分布式/安全聚焦 CTest 5/5 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 505.24 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；配置验证/覆盖顺序、错误语义、Drogon 输入、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1561,7 +1561,7 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定人工死信重放所�
 
 系统测试、单元测试、部署运维和 OpenSpec 先行固定运行时凭据所有权。全仓库精确符号与调用点审计确认 `ConfigMgr::GetDatabasePassword()` 与 `GetRedisPassword()` 都只有公开声明与实现，没有生产、测试或文档调用者；启动流程在 `drogon::app().loadConfigJson()` 前调用 `RuntimeConfig::LoadFromEnvironment()`，由其环境覆盖把凭据写入唯一 `default` 数据库客户端与 Redis 客户端配置。
 
-两个无调用 getter 的声明与实现已删除，`ConfigMgr_test.cpp` 通过头文件和实现四项否定断言拒绝旧凭据读取面回归。`RuntimeConfig::ApplyEnvironmentOverrides()` 的注入、唯一数据库客户端门禁和 `ValidateSecureConfig()` 的安全模式非空检查均未改变；真实 PostgreSQL/Redis 连接、跨实例认证一致性和 Redis 会话持久化保持原语义。本轮不删除环境变量、部署 Secret、Drogon 客户端字段、兼容配置或迁移分支，因此 Phase 10 总清理项继续保持未勾选。
+两个无调用 getter 的声明与实现已删除，`ConfigMgr_test.cpp` 通过头文件和实现四项否定断言拒绝旧凭据读取面回归。`RuntimeConfig::LoadFromEnvironment()` 内部环境覆盖阶段的注入、唯一数据库客户端门禁和 `ValidateSecureConfig()` 的安全模式非空检查均未改变；真实 PostgreSQL/Redis 连接、跨实例认证一致性和 Redis 会话持久化保持原语义。本轮不删除环境变量、部署 Secret、Drogon 客户端字段、兼容配置或迁移分支，因此 Phase 10 总清理项继续保持未勾选。
 
 完整构建、配置/安全模式/真实 PostgreSQL 与 Redis 聚焦 CTest 69/69 和 OpenSpec 24/24 通过。完整 CTest 共 1456 项，1449 项通过、7 项环境门控跳过、0 失败，总耗时 495.22 秒。
 
@@ -1800,6 +1800,14 @@ API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享�
 公开 `LoadFile()` 声明和成员定义已删除，原函数体不改逻辑地转为 `RuntimeConfig.cpp` 匿名命名空间的 `LoadConfigFile()`；重建后 `nm` 确认 helper 为本地 `t` 符号且旧成员符号消失。`RuntimeConfig_test.cpp` 通过 C++23 concept 拒绝旧 public 能力回归。`DISK_CONFIG_FILE` 选择、默认 `config.json`、文件打开/JSON 解析错误、单一 `default` 路由验证、环境覆盖顺序与 Drogon 加载均未改变。
 
 完整构建、RuntimeConfig 聚焦 GoogleTest 9/9、`WorkerObservationModeIntegration`/`SecureLocalStagingCutoffIntegration`/`DistributedTopologyContract` 3/3 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 502.22 秒。目标 MinIO/云 S3、PgBouncer、Prometheus 和多实例环境门控仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.61 RuntimeConfig 单一公开管线清理记录（2026-07-31）
+
+系统测试、部署运维、单元测试和 OpenSpec 先行固定 RuntimeConfig 单一公开管线。全仓库精确调用点审计确认 `ValidateDatabaseRouting()` 与 `ApplyEnvironmentOverrides()` 在生产中只由同一 `.cpp` 的 `LoadFromEnvironment()` 调用，其他直接消费者全部位于 `RuntimeConfig_test.cpp`；已编译对象的定义符号也确认三个组合阶段之间没有外部生产入口需求。
+
+两个成员声明与成员定义已删除，原函数体不改逻辑地下沉到 `RuntimeConfig.cpp` 匿名命名空间。重建后 `nm` 只将 `RuntimeConfig::LoadFromEnvironment()` 标记为全局 `T` 符号，文件加载、路由验证和环境覆盖均为本地 `t` 符号。`RuntimeConfig_test.cpp` 通过三项 C++23 concept 拒绝独立公开能力回归，9 项行为测试全部改用唯一临时 JSON、`DISK_CONFIG_FILE` 和真实环境变量执行完整管线。数据库验证位于环境覆盖之前的顺序、类型/范围检查、敏感值排除、缺失目标 section 失败、Drogon 输入和启动失败语义均未改变。
+
+完整构建、RuntimeConfig 聚焦 GoogleTest 9/9、`WorkerObservationModeIntegration`/`SecureLocalStagingCutoffIntegration`/`DistributedTopologyContract`/`AuthClusterConsistencyIntegration`/`RedisSessionPersistenceIntegration` 聚焦 CTest 5/5 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 505.24 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；本轮不删除环境变量、配置字段、部署 Secret、schema 或迁移分支，Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

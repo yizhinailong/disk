@@ -15,10 +15,6 @@ namespace disk::utils {
     public:
         [[nodiscard]]
         static auto LoadFromEnvironment() -> Json::Value;
-
-        static auto ValidateDatabaseRouting(const Json::Value& config) -> void;
-
-        static auto ApplyEnvironmentOverrides(Json::Value& config) -> void;
     };
 
 } // namespace disk::utils

@@ -22,7 +22,19 @@ namespace {
         Config::LoadFile(path);
     };
 
+    template <typename Config>
+    concept HasPublicDatabaseRoutingValidation = requires(const Json::Value& config) {
+        Config::ValidateDatabaseRouting(config);
+    };
+
+    template <typename Config>
+    concept HasPublicEnvironmentOverrides = requires(Json::Value& config) {
+        Config::ApplyEnvironmentOverrides(config);
+    };
+
     static_assert(!HasPublicLoadFile<disk::utils::RuntimeConfig>);
+    static_assert(!HasPublicDatabaseRoutingValidation<disk::utils::RuntimeConfig>);
+    static_assert(!HasPublicEnvironmentOverrides<disk::utils::RuntimeConfig>);
 
     class EnvironmentScope final {
     public:
@@ -145,51 +157,59 @@ namespace {
         return config;
     }
 
-    TEST(RuntimeConfigTest, AcceptsSingleDefaultDatabaseClient) {
-        auto config = BaseConfig();
+    auto LoadRuntimeConfig(const Json::Value& config) -> Json::Value {
+        RuntimeConfigFile config_file(config);
+        const auto path = config_file.Path().string();
+        EnvironmentScope::Set("DISK_CONFIG_FILE", path.c_str());
+        return disk::utils::RuntimeConfig::LoadFromEnvironment();
+    }
 
-        EXPECT_NO_THROW(disk::utils::RuntimeConfig::ValidateDatabaseRouting(config));
+    TEST(RuntimeConfigTest, AcceptsSingleDefaultDatabaseClient) {
+        EnvironmentScope environment(RuntimeEnvironmentNames());
+
+        EXPECT_NO_THROW(static_cast<void>(LoadRuntimeConfig(BaseConfig())));
     }
 
     TEST(RuntimeConfigTest, RejectsMalformedOrAmbiguousDatabaseRouting) {
+        EnvironmentScope environment(RuntimeEnvironmentNames());
         Json::Value missing_clients(Json::objectValue);
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ValidateDatabaseRouting(missing_clients),
+            LoadRuntimeConfig(missing_clients),
             std::runtime_error
         );
 
         Json::Value object_clients(Json::objectValue);
         object_clients["db_clients"] = Json::Value(Json::objectValue);
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ValidateDatabaseRouting(object_clients),
+            LoadRuntimeConfig(object_clients),
             std::runtime_error
         );
 
         Json::Value empty_clients(Json::objectValue);
         empty_clients["db_clients"] = Json::Value(Json::arrayValue);
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ValidateDatabaseRouting(empty_clients),
+            LoadRuntimeConfig(empty_clients),
             std::runtime_error
         );
 
         Json::Value scalar_client(Json::objectValue);
         scalar_client["db_clients"][0] = "default";
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ValidateDatabaseRouting(scalar_client),
+            LoadRuntimeConfig(scalar_client),
             std::runtime_error
         );
 
         auto renamed_client = BaseConfig();
         renamed_client["db_clients"][0]["name"] = "replica";
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ValidateDatabaseRouting(renamed_client),
+            LoadRuntimeConfig(renamed_client),
             std::runtime_error
         );
 
         auto multiple_clients = BaseConfig();
         multiple_clients["db_clients"][1]["name"] = "replica";
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ValidateDatabaseRouting(multiple_clients),
+            LoadRuntimeConfig(multiple_clients),
             std::runtime_error
         );
     }
@@ -200,12 +220,9 @@ namespace {
         config["db_clients"][1]["name"] = "replica-secret-name";
         config["db_clients"][1]["host"] = "replica-secret-host";
         config["db_clients"][1]["passwd"] = "replica-secret-password";
-        RuntimeConfigFile config_file(config);
-        const auto path = config_file.Path().string();
-        EnvironmentScope::Set("DISK_CONFIG_FILE", path.c_str());
 
         try {
-            const auto loaded = disk::utils::RuntimeConfig::LoadFromEnvironment();
+            const auto loaded = LoadRuntimeConfig(config);
             static_cast<void>(loaded);
             FAIL() << "Expected additional database client to fail";
         } catch (const std::runtime_error& error) {
@@ -253,8 +270,7 @@ namespace {
         EnvironmentScope::Set("DISK_S3_MAX_RETRIES", "5");
         EnvironmentScope::Set("DISK_S3_RETRY_BASE_DELAY_MS", "250");
 
-        auto config = BaseConfig();
-        disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config);
+        auto config = LoadRuntimeConfig(BaseConfig());
 
         EXPECT_EQ(config["listeners"][0]["address"].asString(), "0.0.0.0");
         EXPECT_EQ(config["listeners"][0]["port"].asInt(), 18080);
@@ -297,10 +313,9 @@ namespace {
     TEST(RuntimeConfigTest, RejectsInvalidIntegerWithoutEchoingValue) {
         EnvironmentScope environment(RuntimeEnvironmentNames());
         EnvironmentScope::Set("DATABASE_PORT", "not-a-port-secret");
-        auto config = BaseConfig();
 
         try {
-            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config);
+            static_cast<void>(LoadRuntimeConfig(BaseConfig()));
             FAIL() << "Expected invalid port to fail";
         } catch (const std::runtime_error& error) {
             EXPECT_NE(std::string(error.what()).find("DATABASE_PORT"), std::string::npos);
@@ -311,10 +326,9 @@ namespace {
     TEST(RuntimeConfigTest, RejectsOutOfRangeS3RetryBudget) {
         EnvironmentScope environment(RuntimeEnvironmentNames());
         EnvironmentScope::Set("DISK_S3_MAX_RETRIES", "11");
-        auto config = BaseConfig();
 
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            LoadRuntimeConfig(BaseConfig()),
             std::runtime_error
         );
     }
@@ -322,42 +336,40 @@ namespace {
     TEST(RuntimeConfigTest, RejectsOutOfRangeS3Capacity) {
         EnvironmentScope environment(RuntimeEnvironmentNames());
         EnvironmentScope::Set("DISK_S3_MAX_CONNECTIONS", "257");
-        auto config = BaseConfig();
 
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            LoadRuntimeConfig(BaseConfig()),
             std::runtime_error
         );
     }
 
     TEST(RuntimeConfigTest, RejectsInvalidBooleanAndEmptyOverride) {
         EnvironmentScope environment(RuntimeEnvironmentNames());
-        auto config = BaseConfig();
 
         EnvironmentScope::Set("DISK_S3_USE_SSL", "yes");
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            LoadRuntimeConfig(BaseConfig()),
             std::runtime_error
         );
 
         EnvironmentScope::Set("DISK_S3_USE_SSL", "true");
         EnvironmentScope::Set("DISK_WORKER_CLAIMING_ENABLED", "disabled");
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            LoadRuntimeConfig(BaseConfig()),
             std::runtime_error
         );
 
         EnvironmentScope::Set("DISK_WORKER_CLAIMING_ENABLED", "true");
         EnvironmentScope::Set("DISK_UPLOAD_TASK_CREATION_ENABLED", "disabled");
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            LoadRuntimeConfig(BaseConfig()),
             std::runtime_error
         );
 
         EnvironmentScope::Set("DISK_UPLOAD_TASK_CREATION_ENABLED", "true");
         EnvironmentScope::Set("DATABASE_HOST", "");
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            LoadRuntimeConfig(BaseConfig()),
             std::runtime_error
         );
     }
@@ -365,11 +377,12 @@ namespace {
     TEST(RuntimeConfigTest, RequiresTargetSectionOnlyWhenItsOverrideIsPresent) {
         EnvironmentScope environment(RuntimeEnvironmentNames());
         Json::Value config(Json::objectValue);
-        EXPECT_NO_THROW(disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config));
+        config["db_clients"][0]["name"] = "default";
+        EXPECT_NO_THROW(static_cast<void>(LoadRuntimeConfig(config)));
 
         EnvironmentScope::Set("REDIS_HOST", "redis");
         EXPECT_THROW(
-            disk::utils::RuntimeConfig::ApplyEnvironmentOverrides(config),
+            LoadRuntimeConfig(config),
             std::runtime_error
         );
     }

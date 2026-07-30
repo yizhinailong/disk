@@ -134,6 +134,135 @@ namespace disk::utils {
             return config;
         }
 
+        auto ValidateDatabaseRouting(const Json::Value& config) -> void {
+            constexpr auto ERROR_MESSAGE =
+                "Database routing configuration must contain exactly one client object named default";
+
+            if (!config.isObject()) {
+                throw std::runtime_error(ERROR_MESSAGE);
+            }
+
+            const auto& clients = config["db_clients"];
+            if (!clients.isArray() || clients.size() != 1 || !clients[0].isObject()) {
+                throw std::runtime_error(ERROR_MESSAGE);
+            }
+
+            const auto& name = clients[0]["name"];
+            if (!name.isString() || name.asString() != "default") {
+                throw std::runtime_error(ERROR_MESSAGE);
+            }
+        }
+
+        auto ApplyEnvironmentOverrides(Json::Value& config) -> void {
+            if (!config.isObject()) {
+                throw std::runtime_error("Runtime configuration root must be an object");
+            }
+
+            ApplyString("DISK_LISTEN_ADDRESS", [&config](std::string value) {
+                FirstObject(config, "listeners")["address"] = std::move(value);
+            });
+            ApplyInteger("DISK_LISTEN_PORT", 1, 65535, [&config](Json::Int64 value) {
+                FirstObject(config, "listeners")["port"] = value;
+            });
+
+            ApplyString("DATABASE_HOST", [&config](std::string value) {
+                FirstObject(config, "db_clients")["host"] = std::move(value);
+            });
+            ApplyInteger("DATABASE_PORT", 1, 65535, [&config](Json::Int64 value) {
+                FirstObject(config, "db_clients")["port"] = value;
+            });
+            ApplyString("DATABASE_NAME", [&config](std::string value) {
+                FirstObject(config, "db_clients")["dbname"] = std::move(value);
+            });
+            ApplyString("DATABASE_USER", [&config](std::string value) {
+                FirstObject(config, "db_clients")["user"] = std::move(value);
+            });
+            ApplyString("DATABASE_PASSWORD", [&config](std::string value) {
+                FirstObject(config, "db_clients")["passwd"] = std::move(value);
+            });
+            ApplyInteger("DATABASE_POOL_SIZE", 1, 1024, [&config](Json::Int64 value) {
+                FirstObject(config, "db_clients")["connection_number"] = value;
+            });
+
+            ApplyString("REDIS_HOST", [&config](std::string value) {
+                FirstObject(config, "redis_clients")["host"] = std::move(value);
+            });
+            ApplyInteger("REDIS_PORT", 1, 65535, [&config](Json::Int64 value) {
+                FirstObject(config, "redis_clients")["port"] = value;
+            });
+            ApplyInteger("REDIS_DB", 0, 255, [&config](Json::Int64 value) {
+                FirstObject(config, "redis_clients")["db"] = value;
+            });
+            ApplyString("REDIS_PASSWORD", [&config](std::string value) {
+                FirstObject(config, "redis_clients")["passwd"] = std::move(value);
+            });
+            ApplyInteger("REDIS_POOL_SIZE", 1, 1024, [&config](Json::Int64 value) {
+                FirstObject(config, "redis_clients")["number_of_connections"] = value;
+            });
+
+            ApplyString("DISK_PROCESS_ROLE", [&config](std::string value) {
+                DiskConfig(config)["process_role"] = std::move(value);
+            });
+            ApplyString("DISK_INSTANCE_ID", [&config](std::string value) {
+                DiskConfig(config)["instance_id"] = std::move(value);
+            });
+            ApplyBoolean("DISK_WORKER_CLAIMING_ENABLED", [&config](bool value) {
+                DiskConfig(config)["worker_claiming_enabled"] = value;
+            });
+            ApplyString("DISK_STORAGE_BACKEND", [&config](std::string value) {
+                DiskConfig(config)["storage_backend"] = std::move(value);
+            });
+            ApplyString("DISK_UPLOAD_STAGING_BACKEND", [&config](std::string value) {
+                DiskConfig(config)["upload_staging_backend"] = std::move(value);
+            });
+            ApplyBoolean("DISK_UPLOAD_TASK_CREATION_ENABLED", [&config](bool value) {
+                DiskConfig(config)["upload_task_creation_enabled"] = value;
+            });
+
+            ApplyString("DISK_S3_BUCKET", [&config](std::string value) {
+                DiskConfig(config)["s3"]["bucket"] = std::move(value);
+            });
+            ApplyString("DISK_S3_REGION", [&config](std::string value) {
+                DiskConfig(config)["s3"]["region"] = std::move(value);
+            });
+            ApplyString("DISK_S3_ENDPOINT", [&config](std::string value) {
+                DiskConfig(config)["s3"]["endpoint"] = std::move(value);
+            });
+            ApplyBoolean("DISK_S3_USE_SSL", [&config](bool value) {
+                DiskConfig(config)["s3"]["use_ssl"] = value;
+            });
+            ApplyBoolean("DISK_S3_FORCE_PATH_STYLE", [&config](bool value) {
+                DiskConfig(config)["s3"]["force_path_style"] = value;
+            });
+            ApplyBoolean("DISK_S3_VERIFY_SSL", [&config](bool value) {
+                DiskConfig(config)["s3"]["verify_ssl"] = value;
+            });
+            ApplyString("DISK_S3_OBJECT_PREFIX", [&config](std::string value) {
+                DiskConfig(config)["s3"]["object_prefix"] = std::move(value);
+            });
+            ApplyString("DISK_S3_STAGING_PREFIX", [&config](std::string value) {
+                DiskConfig(config)["s3"]["staging_prefix"] = std::move(value);
+            });
+            ApplyInteger("DISK_S3_MAX_CONNECTIONS", 1, 256, [&config](Json::Int64 value) {
+                DiskConfig(config)["s3"]["max_connections"] = value;
+            });
+            ApplyInteger("DISK_S3_IO_THREADS", 1, 64, [&config](Json::Int64 value) {
+                DiskConfig(config)["s3"]["io_threads"] = value;
+            });
+            ApplyInteger("DISK_S3_CONNECT_TIMEOUT_MS", 100, 60000, [&config](Json::Int64 value) {
+                DiskConfig(config)["s3"]["connect_timeout_ms"] = value;
+            });
+            ApplyInteger("DISK_S3_REQUEST_TIMEOUT_MS", 1000, 3600000, [&config](Json::Int64 value) {
+                DiskConfig(config)["s3"]["request_timeout_ms"] = value;
+            });
+            ApplyInteger("DISK_S3_MAX_RETRIES", 0, 10, [&config](Json::Int64 value) {
+                DiskConfig(config)["s3"]["max_retries"] = value;
+            });
+            ApplyInteger("DISK_S3_RETRY_BASE_DELAY_MS", 1, 60000, [&config](Json::Int64 value) {
+                DiskConfig(config)["s3"]["retry_base_delay_ms"] = value;
+            });
+        }
+
     } // namespace
 
     auto RuntimeConfig::LoadFromEnvironment() -> Json::Value {
@@ -142,135 +271,6 @@ namespace disk::utils {
         ValidateDatabaseRouting(config);
         ApplyEnvironmentOverrides(config);
         return config;
-    }
-
-    auto RuntimeConfig::ValidateDatabaseRouting(const Json::Value& config) -> void {
-        constexpr auto ERROR_MESSAGE =
-            "Database routing configuration must contain exactly one client object named default";
-
-        if (!config.isObject()) {
-            throw std::runtime_error(ERROR_MESSAGE);
-        }
-
-        const auto& clients = config["db_clients"];
-        if (!clients.isArray() || clients.size() != 1 || !clients[0].isObject()) {
-            throw std::runtime_error(ERROR_MESSAGE);
-        }
-
-        const auto& name = clients[0]["name"];
-        if (!name.isString() || name.asString() != "default") {
-            throw std::runtime_error(ERROR_MESSAGE);
-        }
-    }
-
-    auto RuntimeConfig::ApplyEnvironmentOverrides(Json::Value& config) -> void {
-        if (!config.isObject()) {
-            throw std::runtime_error("Runtime configuration root must be an object");
-        }
-
-        ApplyString("DISK_LISTEN_ADDRESS", [&config](std::string value) {
-            FirstObject(config, "listeners")["address"] = std::move(value);
-        });
-        ApplyInteger("DISK_LISTEN_PORT", 1, 65535, [&config](Json::Int64 value) {
-            FirstObject(config, "listeners")["port"] = value;
-        });
-
-        ApplyString("DATABASE_HOST", [&config](std::string value) {
-            FirstObject(config, "db_clients")["host"] = std::move(value);
-        });
-        ApplyInteger("DATABASE_PORT", 1, 65535, [&config](Json::Int64 value) {
-            FirstObject(config, "db_clients")["port"] = value;
-        });
-        ApplyString("DATABASE_NAME", [&config](std::string value) {
-            FirstObject(config, "db_clients")["dbname"] = std::move(value);
-        });
-        ApplyString("DATABASE_USER", [&config](std::string value) {
-            FirstObject(config, "db_clients")["user"] = std::move(value);
-        });
-        ApplyString("DATABASE_PASSWORD", [&config](std::string value) {
-            FirstObject(config, "db_clients")["passwd"] = std::move(value);
-        });
-        ApplyInteger("DATABASE_POOL_SIZE", 1, 1024, [&config](Json::Int64 value) {
-            FirstObject(config, "db_clients")["connection_number"] = value;
-        });
-
-        ApplyString("REDIS_HOST", [&config](std::string value) {
-            FirstObject(config, "redis_clients")["host"] = std::move(value);
-        });
-        ApplyInteger("REDIS_PORT", 1, 65535, [&config](Json::Int64 value) {
-            FirstObject(config, "redis_clients")["port"] = value;
-        });
-        ApplyInteger("REDIS_DB", 0, 255, [&config](Json::Int64 value) {
-            FirstObject(config, "redis_clients")["db"] = value;
-        });
-        ApplyString("REDIS_PASSWORD", [&config](std::string value) {
-            FirstObject(config, "redis_clients")["passwd"] = std::move(value);
-        });
-        ApplyInteger("REDIS_POOL_SIZE", 1, 1024, [&config](Json::Int64 value) {
-            FirstObject(config, "redis_clients")["number_of_connections"] = value;
-        });
-
-        ApplyString("DISK_PROCESS_ROLE", [&config](std::string value) {
-            DiskConfig(config)["process_role"] = std::move(value);
-        });
-        ApplyString("DISK_INSTANCE_ID", [&config](std::string value) {
-            DiskConfig(config)["instance_id"] = std::move(value);
-        });
-        ApplyBoolean("DISK_WORKER_CLAIMING_ENABLED", [&config](bool value) {
-            DiskConfig(config)["worker_claiming_enabled"] = value;
-        });
-        ApplyString("DISK_STORAGE_BACKEND", [&config](std::string value) {
-            DiskConfig(config)["storage_backend"] = std::move(value);
-        });
-        ApplyString("DISK_UPLOAD_STAGING_BACKEND", [&config](std::string value) {
-            DiskConfig(config)["upload_staging_backend"] = std::move(value);
-        });
-        ApplyBoolean("DISK_UPLOAD_TASK_CREATION_ENABLED", [&config](bool value) {
-            DiskConfig(config)["upload_task_creation_enabled"] = value;
-        });
-
-        ApplyString("DISK_S3_BUCKET", [&config](std::string value) {
-            DiskConfig(config)["s3"]["bucket"] = std::move(value);
-        });
-        ApplyString("DISK_S3_REGION", [&config](std::string value) {
-            DiskConfig(config)["s3"]["region"] = std::move(value);
-        });
-        ApplyString("DISK_S3_ENDPOINT", [&config](std::string value) {
-            DiskConfig(config)["s3"]["endpoint"] = std::move(value);
-        });
-        ApplyBoolean("DISK_S3_USE_SSL", [&config](bool value) {
-            DiskConfig(config)["s3"]["use_ssl"] = value;
-        });
-        ApplyBoolean("DISK_S3_FORCE_PATH_STYLE", [&config](bool value) {
-            DiskConfig(config)["s3"]["force_path_style"] = value;
-        });
-        ApplyBoolean("DISK_S3_VERIFY_SSL", [&config](bool value) {
-            DiskConfig(config)["s3"]["verify_ssl"] = value;
-        });
-        ApplyString("DISK_S3_OBJECT_PREFIX", [&config](std::string value) {
-            DiskConfig(config)["s3"]["object_prefix"] = std::move(value);
-        });
-        ApplyString("DISK_S3_STAGING_PREFIX", [&config](std::string value) {
-            DiskConfig(config)["s3"]["staging_prefix"] = std::move(value);
-        });
-        ApplyInteger("DISK_S3_MAX_CONNECTIONS", 1, 256, [&config](Json::Int64 value) {
-            DiskConfig(config)["s3"]["max_connections"] = value;
-        });
-        ApplyInteger("DISK_S3_IO_THREADS", 1, 64, [&config](Json::Int64 value) {
-            DiskConfig(config)["s3"]["io_threads"] = value;
-        });
-        ApplyInteger("DISK_S3_CONNECT_TIMEOUT_MS", 100, 60000, [&config](Json::Int64 value) {
-            DiskConfig(config)["s3"]["connect_timeout_ms"] = value;
-        });
-        ApplyInteger("DISK_S3_REQUEST_TIMEOUT_MS", 1000, 3600000, [&config](Json::Int64 value) {
-            DiskConfig(config)["s3"]["request_timeout_ms"] = value;
-        });
-        ApplyInteger("DISK_S3_MAX_RETRIES", 0, 10, [&config](Json::Int64 value) {
-            DiskConfig(config)["s3"]["max_retries"] = value;
-        });
-        ApplyInteger("DISK_S3_RETRY_BASE_DELAY_MS", 1, 60000, [&config](Json::Int64 value) {
-            DiskConfig(config)["s3"]["retry_base_delay_ms"] = value;
-        });
     }
 
 } // namespace disk::utils

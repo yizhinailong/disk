@@ -245,6 +245,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site and object-relocation audit confirms that `RuntimeConfig::LoadFile` is only called by `LoadFromEnvironment` in the same implementation unit
 - **THEN** the public member SHALL be replaced by an implementation-local file loader while path selection, JSON parsing, database routing validation, environment overrides, and startup failure behavior remain unchanged
 
+#### Scenario: Runtime config exposes one complete pipeline
+
+- **WHEN** call-site and object-relocation audits confirm that `RuntimeConfig::ValidateDatabaseRouting` and `RuntimeConfig::ApplyEnvironmentOverrides` have no production consumer outside `LoadFromEnvironment` and are otherwise called only by unit tests
+- **THEN** both stages SHALL become implementation-local, tests SHALL exercise them through temporary files and the composite loader, and `RuntimeConfig` SHALL expose only `LoadFromEnvironment` without changing validation, override, or failure behavior
+
 #### Scenario: Unused token-lifetime config facade is removed
 
 - **WHEN** a whole-repository read/write audit confirms that the `ConfigMgr` access/refresh token lifetime getters and fixed members have no production or test caller and no JSON or environment loading path
