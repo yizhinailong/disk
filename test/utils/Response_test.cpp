@@ -33,8 +33,14 @@ concept HasVoidFromResult = requires(const Result<void>& result) {
     ResponseFactory::FromResult(result);
 };
 
+template <typename ResponseFactory>
+concept HasCustomFail = requires {
+    ResponseFactory::Fail(ErrorCode::InternalError, "failure");
+};
+
 static_assert(!HasValueFromResult<Response>);
 static_assert(!HasVoidFromResult<Response>);
+static_assert(!HasCustomFail<Response>);
 
 TEST(Response, InternalErrorUsesStableEnvelope) {
     auto response = Response::Error(ErrorInfo(ErrorCode::InternalError));

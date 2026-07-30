@@ -53,7 +53,7 @@ Ignore generated/artifact paths: `build/`, `clients/desktop/build/`, `.sisyphus/
 | `RedisService` | singleton | `src/services/RedisService.hpp/.cpp` | Redis wrapper, batch ops, CAS, rate-limit increments |
 | `UploadStagingStorage` / `IBlobStore` | interfaces | `src/storage/` | Upload-session staging and final content Blob boundaries; no HTTP/DB/permission logic |
 | `AssemblyConcurrencyLimiter` | singleton | `src/storage/AssemblyConcurrencyLimiter.hpp` | Identifier-free, process-local upload assembly capacity guard |
-| `Response` | utility | `src/utils/Response.hpp` | Converts `Result<T>` into uniform `{code,message,data}` JSON |
+| `Response` | utility | `src/utils/Response.hpp` | Builds uniform success, error, and paginated `{code,message,data}` JSON envelopes |
 | `Application` | Qt bridge | `clients/desktop/src/app/Application.*` | Owns/injects managers into QML context and wires auth/session signals |
 | `RequestFactory` | desktop network | `clients/desktop/src/network/RequestFactory.hpp` | Auth-domain-aware headers; owner and visitor tokens never mix |
 

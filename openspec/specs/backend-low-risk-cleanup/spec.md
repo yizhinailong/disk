@@ -205,6 +205,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository audit confirms that both `Response::FromResult` overloads have no production caller and only the void overload is exercised by dedicated unit tests while controllers explicitly select success, pagination, or error responses at the HTTP boundary
 - **THEN** the unused adapters and dedicated tests SHALL be removed while active success, pagination, error, and startup-failure response builders retain their existing envelope and status behavior
 
+#### Scenario: Single-use custom-error response alias is removed
+
+- **WHEN** a whole-repository and compiled-object audit confirms that `Response::Fail` only forwards to `Response::Error(ErrorInfo(code, message))` and has exactly one production caller in the process-drain rejection path
+- **THEN** that caller SHALL use the canonical `ErrorInfo` path and the alias SHALL be removed while the custom message, uniform error envelope, HTTP 503 override, `Retry-After` header, and process-drain behavior retain direct regression contracts
+
 #### Scenario: Unused Redis batch-command surface is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller

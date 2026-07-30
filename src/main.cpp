@@ -48,10 +48,10 @@ namespace {
     };
 
     [[nodiscard]] auto BuildServiceUnavailableResponse() -> drogon::HttpResponsePtr {
-        auto response = disk::Response::Fail(
+        auto response = disk::Response::Error(ErrorInfo(
             ErrorCode::InternalError,
             "Service is not accepting new requests"
-        );
+        ));
         response->setStatusCode(drogon::k503ServiceUnavailable);
         response->addHeader("Retry-After", "1");
         return response;

@@ -9,8 +9,6 @@
 
 #pragma once
 
-#include <string>
-
 #include <drogon/HttpResponse.h>
 #include <json/json.h>
 
@@ -128,18 +126,6 @@ namespace disk {
         [[nodiscard]]
         static auto Error(ErrorCode code) -> drogon::HttpResponsePtr {
             return Error(ErrorInfo(code));
-        }
-
-        /// 错误响应（错误码 + 自定义消息）
-        /**
-         * @brief 失败响应
-         * @param code 错误码
-         * @param message 错误消息
-         * @return drogon::HttpResponsePtr 失败HTTP响应对象
-         */
-        [[nodiscard]]
-        static auto Fail(ErrorCode code, const std::string& message) -> drogon::HttpResponsePtr {
-            return Error(ErrorInfo(code, message));
         }
     };
 } // namespace disk

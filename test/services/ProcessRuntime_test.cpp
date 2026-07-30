@@ -58,6 +58,26 @@ namespace disk::runtime {
             return count;
         }
 
+        TEST(ProcessDrainResponseContractTest, UsesCanonicalErrorBuilderAndStableRetryEnvelope) {
+            const auto source = ReadSourceFile("src/main.cpp");
+            const auto response_begin = source.find("auto BuildServiceUnavailableResponse()");
+            const auto response_end = source.find("auto RegisterRequestLifecycle(", response_begin);
+
+            ASSERT_NE(response_begin, std::string::npos);
+            ASSERT_NE(response_end, std::string::npos);
+            const auto response_source =
+                source.substr(response_begin, response_end - response_begin);
+
+            EXPECT_TRUE(Contains(response_source, "disk::Response::Error(ErrorInfo("));
+            EXPECT_TRUE(Contains(
+                response_source,
+                "\"Service is not accepting new requests\""
+            ));
+            EXPECT_TRUE(Contains(response_source, "drogon::k503ServiceUnavailable"));
+            EXPECT_TRUE(Contains(response_source, "addHeader(\"Retry-After\", \"1\")"));
+            EXPECT_FALSE(Contains(response_source, "Response::Fail("));
+        }
+
         TEST(ProcessDrainLogContextContractTest, UsesTypedProcessCorrelationWithoutOwnership) {
             const auto source = ReadSourceFile("src/main.cpp");
             const auto shutdown_begin = source.find("auto BeginShutdown(");

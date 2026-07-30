@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，单项文件夹删除计划死路径清理）：全仓库精确调用点与已编译对象重定位审计确认 `disk::file::utils::FetchFolderDeletePlan` 只转发到 `FolderRepository::FetchFolderDeletePlan`，仓储方法没有其他消费者；两层入口已删除，`FolderRepository` 收敛为 12 个活跃显式 client 原语，`FetchFolderSubtree` 与 FileMutation/Trash 的三条 `FetchBatchFolderDeletePlans` 路径保留。完整构建、相邻仓储聚焦 GoogleTest 6/6、文件变更/文件夹/回收站/内容配额/嵌套移动真实集成 5/5 和 OpenSpec 24/24 通过；首次完整回归发现并修正 `FileRepositorySignatureContractTest` 的旧构造次数，第二轮完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 508.06 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；递归用户谓词、批量覆盖消重、事务连接、回收站快照、配额/ref_count、REST 响应、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，单用途失败响应别名清理）：全仓库精确符号、调用点与已编译对象审计确认 `Response::Fail()` 只由 `main.cpp` 的进程排空拒绝路径调用，且只包装 `Response::Error(ErrorInfo(code, message))`；唯一调用点已改为规范错误构造，该公开别名与不再需要的 include 已删除。编译期否定合同拒绝旧入口回归，排空源码合同正向锁定自定义消息、HTTP 503 与 `Retry-After: 1`。完整构建、Response/ProcessRuntime/HealthService/Worker drain 接管/分布式拓扑聚焦 CTest 23/23 和 OpenSpec 24/24 通过；完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 504.14 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；统一 JSON 信封、业务码、请求计数、优雅退出、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1824,6 +1824,14 @@ API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享�
 utility 转发与仓储单项方法已一并删除，`FolderRepository` 从 13 个原语收敛为 12 个活跃显式 client 原语。`FolderRepository_test.cpp` 通过 C++23 concept 与源码否定合同拒绝两层旧入口回归，并正向锁定单项子树读取、三条批量计划调用、无状态仓储及连接所有权；相邻 `FileRepository_test.cpp` 同步把仓储内默认构造点从 2 调整为 1。递归用户谓词、批量覆盖消重、事务连接、回收站快照、配额/ref_count、REST 响应、schema 和迁移兼容合同未改变。
 
 完整构建、相邻仓储聚焦 GoogleTest 6/6、`FileMutationOpsIntegration`/`FolderLifecycleIntegration`/`TrashLifecycleIntegration`/`SafetyContentQuotaIntegration`/`SafetyMoveCopyPathIntegration` 5/5 和 OpenSpec 24/24 通过。首次完整 CTest 的唯一失败是相邻文件仓储源码合同仍锁定已删除路径带来的第二个默认构造点；计数同步并定向复验后，第二轮完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 508.06 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.64 单用途失败响应别名清理记录（2026-07-31）
+
+系统测试、单元测试和 OpenSpec 先行固定进程排空拒绝响应边界。全仓库精确符号、调用点和已编译对象审计确认 `Response::Fail()` 只在 `main.cpp` 的 `BuildServiceUnavailableResponse()` 中调用，只包装 `Response::Error(ErrorInfo(code, message))`，没有其他生产、测试、工具、客户端或迁移消费者；测试二进制也没有该符号。
+
+唯一调用点已改为显式调用 `Response::Error(ErrorInfo(...))`，单用途公开别名与不再需要的 `<string>` include 已删除。`Response_test.cpp` 以 C++23 concept 拒绝旧入口回归，`ProcessRuntime_test.cpp` 正向锁定规范错误构造、`Service is not accepting new requests`、HTTP 503 与 `Retry-After: 1`。统一 JSON 错误信封、`10001` 业务码、请求计数、排空准入、readiness、优雅退出、schema、迁移与 REST 合同未改变。
+
+完整构建、Response/ProcessRuntime/HealthService/Worker drain 接管/分布式拓扑聚焦 CTest 23/23 和 OpenSpec 24/24 通过。重建后的后端可执行文件不再包含 `Response::Fail` 符号；完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 504.14 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 
