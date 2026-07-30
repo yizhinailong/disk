@@ -4109,7 +4109,7 @@ Share Token（通过 `/api/share/access` 获取）需要以下安全措施：
 
 分享令牌签发返回自包含 JWT，不向 Redis 写入 `share_token:{share_code}:{token_hash}` allowlist，验证也不依赖该 namespace。这与可选的单 token blacklist 是两个不同概念，不得为死 allowlist builder 创造或保留 Redis 状态。
 
-取消分享采用分享记录状态撤销语义：取消操作把 `shares.status` 更新为 cancelled 后，所有已签发 token 在下一次访客操作的数据库状态检查中立即失效，不要求枚举 token，也不要求把每个 token hash 写入 Redis。Redis `share_token_blacklist:{token_hash}` 仅用于撤销某一个具体 token，不能替代业务路径的实时分享状态检查。
+取消分享采用分享记录状态撤销语义：取消操作把 `shares.status` 更新为 cancelled 后，所有已签发 token 在下一次访客操作的数据库状态检查中立即失效，不要求枚举 token，也不要求把每个 token hash 写入 Redis。Redis `share_token_blacklist:{token_hash}` 仅表示某一个具体 token 已撤销，不能替代业务路径的实时分享状态检查；当前 HTTP/Service 业务路径不暴露按原始 token 写入该键的通用命令，过滤器只消费受信运维或兼容流程已经持久化的精确 hash 状态。删除无调用方的 `TokenService::RevokeShareToken` 不得删除该读取契约、正缓存或 fail-closed 行为。
 
 **撤销响应语义**：
 

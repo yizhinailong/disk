@@ -142,8 +142,10 @@ namespace disk::services {
             EXPECT_TRUE(Contains(source, "[this]() { LogPoolMetrics(); }"));
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                13U
+                12U
             );
+            EXPECT_FALSE(Contains(header, "auto RevokeShareToken("));
+            EXPECT_FALSE(Contains(source, "TokenService::RevokeShareToken("));
             EXPECT_EQ(CountOccurrences(source, "Logger::Debug(log_context)"), 4U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Info(log_context)"), 2U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Trace(log_context)"), 2U);
@@ -240,7 +242,11 @@ namespace disk::services {
             EXPECT_TRUE(Contains(source, "IsShareTokenRevoked(hash_result.value(), log_context)"));
             EXPECT_TRUE(Contains(source, "REFRESH_TOKEN_TTL, log_context"));
             EXPECT_TRUE(Contains(source, "ACCESS_TOKEN_TTL, log_context"));
-            EXPECT_TRUE(Contains(source, "SHARE_TOKEN_TTL, log_context"));
+            EXPECT_FALSE(Contains(source, "SHARE_TOKEN_TTL, log_context"));
+            EXPECT_TRUE(Contains(
+                source,
+                "RedisKeyPrefix::BuildShareTokenBlacklistKey(token_hash)"
+            ));
             EXPECT_TRUE(Contains(source, "m_redis_service->Delete(key, log_context)"));
             EXPECT_EQ(CountOccurrences(source, "m_redis_service->Exists(key, log_context)"), 2U);
 

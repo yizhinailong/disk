@@ -127,13 +127,22 @@ namespace {
             return request;
         }
 
-        auto TrackRevocationKey(const std::string& token) -> void {
+        auto SeedRevocationKey(const std::string& token) -> void {
             auto hash_result = TokenService::ExtractShareTokenHash(token);
             ASSERT_TRUE(hash_result.has_value());
 
-            m_cleanup_keys.push_back(
-                disk::redis::RedisKeyPrefix::BuildShareTokenBlacklistKey(hash_result.value())
+            const auto key =
+                disk::redis::RedisKeyPrefix::BuildShareTokenBlacklistKey(hash_result.value());
+            m_cleanup_keys.push_back(key);
+
+            auto set_result = drogon::sync_wait(
+                m_redis_service->Set(
+                    key,
+                    "1",
+                    TokenService::GetShareTokenExpireSeconds()
+                )
             );
+            ASSERT_TRUE(set_result.has_value());
         }
 
         inline static drogon::nosql::RedisClientPtr s_redis_client;
@@ -262,10 +271,8 @@ namespace {
         );
         ASSERT_TRUE(token_result.has_value());
 
-        auto revoke_result = drogon::sync_wait(m_token_service->RevokeShareToken(token_result.value()));
-        ASSERT_TRUE(revoke_result.has_value());
-        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
-        TrackRevocationKey(token_result.value());
+        SeedRevocationKey(token_result.value());
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 0u);
 
         auto request = BuildShareRequestWithToken(token_result.value());
         auto response = drogon::sync_wait(m_filter->doFilter(request));
@@ -277,6 +284,7 @@ namespace {
         EXPECT_EQ((*json)["code"].asUInt(), static_cast<Json::UInt>(Code::TokenRevoked));
         EXPECT_EQ((*json)["message"].asString(), "Token revoked");
         EXPECT_FALSE(request->attributes()->find(ShareAuthFilter::SHARE_TOKEN_JTI_ATTRIBUTE));
+        EXPECT_EQ(m_token_service->GetShareRevocationCacheSizeForTest(), 1u);
     }
 
     TEST_F(ShareAuthFilterRuntimeTest, FilterValidTokenSetsRequestAttributes) {

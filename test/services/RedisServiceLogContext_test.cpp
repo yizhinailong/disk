@@ -192,7 +192,8 @@ namespace disk::services {
             }
             EXPECT_FALSE(Contains(source, "<< ex.what()"));
 
-            EXPECT_TRUE(EveryCallContainsContext(token, "m_redis_service->Set(", 3U));
+            EXPECT_TRUE(EveryCallContainsContext(token, "m_redis_service->Set(", 2U));
+            EXPECT_FALSE(Contains(token, "TokenService::RevokeShareToken("));
             EXPECT_TRUE(EveryCallContainsContext(token, "m_redis_service->CompareAndSwap(", 1U));
             EXPECT_TRUE(EveryCallContainsContext(token, "m_redis_service->Delete(", 1U));
             EXPECT_TRUE(EveryCallContainsContext(token, "m_redis_service->Exists(", 2U));

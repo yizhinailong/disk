@@ -344,18 +344,6 @@ namespace disk::services {
             -> drogon::Task<Result<ShareTokenClaims>>;
 
         /**
-         * @brief 撤销分享令牌
-         *
-         * @param token 分享令牌
-         * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
-         */
-        [[nodiscard]]
-        auto RevokeShareToken(
-            const std::string& token,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<void>>;
-
-        /**
          * @brief 检查分享令牌是否已被撤销
          *
          * 优先检查本地已撤销正缓存，缓存未命中时查询共享 Redis。

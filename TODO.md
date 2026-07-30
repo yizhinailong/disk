@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-30，Redis 独立变更死接口清理）：权威文档与 OpenSpec 先行将共享 `RedisService` 收缩为 8 个有生产调用的 API 和 13 条命令事件。全仓库调用审计确认 `Expire`、`IncrBy` 和 `TtlType` 只存在于直接服务测试，没有生产、集成、工具、客户端或迁移消费者，因此已删除；TTL 继续只由 `Set`、`CompareAndSwap` 和 `IncrWithExpire` 原子管理，文件列表世代继续只使用 `Incr`。完整构建、Redis 聚焦 GoogleTest 14/14、Redis 命名 CTest 22/22 和 OpenSpec 24/24 通过；完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 533.89 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。此前已验证的隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-30，分享令牌撤销死写入口清理）：权威 API、部署、系统/单元测试文档与 OpenSpec 先行固定边界。全仓库调用审计确认 `TokenService::RevokeShareToken` 没有生产、集成、工具、客户端或迁移消费者，仅被过滤器单测用来造状态，因此已删除；测试改为直接预置精确 Redis blacklist hash，并证明过滤器从空本地缓存读取撤销状态、返回 `40111` 后写入正缓存。单 token blacklist 读取、Redis 故障 fail-closed、数据库分享状态复查和会话安全键持久化不变。完整构建、相关 GoogleTest/CTest 47/47 和 OpenSpec 24/24 通过；完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 507.15 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。此前已验证的隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1736,6 +1736,14 @@ Compose 容器、网络、数据卷、失败构建容器、测试密钥文件、
 三个无调用表面及其命令实现已删除。`RedisService_test.cpp` 通过编译期 concept 拒绝独立过期和任意步长计数回归；`RedisServiceLogContext_test.cpp` 同时拒绝旧类型、声明与实现，并锁定 8 个活跃 API 和 13 条命令事件。`Set` 继续原子写值并设置 TTL，`Incr` 继续维护文件列表世代，`CompareAndSwap` 继续旋转 refresh token，`IncrWithExpire` 继续原子管理固定窗口；上层故障策略、指标、`Result` 错误与公开 API 不变。
 
 完整构建、Redis 聚焦 GoogleTest 14/14、Redis 命名 CTest 22/22 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 533.89 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。Phase 10 过渡字段/配置/分支总清理项在兼容路径退役和目标环境门禁完成前继续保持未勾选。
+
+### 15.53 分享令牌撤销死写入口清理记录（2026-07-30）
+
+API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享撤销的读写边界。全仓库精确符号与调用点审计确认 `TokenService::RevokeShareToken` 没有生产、集成、工具、客户端或迁移消费者，仅由 `ShareAuthFilter_test.cpp` 直接调用；`VerifyShareTokenWithRedis`、`IsShareTokenRevoked`、`share_token_blacklist:{token_hash}` builder、正缓存、集成测试的精确 Redis 预置、取消后的数据库实时状态复查和安全键持久化合同仍有活跃消费者。
+
+无调用的公开写入口及其实现已删除。撤销过滤器用例改为计算签发 token 的精确 hash 并通过 RedisService 原子写入 TTL 键，先证明本地缓存为空，再证明真实过滤器返回 HTTP 401/`40111 TokenRevoked` 并把正缓存更新为 1。TokenService 与 RedisService 源码合同共同拒绝旧方法回归，并把有生产调用的 TokenService Redis `Set` 计数从 3 收缩为 2；分享 JWT、scope、blacklist 读取、Redis 故障 fail-closed、数据库分享状态和公开响应不变。
+
+完整构建、相关 GoogleTest 47/47、同名 CTest 47/47 和 OpenSpec 24/24 通过。首轮完整回归唯一失败是 Redis 源码合同仍保留旧的 3 次 `Set` 计数；修正为 2 后定向 1/1 通过，第二轮完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 507.15 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。Phase 10 过渡字段/配置/分支总清理项在兼容路径退役和目标环境门禁完成前继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

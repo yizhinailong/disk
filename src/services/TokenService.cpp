@@ -699,28 +699,6 @@ namespace disk::services {
         co_return verify_result.value();
     }
 
-    auto TokenService::RevokeShareToken(
-        const std::string& token,
-        disk::utils::LogContext log_context
-    ) -> drogon::Task<Result<void>> {
-        auto hash_result = ExtractShareTokenHash(token);
-        if (!hash_result) {
-            co_return std::unexpected(hash_result.error());
-        }
-
-        const auto key =
-            disk::redis::RedisKeyPrefix::BuildShareTokenBlacklistKey(hash_result.value());
-        auto result = co_await m_redis_service->Set(key, "1", SHARE_TOKEN_TTL, log_context);
-        if (!result) {
-            co_return std::unexpected(result.error());
-        }
-
-        const auto now = std::chrono::steady_clock::now();
-        std::unique_lock lock(m_share_cache_mutex);
-        m_share_revocation_cache.Upsert(hash_result.value(), ShareCacheEntry{ .expires_at = now + std::chrono::seconds(GetShareTokenExpireSeconds()) });
-        co_return {};
-    }
-
     auto TokenService::IsShareTokenRevoked(
         const std::string& token_hash,
         disk::utils::LogContext log_context
