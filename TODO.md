@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-30，Access 撤销缓存死探针清理）：单元测试文档与 OpenSpec 先行固定边界。全仓库调用审计确认 `TokenService::IsRevocationCacheEntryRevokedForTest` 只被同一用例中的两条断言调用，且分别重复相邻的零/一条目缓存大小断言，因此已从生产头文件和实现中删除；重复断言一并移除，源码合同拒绝该测试探针回归。缓存写入/删除、过期、Redis 撤销读取和 access token 拒绝覆盖保持不变。完整构建、相关 GoogleTest/CTest 34/34、认证集成测试 3/3 和 OpenSpec 24/24 通过；完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 501.98 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。此前已验证的隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-30，分享状态测试专用转换器清理）：单元测试文档与 OpenSpec 先行固定边界。全仓库调用审计确认 `ShareStatusToString` 只有一个内联定义和 DTO/Service 测试中两组完全重复的三枚举断言，没有生产、集成、工具、客户端或迁移消费者，因此已删除转换器与六条专属断言，源码合同拒绝旧符号回归。活跃 `ShareStatus` 数值、列表 status 参数校验、数据库状态判断和 DTO 直接序列化的 status 字符串保持不变。完整构建、Share GoogleTest 266/266、Share CTest 272/272 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 505.04 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。此前已验证的隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1752,6 +1752,14 @@ API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享�
 冗余测试专用成员探针及两条重复断言已删除，零/一条目缓存状态断言保留；`TokenServiceLogContext_test.cpp` 的源码合同同时拒绝旧声明与实现回归。撤销缓存的插入、删除、到期语义、Redis 支持的跨实例判定和公开认证响应没有变化。
 
 完整构建、相关 GoogleTest 34/34、同名 CTest 34/34、`AuthClusterConsistencyIntegration`/`RedisSessionPersistenceIntegration`/`AuthLifecycleIntegration` 3/3 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 501.98 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；Phase 3/10 总清理项在兼容路径退役和目标环境门禁完成前继续保持未勾选。
+
+### 15.55 分享状态测试专用转换器清理记录（2026-07-30）
+
+单元测试文档与 OpenSpec 先行固定分享状态 DTO 边界。全仓库精确符号与调用点审计确认 `ShareStatusToString` 只有 `ShareDto.hpp` 中的一个内联定义，以及 `ShareDto_test.cpp`/`ShareService_test.cpp` 中两组完全重复的 active/expired/cancelled 格式断言；没有生产、集成、工具、客户端或迁移消费者。生产仍直接使用 `ShareStatus` 的稳定数值完成 PostgreSQL 状态写入、过滤与授权判断，响应 DTO 直接序列化服务查询得到的既有状态字符串。
+
+无调用转换器与六条只测死代码的断言已删除；`ShareLogContext_test.cpp` 的源码合同拒绝旧符号回归。分享状态枚举、列表参数的 all/active/expired/cancelled 校验、服务状态分支、管理/浏览/访问链路和公开 JSON status 字段均未改变。
+
+完整构建、名称含 Share 的 GoogleTest 266/266、CTest 272/272（含 6 项真实分享集成）和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 505.04 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；Phase 10 过渡字段、配置与迁移分支总清理项在兼容路径退役和目标环境门禁完成前继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

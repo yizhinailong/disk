@@ -84,19 +84,6 @@ namespace disk::share {
         Expired = 2    ///< 已过期
     };
 
-    /**
-     * @brief 分享状态转换为字符串
-     */
-    [[nodiscard]]
-    inline auto ShareStatusToString(ShareStatus status) -> std::string {
-        switch (status) {
-            case ShareStatus::Active   : return "active";
-            case ShareStatus::Expired  : return "expired";
-            case ShareStatus::Cancelled: return "cancelled";
-            default                    : return "unknown";
-        }
-    }
-
     /// ==================== 权限枚举 ====================
 
     /**

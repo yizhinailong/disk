@@ -155,6 +155,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site and built-object audit confirms that the `DtoBase::SetField` overloads for `std::string_view` and `const char*` plus the `DtoBase::SetArray` overloads for `std::vector<uint64_t>` and `std::vector<std::string>` have no production consumer or object-code instantiation
 - **THEN** the four unused overloads and their now-unused include SHALL be removed while source contracts reject their reintroduction and every active scalar, nested-object, optional, nullable, object-array, and `uint32_t`-array response keeps its existing JSON shape
 
+#### Scenario: Test-only share-status formatter is removed
+
+- **WHEN** a whole-repository call-site audit confirms that `ShareStatusToString` is called only by two duplicate sets of enum-formatting assertions while production uses `ShareStatus` for database state decisions and response DTOs serialize their existing status strings directly
+- **THEN** the unused formatter and its six dedicated assertions SHALL be removed while a source contract rejects its reintroduction and active enum values, list-status validation, database state handling, and response JSON status fields retain their existing coverage
+
 #### Scenario: Unused share-token allowlist key is removed
 
 - **WHEN** a whole-repository audit confirms that the `share_token:{share_code}:{token_hash}` prefix and builder are used only by key-format unit tests while share issuance returns a self-contained JWT and production verification uses the optional blacklist plus live database state

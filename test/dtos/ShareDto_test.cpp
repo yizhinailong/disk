@@ -40,8 +40,6 @@ using disk::share::ShareListRequest;
 using disk::share::ShareListResponse;
 using disk::share::SharePermission;
 using disk::share::SharePermissionToString;
-using disk::share::ShareStatus;
-using disk::share::ShareStatusToString;
 using disk::share::StringToSharePermission;
 using disk::share::UpdateShareRequest;
 using disk::share::UpdateShareResponse;
@@ -66,20 +64,6 @@ static auto CreateQueryRequest(const std::map<std::string, std::string>& params)
         req->setParameter(key, value);
     }
     return req;
-}
-
-/// ==================== ShareStatus Tests ====================
-
-TEST(ShareStatus, ToStringActive) {
-    EXPECT_EQ(ShareStatusToString(ShareStatus::Active), "active");
-}
-
-TEST(ShareStatus, ToStringExpired) {
-    EXPECT_EQ(ShareStatusToString(ShareStatus::Expired), "expired");
-}
-
-TEST(ShareStatus, ToStringCancelled) {
-    EXPECT_EQ(ShareStatusToString(ShareStatus::Cancelled), "cancelled");
 }
 
 /// ==================== SharePermission Tests ====================

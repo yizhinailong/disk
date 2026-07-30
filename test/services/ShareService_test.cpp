@@ -343,22 +343,6 @@ namespace disk::share {
             EXPECT_EQ(json["name"].asString(), "Documents");
         }
 
-        /// ==================== Share Status Enum Tests ====================
-
-        class ShareServiceStatusTest : public ::testing::Test {};
-
-        TEST_F(ShareServiceStatusTest, ShareStatusToStringActive) {
-            EXPECT_EQ(ShareStatusToString(ShareStatus::Active), "active");
-        }
-
-        TEST_F(ShareServiceStatusTest, ShareStatusToStringExpired) {
-            EXPECT_EQ(ShareStatusToString(ShareStatus::Expired), "expired");
-        }
-
-        TEST_F(ShareServiceStatusTest, ShareStatusToStringCancelled) {
-            EXPECT_EQ(ShareStatusToString(ShareStatus::Cancelled), "cancelled");
-        }
-
         /// ==================== Share Permission Enum Tests ====================
 
         class ShareServicePermissionTest : public ::testing::Test {};

@@ -129,6 +129,7 @@ namespace disk::share {
             );
             EXPECT_FALSE(Contains(service_header, "auto UpdateTimestamp("));
             EXPECT_FALSE(Contains(service_source, "ShareService::UpdateTimestamp("));
+            EXPECT_FALSE(Contains(dto_source, "ShareStatusToString"));
 
             for (const auto* call_marker : {
                      "co_await ValidateFileOwnership(",
