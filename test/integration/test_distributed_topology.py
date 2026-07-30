@@ -350,6 +350,8 @@ def main() -> int:
         "`workloads/worker/`",
         "`workloads/api/`",
         "numeric UID/GID `10001`",
+        "redis-tls-proxy",
+        "Redis writer DNS failover",
         "Preserve the",
         "expand schema.",
     ):
@@ -375,6 +377,7 @@ def main() -> int:
             "namespace.yaml",
             "service-account.yaml",
             "runtime-config.yaml",
+            "redis-tls-proxy.yaml",
         },
         "migration/kustomization.yaml": {"job.yaml"},
         "workloads/kustomization.yaml": {"worker", "api"},
@@ -409,7 +412,10 @@ def main() -> int:
         "DISK_STORAGE_BACKEND": "s3",
         "DISK_UPLOAD_STAGING_BACKEND": "s3",
         "DATABASE_POOL_SIZE": "8",
+        "REDIS_HOST": "127.0.0.1",
+        "REDIS_PORT": "6379",
         "REDIS_POOL_SIZE": "4",
+        "REDIS_TLS_UPSTREAM_PORT": "6380",
         "DISK_S3_USE_SSL": "true",
         "DISK_S3_VERIFY_SSL": "true",
         "DISK_S3_MAX_CONNECTIONS": "16",
@@ -420,7 +426,8 @@ def main() -> int:
         require(runtime_environment.get(name) == expected, f"Kubernetes {name} drifted")
     for name in (
         "DATABASE_HOST",
-        "REDIS_HOST",
+        "REDIS_TLS_UPSTREAM_HOST",
+        "REDIS_TLS_SERVER_NAME",
         "DISK_S3_BUCKET",
         "DISK_S3_REGION",
         "DISK_S3_ENDPOINT",
@@ -432,12 +439,42 @@ def main() -> int:
     for secret_name in (
         "DATABASE_PASSWORD",
         "REDIS_PASSWORD",
+        "REDIS_CA_CERT",
         "JWT_SECRET",
         "DISK_S3_ACCESS_KEY",
         "DISK_S3_SECRET_KEY",
         "DISK_S3_SESSION_TOKEN",
     ):
         require(secret_name not in runtime_environment, f"secret entered ConfigMap: {secret_name}")
+
+    redis_proxy_resource = kubernetes_documents["platform/redis-tls-proxy.yaml"][0]
+    require(
+        redis_proxy_resource["kind"] == "ConfigMap"
+        and redis_proxy_resource["metadata"]["name"] == "disk-redis-tls-proxy",
+        "Redis TLS proxy config identity drifted",
+    )
+    redis_proxy_config = redis_proxy_resource["data"]["haproxy.cfg"]
+    for marker in (
+        "ssl-default-server-options ssl-min-ver TLSv1.2",
+        "timeout connect 5s",
+        "parse-resolv-conf",
+        "hold valid 10s",
+        "bind 127.0.0.1:6379",
+        "${REDIS_TLS_UPSTREAM_HOST}:${REDIS_TLS_UPSTREAM_PORT}",
+        "ssl verify required",
+        "ca-file /etc/disk/redis-ca/ca.crt",
+        "sni str(${REDIS_TLS_SERVER_NAME})",
+        "verifyhost ${REDIS_TLS_SERVER_NAME}",
+        "check resolvers redis_dns",
+        "init-addr last,libc,none",
+    ):
+        require(marker in redis_proxy_config, f"Redis TLS proxy is missing {marker}")
+    require(
+        "0.0.0.0:6379" not in redis_proxy_config
+        and "REDIS_PASSWORD" not in redis_proxy_config
+        and "verify none" not in redis_proxy_config,
+        "Redis TLS proxy widened loopback or weakened credential/TLS handling",
+    )
 
     service_account = kubernetes_documents["platform/service-account.yaml"][0]
     require(
@@ -569,6 +606,10 @@ def main() -> int:
             "limits": {"cpu": "1", "memory": "1Gi"},
         },
     }
+    expected_proxy_resources = {
+        "requests": {"cpu": "50m", "memory": "32Mi"},
+        "limits": {"cpu": "250m", "memory": "128Mi"},
+    }
 
     def validate_deployment(relative_path: str, role: str) -> None:
         deployment = kubernetes_documents[relative_path][0]
@@ -621,7 +662,12 @@ def main() -> int:
             and spread[0]["whenUnsatisfiable"] == "DoNotSchedule",
             f"{role} failure-domain spread drifted",
         )
-        container = pod["containers"][0]
+        containers = {container["name"]: container for container in pod["containers"]}
+        require(
+            set(containers) == {"disk", "redis-tls-proxy"},
+            f"{role} Pod container inventory drifted",
+        )
+        container = containers["disk"]
         require(
             spec["template"]["metadata"]["annotations"]["prometheus.io/job"]
             == f"disk-{role}",
@@ -697,12 +743,67 @@ def main() -> int:
             == {"runtime-data": "/var/lib/disk", "tmp": "/tmp"},
             f"{role} runtime scratch mounts drifted",
         )
+        proxy = containers["redis-tls-proxy"]
         require(
-            {
-                volume["name"]: set(volume) - {"name"}
-                for volume in pod["volumes"]
+            proxy["image"] == "haproxy:replace-with-reviewed-tag"
+            and proxy["args"]
+            == ["-W", "-db", "-f", "/usr/local/etc/haproxy/haproxy.cfg"],
+            f"{role} Redis TLS proxy image or command drifted",
+        )
+        require(
+            proxy["envFrom"]
+            == [{"configMapRef": {"name": "disk-runtime-config"}}]
+            and "env" not in proxy,
+            f"{role} Redis TLS proxy must receive no Secret environment",
+        )
+        require(
+            proxy["resources"] == expected_proxy_resources,
+            f"{role} Redis TLS proxy resource envelope drifted",
+        )
+        require(
+            proxy["securityContext"]["readOnlyRootFilesystem"] is True
+            and proxy["securityContext"]["allowPrivilegeEscalation"] is False
+            and proxy["securityContext"]["capabilities"]["drop"] == ["ALL"],
+            f"{role} Redis TLS proxy security boundary drifted",
+        )
+        proxy_mounts = {mount["name"]: mount for mount in proxy["volumeMounts"]}
+        require(
+            proxy_mounts
+            == {
+                "redis-tls-proxy-config": {
+                    "name": "redis-tls-proxy-config",
+                    "mountPath": "/usr/local/etc/haproxy/haproxy.cfg",
+                    "subPath": "haproxy.cfg",
+                    "readOnly": True,
+                },
+                "redis-ca": {
+                    "name": "redis-ca",
+                    "mountPath": "/etc/disk/redis-ca",
+                    "readOnly": True,
+                },
+            },
+            f"{role} Redis TLS proxy mounts drifted",
+        )
+        volumes = {volume["name"]: volume for volume in pod["volumes"]}
+        require(
+            set(volumes)
+            == {"runtime-data", "tmp", "redis-tls-proxy-config", "redis-ca"}
+            and volumes["runtime-data"] == {"name": "runtime-data", "emptyDir": {}}
+            and volumes["tmp"] == {"name": "tmp", "emptyDir": {}}
+            and volumes["redis-tls-proxy-config"]
+            == {
+                "name": "redis-tls-proxy-config",
+                "configMap": {"name": "disk-redis-tls-proxy"},
             }
-            == {"runtime-data": {"emptyDir"}, "tmp": {"emptyDir"}},
+            and volumes["redis-ca"]
+            == {
+                "name": "redis-ca",
+                "secret": {
+                    "secretName": "disk-runtime-secrets",
+                    "defaultMode": 0o440,
+                    "items": [{"key": "REDIS_CA_CERT", "path": "ca.crt"}],
+                },
+            },
             f"{role} must not depend on a host path or persistent application volume",
         )
 
@@ -808,6 +909,7 @@ def main() -> int:
     require(
         release_plan["schema_version"] == 1
         and release_plan["minimum_kubernetes_version"] == "1.30"
+        and release_plan["image_policy"]["sidecars"] == ["haproxy"]
         and release_plan["image_policy"]["require_digest"] is True,
         "Kubernetes release identity/image policy drifted",
     )
@@ -821,6 +923,20 @@ def main() -> int:
             "steady_state": "deploy/kubernetes/workloads",
         },
         "Kubernetes independently deployable artifact paths drifted",
+    )
+    require(
+        set(release_plan["secret_policy"]["required_keys"])
+        == {
+            "DATABASE_PASSWORD",
+            "REDIS_PASSWORD",
+            "REDIS_CA_CERT",
+            "JWT_SECRET",
+            "DISK_S3_ACCESS_KEY",
+            "DISK_S3_SECRET_KEY",
+        }
+        and release_plan["secret_policy"]["optional_keys"]
+        == ["DISK_S3_SESSION_TOKEN"],
+        "Kubernetes runtime Secret policy drifted",
     )
     require(
         [stage["id"] for stage in release_plan["stages"]]
@@ -854,6 +970,12 @@ def main() -> int:
         and "verify_scheduler_capacity"
         in release_plan["stages"][0]["actions"],
         "Kubernetes scheduler capacity gate drifted",
+    )
+    require(
+        "verify_redis_tls_proxy_policy" in release_plan["stages"][0]["actions"]
+        and "verify_redis_tls_dns_failover"
+        in release_plan["stages"][4]["actions"],
+        "Kubernetes Redis TLS release gates drifted",
     )
     require(
         release_plan["stages"][1]["actions"][:2]

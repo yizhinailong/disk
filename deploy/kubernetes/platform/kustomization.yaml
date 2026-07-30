@@ -4,3 +4,4 @@ resources:
   - namespace.yaml
   - service-account.yaml
   - runtime-config.yaml
+  - redis-tls-proxy.yaml

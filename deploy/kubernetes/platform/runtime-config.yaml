@@ -20,10 +20,13 @@ data:
   DATABASE_USER: disk
   DATABASE_POOL_SIZE: "8"
   PGSSLMODE: verify-full
-  REDIS_HOST: replace-with-private-redis-writer
+  REDIS_HOST: 127.0.0.1
   REDIS_PORT: "6379"
   REDIS_DB: "0"
   REDIS_POOL_SIZE: "4"
+  REDIS_TLS_UPSTREAM_HOST: replace-with-private-redis-writer
+  REDIS_TLS_UPSTREAM_PORT: "6380"
+  REDIS_TLS_SERVER_NAME: replace-with-redis-certificate-name
   DISK_S3_BUCKET: replace-with-production-bucket
   DISK_S3_REGION: replace-with-production-region
   DISK_S3_ENDPOINT: https://replace-with-private-s3-endpoint

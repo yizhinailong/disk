@@ -155,8 +155,50 @@ spec:
               mountPath: /var/lib/disk
             - name: tmp
               mountPath: /tmp
+        - name: redis-tls-proxy
+          image: haproxy:replace-with-reviewed-tag
+          imagePullPolicy: IfNotPresent
+          args:
+            - -W
+            - -db
+            - -f
+            - /usr/local/etc/haproxy/haproxy.cfg
+          envFrom:
+            - configMapRef:
+                name: disk-runtime-config
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: redis-tls-proxy-config
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg
+              readOnly: true
+            - name: redis-ca
+              mountPath: /etc/disk/redis-ca
+              readOnly: true
       volumes:
         - name: runtime-data
           emptyDir: {}
         - name: tmp
           emptyDir: {}
+        - name: redis-tls-proxy-config
+          configMap:
+            name: disk-redis-tls-proxy
+        - name: redis-ca
+          secret:
+            secretName: disk-runtime-secrets
+            defaultMode: 288
+            items:
+              - key: REDIS_CA_CERT
+                path: ca.crt

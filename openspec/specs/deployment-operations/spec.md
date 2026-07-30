@@ -37,6 +37,21 @@ Deployment documentation SHALL define PostgreSQL setup, schema initialization, p
 - **WHEN** Redis is configured for the application
 - **THEN** the operator SHALL be able to verify service status, authentication, connection count, and application configuration alignment
 
+### Requirement: Production Redis transport is authenticated and encrypted
+The Kubernetes production reference SHALL route every API and Worker Redis connection through a per-Pod loopback TLS proxy because the selected Drogon Redis client has no native TLS configuration. The application-to-proxy hop SHALL bind only to loopback in the shared Pod network namespace. The proxy-to-Redis hop SHALL require TLS 1.2 or later, a protected CA bundle, certificate hostname verification, SNI, authenticated Redis commands, bounded connection timeouts, and DNS re-resolution of the stable private writer endpoint. Both application roles SHALL use the same proxy policy and SHALL remain unready while Redis commands cannot cross that policy. Repository defaults SHALL contain only rejected endpoint, server-name, and proxy-image placeholders; target overlays SHALL pin the proxy image by digest and supply the CA through the protected runtime Secret.
+
+#### Scenario: A production Pod connects to Redis
+- **WHEN** an API or Worker Pod is rendered from the production reference
+- **THEN** Drogon SHALL connect only to the Pod loopback listener while the co-located proxy connects to the private Redis writer with required CA and hostname verification, SNI, TLS 1.2 or later, and Redis password authentication
+
+#### Scenario: The Redis writer fails over through DNS
+- **WHEN** the stable private Redis writer name resolves to a replacement address
+- **THEN** each Pod proxy SHALL re-resolve that name and establish newly verified TLS connections without changing application Redis configuration or enabling a public endpoint
+
+#### Scenario: Redis TLS configuration is incomplete
+- **WHEN** the proxy image is not digest-pinned, an endpoint or server-name placeholder remains, the CA Secret key is absent, certificate verification fails, or Redis commands cannot reach the writer
+- **THEN** the release gate SHALL stop and the affected application Pod SHALL NOT become ready
+
 ### Requirement: PgBouncer transaction-pool compatibility
 Deployment documentation MAY claim PgBouncer transaction-pool compatibility only for PgBouncer 1.25.2 or later with `pool_mode=transaction`, non-zero protocol-level `max_prepared_statements`, and `server_reset_query_always` disabled. PgBouncer SHALL continue to target the single stable PostgreSQL writer endpoint. Application client-pool limits, PgBouncer backend-pool limits, PostgreSQL connection budgets, authentication, and TLS SHALL remain independently bounded and verified.
 

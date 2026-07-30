@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: disk-redis-tls-proxy
+  namespace: disk
+  labels:
+    app.kubernetes.io/name: disk
+    app.kubernetes.io/component: redis-tls-proxy
+    app.kubernetes.io/part-of: disk
+data:
+  haproxy.cfg: |
+    global
+      log stdout format raw local0
+      ssl-default-server-options ssl-min-ver TLSv1.2
+
+    defaults
+      log global
+      mode tcp
+      option tcplog
+      timeout connect 5s
+      timeout client 1h
+      timeout server 1h
+      timeout check 5s
+
+    resolvers redis_dns
+      parse-resolv-conf
+      resolve_retries 3
+      timeout resolve 1s
+      timeout retry 1s
+      hold valid 10s
+      hold obsolete 10s
+      hold nx 10s
+      hold timeout 10s
+
+    frontend redis_loopback
+      bind 127.0.0.1:6379
+      default_backend redis_tls_writer
+
+    backend redis_tls_writer
+      server redis-writer ${REDIS_TLS_UPSTREAM_HOST}:${REDIS_TLS_UPSTREAM_PORT} ssl verify required ca-file /etc/disk/redis-ca/ca.crt sni str(${REDIS_TLS_SERVER_NAME}) verifyhost ${REDIS_TLS_SERVER_NAME} check resolvers redis_dns init-addr last,libc,none
