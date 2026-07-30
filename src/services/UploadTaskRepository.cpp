@@ -260,23 +260,6 @@ namespace disk::file {
     }
 
     auto UploadTaskRepository::RenewFinalizeLease(
-        const std::string& upload_id,
-        uint64_t user_id,
-        const std::string& lease_owner,
-        uint64_t expected_state_version,
-        uint32_t lease_duration_seconds
-    ) const -> drogon::Task<std::optional<uint64_t>> {
-        co_return co_await RenewFinalizeLease(
-            m_db_client,
-            upload_id,
-            user_id,
-            lease_owner,
-            expected_state_version,
-            lease_duration_seconds
-        );
-    }
-
-    auto UploadTaskRepository::RenewFinalizeLease(
         const drogon::orm::DbClientPtr& client,
         const std::string& upload_id,
         uint64_t user_id,

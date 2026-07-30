@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，Kubernetes Redis TLS 代理）：能力审计确认当前 Drogon 1.9.11 及其上游 Redis 配置没有原生 TLS 入口，既有生产参考的私网 writer/password 不能单独证明传输加密。部署设计、系统测试计划与 OpenSpec 已固定 per-Pod loopback 代理边界；platform 新增共享 HAProxy 配置，API/Worker 的 Drogon 客户端只连接 `127.0.0.1:6379`，同 Pod sidecar 以 TLS 1.2+、受保护 CA、SNI、`verifyhost`、健康检查和 DNS 重解析连接私网稳定写端点。代理不接收 Redis 密码，CA 只从 Secret volume 读取；两个镜像、upstream host 和 certificate name 必须由目标 overlay 替换并固定 digest。官方 HAProxy 3.2.4 `-c` 解析、Kustomize v5.7.1 五个入口渲染、`DistributedTopologyContract` 1/1 和 OpenSpec 24/24 通过；完整构建无增量工作，完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 504.50 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。Phase 6 Redis 条目仍保持未勾选：目标私网端点、真实 CA、证书错误拒绝、AUTH/Lua/CAS/SCAN/TTL、DNS 故障切换和 RTO/RPO 必须在现场验证。隔离单机证据仍不替代目标 S3 TLS/KMS、高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，上传续租默认客户端死重载清理）：全仓库调用点与已编译对象符号审计确认 `UploadTaskRepository::RenewFinalizeLease` 的五参数默认客户端转发重载没有生产、集成、工具、客户端或迁移消费者，真实完成路径只使用显式传入 standalone client 或当前短事务连接的六参数 owner/version CAS 原语。无调用声明与转发实现已删除；编译期合同拒绝旧调用形状并正向保留活跃重载，源码合同锁定唯一仓储续租定义。完整构建、UploadTaskRepository/UploadLifecycle 聚焦 GoogleTest 21/21、`UploadRollbackGateIntegration`/`UploadStateMachineIntegration` 2/2 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 499.16 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。活跃 SQL、PostgreSQL 时间、状态值、local staging 描述符、旧路径 fallback 和 nullable 迁移字段均未改变；Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1776,6 +1776,14 @@ API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享�
 `deploy/kubernetes/platform` 新增共享 HAProxy ConfigMap，运行时把 Drogon Redis 固定到 `127.0.0.1:6379`。API/Worker 均增加相同 sidecar：代理只监听 loopback，以 TLS 1.2+、`verify required`、受保护 CA、SNI、`verifyhost`、5 秒连接超时、健康检查和基于 Pod `resolv.conf` 的 DNS 重解析连接私网稳定写端点。`REDIS_PASSWORD` 仍由应用用于 Redis AUTH，代理不接收该 Secret；`REDIS_CA_CERT` 只读挂载，sidecar 保持非 root、只读根文件系统、零 capability 和有界资源。发布计划要求代理镜像 digest、TLS policy 预检与目标 DNS 故障切换，基础端点和 certificate name 继续用拒绝发布占位符。
 
 官方 HAProxy 3.2.4 源码临时构建后，仓库 ConfigMap 经环境展开通过真实 `haproxy -c`；Kustomize v5.7.1 对 platform、migration、worker、api 和稳态聚合 5/5 渲染通过。完整构建无增量工作，`DistributedTopologyContract` 1/1、OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 504.50 秒。Phase 6 Redis 条目继续未勾选，目标私网端点、真实 CA、证书错误拒绝、AUTH/Lua/CAS/SCAN/TTL、DNS 故障切换和 RTO/RPO 仍须现场验证；Phase 9/10 与最终 Definition of Done 也保持未勾选。
+
+### 15.58 上传续租默认客户端死重载清理记录（2026-07-31）
+
+数据库设计、系统测试、单元测试和 OpenSpec 先行固定上传续租仓储边界。全仓库精确调用点审计确认 `UploadTaskRepository::RenewFinalizeLease` 的五参数重载只把构造时 `m_db_client` 转发给六参数重载，没有生产、集成、工具、客户端或迁移调用；已编译主程序对象的定义/重定位差集也只把它识别为未引用的公开方法。真实完成路径在组装后和最终短事务首条业务语句前，始终显式传入 standalone client 或当前 transaction、`lease_owner` 与最新 `state_version`。
+
+五参数声明和 17 行转发实现已删除。`UploadTaskRepository_test.cpp` 以 C++23 concept 拒绝旧调用形状、正向保留显式 `DbClientPtr` 的六参数原语，并要求仓储源码只保留一个续租定义。活跃 SQL 继续匹配 `Finalizing + lease_owner + state_version + lease_expires_at > NOW()`，使用 PostgreSQL 时间并返回递增版本；状态值、local staging 描述符、旧路径 fallback、nullable 迁移字段和 REST API 均未改变。
+
+完整构建成功，UploadTaskRepository/UploadLifecycle 聚焦 GoogleTest 21/21、`UploadRollbackGateIntegration`/`UploadStateMachineIntegration` 2/2 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 499.16 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；Phase 3/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

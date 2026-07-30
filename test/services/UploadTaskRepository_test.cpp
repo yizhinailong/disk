@@ -7,11 +7,13 @@
 
 #include "services/UploadTaskRepository.hpp"
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -19,6 +21,35 @@
 
 namespace disk::file {
     namespace {
+
+        template <typename Repository>
+        concept HasDefaultClientRenewFinalizeLease = requires(
+            const Repository& repository,
+            const std::string& upload_id,
+            const std::string& lease_owner
+        ) {
+            repository.RenewFinalizeLease(upload_id, uint64_t{}, lease_owner, uint64_t{}, uint32_t{});
+        };
+
+        template <typename Repository>
+        concept HasExplicitClientRenewFinalizeLease = requires(
+            const Repository& repository,
+            const drogon::orm::DbClientPtr& client,
+            const std::string& upload_id,
+            const std::string& lease_owner
+        ) {
+            repository.RenewFinalizeLease(
+                client,
+                upload_id,
+                uint64_t{},
+                lease_owner,
+                uint64_t{},
+                uint32_t{}
+            );
+        };
+
+        static_assert(!HasDefaultClientRenewFinalizeLease<UploadTaskRepository>);
+        static_assert(HasExplicitClientRenewFinalizeLease<UploadTaskRepository>);
 
         auto RepositoryRoot() -> std::filesystem::path {
             return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
@@ -71,6 +102,15 @@ namespace disk::file {
             EXPECT_FALSE(Contains(source, "UploadTaskRepository::MarkCompletedIfInProgress("));
             EXPECT_FALSE(Contains(source, "UploadTaskRepository::GetChunkCoverage("));
             EXPECT_FALSE(Contains(source, "DeleteChunks(std::string"));
+
+            constexpr std::string_view renew_marker =
+                "auto UploadTaskRepository::RenewFinalizeLease(";
+            const auto renew_definition = source.find(renew_marker);
+            ASSERT_NE(renew_definition, std::string::npos);
+            EXPECT_EQ(
+                source.find(renew_marker, renew_definition + renew_marker.size()),
+                std::string::npos
+            );
 
             EXPECT_FALSE(Contains(lifecycle_header, "struct ChunkCoverage"));
             EXPECT_FALSE(Contains(lifecycle_header, "auto IsCompleteCoverage("));

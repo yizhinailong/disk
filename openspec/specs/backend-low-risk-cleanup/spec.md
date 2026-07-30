@@ -101,6 +101,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** completion, cancellation, expiration, or chunk persistence needs a PostgreSQL primitive
 - **THEN** the repository SHALL retain the owner/version guarded transition or transaction-client overload used by that production flow
 
+#### Scenario: Unused default-client lease renewal is removed
+
+- **WHEN** whole-repository call-site and built-object audits confirm that the five-argument `UploadTaskRepository::RenewFinalizeLease` only forwards to the explicit-client overload and has no production, integration, tool, client, or migration consumer
+- **THEN** the declaration and forwarding implementation SHALL be removed while the six-argument transaction-client overload, owner/version/expiry predicate, PostgreSQL time, and returned next version remain unchanged
+
 #### Scenario: Unused descendant file-path update primitive is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `FileRepository::UpdateDescendantFilePathsForFolderMove` and its dedicated SQL have no production or behavioral-test caller
