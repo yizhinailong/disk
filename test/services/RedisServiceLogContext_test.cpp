@@ -148,16 +148,21 @@ namespace disk::services {
             ASSERT_FALSE(source.empty());
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                10U
+                8U
             );
-            EXPECT_EQ(CountOccurrences(source, "Logger::Trace(log_context)"), 7U);
-            EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 11U);
+            EXPECT_EQ(CountOccurrences(source, "Logger::Trace(log_context)"), 4U);
+            EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 9U);
+            EXPECT_FALSE(Contains(header, "enum class TtlType"));
+            EXPECT_FALSE(Contains(header, "auto Expire("));
+            EXPECT_FALSE(Contains(header, "auto IncrBy("));
             EXPECT_FALSE(Contains(header, "struct KeyValue"));
             EXPECT_FALSE(Contains(header, "auto MSet("));
             EXPECT_FALSE(Contains(header, "auto MGet("));
             EXPECT_FALSE(Contains(header, "auto MDelete("));
             EXPECT_FALSE(Contains(source, "BuildMSetCommand"));
             EXPECT_FALSE(Contains(source, "BuildMultiKeyCommand"));
+            EXPECT_FALSE(Contains(source, "RedisService::Expire("));
+            EXPECT_FALSE(Contains(source, "RedisService::IncrBy("));
             EXPECT_FALSE(Contains(source, "RedisService::MSet("));
             EXPECT_FALSE(Contains(source, "RedisService::MGet("));
             EXPECT_FALSE(Contains(source, "RedisService::MDelete("));
@@ -366,7 +371,6 @@ namespace disk::services {
         TEST_F(RedisServiceLogContextTest, SuccessfulCommandsPreserveContextWithoutSecrets) {
             const auto context = MakeContext("redis-success-request", "redis_contract");
             const auto exists_key = TrackKey("secret-exists-key");
-            const auto missing_key = TrackKey("secret-missing-key");
             const auto counter_key = TrackKey("secret-counter-key");
             const auto cas_key = TrackKey("secret-cas-key");
             const auto rate_key = TrackKey("secret-rate-key");
@@ -376,31 +380,21 @@ namespace disk::services {
 
             ASSERT_TRUE(drogon::sync_wait(m_service->Set(exists_key, initial_value)).has_value());
             ASSERT_TRUE(drogon::sync_wait(m_service->Exists(exists_key, context)).value());
-            ASSERT_TRUE(drogon::sync_wait(m_service->Expire(exists_key, 60, context)).has_value());
-            const auto missing_expire =
-                drogon::sync_wait(m_service->Expire(missing_key, 60, context));
-            ASSERT_FALSE(missing_expire.has_value());
-            EXPECT_EQ(missing_expire.error().code, ErrorCode::RedisKeyNotFound);
             ASSERT_EQ(drogon::sync_wait(m_service->Incr(counter_key, context)).value(), 1);
-            ASSERT_EQ(drogon::sync_wait(m_service->IncrBy(counter_key, 4, context)).value(), 5);
             ASSERT_TRUE(drogon::sync_wait(m_service->Set(cas_key, expected_value)).has_value());
             ASSERT_TRUE(drogon::sync_wait(m_service->CompareAndSwap(cas_key, expected_value, new_value, 60, context)).value());
             ASSERT_EQ(drogon::sync_wait(m_service->IncrWithExpire(rate_key, 60, context)).value(), 1);
 
-            const auto records = DrainRecords(7);
-            ASSERT_EQ(records.size(), 7U);
+            const auto records = DrainRecords(4);
+            ASSERT_EQ(records.size(), 4U);
             ExpectContext(records[0], "redis-success-request", "redis_contract", "trace", "Redis EXISTS:");
-            ExpectContext(records[1], "redis-success-request", "redis_contract", "trace", "Redis EXPIRE:");
-            ExpectContext(records[2], "redis-success-request", "redis_contract", "trace", "Redis EXPIRE:");
-            ExpectContext(records[3], "redis-success-request", "redis_contract", "trace", "Redis INCR succeeded");
-            ExpectContext(records[4], "redis-success-request", "redis_contract", "trace", "Redis INCRBY:");
-            ExpectContext(records[5], "redis-success-request", "redis_contract", "trace", "Redis CAS:");
-            ExpectContext(records[6], "redis-success-request", "redis_contract", "trace", "Redis IncrWithExpire succeeded:");
+            ExpectContext(records[1], "redis-success-request", "redis_contract", "trace", "Redis INCR succeeded");
+            ExpectContext(records[2], "redis-success-request", "redis_contract", "trace", "Redis CAS:");
+            ExpectContext(records[3], "redis-success-request", "redis_contract", "trace", "Redis IncrWithExpire succeeded:");
             ExpectSecretsExcluded(
                 records,
                 {
                     exists_key,
-                    missing_key,
                     counter_key,
                     cas_key,
                     rate_key,

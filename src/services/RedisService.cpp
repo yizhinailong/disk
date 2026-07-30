@@ -199,43 +199,6 @@ namespace disk::services {
         }
     }
 
-    auto RedisService::Expire(
-        const std::string& key,
-        int ttl,
-        disk::utils::LogContext log_context
-    ) -> drogon::Task<Result<void>> {
-        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::Redis);
-        try {
-            auto result =
-                co_await m_redis_client->execCommandCoro("EXPIRE %s %d", key.c_str(), ttl);
-
-            if (result.asInteger() == 0) {
-                Logger::Trace(log_context) << "Redis EXPIRE: ttl=" << ttl << ", updated=false";
-
-                timer.Finish(disk::metrics::DependencyOutcome::Success);
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::RedisKeyNotFound, "Redis key not found: " + key)
-                );
-            }
-
-            Logger::Trace(log_context) << "Redis EXPIRE: ttl=" << ttl << ", updated=true";
-
-            timer.Finish(disk::metrics::DependencyOutcome::Success);
-            co_return {};
-
-        } catch (const drogon::nosql::RedisException& ex) {
-            timer.Finish(ClassifyRedisError(ex.code()));
-            Logger::Error(log_context) << "Redis operation failed: EXPIRE";
-            co_return std::unexpected(ErrorInfo(
-                ErrorCode::RedisOperationFailed,
-                "Redis operation failed: " + std::string(ex.what())
-            ));
-        } catch (const std::exception& ex) {
-            timer.Finish(disk::metrics::DependencyOutcome::Protocol);
-            co_return WrapRedisResultParseError("EXPIRE", ex, log_context);
-        }
-    }
-
     auto RedisService::Incr(const std::string& key, disk::utils::LogContext log_context)
         -> drogon::Task<Result<std::int64_t>> {
         disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::Redis);
@@ -258,36 +221,6 @@ namespace disk::services {
         } catch (const std::exception& ex) {
             timer.Finish(disk::metrics::DependencyOutcome::Protocol);
             co_return WrapRedisResultParseError("INCR", ex, log_context);
-        }
-    }
-
-    auto RedisService::IncrBy(
-        const std::string& key,
-        std::int64_t increment,
-        disk::utils::LogContext log_context
-    )
-        -> drogon::Task<Result<std::int64_t>> {
-        disk::metrics::DependencyCallTimer timer(disk::metrics::Dependency::Redis);
-        try {
-            auto result =
-                co_await m_redis_client->execCommandCoro("INCRBY %s %lld", key.c_str(), increment);
-            const auto new_value = result.asInteger();
-
-            Logger::Trace(log_context) << "Redis INCRBY: increment=" << increment;
-
-            timer.Finish(disk::metrics::DependencyOutcome::Success);
-            co_return new_value;
-
-        } catch (const drogon::nosql::RedisException& ex) {
-            timer.Finish(ClassifyRedisError(ex.code()));
-            Logger::Error(log_context) << "Redis operation failed: INCRBY";
-            co_return std::unexpected(ErrorInfo(
-                ErrorCode::RedisOperationFailed,
-                "Redis operation failed: " + std::string(ex.what())
-            ));
-        } catch (const std::exception& ex) {
-            timer.Finish(disk::metrics::DependencyOutcome::Protocol);
-            co_return WrapRedisResultParseError("INCRBY", ex, log_context);
         }
     }
 

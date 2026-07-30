@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-30，最新候选容器拓扑复验）：从仓库 `Dockerfile` 完整构建 `disk-distributed:local`，修复清洁构建发现的 vcpkg `libpq` 工具闭包、C++23 编译器混用和 Ubuntu 预置 `disk` 组冲突。最终镜像 ID 为 `sha256:829c4aedd6f86c14f4252c72773cc4ea6ec60125a3802d7249d6a45df3790d2d`，大小 71664902 字节，以 `10001:10001` 运行，容器身份为 `disk:disk-app`。启用 KVM 的隔离 Docker daemon 以该单一镜像启动 PostgreSQL、Redis、MinIO、两 API、两 Worker 和真实 Nginx 入口，`DistributedFlowIntegration` 1/1 通过（CTest 122.29 秒，总耗时 122.31 秒，20 项检查）。`0600` 原子证据 SHA-256 为 `f129db467a5a84944136e9c59340b333582141b5b2b4f4888d2ae37fb5e30451`，受管拓扑、数据卷、测试密钥、虚拟机磁盘和临时工具已清理。至此最新候选链路的 7 个常规环境门禁均已显式复验。最近完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 511.27 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-30，Redis 独立变更死接口清理）：权威文档与 OpenSpec 先行将共享 `RedisService` 收缩为 8 个有生产调用的 API 和 13 条命令事件。全仓库调用审计确认 `Expire`、`IncrBy` 和 `TtlType` 只存在于直接服务测试，没有生产、集成、工具、客户端或迁移消费者，因此已删除；TTL 继续只由 `Set`、`CompareAndSwap` 和 `IncrWithExpire` 原子管理，文件列表世代继续只使用 `Incr`。完整构建、Redis 聚焦 GoogleTest 14/14、Redis 命名 CTest 22/22 和 OpenSpec 24/24 通过；完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 533.89 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。此前已验证的隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1728,6 +1728,14 @@ OpenSpec、系统测试、部署运维和单元测试文档先行固定 Promethe
 在启用 KVM 的隔离 Linux Docker daemon 中，Compose 使用该单一镜像启动 PostgreSQL、Redis、MinIO、两个 API、两个 Worker 和真实 Nginx 无粘性入口。`DistributedFlowIntegration` 1/1 通过（CTest 122.29 秒，总耗时 122.31 秒，20 项检查）；严格 A/B 交替、单入口随机路由、终态竞态、Worker 租约接管、PostgreSQL/Redis/MinIO 故障后原 API 进程恢复、multipart abort 持久重试收敛和单 API 停止后入口继续服务均通过。`0600` 原子证据 `.sisyphus/evidence/distributed-flow-summary.json` 的 SHA-256 为 `f129db467a5a84944136e9c59340b333582141b5b2b4f4888d2ae37fb5e30451`，状态为 `passed`，不包含令牌或凭据字段。
 
 Compose 容器、网络、数据卷、失败构建容器、测试密钥文件、端口转发、虚拟机磁盘和临时 Docker 工具均已清理。至此最新候选链路的 7 个常规环境门禁均已显式复验，但隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役验收。Phase 6/9/10 和最终 Definition of Done 相关项继续保持未勾选。
+
+### 15.52 Redis 独立变更死接口清理记录（2026-07-30）
+
+数据库设计、系统测试、部署运维、单元测试和 OpenSpec 先行固定 RedisService 的活跃命令边界。全仓库精确符号与调用点审计确认 `RedisService::Expire`、`RedisService::IncrBy` 和 `TtlType` 没有生产、集成、工具、客户端或迁移消费者，只由 RedisService 直接单测覆盖。
+
+三个无调用表面及其命令实现已删除。`RedisService_test.cpp` 通过编译期 concept 拒绝独立过期和任意步长计数回归；`RedisServiceLogContext_test.cpp` 同时拒绝旧类型、声明与实现，并锁定 8 个活跃 API 和 13 条命令事件。`Set` 继续原子写值并设置 TTL，`Incr` 继续维护文件列表世代，`CompareAndSwap` 继续旋转 refresh token，`IncrWithExpire` 继续原子管理固定窗口；上层故障策略、指标、`Result` 错误与公开 API 不变。
+
+完整构建、Redis 聚焦 GoogleTest 14/14、Redis 命名 CTest 22/22 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 533.89 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。Phase 10 过渡字段/配置/分支总清理项在兼容路径退役和目标环境门禁完成前继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

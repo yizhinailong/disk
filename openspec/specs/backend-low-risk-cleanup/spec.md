@@ -180,6 +180,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site audit confirms that `RedisService::MSet`, `MGet`, `MDelete`, the `KeyValue` input type, and their command builders have no production or behavioral-test caller
 - **THEN** those declarations, implementations, and placeholder tests SHALL be removed together while active single-key, counter, CAS, and fixed-window operations retain their existing behavior
 
+#### Scenario: Unused standalone Redis mutations are removed
+
+- **WHEN** a whole-repository call-site audit confirms that `RedisService::Expire`, `RedisService::IncrBy`, and the `TtlType` enum have no production caller and are exercised only by direct Redis service tests
+- **THEN** those declarations, implementations, and dedicated expectations SHALL be removed while `Set` retains atomic write-with-TTL behavior, `Incr` retains cache-generation increments, `CompareAndSwap` retains refresh-token rotation, and `IncrWithExpire` retains atomic fixed-window rate limiting
+
 #### Scenario: Unused unchecked content-reference wrapper is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `ContentService::IncrementRefCounts` has no production caller and only converts `IncrementRefCountsChecked` failures into an empty set

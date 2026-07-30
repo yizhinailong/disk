@@ -32,6 +32,16 @@ namespace {
     using disk::error::Code;
     using disk::services::RedisService;
 
+    template <typename Service>
+    concept HasStandaloneExpire = requires(Service& service, const std::string& key) {
+        service.Expire(key, 1, disk::utils::LogContext{});
+    };
+
+    template <typename Service>
+    concept HasArbitraryIncrement = requires(Service& service, const std::string& key) {
+        service.IncrBy(key, std::int64_t{ 1 }, disk::utils::LogContext{});
+    };
+
     auto PingRedis(const drogon::nosql::RedisClientPtr& redis_client) -> drogon::Task<std::string> {
         auto result = co_await redis_client->execCommandCoro("PING");
         co_return result.asString();
@@ -138,14 +148,11 @@ namespace {
         EXPECT_EQ(missing_result.error().code, Code::RedisKeyNotFound);
     }
 
-    TEST_F(RedisServiceRuntimeTest, ExpireRemovesKeyAfterTtl) {
+    TEST_F(RedisServiceRuntimeTest, SetWithTtlRemovesKeyAfterExpiry) {
         const auto key = TrackKey("expire");
 
-        auto set_result = drogon::sync_wait(m_service->Set(key, "expires"));
+        auto set_result = drogon::sync_wait(m_service->Set(key, "expires", 1));
         ASSERT_TRUE(set_result.has_value());
-
-        auto expire_result = drogon::sync_wait(m_service->Expire(key, 1));
-        ASSERT_TRUE(expire_result.has_value());
 
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
@@ -158,7 +165,7 @@ namespace {
         EXPECT_EQ(get_result.error().code, Code::RedisKeyNotFound);
     }
 
-    TEST_F(RedisServiceRuntimeTest, IncrAndIncrByRoundTrip) {
+    TEST_F(RedisServiceRuntimeTest, IncrRoundTrip) {
         const auto key = TrackKey("counter");
 
         auto incr_result = drogon::sync_wait(m_service->Incr(key));
@@ -169,17 +176,9 @@ namespace {
         ASSERT_TRUE(incr_existing_result.has_value());
         EXPECT_EQ(incr_existing_result.value(), 2);
 
-        auto incr_by_result = drogon::sync_wait(m_service->IncrBy(key, 10));
-        ASSERT_TRUE(incr_by_result.has_value());
-        EXPECT_EQ(incr_by_result.value(), 12);
-
-        auto decr_by_result = drogon::sync_wait(m_service->IncrBy(key, -3));
-        ASSERT_TRUE(decr_by_result.has_value());
-        EXPECT_EQ(decr_by_result.value(), 9);
-
         auto get_result = drogon::sync_wait(m_service->Get(key));
         ASSERT_TRUE(get_result.has_value());
-        EXPECT_EQ(get_result.value(), "9");
+        EXPECT_EQ(get_result.value(), "2");
     }
 
     TEST_F(RedisServiceRuntimeTest, IncrWithExpireAtomicallyIncrsAndSetsExpiry) {
@@ -301,24 +300,9 @@ namespace {
         EXPECT_EQ(version.error().code, Code::RedisOperationFailed);
     }
 
-    TEST(RedisServiceTest, MethodSignatures) {
-        /// 测试用例结构：
-        /// 验证所有 RedisService 通用方法的签名
-
-        /// 测试方法签名：
-        /// auto Set(const std::string& key, const std::string& value, int ttl = 0) -> drogon::Task<Result<void>>
-        /// auto Get(const std::string& key) -> drogon::Task<Result<std::string>>
-        /// auto Delete(const std::string& key) -> drogon::Task<Result<void>>
-        /// auto Exists(const std::string& key) -> drogon::Task<bool>>
-        /// auto Expire(const std::string& key, int ttl) -> drogon::Task<Result<void>>
-
-        /// 验证要点：
-        /// - 所有方法返回 drogon::Task<T> 类型
-        /// - Set/Get/Delete/Expire 返回 Result<T>
-        /// - Exists 返回 drogon::Task<bool>
-        /// - 参数使用 const 引用（key, value, ttl）
-
-        SUCCEED();
+    TEST(RedisServiceTest, ExcludesUnusedStandaloneMutations) {
+        EXPECT_FALSE(HasStandaloneExpire<RedisService>);
+        EXPECT_FALSE(HasArbitraryIncrement<RedisService>);
     }
 
 } // namespace

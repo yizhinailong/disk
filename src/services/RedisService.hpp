@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include <drogon/nosql/RedisClient.h>
@@ -18,16 +19,6 @@
 #include "utils/Singleton.hpp"
 
 namespace disk::services {
-
-    /// ==================== 辅助类型 ====================
-
-    /**
-     * @brief TTL类型枚举
-     */
-    enum class TtlType : std::uint8_t {
-        Permanent = 0, ///< 永不过期
-        Auto           ///< 自动过期（使用参数值）
-    };
 
     /**
      * @brief Redis 服务类（单例）
@@ -116,19 +107,6 @@ namespace disk::services {
             -> drogon::Task<Result<bool>>;
 
         /**
-         * @brief 设置 Redis 键的过期时间
-         * @param key Redis 键
-         * @param ttl 过期时间（秒）
-         * @return Result<void> 成功返回 void，失败返回错误
-         */
-        [[nodiscard]]
-        auto Expire(
-            const std::string& key,
-            int ttl,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<void>>;
-
-        /**
          * @brief 原子性递增 Redis 键值（递增 1）
          * @param key Redis 键
          * @return Result<std::int64_t> 成功返回递增后的新值，失败返回错误
@@ -136,19 +114,6 @@ namespace disk::services {
         [[nodiscard]]
         auto Incr(const std::string& key, disk::utils::LogContext log_context = {})
             -> drogon::Task<Result<std::int64_t>>;
-
-        /**
-         * @brief 原子性递增 Redis 键值（递增指定值）
-         * @param key Redis 键
-         * @param increment 递增量
-         * @return Result<std::int64_t> 成功返回递增后的新值，失败返回错误
-         */
-        [[nodiscard]]
-        auto IncrBy(
-            const std::string& key,
-            std::int64_t increment,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<std::int64_t>>;
 
         /**
          * @brief 原子性比较并交换 (Compare-And-Swap)
