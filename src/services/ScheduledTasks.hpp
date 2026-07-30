@@ -58,9 +58,6 @@ namespace disk::services {
         auto SeedOnce(std::chrono::system_clock::time_point now) -> drogon::Task<Result<PeriodicSeedResult>>;
 
         [[nodiscard]]
-        auto IsAccepting() const noexcept -> bool;
-
-        [[nodiscard]]
         auto IsDrained() const noexcept -> bool;
 
         ~ScheduledTasks() = default;

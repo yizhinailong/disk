@@ -109,10 +109,6 @@ namespace disk::jobs {
         co_return true;
     }
 
-    auto StorageWorkerRuntime::IsAccepting() const noexcept -> bool {
-        return m_accepting.load();
-    }
-
     auto StorageWorkerRuntime::IsDrained() const noexcept -> bool {
         return !m_poll_inflight.load();
     }

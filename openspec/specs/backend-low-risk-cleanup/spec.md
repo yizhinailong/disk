@@ -225,6 +225,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site audit confirms that `StorageWorkerRuntime::IsStarted` has no production or test caller
 - **THEN** the public probe SHALL be removed while the internal atomic startup guard, idempotent `Start`, drain admission, and in-flight drain observation remain unchanged
 
+#### Scenario: Unused runtime admission probes are removed
+
+- **WHEN** a whole-repository call-site audit confirms that `ScheduledTasks::IsAccepting` has no caller and `StorageWorkerRuntime::IsAccepting` is only used by redundant test assertions while `PollOnce` already proves the admission behavior
+- **THEN** both public probes and the redundant assertions SHALL be removed while internal admission state, Worker polling, scheduler seeding, drain or stop behavior, and in-flight drain observation remain unchanged
+
 #### Scenario: Unused share timestamp helper is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `ShareService::UpdateTimestamp` has no production or test caller

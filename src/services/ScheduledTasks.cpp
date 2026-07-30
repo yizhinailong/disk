@@ -241,10 +241,6 @@ namespace disk::services {
         }
     }
 
-    auto ScheduledTasks::IsAccepting() const noexcept -> bool {
-        return m_accepting.load();
-    }
-
     auto ScheduledTasks::IsDrained() const noexcept -> bool {
         return !m_seed_inflight.load();
     }

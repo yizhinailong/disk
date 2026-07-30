@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，上传续租默认客户端死重载清理）：全仓库调用点与已编译对象符号审计确认 `UploadTaskRepository::RenewFinalizeLease` 的五参数默认客户端转发重载没有生产、集成、工具、客户端或迁移消费者，真实完成路径只使用显式传入 standalone client 或当前短事务连接的六参数 owner/version CAS 原语。无调用声明与转发实现已删除；编译期合同拒绝旧调用形状并正向保留活跃重载，源码合同锁定唯一仓储续租定义。完整构建、UploadTaskRepository/UploadLifecycle 聚焦 GoogleTest 21/21、`UploadRollbackGateIntegration`/`UploadStateMachineIntegration` 2/2 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 499.16 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。活跃 SQL、PostgreSQL 时间、状态值、local staging 描述符、旧路径 fallback 和 nullable 迁移字段均未改变；Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，Worker/Scheduler 准入死探针清理）：全仓库精确调用点审计确认 `ScheduledTasks::IsAccepting()` 没有生产或测试调用者，`StorageWorkerRuntime::IsAccepting()` 只被两条行为测试断言重复观察，生产关停仅读取两者的 `IsDrained()`。两个公开读探针及冗余断言已删除，编译期合同拒绝旧能力回归；内部 `m_accepting`、Worker 轮询、Scheduler 播种、排空/停止与 in-flight 观察不变。完整构建、Worker/Scheduler 聚焦 GoogleTest 10/10、Scheduler 角色切换/Worker 排空接管/分布式拓扑聚焦 CTest 3/3 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 512.49 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1543,7 +1543,7 @@ ADR、系统测试、单元测试和 OpenSpec 先行固定人工死信重放所�
 
 ### 15.29 Worker 启动状态死探针清理记录（2026-07-27）
 
-系统测试、单元测试、部署运维和 OpenSpec 先行固定 Worker 运行时公开面合同。全仓库精确符号与调用点审计确认 `StorageWorkerRuntime::IsStarted()` 只有声明与实现，没有生产、测试或文档调用者；内部 `m_started` 原子状态仍由 `Start()` 的 CAS 使用，`IsDrained()` 仍由进程关停流程读取，`IsAccepting()` 仍由运行时行为测试观察 drain admission。
+系统测试、单元测试、部署运维和 OpenSpec 先行固定 Worker 运行时公开面合同。全仓库精确符号与调用点审计确认 `StorageWorkerRuntime::IsStarted()` 只有声明与实现，没有生产、测试或文档调用者；内部 `m_started` 原子状态仍由 `Start()` 的 CAS 使用，`IsDrained()` 仍由进程关停流程读取。当时保留的测试观察探针 `IsAccepting()` 后续已按 15.59 清理。
 
 无调用的 `IsStarted()` 声明与实现已删除，`StorageWorkerRuntime_test.cpp` 通过编译期能力探测拒绝旧公开探针回归。启动幂等、首次及周期轮询、连续 drain、异常吞吐、in-flight 排空等待和结构化日志语义均未改变。本轮不删除 Worker 状态、配置、持久任务字段、迁移分支或部署能力，因此 Phase 10 总清理项继续保持未勾选。
 
@@ -1784,6 +1784,14 @@ API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享�
 五参数声明和 17 行转发实现已删除。`UploadTaskRepository_test.cpp` 以 C++23 concept 拒绝旧调用形状、正向保留显式 `DbClientPtr` 的六参数原语，并要求仓储源码只保留一个续租定义。活跃 SQL 继续匹配 `Finalizing + lease_owner + state_version + lease_expires_at > NOW()`，使用 PostgreSQL 时间并返回递增版本；状态值、local staging 描述符、旧路径 fallback、nullable 迁移字段和 REST API 均未改变。
 
 完整构建成功，UploadTaskRepository/UploadLifecycle 聚焦 GoogleTest 21/21、`UploadRollbackGateIntegration`/`UploadStateMachineIntegration` 2/2 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 499.16 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；Phase 3/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.59 Worker/Scheduler 准入死探针清理记录（2026-07-31）
+
+系统测试、单元测试、部署运维和 OpenSpec 先行固定运行时准入边界。全仓库精确调用点审计确认 `ScheduledTasks::IsAccepting()` 只有声明与实现，`StorageWorkerRuntime::IsAccepting()` 除声明与实现外只有两条冗余测试断言；生产、集成、工具、客户端和迁移均没有调用，进程关停仅使用两者的 `IsDrained()`。
+
+两个公开读探针的声明与实现、两条冗余断言已删除。Worker 与 Scheduler 单测分别以 C++23 concept 拒绝旧能力回归；Worker 仍以 drain 前 `PollOnce()` 执行回调、drain 后返回 `false` 且回调次数为 0 证明准入行为。内部 `m_accepting`、`BeginDrain`/`Stop`、`PollOnce`/`SeedOnce`、in-flight 观察、首次及周期播种和公开 API 均未改变。
+
+完整构建、Worker/Scheduler 聚焦 GoogleTest 10/10、`SchedulerRoleCutoverIntegration`/`WorkerDrainTakeoverIntegration`/`DistributedTopologyContract` 3/3 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 512.49 秒。目标 MinIO/云 S3、PgBouncer、Prometheus 和多实例环境门控仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

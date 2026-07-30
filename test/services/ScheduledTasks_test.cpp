@@ -16,6 +16,13 @@ namespace disk::services {
     namespace {
         using namespace std::chrono_literals;
 
+        template <typename T>
+        concept HasIsAccepting = requires(const T& scheduler) {
+            scheduler.IsAccepting();
+        };
+
+        static_assert(!HasIsAccepting<ScheduledTasks>);
+
         auto RepositoryRoot() -> std::filesystem::path {
             return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
         }

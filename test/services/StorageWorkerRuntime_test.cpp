@@ -29,7 +29,13 @@ namespace disk::jobs {
             runtime.IsStarted();
         };
 
+        template <typename T>
+        concept HasIsAccepting = requires(const T& runtime) {
+            runtime.IsAccepting();
+        };
+
         static_assert(!HasIsStarted<StorageWorkerRuntime>);
+        static_assert(!HasIsAccepting<StorageWorkerRuntime>);
 
         class StorageWorkerRuntimeLogTest : public ::testing::Test {
         protected:
@@ -159,7 +165,6 @@ namespace disk::jobs {
             EXPECT_TRUE(drogon::sync_wait(runtime.PollOnce()));
             EXPECT_EQ(calls, 2);
             EXPECT_TRUE(runtime.IsDrained());
-            EXPECT_TRUE(runtime.IsAccepting());
         }
 
         TEST(StorageWorkerRuntimeTest, StopsContinuousDrainAfterRunnerFailure) {
@@ -216,7 +221,6 @@ namespace disk::jobs {
             runtime.BeginDrain();
             runtime.BeginDrain();
 
-            EXPECT_FALSE(runtime.IsAccepting());
             EXPECT_TRUE(runtime.IsDrained());
             EXPECT_FALSE(drogon::sync_wait(runtime.PollOnce()));
             EXPECT_EQ(calls, 0);
