@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，上传状态机整数终态死重载清理）：全仓库精确调用点和已编译对象审计确认 `IsTerminalStatus(int)` 只有声明、实现与 `UploadStateMachine_test.cpp` 的非法值断言，没有生产消费者；类型化 `IsTerminalStatus(UploadTaskStatus)` 仍由 `StorageRecoveryAdminService` 生产路径调用。整数重载的公开声明、实现与专用断言已删除；编译期与源码合同拒绝旧形状回归，正向保留类型化终态、未知存储值拒绝和恢复计划准入。完整构建、状态机/上传仓储/恢复管理/真实 PostgreSQL 状态机与存储任务/分布式拓扑聚焦 CTest 20/20 和 OpenSpec 24/24 通过；完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 504.72 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；状态数值、诊断名称、finalize/cancel 决策、PostgreSQL 条件写、恢复响应、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，请求追踪生成/校验 helper 内部化）：全仓库精确调用点和已编译对象审计确认 `RequestTraceFilter::GenerateRequestId()` 与 `IsValidRequestId()` 没有外部生产消费者，而 `main.cpp.o` 仍依赖 `ResolveRequestId()`。前两者已下沉为实现文件本地 helper，旧成员符号从后端与测试二进制消失，公开解析入口继续供 pre-routing advice 与全局过滤器共用；编译期合同拒绝旧公开面回归，行为测试通过活跃入口覆盖合法 128 字符边界、非法值 UUID 回退和已有属性保留。完整构建、请求追踪/进程准入/分布式拓扑/健康日志聚焦 CTest 16/16 和 OpenSpec 24/24 通过；完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 506.04 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；响应头、日志关联、请求准入、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1848,6 +1848,14 @@ utility 转发与仓储单项方法已一并删除，`FolderRepository` 从 13 �
 整数重载的公开声明、五行包装实现和专用非法值断言已删除。`UploadStateMachine_test.cpp` 以 C++23 concept 拒绝整数调用形状回归并正向保留类型化能力；状态机/仓储源码合同拒绝旧声明与实现，恢复管理源码合同锁定生产类型化调用。`UploadTaskStatusFromStorage` 继续拒绝未知值，六种状态的终态分类、数值、诊断名称、finalize/cancel 决策、PostgreSQL 条件写、恢复响应与 REST 合同均未改变。
 
 完整构建、状态机/上传仓储/恢复管理/真实 PostgreSQL 状态机与存储任务/分布式拓扑聚焦 CTest 20/20 和 OpenSpec 24/24 通过。重建后的状态机对象、后端与测试二进制不再包含 `IsTerminalStatus(int)` 符号，而类型化符号仍存在；完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 504.72 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.67 请求追踪生成/校验 helper 内部化记录（2026-07-31）
+
+系统测试、单元测试和 OpenSpec 先行固定请求追踪公开边界。全仓库精确调用点与已编译对象审计确认 `RequestTraceFilter::GenerateRequestId()` 只由同一实现文件消费，`IsValidRequestId()` 只由该实现文件与直接单测消费，没有其他生产、集成、工具、客户端或迁移消费者。审计同时确认 `main.cpp` 的 pre-routing advice 对 `ResolveRequestId()` 有真实生产调用，`main.cpp.o` 保留该符号的未定义引用，因此解析入口必须继续公开。
+
+生成与校验成员声明和定义已删除，原逻辑下沉为 `RequestTraceFilter.cpp` 匿名命名空间 helper；重建后的实现对象将两者标记为本地 `t` 符号，后端和测试二进制不再包含旧成员符号，公开 `ResolveRequestId()` 符号与生产链接关系继续存在。`RequestTraceFilter_test.cpp` 通过 C++23 concept 拒绝两个旧公开能力回归并正向保留解析入口，行为只经活跃解析/过滤入口验证合法上游 ID、128 字符边界、空值、超长、空格、斜杠、CR/LF 的 UUID v4 回退以及已有 `request_id` 属性不被覆盖。响应 `X-Request-Id`、结构化日志关联、进程排空请求准入、REST、schema 和迁移合同均未改变。
+
+完整构建、请求追踪/进程准入/分布式拓扑/健康日志聚焦 CTest 16/16 和 OpenSpec 24/24 通过。完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 506.04 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

@@ -87,6 +87,15 @@ The cleanup SHALL preserve existing authentication boundaries, route-level filte
 - **WHEN** a rate-limit filter depends on `user_id` populated by JWT authentication
 - **THEN** the cleanup SHALL preserve an execution order in which JWT authentication can populate `user_id` before that rate-limit filter evaluates the request
 
+### Requirement: Filter helper surfaces follow production use
+
+Backend filters SHALL expose only helper capabilities consumed across production translation units while keeping internal parsing and generation logic directly covered through active filter behavior.
+
+#### Scenario: Request-trace generation helpers are internalized
+
+- **WHEN** whole-repository and compiled-object audits confirm that `RequestTraceFilter::GenerateRequestId` and `IsValidRequestId` have no external production consumer while `main.cpp` and the global filter both depend on `ResolveRequestId`
+- **THEN** generation and validation SHALL become implementation-private helpers while `ResolveRequestId`, safe upstream-ID acceptance, invalid-ID UUID fallback, existing-attribute preservation, response correlation, and process-drain request admission retain direct coverage
+
 ### Requirement: Repository surfaces follow production use
 
 Backend repository classes SHALL expose only persistence primitives used by production flows, while persisted compatibility contracts remain governed by their separate migration-retirement gates.
