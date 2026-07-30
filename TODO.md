@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，Worker/Scheduler 准入死探针清理）：全仓库精确调用点审计确认 `ScheduledTasks::IsAccepting()` 没有生产或测试调用者，`StorageWorkerRuntime::IsAccepting()` 只被两条行为测试断言重复观察，生产关停仅读取两者的 `IsDrained()`。两个公开读探针及冗余断言已删除，编译期合同拒绝旧能力回归；内部 `m_accepting`、Worker 轮询、Scheduler 播种、排空/停止与 in-flight 观察不变。完整构建、Worker/Scheduler 聚焦 GoogleTest 10/10、Scheduler 角色切换/Worker 排空接管/分布式拓扑聚焦 CTest 3/3 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 512.49 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，运行时配置文件加载公开面清理）：全仓库精确调用点与已编译对象重定位审计确认 `RuntimeConfig::LoadFile()` 只被同一实现单元内的 `LoadFromEnvironment()` 调用，没有其他生产、测试、工具、客户端或迁移消费者。公开声明与成员定义已删除，原文件打开/JSON 解析逻辑下沉为 `.cpp` 匿名命名空间的本地 helper，编译期合同拒绝旧公开入口回归。完整构建、RuntimeConfig 聚焦 GoogleTest 9/9、Worker 观察启动/安全 local staging 拒绝/分布式拓扑聚焦 CTest 3/3 和 OpenSpec 24/24 通过；完整 CTest 共 1423 项，1416 通过、7 项按环境门控跳过、0 失败，总耗时 502.22 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；配置加载顺序、错误语义、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1792,6 +1792,14 @@ API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享�
 两个公开读探针的声明与实现、两条冗余断言已删除。Worker 与 Scheduler 单测分别以 C++23 concept 拒绝旧能力回归；Worker 仍以 drain 前 `PollOnce()` 执行回调、drain 后返回 `false` 且回调次数为 0 证明准入行为。内部 `m_accepting`、`BeginDrain`/`Stop`、`PollOnce`/`SeedOnce`、in-flight 观察、首次及周期播种和公开 API 均未改变。
 
 完整构建、Worker/Scheduler 聚焦 GoogleTest 10/10、`SchedulerRoleCutoverIntegration`/`WorkerDrainTakeoverIntegration`/`DistributedTopologyContract` 3/3 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 512.49 秒。目标 MinIO/云 S3、PgBouncer、Prometheus 和多实例环境门控仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.60 运行时配置文件加载公开面清理记录（2026-07-31）
+
+系统测试、部署运维、单元测试和 OpenSpec 先行固定运行时配置加载边界。全仓库精确调用点审计确认 `RuntimeConfig::LoadFile()` 只有公开声明、成员定义和同一 `.cpp` 内 `LoadFromEnvironment()` 的唯一调用；已编译对象也只有该内部重定位，没有其他生产、测试、工具、客户端或迁移消费者。
+
+公开 `LoadFile()` 声明和成员定义已删除，原函数体不改逻辑地转为 `RuntimeConfig.cpp` 匿名命名空间的 `LoadConfigFile()`；重建后 `nm` 确认 helper 为本地 `t` 符号且旧成员符号消失。`RuntimeConfig_test.cpp` 通过 C++23 concept 拒绝旧 public 能力回归。`DISK_CONFIG_FILE` 选择、默认 `config.json`、文件打开/JSON 解析错误、单一 `default` 路由验证、环境覆盖顺序与 Drogon 加载均未改变。
+
+完整构建、RuntimeConfig 聚焦 GoogleTest 9/9、`WorkerObservationModeIntegration`/`SecureLocalStagingCutoffIntegration`/`DistributedTopologyContract` 3/3 和 OpenSpec 24/24 通过。完整 CTest 共 1423 项，1416 项通过、7 项环境门控跳过、0 失败，总耗时 502.22 秒。目标 MinIO/云 S3、PgBouncer、Prometheus 和多实例环境门控仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

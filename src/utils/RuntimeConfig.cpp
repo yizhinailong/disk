@@ -14,6 +14,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -117,28 +118,29 @@ namespace disk::utils {
             }
         }
 
+        [[nodiscard]]
+        auto LoadConfigFile(std::string_view path) -> Json::Value {
+            std::ifstream input{ std::string(path) };
+            if (!input.is_open()) {
+                throw std::runtime_error("Cannot open runtime configuration file");
+            }
+
+            Json::Value config;
+            Json::CharReaderBuilder builder;
+            std::string errors;
+            if (!Json::parseFromStream(builder, input, &config, &errors) || !config.isObject()) {
+                throw std::runtime_error("Cannot parse runtime configuration file: " + errors);
+            }
+            return config;
+        }
+
     } // namespace
 
     auto RuntimeConfig::LoadFromEnvironment() -> Json::Value {
         auto path = ReadEnvironment("DISK_CONFIG_FILE").value_or("config.json");
-        auto config = LoadFile(path);
+        auto config = LoadConfigFile(path);
         ValidateDatabaseRouting(config);
         ApplyEnvironmentOverrides(config);
-        return config;
-    }
-
-    auto RuntimeConfig::LoadFile(std::string_view path) -> Json::Value {
-        std::ifstream input{ std::string(path) };
-        if (!input.is_open()) {
-            throw std::runtime_error("Cannot open runtime configuration file");
-        }
-
-        Json::Value config;
-        Json::CharReaderBuilder builder;
-        std::string errors;
-        if (!Json::parseFromStream(builder, input, &config, &errors) || !config.isObject()) {
-            throw std::runtime_error("Cannot parse runtime configuration file: " + errors);
-        }
         return config;
     }
 

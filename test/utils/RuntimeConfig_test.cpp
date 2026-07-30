@@ -6,6 +6,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -15,6 +16,13 @@
 #include <json/writer.h>
 
 namespace {
+
+    template <typename Config>
+    concept HasPublicLoadFile = requires(std::string_view path) {
+        Config::LoadFile(path);
+    };
+
+    static_assert(!HasPublicLoadFile<disk::utils::RuntimeConfig>);
 
     class EnvironmentScope final {
     public:

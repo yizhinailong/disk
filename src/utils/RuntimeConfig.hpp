@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <string_view>
-
 #include <json/value.h>
 
 namespace disk::utils {
@@ -17,9 +15,6 @@ namespace disk::utils {
     public:
         [[nodiscard]]
         static auto LoadFromEnvironment() -> Json::Value;
-
-        [[nodiscard]]
-        static auto LoadFile(std::string_view path) -> Json::Value;
 
         static auto ValidateDatabaseRouting(const Json::Value& config) -> void;
 
