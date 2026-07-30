@@ -146,6 +146,8 @@ namespace disk::services {
             );
             EXPECT_FALSE(Contains(header, "auto RevokeShareToken("));
             EXPECT_FALSE(Contains(source, "TokenService::RevokeShareToken("));
+            EXPECT_FALSE(Contains(header, "IsRevocationCacheEntryRevokedForTest"));
+            EXPECT_FALSE(Contains(source, "IsRevocationCacheEntryRevokedForTest"));
             EXPECT_EQ(CountOccurrences(source, "Logger::Debug(log_context)"), 4U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Info(log_context)"), 2U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Trace(log_context)"), 2U);

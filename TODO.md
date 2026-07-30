@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-30，分享令牌撤销死写入口清理）：权威 API、部署、系统/单元测试文档与 OpenSpec 先行固定边界。全仓库调用审计确认 `TokenService::RevokeShareToken` 没有生产、集成、工具、客户端或迁移消费者，仅被过滤器单测用来造状态，因此已删除；测试改为直接预置精确 Redis blacklist hash，并证明过滤器从空本地缓存读取撤销状态、返回 `40111` 后写入正缓存。单 token blacklist 读取、Redis 故障 fail-closed、数据库分享状态复查和会话安全键持久化不变。完整构建、相关 GoogleTest/CTest 47/47 和 OpenSpec 24/24 通过；完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 507.15 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。此前已验证的隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-30，Access 撤销缓存死探针清理）：单元测试文档与 OpenSpec 先行固定边界。全仓库调用审计确认 `TokenService::IsRevocationCacheEntryRevokedForTest` 只被同一用例中的两条断言调用，且分别重复相邻的零/一条目缓存大小断言，因此已从生产头文件和实现中删除；重复断言一并移除，源码合同拒绝该测试探针回归。缓存写入/删除、过期、Redis 撤销读取和 access token 拒绝覆盖保持不变。完整构建、相关 GoogleTest/CTest 34/34、认证集成测试 3/3 和 OpenSpec 24/24 通过；完整 CTest 共 1429 项，1422 通过、7 项按环境门控跳过、0 失败，总耗时 501.98 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。此前已验证的隔离单机容器拓扑不替代目标环境的 TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据和兼容路径退役；Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1744,6 +1744,14 @@ API、系统测试、部署运维、单元测试和 OpenSpec 先行固定分享�
 无调用的公开写入口及其实现已删除。撤销过滤器用例改为计算签发 token 的精确 hash 并通过 RedisService 原子写入 TTL 键，先证明本地缓存为空，再证明真实过滤器返回 HTTP 401/`40111 TokenRevoked` 并把正缓存更新为 1。TokenService 与 RedisService 源码合同共同拒绝旧方法回归，并把有生产调用的 TokenService Redis `Set` 计数从 3 收缩为 2；分享 JWT、scope、blacklist 读取、Redis 故障 fail-closed、数据库分享状态和公开响应不变。
 
 完整构建、相关 GoogleTest 47/47、同名 CTest 47/47 和 OpenSpec 24/24 通过。首轮完整回归唯一失败是 Redis 源码合同仍保留旧的 3 次 `Set` 计数；修正为 2 后定向 1/1 通过，第二轮完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 507.15 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。Phase 10 过渡字段/配置/分支总清理项在兼容路径退役和目标环境门禁完成前继续保持未勾选。
+
+### 15.54 Access 撤销缓存死探针清理记录（2026-07-30）
+
+单元测试文档与 OpenSpec 先行固定 access 撤销缓存测试边界。全仓库精确符号与调用点审计确认 `TokenService::IsRevocationCacheEntryRevokedForTest` 只有生产头文件声明、实现和同一单测中的两条调用；两条调用分别重复紧邻的缓存大小为零和一的断言，没有生产、集成、工具、客户端或迁移消费者。运行时 `IsAccessTokenRevoked`、Redis blacklist 读取、正缓存、过期清理和 access token 拒绝路径仍有独立覆盖。
+
+冗余测试专用成员探针及两条重复断言已删除，零/一条目缓存状态断言保留；`TokenServiceLogContext_test.cpp` 的源码合同同时拒绝旧声明与实现回归。撤销缓存的插入、删除、到期语义、Redis 支持的跨实例判定和公开认证响应没有变化。
+
+完整构建、相关 GoogleTest 34/34、同名 CTest 34/34、`AuthClusterConsistencyIntegration`/`RedisSessionPersistenceIntegration`/`AuthLifecycleIntegration` 3/3 和 OpenSpec 24/24 通过。完整 CTest 共 1429 项，1422 项通过、7 项环境门控跳过、0 失败，总耗时 501.98 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；Phase 3/10 总清理项在兼容路径退役和目标环境门禁完成前继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

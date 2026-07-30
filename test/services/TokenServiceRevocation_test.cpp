@@ -148,12 +148,10 @@ namespace {
 
         m_service->SetRevocationCacheEntryForTest(jti, false, 5);
         ASSERT_EQ(m_service->GetRevocationCacheSizeForTest(), 0u);
-        EXPECT_FALSE(m_service->IsRevocationCacheEntryRevokedForTest(jti));
 
         m_service->SetRevocationCacheEntryForTest(jti, true, TokenService::GetAccessTokenExpireSeconds());
 
         EXPECT_EQ(m_service->GetRevocationCacheSizeForTest(), 1u);
-        EXPECT_TRUE(m_service->IsRevocationCacheEntryRevokedForTest(jti));
     }
 
     TEST_F(TokenServiceRevocationTest, NonRevokedTokenIsNotCached) {

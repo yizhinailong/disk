@@ -257,9 +257,6 @@ namespace disk::services {
             int ttl_seconds
         ) -> void;
 
-        [[nodiscard]]
-        auto IsRevocationCacheEntryRevokedForTest(const std::string& jti) const -> bool;
-
         /**
          * @brief 测试用：获取本地撤销缓存条目数
          * @return size_t 缓存条目数量

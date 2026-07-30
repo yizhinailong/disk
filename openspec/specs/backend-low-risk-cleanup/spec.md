@@ -165,6 +165,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site audit confirms that `TokenService::RevokeShareToken` has no production caller and is used only to seed one filter test
 - **THEN** the unused writer SHALL be removed and that test SHALL seed the exact Redis blacklist hash directly while blacklist reads, positive revocation caching, Redis failure handling, and live database share-status checks retain their existing behavior
 
+#### Scenario: Redundant access-revocation cache probe is removed
+
+- **WHEN** a whole-repository audit confirms that `TokenService::IsRevocationCacheEntryRevokedForTest` is used only by two assertions that duplicate adjacent zero/one cache-size checks
+- **THEN** the redundant production-header test probe and duplicate assertions SHALL be removed while cache insertion/removal, expiry, Redis-backed revocation checks, and access-token rejection retain their existing coverage
+
 #### Scenario: Test-only combined file hash helper is removed
 
 - **WHEN** a whole-repository audit confirms that `FileHashPair` and `FileHashUtil::HashFileMd5AndSha256` are used only by dedicated unit tests while Local and S3 assembly compute whole-file MD5 and SHA-256 during their own bounded streaming pass
