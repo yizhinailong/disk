@@ -106,6 +106,11 @@ namespace disk::folder {
 
             EXPECT_EQ(CountOccurrences(dto_source, "disk::utils::LogContext log_context = {}"), 3);
             EXPECT_EQ(
+                CountOccurrences(dto_source, "::disk::utils::HasForbiddenDriveItemChars("),
+                2U
+            );
+            EXPECT_FALSE(Contains(dto_source, "static const char forbidden_chars[]"));
+            EXPECT_EQ(
                 CountOccurrences(service_body, "disk::utils::LogContext log_context"),
                 8
             );

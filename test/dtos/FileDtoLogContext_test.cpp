@@ -144,6 +144,11 @@ namespace disk::file {
             EXPECT_FALSE(Contains(dto_source, "log_context.job_id"));
             EXPECT_FALSE(Contains(dto_source, "log_context.lease_owner"));
             EXPECT_FALSE(Contains(dto_source, "log_context.state_version"));
+            EXPECT_EQ(
+                CountOccurrences(dto_source, "::disk::utils::HasForbiddenDriveItemChars("),
+                2U
+            );
+            EXPECT_FALSE(Contains(dto_source, "static const char forbidden_chars[]"));
 
             EXPECT_EQ(
                 CountOccurrences(

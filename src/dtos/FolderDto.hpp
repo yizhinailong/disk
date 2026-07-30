@@ -160,20 +160,7 @@ namespace disk::folder {
         /// 验证禁止字符 (/ \ : * ? " < > | 及控制字符 0x00-0x1F)
         [[nodiscard]]
         auto ValidateForbiddenChars() const -> bool {
-            static const char forbidden_chars[] = "/\\:*?\"<>|";
-            for (char c : name) {
-                /// 检查控制字符 (0x00-0x1F)
-                if (static_cast<unsigned char>(c) <= 0x1F) {
-                    return false;
-                }
-                /// 检查文件系统保留字符
-                for (char fc : forbidden_chars) {
-                    if (c == fc) {
-                        return false;
-                    }
-                }
-            }
-            return true;
+            return !::disk::utils::HasForbiddenDriveItemChars(name);
         }
 
         /// 验证保留名称 (. 和 ..)
@@ -302,18 +289,7 @@ namespace disk::folder {
         }
 
         [[nodiscard]] auto ValidateForbiddenChars() const -> bool {
-            static const char forbidden_chars[] = "/\\:*?\"<>|";
-            for (char c : new_name) {
-                if (static_cast<unsigned char>(c) <= 0x1F) {
-                    return false;
-                }
-                for (char fc : forbidden_chars) {
-                    if (c == fc) {
-                        return false;
-                    }
-                }
-            }
-            return true;
+            return !::disk::utils::HasForbiddenDriveItemChars(new_name);
         }
 
         [[nodiscard]] auto ValidateReservedNames() const -> bool {

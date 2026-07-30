@@ -150,6 +150,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site audit confirms that `DtoBase::RequireBool` and `DtoBase::OptionalInt` are called only by `DtoBase_test.cpp` while every production request DTO uses the remaining typed helpers
 - **THEN** the two unused helpers and their dedicated assertions SHALL be removed while source contracts reject their reintroduction and all active JSON, path, query, and ID-array parsers retain their existing `Result<T>` errors without logging
 
+#### Scenario: Shared drive-item name validation is reused
+
+- **WHEN** file upload, file rename, folder creation, and folder rename duplicate the same forbidden-character loop while `NameValidation` already provides the identical cross-platform predicate
+- **THEN** all four DTO validators SHALL reuse that shared predicate and source contracts SHALL lock the production call sites while validation order, public errors, reserved-name rules, hidden-name rules, and UTF-8 handling remain unchanged
+
 #### Scenario: Unused DTO serialization overloads are removed
 
 - **WHEN** a whole-repository call-site and built-object audit confirms that the `DtoBase::SetField` overloads for `std::string_view` and `const char*` plus the `DtoBase::SetArray` overloads for `std::vector<uint64_t>` and `std::vector<std::string>` have no production consumer or object-code instantiation
