@@ -1667,6 +1667,8 @@ Authorization: Bearer <access_token>
 > - 在 `files` 表创建新记录
 > - `file_contents.ref_count` 递增（而非复制物理存储）
 > - 删除文件时 `ref_count` 递减，仅当 `ref_count = 0` 时删除物理文件
+>
+> **并发同名语义**：多个请求把同一文件或不同目录下的同名文件并发复制到同一目标目录时，恰好一个副本创建成功；其余同名项按批量冲突规则跳过，请求仍返回 HTTP 200/业务码 0，且该请求的 `copied_file_count` 与 `copied_count` 不计入冲突项。输家不得增加内容引用计数或已用配额，全部预留配额必须释放，服务端不得暴露 PostgreSQL 唯一约束异常。
 
 #### 请求头
 

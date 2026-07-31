@@ -84,6 +84,10 @@ The system SHALL allow users to copy files or folders while preserving content-s
 - **WHEN** the requested copy would exceed user quota
 - **THEN** the system SHALL reject the copy without partially applying the operation
 
+#### Scenario: Same-named files are concurrently copied into one folder
+- **WHEN** multiple requests concurrently copy the same-named file into one target folder
+- **THEN** exactly one copy SHALL be created, while every other conflicting item SHALL be excluded from the copied count without consuming content references, used quota, or reserved quota
+
 ### Requirement: Search Namespace
 The system SHALL allow users to search files and folders by keyword within their own namespace.
 

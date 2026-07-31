@@ -1989,6 +1989,14 @@ API、数据库、系统测试、单元测试和 OpenSpec 先行固定不同源�
 
 新增真实场景现为 9/9，完整内容/配额安全网为 280/280：8 个并发请求均为 HTTP 200/业务码 0，`moved_file_count` 合计恰好为 1，目标名称与路径只有一行，七个输家保留源目录与路径，目标和八个源目录的 `item_count` 均匹配实际直属项，日志不再包含该唯一约束名。Python 语法、clang-format、差异检查、完整构建、相关直接 GoogleTest 10/10、文件仓储/变更/缓存/文件夹生命周期/移动/拓扑聚焦 CTest 17 通过、1 项按 PgBouncer 环境门控跳过（9.29 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1430 项：1423 通过、7 项按环境门控跳过、0 失败，总耗时 526.48 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与数据库事务合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.84 文件并发复制同名锁内跳过记录（2026-07-31）
+
+API、数据库、系统测试、单元测试和 OpenSpec 先行固定同名文件并发复制到同一目标目录时的批量部分成功、引用与配额语义。调用链审计确认旧流程在事务外查询目标名称占用并筛选候选，随后批次事务先增加 `file_contents.ref_count`、插入文件元数据并结算配额；多个请求可同时通过快照查重，正常冲突只能依靠唯一约束使整个批次回滚，再由外层释放预留配额并返回复制数 0。带 0.5 秒 PostgreSQL `BEFORE INSERT` 延迟 trigger 的手工旧二进制复现中，8 个请求均为 HTTP 200/业务码 0，复制计数合计为 1，目标只有一个副本，引用和已用配额各增加一次且无预留泄漏，但服务器日志出现 14 次 `uk_files_user_folder_name`。新源码顺序合同在生产实现前按预期因缺少事务内候选名称排序而失败；旧二进制运行新增真实场景时 9 项通过、1 项失败，唯一失败正是约束日志泄漏。
+
+事务外名称查询继续作为无写入的快照优化，但不再承担并发裁决。每个显式文件复制批次现在进入既有 `TransactionRunner` 后，先收集候选名称、去重排序并依次获取 `FileRepository::AcquireNameLock` 的 `file-name:<user_id>:<target_folder_id>:<name>` transaction advisory lock，再用同一 transaction client 复查目标占用。只有锁内剩余项才进入引用计数递增、`InsertCopiedFiles` 和 `CommitReservedToUsed`；并发冲突项不触碰引用或 INSERT，并在同一事务通过 `ReleaseReservedStorageChecked` 释放对应预留配额。事务提交成功后才把复制数、实际大小、释放大小和 ID 映射合入公开响应，原批量成功 envelope、外层失败释放、文件夹复制和提交后缓存失效语义保持不变。
+
+新增真实场景现为 10/10，完整内容/配额安全网为 288/288：8 个并发请求继续全部返回 HTTP 200/业务码 0，`copied_file_count` 合计恰好为 1，目标名称/内容/路径只有一行，`ref_count` 与 `storage_used` 各增加一次，`storage_reserved` 回到基线且日志不再包含该唯一约束名。Python 语法、clang-format、差异检查、完整构建、相关直接 GoogleTest 11/11 和 OpenSpec 严格校验 24/24 通过。首次复制/配额/缓存/批量/原子性/移动/拓扑聚焦 CTest 仅因 `QuotaService_test.cpp` 仍要求旧 4 个调用而 1 项失败；该显式上下文计数更新为包含锁内释放的 5 个调用后，聚焦 CTest 29 项通过、1 项按 PgBouncer 环境门控跳过、0 失败（8.68 秒）。最终不带命令行额外超时的完整 CTest 共 1431 项：1424 通过、7 项按环境门控跳过、0 失败，总耗时 518.13 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与 PostgreSQL transaction advisory lock 合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

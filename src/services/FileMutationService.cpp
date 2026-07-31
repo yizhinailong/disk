@@ -775,24 +775,69 @@ namespace disk::file {
             }
 
             std::unordered_map<uint64_t, uint64_t> old_id_to_size;
-            std::unordered_map<uint64_t, uint64_t> valid_content_ref_increment;
-            uint64_t valid_items_size = 0;
             for (const auto& [old_id, file_ptr] : valid_items) {
                 old_id_to_size[old_id] = file_ptr->getValueOfSize();
-                valid_items_size += file_ptr->getValueOfSize();
-                if (auto content_id = file_ptr->getContentId()) {
-                    valid_content_ref_increment[*content_id] += 1;
-                }
             }
 
             std::vector<FileIdMapping> staged_file_mappings;
             uint64_t staged_actual_size = 0;
+            uint64_t staged_released_size = 0;
             int staged_file_count = 0;
             auto tx_result = co_await transaction_runner.Run(
                 [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                    std::vector<std::string> transaction_names;
+                    transaction_names.reserve(valid_items.size());
+                    for (const auto& [old_id, file_ptr] : valid_items) {
+                        (void)old_id;
+                        transaction_names.push_back(file_ptr->getValueOfName());
+                    }
+                    std::sort(transaction_names.begin(), transaction_names.end());
+                    transaction_names.erase(
+                        std::unique(transaction_names.begin(), transaction_names.end()),
+                        transaction_names.end()
+                    );
+                    for (const auto& name : transaction_names) {
+                        co_await m_file_repository.AcquireNameLock(
+                            transaction,
+                            user_id,
+                            request.target_folder_id,
+                            name
+                        );
+                    }
+
+                    auto transaction_occupied_names = co_await utils::QueryOccupiedNames(
+                        transaction,
+                        request.target_folder_id,
+                        user_id,
+                        transaction_names
+                    );
+
+                    std::vector<std::pair<uint64_t, const Files*>> transaction_items;
+                    transaction_items.reserve(valid_items.size());
+                    std::unordered_map<uint64_t, uint64_t> transaction_content_ref_increment;
+                    uint64_t transaction_items_size = 0;
+                    uint64_t transaction_skipped_size = 0;
+                    for (const auto& [old_id, file_ptr] : valid_items) {
+                        const auto& name = file_ptr->getValueOfName();
+                        if (transaction_occupied_names.contains(name)) {
+                            Logger::Warn(log_context)
+                                << "Target folder acquired file with same name, skipping copy: "
+                                << name;
+                            transaction_skipped_size += file_ptr->getValueOfSize();
+                            continue;
+                        }
+
+                        transaction_occupied_names.insert(name);
+                        transaction_items.emplace_back(old_id, file_ptr);
+                        transaction_items_size += file_ptr->getValueOfSize();
+                        if (auto content_id = file_ptr->getContentId()) {
+                            transaction_content_ref_increment[*content_id] += 1;
+                        }
+                    }
+
                     auto increment_result = co_await content_service.IncrementRefCountsChecked(
                         transaction,
-                        valid_content_ref_increment,
+                        transaction_content_ref_increment,
                         existing_content_ids,
                         log_context
                     );
@@ -801,7 +846,7 @@ namespace disk::file {
                     }
 
                     const auto& incremented_ids = increment_result.value();
-                    for (const auto& [old_id, file_ptr] : valid_items) {
+                    for (const auto& [old_id, file_ptr] : transaction_items) {
                         (void)old_id;
                         auto cid = file_ptr->getContentId();
                         if (cid && !incremented_ids.contains(*cid)) {
@@ -819,7 +864,7 @@ namespace disk::file {
                         transaction,
                         user_id,
                         request.target_folder_id,
-                        valid_items,
+                        transaction_items,
                         log_context
                     );
                     if (!id_mappings_result) {
@@ -829,11 +874,21 @@ namespace disk::file {
                     auto commit_quota_result = co_await quota_service.CommitReservedToUsed(
                         transaction,
                         user_id,
-                        valid_items_size,
+                        transaction_items_size,
                         log_context
                     );
                     if (!commit_quota_result) {
                         co_return std::unexpected(commit_quota_result.error());
+                    }
+
+                    auto release_quota_result = co_await quota_service.ReleaseReservedStorageChecked(
+                        transaction,
+                        user_id,
+                        transaction_skipped_size,
+                        log_context
+                    );
+                    if (!release_quota_result) {
+                        co_return std::unexpected(release_quota_result.error());
                     }
 
                     for (const auto& [old_id, new_id] : id_mappings_result.value()) {
@@ -841,6 +896,7 @@ namespace disk::file {
                         staged_actual_size += old_id_to_size[old_id];
                         staged_file_mappings.push_back({ .old_id = old_id, .new_id = new_id });
                     }
+                    staged_released_size = transaction_skipped_size;
                     co_return {};
                 }
             );
@@ -861,6 +917,7 @@ namespace disk::file {
 
             copied_file_count += staged_file_count;
             actual_copy_size += staged_actual_size;
+            released_copy_size += staged_released_size;
             new_files.insert(new_files.end(), staged_file_mappings.begin(), staged_file_mappings.end());
 
             if (skipped_before_tx_size > 0) {

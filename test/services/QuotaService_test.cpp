@@ -221,7 +221,7 @@ namespace disk::quota {
             EXPECT_TRUE(EveryCallContainsContext(
                 file_mutation,
                 "quota_service.",
-                4U
+                5U
             ));
             EXPECT_TRUE(EveryCallContainsContext(trash, "quota_service.", 1U));
             EXPECT_TRUE(Contains(

@@ -716,6 +716,32 @@ def install_file_move_delay_trigger(user_id: int, folder_id: int, target_name: s
     return lambda: drop_failure_trigger("files", trigger_name, function_name)
 
 
+def install_file_copy_delay_trigger(user_id: int, folder_id: int, target_name: str):
+    """Delay matching copied-file inserts so concurrent prechecks overlap."""
+    function_name = safe_test_identifier("delay_file_copy_fn")
+    trigger_name = safe_test_identifier("delay_file_copy_trg")
+    escaped_target = target_name.replace("'", "''")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.user_id = {int(user_id)}
+               AND NEW.folder_id = {int(folder_id)}
+               AND NEW.name = '{escaped_target}' THEN
+                PERFORM pg_sleep(0.5);
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE INSERT ON files '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("files", trigger_name, function_name)
+
+
 def assert_delete_transaction_error(label: str, resp) -> None:
     """Assert delete transaction failures keep the stable public error contract."""
     assert_equal(f"{label} returns HTTP 500", resp.status_code, 500)
@@ -1837,6 +1863,83 @@ def test_concurrent_same_name_file_moves_skip_conflicts() -> None:
     )
 
 
+def test_concurrent_same_name_file_copies_skip_before_insert() -> None:
+    """Verify concurrent same-name copies serialize before reference and insert writes."""
+    log_section("Concurrent Same-Name File Copy Single Winner")
+    target_id = create_folder(f"safety_file_copy_target_{unique_name()}")
+    filename = f"safety_file_copy_collision_{unique_name()}.bin"
+    payload = f"file-copy-payload-{unique_name()}".encode()
+    source_id = upload_file(filename, payload)
+    source = file_row(source_id)
+    content_id = int(source["content_id"])
+    ref_before = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    target_path = str(
+        scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID)) or ""
+    )
+    concurrency = 8
+    barrier = threading.Barrier(concurrency)
+    cleanup_trigger = install_file_copy_delay_trigger(USER_ID, target_id, filename)
+
+    def copy_to_same_target(index: int):
+        barrier.wait(timeout=10)
+        return fetch(
+            "/api/file/copy",
+            method="POST",
+            headers=auth_headers(request_id=f"safety-file-copy-{index}-{unique_name()}"),
+            json_body={"file_ids": [source_id], "folder_ids": [], "target_folder_id": target_id},
+        )
+
+    try:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            responses = list(executor.map(copy_to_same_target, range(concurrency)))
+    finally:
+        cleanup_trigger()
+
+    for index, response in enumerate(responses):
+        save_evidence(f"{EVIDENCE_PREFIX}-file-copy-concurrent-{index}.json", response.text)
+
+    successful_responses = [
+        response
+        for response in responses
+        if response.status_code == 200 and json_field(response.text, "code") == "0"
+    ]
+    copied_counts = [int(json_field(response.text, "data.copied_file_count") or 0) for response in responses]
+    target_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM files "
+            "WHERE user_id = %s AND folder_id = %s AND content_id = %s AND name = %s AND path = %s",
+            (USER_ID, target_id, content_id, filename, f"{target_path}{filename}"),
+        )
+        or 0
+    )
+    ref_after = int(content_row(content_id)["ref_count"])
+    quota_after = user_quota()
+    server_log = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+
+    assert_equal("concurrent file copy returns every response", len(responses), concurrency)
+    assert_equal("concurrent file copy keeps every batch response successful", len(successful_responses), concurrency)
+    assert_equal("concurrent file copy counts exactly one winner", sum(copied_counts), 1)
+    assert_equal("concurrent file copy stores one target row and path", target_rows, 1)
+    assert_numeric_delta("concurrent file copy increments ref_count once", ref_before, ref_after, 1)
+    assert_numeric_delta(
+        "concurrent file copy consumes used quota once",
+        quota_before["storage_used"],
+        quota_after["storage_used"],
+        len(payload),
+    )
+    assert_equal(
+        "concurrent file copy releases every reservation",
+        quota_after["storage_reserved"],
+        quota_before["storage_reserved"],
+    )
+    assert_equal(
+        "concurrent file copy does not expose the uniqueness constraint",
+        "uk_files_user_folder_name" in server_log,
+        False,
+    )
+
+
 def test_copy_quota_rejection_no_side_effects() -> None:
     """Verify over-quota copy leaves no files or ref-count changes behind."""
     log_section("Copy Quota Rejection")
@@ -2583,6 +2686,7 @@ def main() -> None:
     test_concurrent_folder_rename_has_one_winner_and_stable_conflicts()
     test_concurrent_file_rename_has_one_winner_and_stable_conflicts()
     test_concurrent_same_name_file_moves_skip_conflicts()
+    test_concurrent_same_name_file_copies_skip_before_insert()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()

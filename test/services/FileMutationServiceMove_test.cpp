@@ -70,6 +70,14 @@ namespace disk::file {
             );
         }
 
+        auto ExtractCopyBody(const std::string& source) -> std::string {
+            return ExtractRange(
+                source,
+                "auto FileMutationService::Copy(",
+                "    /// ==================== Delete ===================="
+            );
+        }
+
         TEST(FileMutationServiceRenameContractTest, RenameUsesOneTransactionAndStableErrors) {
             const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
             const auto rename_body = ExtractRenameBody(source);
@@ -154,6 +162,36 @@ namespace disk::file {
             ASSERT_NE(result_check, std::string::npos);
             ASSERT_NE(cache_invalidation, std::string::npos);
             EXPECT_LT(result_check, cache_invalidation);
+        }
+
+        TEST(FileMutationServiceCopyContractTest, CopyLocksNamesAndRechecksConflictsInsideBatchTransaction) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto copy_body = ExtractCopyBody(source);
+
+            ASSERT_FALSE(copy_body.empty());
+            const auto transaction = copy_body.find("auto tx_result = co_await transaction_runner.Run(");
+            const auto sort_names = copy_body.find("std::sort(transaction_names.begin(), transaction_names.end())", transaction);
+            const auto name_locks = copy_body.find("m_file_repository.AcquireNameLock(", sort_names);
+            const auto conflict_check = copy_body.find("utils::QueryOccupiedNames(", name_locks);
+            const auto ref_increment = copy_body.find("content_service.IncrementRefCountsChecked(", conflict_check);
+            const auto insert = copy_body.find("InsertCopiedFiles(", ref_increment);
+            const auto quota_commit = copy_body.find("quota_service.CommitReservedToUsed(", insert);
+            const auto quota_release = copy_body.find("quota_service.ReleaseReservedStorageChecked(", quota_commit);
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(sort_names, std::string::npos);
+            ASSERT_NE(name_locks, std::string::npos);
+            ASSERT_NE(conflict_check, std::string::npos);
+            ASSERT_NE(ref_increment, std::string::npos);
+            ASSERT_NE(insert, std::string::npos);
+            ASSERT_NE(quota_commit, std::string::npos);
+            ASSERT_NE(quota_release, std::string::npos);
+            EXPECT_LT(transaction, sort_names);
+            EXPECT_LT(sort_names, name_locks);
+            EXPECT_LT(name_locks, conflict_check);
+            EXPECT_LT(conflict_check, ref_increment);
+            EXPECT_LT(ref_increment, insert);
+            EXPECT_LT(insert, quota_commit);
+            EXPECT_LT(quota_commit, quota_release);
         }
 
         TEST(FileMutationLogContextContractTest, ControllerAndServicesUseExplicitRequestContext) {
