@@ -137,14 +137,7 @@ namespace disk::storage {
             const std::string& continuation_token,
             size_t limit,
             disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<StorageInventoryPage>> {
-            static_cast<void>(continuation_token);
-            static_cast<void>(limit);
-            static_cast<void>(log_context);
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Final Blob inventory is not supported")
-            );
-        }
+        ) -> drogon::Task<Result<StorageInventoryPage>> = 0;
     };
 
 } // namespace disk::storage

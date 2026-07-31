@@ -211,6 +211,14 @@ namespace {
             co_return static_cast<uint64_t>(0);
         }
 
+        auto ListFinalObjects(
+            const std::string& /*continuation_token*/,
+            size_t /*limit*/,
+            disk::utils::LogContext /*log_context*/
+        ) -> drogon::Task<Result<disk::storage::StorageInventoryPage>> override {
+            co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
+        }
+
         bool blob_exists{ true };
         bool local_path_available{ true };
         bool open_blob_should_fail{ false };

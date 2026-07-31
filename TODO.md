@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，GoogleTest 发现用例超时合同）：针对上一轮完整回归中 Redis 运行时用例曾无限挂起的已观察风险，`disk-test` 的 1348 个 GoogleTest 发现用例已统一携带 60 秒 CTest `TIMEOUT`；独立合同从生成元数据对账全部用例，并锁定 `RedisServiceRuntimeTest.SetGetExistsDeleteRoundTrip`。重新配置前的负向验证精确报告 1348 项中 0 项携带上限；重新配置/完整构建后元数据 1348/1348，代表性 Redis、超时与拓扑合同聚焦 CTest 3/3，OpenSpec 24/24 通过。不带命令行 `--timeout` 的完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 511.62 秒。当前主机仍没有容器/Kubernetes、Nginx、PgBouncer、Prometheus 或 MinIO 命令与对应门控变量；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。Python 集成和环境门控用例的独立超时、串行和跳过语义未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，存储诊断必选能力收紧）：活跃消费者与全部派生类审计确认，readiness、管理员上传诊断及 staging/final 对账依赖分片 HEAD 和两类 inventory；Local/S3 生产适配器已完整实现，基类的三条“不支持”默认分支没有生产落点。`HeadChunkObject`、`ListStagingObjects` 和 `ListFinalObjects` 已改为纯虚必选合同，旧 fallback 与三条错误消息删除；两个局部测试替身显式补齐签名。clang-format、完整构建、Local/S3/readiness/对账/Worker/下载聚焦 CTest 98/98 和 OpenSpec 24/24 通过；完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 519.58 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；受保护的 local/legacy 路由、REST、schema、配置及错误映射未改变，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1872,6 +1872,14 @@ utility 转发与仓储单项方法已一并删除，`FolderRepository` 从 13 �
 `test/CMakeLists.txt` 现在通过 `gtest_discover_tests(... PROPERTIES TIMEOUT 60)` 统一绑定单测用例上限。新增 `VerifyDiscoveredTestTimeouts.cmake` 读取构建目录生成的 `disk-test[1]_tests.cmake`，对账 `add_test()` 数与携带精确上限的 `set_tests_properties()` 数，并额外确认上述代表性 Redis 用例存在且受限。元数据不存在、没有发现用例、数量不一致或代表用例缺失都会使 `CTestDiscoveredUnitTimeoutContract` 失败。Python 集成、故障注入和环境门控用例继续使用原有独立上限，没有改变串行、跳过或目标环境证据语义。
 
 CMake 重新配置和完整构建通过；生成元数据对账 1348/1348 项携带 60 秒上限。首次相邻聚焦的唯一失败是 `DistributedTopologyContract` 仍锁定旧的 1424/1417/7 测试库存；只同步为 1425/1418/7 后，Python 语法和拓扑脚本直接执行、代表性 Redis/超时/拓扑聚焦 CTest 3/3 以及 OpenSpec 严格校验 24/24 通过。不带命令行 `--timeout` 的最终完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 511.62 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；因此本批不构成目标高可用、TLS/KMS、独立故障域、长稳或压力验收，Phase 6/9/10 及最终 Definition of Done 继续保持未勾选。
+
+### 15.70 存储诊断必选能力收紧记录（2026-07-31）
+
+后端基础边界 OpenSpec 和单元测试文档先行固定存储诊断能力。活跃调用点审计确认 `HealthService` 用 staging/final inventory 进行角色就绪检查，`UploadDiagnosticService` 逐分片执行 `HeadChunkObject`，`StorageReconciliationService` 用两类 inventory 执行 staging/final 完整对账。派生类审计只有 `LocalFileStorage`、`S3ObjectStorage`、`LocalBlobStore` 和两个局部测试替身；两个生产 staging 适配器均已覆盖 HEAD 与 staging inventory，两个生产 Blob 适配器均已覆盖 final inventory。
+
+`UploadStagingStorage` 不再为 `HeadChunkObject` 和 `ListStagingObjects` 提供返回 `InternalError` 的默认协程，`IBlobStore` 不再为 `ListFinalObjects` 提供同类 fallback；三者都改为纯虚方法，新适配器遗漏任一诊断能力将在编译期失败，而不是启动后由 readiness、管理诊断或对账任务首次发现。旧默认实现和三条“不支持”错误消息删除；Worker cleanup 与 DownloadResponder 的局部测试替身只显式补齐本用例不调用的签名。现有存储边界源码合同锁定三个 `= 0`、旧错误文本消失及 Local/S3 生产声明完整。
+
+clang-format、完整构建、Local/S3/readiness/对账/Worker/下载聚焦 CTest 98/98 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 519.58 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；本批不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支，也不构成目标 HA、TLS/KMS、长稳或压力验收，因此 Phase 3/6/9/10 及最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

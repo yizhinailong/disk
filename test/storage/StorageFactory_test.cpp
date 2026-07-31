@@ -255,6 +255,7 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     const auto factory_header = ReadSourceFile("src/storage/StorageFactory.hpp");
     const auto manager_header = ReadSourceFile("src/storage/StorageMgr.hpp");
     const auto blob_manager_header = ReadSourceFile("src/storage/BlobStoreMgr.hpp");
+    const auto staging_store_header = ReadSourceFile("src/storage/UploadStagingStorage.hpp");
     const auto blob_store_header = ReadSourceFile("src/storage/IBlobStore.hpp");
     const auto application_header = ReadSourceFile("src/application/ApplicationContext.hpp");
     const auto upload_header = ReadSourceFile("src/services/UploadService.hpp");
@@ -263,6 +264,21 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     const auto local_blob_header = ReadSourceFile("src/storage/LocalBlobStore.hpp");
     const auto local_source = ReadSourceFile("src/storage/LocalFileStorage.cpp");
     const auto s3_header = ReadSourceFile("src/storage/S3ObjectStorage.hpp");
+    const auto staging_head_capability = SourceSection(
+        staging_store_header,
+        "virtual auto HeadChunkObject(",
+        "virtual auto AssembleChunks("
+    );
+    const auto staging_inventory_capability = SourceSection(
+        staging_store_header,
+        "virtual auto ListStagingObjects(",
+        "    };"
+    );
+    const auto final_inventory_capability = SourceSection(
+        blob_store_header,
+        "virtual auto ListFinalObjects(",
+        "    };"
+    );
 
     EXPECT_FALSE(std::filesystem::exists(RepositoryRoot() / "src/storage/IFileStorage.hpp"));
     EXPECT_TRUE(Contains(factory_header, "std::shared_ptr<UploadStagingStorage> upload_staging_storage;"));
@@ -270,6 +286,15 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     EXPECT_FALSE(Contains(manager_header, "GetStorage()"));
     EXPECT_FALSE(Contains(manager_header, "IsInitialized()"));
     EXPECT_FALSE(Contains(blob_manager_header, "IsInitialized()"));
+    EXPECT_FALSE(staging_head_capability.empty());
+    EXPECT_TRUE(Contains(staging_head_capability, "= 0;"));
+    EXPECT_FALSE(staging_inventory_capability.empty());
+    EXPECT_TRUE(Contains(staging_inventory_capability, "= 0;"));
+    EXPECT_FALSE(final_inventory_capability.empty());
+    EXPECT_TRUE(Contains(final_inventory_capability, "= 0;"));
+    EXPECT_FALSE(Contains(staging_store_header, "Staging object HEAD is not supported"));
+    EXPECT_FALSE(Contains(staging_store_header, "Staging inventory is not supported"));
+    EXPECT_FALSE(Contains(blob_store_header, "Final Blob inventory is not supported"));
     EXPECT_TRUE(Contains(blob_store_header, "virtual auto BlobExists("));
     EXPECT_FALSE(Contains(blob_store_header, "virtual auto Exists("));
     EXPECT_TRUE(Contains(blob_store_header, "virtual auto OpenBlobRangeForRead("));
@@ -287,10 +312,16 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     EXPECT_FALSE(Contains(upload_header, "IFileStorage"));
     EXPECT_FALSE(Contains(lifecycle_header, "IFileStorage"));
     EXPECT_TRUE(Contains(local_header, "class LocalFileStorage : public UploadStagingStorage"));
+    EXPECT_TRUE(Contains(local_header, "auto HeadChunkObject("));
+    EXPECT_TRUE(Contains(local_header, "auto ListStagingObjects("));
     EXPECT_FALSE(Contains(local_header, "DeletePath("));
     EXPECT_FALSE(Contains(local_source, "RunBlockingFilesystemTaskWithTimeout"));
     EXPECT_TRUE(Contains(local_header, "DiscardAssembly("));
+    EXPECT_TRUE(Contains(local_blob_header, "auto ListFinalObjects("));
     EXPECT_TRUE(Contains(s3_header, "class S3ObjectStorage final : public IBlobStore,"));
+    EXPECT_TRUE(Contains(s3_header, "auto HeadChunkObject("));
+    EXPECT_TRUE(Contains(s3_header, "auto ListStagingObjects("));
+    EXPECT_TRUE(Contains(s3_header, "auto ListFinalObjects("));
 }
 
 TEST_F(StorageFactoryTest, SelectsLocalStorageWithoutCreatingS3Client) {

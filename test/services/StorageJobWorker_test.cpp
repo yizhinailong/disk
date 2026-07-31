@@ -73,6 +73,14 @@ namespace disk::jobs {
                 co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
             }
 
+            auto HeadChunkObject(
+                const disk::storage::UploadStagingSession&,
+                const disk::storage::UploadStagingChunk&,
+                disk::utils::LogContext
+            ) -> drogon::Task<Result<disk::storage::UploadStagingObjectHead>> override {
+                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
+            }
+
             auto AssembleChunks(
                 const disk::storage::UploadStagingSession&,
                 uint64_t,
@@ -102,6 +110,14 @@ namespace disk::jobs {
                     co_return std::unexpected(cleanup_error.value());
                 }
                 co_return {};
+            }
+
+            auto ListStagingObjects(
+                const std::string&,
+                size_t,
+                disk::utils::LogContext
+            ) -> drogon::Task<Result<disk::storage::StorageInventoryPage>> override {
+                co_return std::unexpected(ErrorInfo(ErrorCode::InternalError));
             }
 
             std::vector<disk::storage::UploadStagingSession> cleaned_sessions;

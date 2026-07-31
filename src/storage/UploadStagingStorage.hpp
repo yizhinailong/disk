@@ -131,14 +131,7 @@ namespace disk::storage {
             const UploadStagingSession& session,
             const UploadStagingChunk& chunk,
             disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<UploadStagingObjectHead>> {
-            static_cast<void>(session);
-            static_cast<void>(chunk);
-            static_cast<void>(log_context);
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Staging object HEAD is not supported")
-            );
-        }
+        ) -> drogon::Task<Result<UploadStagingObjectHead>> = 0;
 
         /**
          * @brief 将会话对应的全部分片按序组装成暂存完整文件
@@ -191,14 +184,7 @@ namespace disk::storage {
             const std::string& continuation_token,
             size_t limit,
             disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<StorageInventoryPage>> {
-            static_cast<void>(continuation_token);
-            static_cast<void>(limit);
-            static_cast<void>(log_context);
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Staging inventory is not supported")
-            );
-        }
+        ) -> drogon::Task<Result<StorageInventoryPage>> = 0;
     };
 
 } // namespace disk::storage

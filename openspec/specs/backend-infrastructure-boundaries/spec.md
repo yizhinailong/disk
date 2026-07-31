@@ -74,6 +74,10 @@ The backend SHALL distinguish upload staging storage responsibilities from final
 - **WHEN** the empty aggregate storage interface is removed before local upload migration is admitted for contract cleanup
 - **THEN** local and S3 adapters SHALL retain the descriptor-based legacy local routing required to drain existing tasks
 
+#### Scenario: Diagnostic storage capabilities are required
+- **WHEN** a local or S3 adapter implements the upload-staging or final-Blob boundary
+- **THEN** staging object HEAD, staging inventory, and final-Blob inventory SHALL be required pure-virtual capabilities, and the shared interfaces SHALL NOT provide default implementations that defer a missing adapter capability to an unsupported runtime error
+
 #### Scenario: Singleton manager probes have no callers
 - **WHEN** a singleton manager initialization probe is not used by production or test callers
 - **THEN** the backend SHALL remove that probe while retaining the manager's required set/get operations and any instance-level runtime readiness state
