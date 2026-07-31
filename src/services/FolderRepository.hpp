@@ -45,6 +45,29 @@ namespace disk::folder {
         ) const -> drogon::Task<std::optional<drogon_model::disk::Folders>>;
 
         [[nodiscard]]
+        auto FindOwnedFolderForUpdate(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t folder_id,
+            uint64_t user_id
+        ) const -> drogon::Task<std::optional<drogon_model::disk::Folders>>;
+
+        auto AcquireNameLock(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            uint64_t parent_id,
+            const std::string& name
+        ) const -> drogon::Task<void>;
+
+        [[nodiscard]]
+        auto NameExistsExcluding(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& name,
+            uint64_t parent_id,
+            uint64_t user_id,
+            uint64_t excluded_folder_id
+        ) const -> drogon::Task<bool>;
+
+        [[nodiscard]]
         auto InsertIfNameAvailable(
             const drogon::orm::DbClientPtr& client,
             drogon_model::disk::Folders folder

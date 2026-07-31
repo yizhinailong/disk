@@ -100,12 +100,28 @@ namespace disk::folder {
                 int,
                 const trantor::Date&
             ) const;
+            using NameExistsSignature = drogon::Task<bool> (FolderRepository::*)(
+                const drogon::orm::DbClientPtr&,
+                const std::string&,
+                uint64_t,
+                uint64_t,
+                uint64_t
+            ) const;
+            using NameLockSignature = drogon::Task<void> (FolderRepository::*)(
+                const drogon::orm::DbClientPtr&,
+                uint64_t,
+                uint64_t,
+                const std::string&
+            ) const;
 
             static_assert(std::is_same_v<decltype(&FolderRepository::FindOwnedFolder), FindOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::FetchFolderSubtree), SubtreeSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::FetchBatchFolderDeletePlans), BatchPlanSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::InsertIfNameAvailable), InsertSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::ApplyItemCountDelta), ItemCountSignature>);
+            static_assert(std::is_same_v<decltype(&FolderRepository::FindOwnedFolderForUpdate), FindOwnedSignature>);
+            static_assert(std::is_same_v<decltype(&FolderRepository::NameExistsExcluding), NameExistsSignature>);
+            static_assert(std::is_same_v<decltype(&FolderRepository::AcquireNameLock), NameLockSignature>);
             static_assert(std::is_default_constructible_v<FolderRepository>);
             static_assert(std::is_empty_v<FolderRepository>);
 
@@ -122,11 +138,11 @@ namespace disk::folder {
 
             EXPECT_EQ(
                 CountOccurrences(header, "const drogon::orm::DbClientPtr& client,"),
-                12U
+                15U
             );
             EXPECT_EQ(
                 CountOccurrences(source, "const drogon::orm::DbClientPtr& client,"),
-                12U
+                15U
             );
             EXPECT_FALSE(Contains(header, "m_db_client"));
             EXPECT_FALSE(Contains(header, "FolderRepository(drogon::orm::DbClientPtr"));
@@ -176,21 +192,61 @@ namespace disk::folder {
             EXPECT_TRUE(Contains(source, "co_return result.affectedRows() > 0;"));
 
             const auto transaction = service.find("disk::file::TransactionRunner transaction_runner(");
-            const auto parent_count = service.find("ApplyItemCountDelta(", transaction);
+            const auto name_lock = service.find("AcquireNameLock(", transaction);
+            const auto parent_count = service.find("ApplyItemCountDelta(", name_lock);
             const auto parent_read = service.find(
                 "FindOwnedFolder(\n" "                        transaction",
                 parent_count
             );
             const auto folder_insert = service.find("InsertIfNameAvailable(", parent_read);
             ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(name_lock, std::string::npos);
             ASSERT_NE(parent_count, std::string::npos);
             ASSERT_NE(parent_read, std::string::npos);
             ASSERT_NE(folder_insert, std::string::npos);
-            EXPECT_LT(transaction, parent_count);
+            EXPECT_LT(transaction, name_lock);
+            EXPECT_LT(name_lock, parent_count);
             EXPECT_LT(parent_count, parent_read);
             EXPECT_LT(parent_read, folder_insert);
             EXPECT_TRUE(Contains(service, "ErrorInfo(ErrorCode::FolderAlreadyExists)"));
             EXPECT_FALSE(Contains(service, "auto FolderService::IncrementParentItemCount("));
+        }
+
+        TEST(FolderRepositorySqlContractTest, RenameLocksNameAndChecksEveryPathWrite) {
+            const auto source = ReadSourceFile("src/services/FolderRepository.cpp");
+            const auto service = ReadSourceFile("src/services/FolderService.cpp");
+
+            EXPECT_TRUE(Contains(source, "auto FolderRepository::FindOwnedFolderForUpdate("));
+            EXPECT_TRUE(Contains(source, "FOR UPDATE"));
+            EXPECT_TRUE(Contains(source, "auto FolderRepository::AcquireNameLock("));
+            EXPECT_TRUE(Contains(source, "pg_advisory_xact_lock(hashtextextended($1, 0))"));
+            EXPECT_TRUE(Contains(source, "auto FolderRepository::NameExistsExcluding("));
+            EXPECT_TRUE(Contains(source, "AND id <> $4"));
+
+            const auto rename = service.find("auto FolderService::Rename(");
+            const auto transaction = service.find("disk::file::TransactionRunner rename_transaction_runner(", rename);
+            const auto target_lock = service.find("FindOwnedFolderForUpdate(", transaction);
+            const auto name_lock = service.find("AcquireNameLock(", target_lock);
+            const auto conflict_check = service.find("NameExistsExcluding(", name_lock);
+            const auto subtree = service.find("FetchFolderSubtree(", conflict_check);
+            const auto root_update = service.find("auto root_updated = co_await", subtree);
+            const auto file_update = service.find("auto file_updated = co_await", root_update);
+            ASSERT_NE(rename, std::string::npos);
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(target_lock, std::string::npos);
+            ASSERT_NE(name_lock, std::string::npos);
+            ASSERT_NE(conflict_check, std::string::npos);
+            ASSERT_NE(subtree, std::string::npos);
+            ASSERT_NE(root_update, std::string::npos);
+            ASSERT_NE(file_update, std::string::npos);
+            EXPECT_LT(transaction, target_lock);
+            EXPECT_LT(target_lock, name_lock);
+            EXPECT_LT(name_lock, conflict_check);
+            EXPECT_LT(conflict_check, subtree);
+            EXPECT_LT(subtree, root_update);
+            EXPECT_LT(root_update, file_update);
+            EXPECT_FALSE(Contains(service, "auto FolderService::IsFolderNameExists("));
+            EXPECT_FALSE(Contains(service, "TransactionRunner::Begin("));
         }
 
         TEST(FolderRepositorySqlContractTest, RecursiveSqlIsNamedVisibleAndUserScoped) {

@@ -127,24 +127,6 @@ namespace disk::folder {
 
     private:
         /**
-         * @brief 检查文件夹名称是否已存在
-         *
-         * @param name 文件夹名称
-         * @param parent_id 父文件夹 ID
-         * @param user_id 用户 ID
-         * @param log_context 请求日志上下文
-         * @return drogon::Task<bool> 是否存在同名文件夹
-         */
-        [[nodiscard]]
-        auto IsFolderNameExists(
-            const std::string& name,
-            uint64_t parent_id,
-            uint64_t user_id,
-            disk::utils::LogContext log_context
-        ) const
-            -> drogon::Task<bool>;
-
-        /**
          * @brief 验证父文件夹归属
          *
          * @param parent_id 父文件夹 ID

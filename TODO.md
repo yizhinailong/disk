@@ -1965,6 +1965,14 @@ API、数据库、系统测试、单元测试和 OpenSpec 先行固定嵌套文�
 
 Python 语法、差异检查、完整构建、相关直接 GoogleTest 7/7、内容/配额安全网 258/258、上传日志安全网 67/67、文件夹/变更/上传/拓扑聚焦 CTest 26/26（21.07 秒）和 OpenSpec 严格校验 24/24 通过。首次完整回归因事务化时遗漏既有缺失父目录日志标记而在 `SafetyUploadInvariantsIntegration` 失败；恢复受约束警告后该注册测试 1/1 通过（117.70 秒），最终不带命令行额外超时的完整 CTest 共 1426 项：1419 通过、7 项按环境门控跳过、0 失败，总耗时 508.73 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与数据库事务合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.81 文件夹并发重命名单赢家记录（2026-07-31）
+
+API、数据库、系统测试、单元测试和 OpenSpec 先行固定同父目录并发重命名的单赢家语义。调用链审计确认旧流程在事务外分别读取目标文件夹、父目录、同名冲突和子树，随后再逐项更新名称与路径；8 个 barrier 同步请求都能通过预检查，唯一约束最终使七个输家暴露为 HTTP 500/`10006`，生产日志亦记录 `uk_folders_user_parent_name` 数据库异常。新编译期/源码合同在生产实现前按预期因缺少显式 transaction client 的目标行锁、名称锁和排除自身查询而失败；旧二进制跑新安全网为 263/265，响应分布为一个业务码 0 和七个业务码 `10006`。
+
+`FolderRepository` 新增显式 transaction client 的 `FindOwnedFolderForUpdate`、`AcquireNameLock` 和 `NameExistsExcluding`。创建与重命名现共用 `folder-name:<user_id>:<parent_id>:<name>` 的 PostgreSQL transaction advisory lock；重命名由一个 `TransactionRunner` 在同一事务中锁定目标行、锁定新名称、排除自身复查冲突、读取父目录与子树，并检查根、后代文件夹和后代文件的每一次路径写入。任一读取、冲突或受影响行数错误都走同一回滚路径；只在 `Run` 成功提交并返回后失效列表缓存。事务外 `IsFolderNameExists` 及其无用 ORM alias 已删除。带 0.5 秒 PostgreSQL `BEFORE UPDATE` 延迟 trigger 的真实安全网现为 265/265：8 个并发请求中一个 HTTP 200/业务码 0，七个稳定为 `409/50010`，目标名称与路径各只有一行，七个输家保留原名与原路径，父目录计数不变，日志不再出现该唯一约束异常。
+
+Python 语法、clang-format、差异检查、完整构建、相关直接 GoogleTest 8/8、内容/配额安全网 265/265、文件夹/缓存/变更/拓扑聚焦 CTest 12 通过、1 项按 PgBouncer 环境门控跳过（19.36 秒）和 OpenSpec 严格校验 24/24 通过。首次完整回归仅因 `FileListCache_test.cpp` 仍查找旧手动 `TransactionRunner::Commit` 而 1 项失败；文档与源码合同改为检查重命名 `Run` 成功结果处理后才失效缓存，该用例 1/1 通过。最终不带命令行额外超时的完整 CTest 共 1427 项：1420 通过、7 项按环境门控跳过、0 失败，总耗时 517.46 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与数据库事务合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

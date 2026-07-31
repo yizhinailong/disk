@@ -138,17 +138,25 @@ namespace disk::file {
             const auto folder = ReadSourceFile("src/services/FolderService.cpp");
             const auto share = ReadSourceFile("src/services/ShareService.cpp");
 
-            const auto folder_commit = folder.find("TransactionRunner::Commit(");
-            const auto folder_commit_context = folder.find("log_context", folder_commit);
+            const auto folder_rename = folder.find("auto FolderService::Rename(");
+            const auto folder_transaction = folder.find(
+                "rename_transaction_runner.Run(",
+                folder_rename
+            );
+            const auto folder_result_check = folder.find(
+                "if (!transaction_result)",
+                folder_transaction
+            );
             const auto folder_invalidation = folder.find(
                 "FileListCache::Invalidate(",
-                folder_commit
+                folder_result_check
             );
-            ASSERT_NE(folder_commit, std::string::npos);
-            ASSERT_NE(folder_commit_context, std::string::npos);
+            ASSERT_NE(folder_rename, std::string::npos);
+            ASSERT_NE(folder_transaction, std::string::npos);
+            ASSERT_NE(folder_result_check, std::string::npos);
             ASSERT_NE(folder_invalidation, std::string::npos);
-            EXPECT_LT(folder_commit_context, folder_invalidation);
-            EXPECT_LT(folder_commit, folder_invalidation);
+            EXPECT_LT(folder_transaction, folder_result_check);
+            EXPECT_LT(folder_result_check, folder_invalidation);
 
             const auto save_to_drive = share.find("auto ShareService::SaveToDrive(");
             const auto share_commit = share.find("TransactionRunner::Commit(", save_to_drive);

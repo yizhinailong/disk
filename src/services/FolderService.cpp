@@ -10,7 +10,6 @@
 #include "FolderService.hpp"
 
 #include <algorithm>
-#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
@@ -21,9 +20,6 @@
 
 namespace disk::folder {
 
-    using drogon::orm::CompareOperator;
-    using drogon::orm::CoroMapper;
-    using drogon::orm::Criteria;
     using drogon_model::disk::Folders;
 
     FolderService::FolderService(drogon::orm::DbClientPtr db_client)
@@ -64,6 +60,13 @@ namespace disk::folder {
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
                 std::string parent_path = "/";
                 uint32_t parent_depth = 0;
+
+                co_await m_folder_repository.AcquireNameLock(
+                    transaction,
+                    user_id,
+                    request.parent_id,
+                    request.name
+                );
 
                 if (request.parent_id > 0) {
                     auto parent_updated = co_await m_folder_repository.ApplyItemCountDelta(
@@ -157,57 +160,98 @@ namespace disk::folder {
             << "Starting rename folder: folder_id=" << folder_id << ", new_name=\"" << new_name
             << "\", user_id=" << user_id;
 
-        try {
-            auto folder = co_await m_folder_repository.FindOwnedFolder(m_db_client, folder_id, user_id);
-            if (!folder) {
-                Logger::Warn(log_context)
-                    << "Folder not found or no permission: folder_id=" << folder_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
-            }
-
-            auto parent_id = folder->getValueOfParentId();
-            if (folder->getValueOfName() != new_name &&
-                co_await IsFolderNameExists(new_name, parent_id, user_id, log_context)) {
-                co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
-            }
-
-            std::string parent_path = "/";
-            if (parent_id > 0) {
-                auto parent = co_await m_folder_repository.FindOwnedFolder(m_db_client, parent_id, user_id);
-                if (!parent) {
+        RenameFolderResponse response;
+        disk::file::TransactionRunner rename_transaction_runner(
+            m_db_client,
+            ErrorInfo(ErrorCode::InternalError, "Failed to rename folder"),
+            log_context
+        );
+        auto transaction_result = co_await rename_transaction_runner.Run(
+            [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                auto folder = co_await m_folder_repository.FindOwnedFolderForUpdate(
+                    transaction,
+                    folder_id,
+                    user_id
+                );
+                if (!folder.has_value()) {
                     co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
                 }
-                parent_path = parent->getValueOfPath();
-            }
 
-            auto old_prefix = folder->getValueOfPath();
-            auto new_prefix = BuildFolderPath(parent_path, new_name);
-            auto subtree = co_await m_folder_repository.FetchFolderSubtree(m_db_client, folder_id, user_id);
+                const auto parent_id = folder->getValueOfParentId();
+                co_await m_folder_repository.AcquireNameLock(
+                    transaction,
+                    user_id,
+                    parent_id,
+                    new_name
+                );
+                if (folder->getValueOfName() != new_name &&
+                    co_await m_folder_repository.NameExistsExcluding(
+                        transaction,
+                        new_name,
+                        parent_id,
+                        user_id,
+                        folder_id
+                    )) {
+                    co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
+                }
 
-            std::shared_ptr<drogon::orm::Transaction> txn;
-            try {
-                txn = co_await disk::file::TransactionRunner::Begin(m_db_client);
+                std::string parent_path = "/";
+                if (parent_id > 0) {
+                    auto parent = co_await m_folder_repository.FindOwnedFolderForUpdate(
+                        transaction,
+                        parent_id,
+                        user_id
+                    );
+                    if (!parent.has_value()) {
+                        co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+                    }
+                    parent_path = parent->getValueOfPath();
+                }
 
+                const auto old_prefix = folder->getValueOfPath();
+                const auto new_prefix = BuildFolderPath(parent_path, new_name);
+                auto subtree = co_await m_folder_repository.FetchFolderSubtree(
+                    transaction,
+                    folder_id,
+                    user_id
+                );
+                if (subtree.empty()) {
+                    co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+                }
+
+                const auto updated_at = trantor::Date::now();
                 for (const auto& item : subtree) {
                     auto old_path = item.getValueOfPath();
                     auto new_path = new_prefix + old_path.substr(old_prefix.size());
                     if (item.getValueOfId() == folder_id) {
-                        co_await m_folder_repository.RenameFolderPath(
-                            txn,
+                        auto root_updated = co_await m_folder_repository.RenameFolderPath(
+                            transaction,
                             item.getValueOfId(),
                             user_id,
                             new_name,
                             new_path,
-                            trantor::Date::now()
+                            updated_at
                         );
+                        if (!root_updated) {
+                            co_return std::unexpected(ErrorInfo(
+                                ErrorCode::InternalError,
+                                "Failed to rename folder"
+                            ));
+                        }
                     } else {
-                        co_await m_folder_repository.UpdateFolderPath(
-                            txn,
+                        auto folder_updated = co_await m_folder_repository.UpdateFolderPath(
+                            transaction,
                             item.getValueOfId(),
                             user_id,
                             new_path,
-                            trantor::Date::now()
+                            updated_at
                         );
+                        if (!folder_updated) {
+                            co_return std::unexpected(ErrorInfo(
+                                ErrorCode::InternalError,
+                                "Failed to rename folder"
+                            ));
+                        }
                     }
                 }
 
@@ -225,108 +269,58 @@ namespace disk::folder {
                         folder_ids.push_back(id);
                     }
                     disk::file::FileRepository file_repository;
-                    auto files = co_await file_repository.FetchFilesInFolders(txn, folder_ids, user_id);
+                    auto files = co_await file_repository.FetchFilesInFolders(
+                        transaction,
+                        folder_ids,
+                        user_id
+                    );
                     for (const auto& file : files) {
                         auto path_it = folder_paths.find(file.getValueOfFolderId());
                         if (path_it == folder_paths.end()) {
                             continue;
                         }
-                        co_await file_repository.UpdateFilePath(
-                            txn,
+                        auto file_updated = co_await file_repository.UpdateFilePath(
+                            transaction,
                             file.getValueOfId(),
                             user_id,
                             BuildFilePath(path_it->second, file.getValueOfName()),
-                            trantor::Date::now()
+                            updated_at
                         );
+                        if (!file_updated) {
+                            co_return std::unexpected(ErrorInfo(
+                                ErrorCode::InternalError,
+                                "Failed to rename folder"
+                            ));
+                        }
                     }
                 }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Error(log_context)
-                    << "Rename folder transaction failed (DB): " << e.base().what();
-                if (txn) {
-                    try {
-                        txn->rollback();
-                    } catch (const std::exception& rb_e) {
-                        Logger::Error(log_context)
-                            << "Transaction rollback failed: " << rb_e.what();
-                    }
-                }
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to rename folder")
-                );
-            } catch (const std::exception& e) {
-                Logger::Error(log_context) << "Rename folder transaction failed: " << e.what();
-                if (txn) {
-                    try {
-                        txn->rollback();
-                    } catch (const std::exception& rb_e) {
-                        Logger::Error(log_context)
-                            << "Transaction rollback failed: " << rb_e.what();
-                    }
-                }
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to rename folder")
-                );
+
+                response.id = folder_id;
+                response.name = new_name;
+                response.path = new_prefix;
+                response.updated_at = updated_at.toDbStringLocal();
+                co_return {};
             }
-
-            auto commit_result = co_await disk::file::TransactionRunner::Commit(
-                txn,
-                log_context
-            );
-            if (!commit_result) {
-                co_return std::unexpected(
-                    ErrorInfo(ErrorCode::InternalError, "Failed to rename folder")
-                );
+        );
+        if (!transaction_result) {
+            if (transaction_result.error().code == ErrorCode::FolderNotFound) {
+                Logger::Warn(log_context)
+                    << "Folder not found or no permission: folder_id=" << folder_id;
+            } else if (transaction_result.error().code == ErrorCode::FolderAlreadyExists) {
+                Logger::Warn(log_context)
+                    << "Folder with same name already exists: name=\"" << new_name << "\"";
+            } else {
+                Logger::Error(log_context) << "Rename folder transaction failed";
             }
-            co_await disk::file::FileListCache::Invalidate(
-                m_redis_service,
-                user_id,
-                log_context
-            );
-
-            RenameFolderResponse response;
-            response.id = folder_id;
-            response.name = new_name;
-            response.path = new_prefix;
-            response.updated_at = trantor::Date::now().toDbStringLocal();
-            co_return response;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context)
-                << "Folder not found or no permission: folder_id=" << folder_id << " - "
-                << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+            co_return std::unexpected(transaction_result.error());
         }
-    }
 
-    auto FolderService::IsFolderNameExists(
-        const std::string& name,
-        uint64_t parent_id,
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<bool> {
-
-        try {
-            CoroMapper<Folders> mapper(m_db_client);
-
-            auto count = co_await mapper.count(
-                Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id) &&
-                Criteria(Folders::Cols::_parent_id, CompareOperator::EQ, parent_id) &&
-                Criteria(Folders::Cols::_name, CompareOperator::EQ, name)
-            );
-
-            Logger::Debug(log_context)
-                << "Checking folder name existence: name=\"" << name
-                << "\", parent_id=" << parent_id << " - "
-                << (count > 0 ? "exists" : "does not exist");
-
-            co_return count > 0;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to check folder name: name=\"" << name << "\" - "
-                << e.base().what();
-            co_return false;
-        }
+        co_await disk::file::FileListCache::Invalidate(
+            m_redis_service,
+            user_id,
+            log_context
+        );
+        co_return response;
     }
 
     auto FolderService::GetFolderTree(

@@ -635,6 +635,33 @@ def install_parent_item_count_failure_trigger(parent_id: int):
     return lambda: drop_failure_trigger("folders", trigger_name, function_name)
 
 
+def install_folder_rename_delay_trigger(user_id: int, parent_id: int, target_name: str):
+    """Delay matching folder renames so concurrent prechecks overlap."""
+    function_name = safe_test_identifier("delay_folder_rename_fn")
+    trigger_name = safe_test_identifier("delay_folder_rename_trg")
+    escaped_target = target_name.replace("'", "''")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.user_id = {int(user_id)}
+               AND NEW.parent_id = {int(parent_id)}
+               AND NEW.name = '{escaped_target}'
+               AND OLD.name <> NEW.name THEN
+                PERFORM pg_sleep(0.5);
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON folders '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("folders", trigger_name, function_name)
+
+
 def assert_delete_transaction_error(label: str, resp) -> None:
     """Assert delete transaction failures keep the stable public error contract."""
     assert_equal(f"{label} returns HTTP 500", resp.status_code, 500)
@@ -1497,6 +1524,82 @@ def test_folder_create_is_atomic_and_concurrent_conflicts_are_stable() -> None:
     assert_numeric_delta("concurrent folder create increments parent once", count_after_retry, count_after_concurrent, 1)
 
 
+def test_concurrent_folder_rename_has_one_winner_and_stable_conflicts() -> None:
+    """Verify concurrent sibling renames serialize before conflict checks."""
+    log_section("Concurrent Folder Rename Single Winner")
+    parent_id = create_folder(f"safety_folder_rename_parent_{unique_name()}")
+    concurrency = 8
+    original_names = [f"safety_folder_rename_source_{index}_{unique_name()}" for index in range(concurrency)]
+    folder_ids = [create_folder(name, parent_id) for name in original_names]
+    target_name = f"safety_folder_rename_target_{unique_name()}"
+    parent_count_before = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (parent_id, USER_ID))
+        or 0
+    )
+    barrier = threading.Barrier(concurrency)
+    cleanup_trigger = install_folder_rename_delay_trigger(USER_ID, parent_id, target_name)
+
+    def rename_to_same_target(index: int):
+        barrier.wait(timeout=10)
+        return fetch(
+            f"/api/folder/{folder_ids[index]}/rename",
+            method="PUT",
+            headers=auth_headers(request_id=f"safety-folder-rename-{index}-{unique_name()}"),
+            json_body={"new_name": target_name},
+        )
+
+    try:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            responses = list(executor.map(rename_to_same_target, range(concurrency)))
+    finally:
+        cleanup_trigger()
+
+    for index, response in enumerate(responses):
+        save_evidence(f"{EVIDENCE_PREFIX}-folder-rename-concurrent-{index}.json", response.text)
+
+    success_responses = [response for response in responses if response.status_code == 200]
+    conflict_responses = [response for response in responses if response.status_code == 409]
+    parent_path = str(
+        scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (parent_id, USER_ID))
+        or ""
+    )
+    target_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders "
+            "WHERE user_id = %s AND parent_id = %s AND name = %s AND path = %s",
+            (USER_ID, parent_id, target_name, f"{parent_path}{target_name}/"),
+        )
+        or 0
+    )
+    original_rows = sum(
+        int(
+            scalar(
+                "SELECT COUNT(*) FROM folders "
+                "WHERE user_id = %s AND parent_id = %s AND name = %s AND path = %s",
+                (USER_ID, parent_id, name, f"{parent_path}{name}/"),
+            )
+            or 0
+        )
+        for name in original_names
+    )
+    parent_count_after = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (parent_id, USER_ID))
+        or 0
+    )
+
+    assert_equal("concurrent folder rename returns every response", len(responses), concurrency)
+    assert_equal("concurrent folder rename has one success", len(success_responses), 1)
+    assert_equal("concurrent folder rename has seven conflicts", len(conflict_responses), concurrency - 1)
+    assert_equal(
+        "concurrent folder rename conflicts use FolderAlreadyExists",
+        {json_field(response.text, "code") for response in conflict_responses},
+        {"50010"},
+    )
+    assert_equal("concurrent folder rename stores one target name and path", target_rows, 1)
+    assert_equal("concurrent folder rename preserves loser names and paths", original_rows, concurrency - 1)
+    assert_equal("concurrent folder rename preserves parent count", parent_count_after, parent_count_before)
+
+
 def test_copy_quota_rejection_no_side_effects() -> None:
     """Verify over-quota copy leaves no files or ref-count changes behind."""
     log_section("Copy Quota Rejection")
@@ -2240,6 +2343,7 @@ def main() -> None:
     test_upload_task_insert_failure_rolls_back_reservation_and_retries()
     test_concurrent_upload_init_reuses_one_task_and_reservation()
     test_folder_create_is_atomic_and_concurrent_conflicts_are_stable()
+    test_concurrent_folder_rename_has_one_winner_and_stable_conflicts()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()

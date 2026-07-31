@@ -50,6 +50,10 @@ The system SHALL allow users to rename files or folders while enforcing naming v
 - **WHEN** the requested new name violates naming rules or conflicts with an existing same-type item
 - **THEN** the system SHALL reject the rename request
 
+#### Scenario: Different folders are concurrently renamed to one name
+- **WHEN** multiple requests concurrently rename different folders in one parent to the same valid name
+- **THEN** exactly one transaction SHALL update its complete folder/file subtree, while every loser SHALL receive `FolderAlreadyExists` without partial path changes
+
 ### Requirement: Move Items
 The system SHALL allow users to move files or folders to an accessible target folder.
 
