@@ -3301,6 +3301,121 @@ def test_restore_trash_delete_suppression_rolls_back_and_retries() -> None:
     assert_equal("restore retry keeps quota", user_quota(), quota_before)
 
 
+def test_file_trash_parent_count_failures_roll_back_and_retry() -> None:
+    """Verify nested file soft delete and restore update the parent count atomically."""
+    log_section("File Trash Parent Count Failures Roll Back And Retry")
+    parent_id = create_folder(f"safety_trash_parent_count_{unique_name()}")
+    filename = f"safety_trash_parent_count_{unique_name()}.bin"
+    payload = f"trash-parent-count-{unique_name()}".encode()
+    file_id = upload_file(filename, payload, parent_id)
+    content_id = int(file_row(file_id)["content_id"])
+    ref_before = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    assert_equal(
+        "trash parent count fixture starts at one",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0),
+        1,
+    )
+
+    cleanup_trigger = install_parent_item_count_suppression_trigger(parent_id)
+    try:
+        delete_response = delete_file_to_trash_response(file_id)
+    finally:
+        cleanup_trigger()
+
+    active_after_delete_failure = int(
+        scalar("SELECT COUNT(*) FROM files WHERE id = %s AND user_id = %s", (file_id, USER_ID))
+        or 0
+    )
+    trash_after_delete_failure = query_one(
+        "SELECT id FROM trash WHERE user_id = %s AND item_type = 'file' AND item_id = %s "
+        "ORDER BY id DESC LIMIT 1",
+        (USER_ID, file_id),
+    )
+    assert_equal("trash parent decrement failure returns HTTP 500", delete_response.status_code, 500)
+    assert_equal(
+        "trash parent decrement failure returns InternalError",
+        json_field(delete_response.text, "code"),
+        "10006",
+    )
+    assert_equal("trash parent decrement failure keeps active file", active_after_delete_failure, 1)
+    assert_equal("trash parent decrement failure creates no trash row", trash_after_delete_failure is None, True)
+    assert_equal(
+        "trash parent decrement failure keeps parent count",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0),
+        1,
+    )
+
+    if active_after_delete_failure == 1:
+        trash_id = delete_file_to_trash(file_id)
+    else:
+        trash_id = int(trash_after_delete_failure["id"])
+    count_after_delete = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0
+    )
+    assert_equal("successful nested soft delete decrements parent count", count_after_delete, 0)
+    execute("UPDATE folders SET item_count = 0 WHERE id = %s", (parent_id,))
+
+    cleanup_trigger = install_parent_item_count_suppression_trigger(parent_id)
+    try:
+        restore_response = restore_trash_response(trash_id)
+    finally:
+        cleanup_trigger()
+
+    active_after_restore_failure = query_one(
+        "SELECT id FROM files WHERE user_id = %s AND folder_id = %s AND name = %s",
+        (USER_ID, parent_id, filename),
+    )
+    trash_after_restore_failure = int(
+        scalar("SELECT COUNT(*) FROM trash WHERE id = %s AND user_id = %s", (trash_id, USER_ID))
+        or 0
+    )
+    assert_equal("trash parent increment failure keeps HTTP 200 batch envelope", restore_response.status_code, 200)
+    assert_equal(
+        "trash parent increment failure reports one failed item",
+        json_field(restore_response.text, "data.summary.failure_count"),
+        "1",
+    )
+    assert_equal(
+        "trash parent increment failure reports failed status",
+        json_field(restore_response.text, "data.results.0.status"),
+        "failed",
+    )
+    assert_equal(
+        "trash parent increment failure reports InternalError",
+        json_field(restore_response.text, "data.results.0.error.code"),
+        "10006",
+    )
+    assert_equal("trash parent increment failure creates no active file", active_after_restore_failure is None, True)
+    assert_equal("trash parent increment failure keeps trash row", trash_after_restore_failure, 1)
+    assert_equal(
+        "trash parent increment failure keeps parent count",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0),
+        0,
+    )
+
+    if trash_after_restore_failure == 1:
+        restored_file_id = restore_trash(trash_id)
+    else:
+        restored_file_id = int(active_after_restore_failure["id"])
+    restored_file = file_row(restored_file_id)
+    final_parent_count = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0
+    )
+    assert_equal("trash parent retry restores original parent", int(restored_file["folder_id"]), parent_id)
+    assert_equal("trash parent retry restores original filename", restored_file["name"], filename)
+    assert_equal("successful nested restore increments parent count", final_parent_count, 1)
+    assert_equal("trash parent transitions keep ref_count", int(content_row(content_id)["ref_count"]), ref_before)
+    assert_equal("trash parent transitions keep quota", user_quota(), quota_before)
+    execute(
+        "UPDATE folders SET item_count = "
+        "(SELECT COUNT(*) FROM files WHERE folder_id = %s AND user_id = %s) + "
+        "(SELECT COUNT(*) FROM folders WHERE parent_id = %s AND user_id = %s) "
+        "WHERE id = %s AND user_id = %s",
+        (parent_id, USER_ID, parent_id, USER_ID, parent_id, USER_ID),
+    )
+
+
 def test_share_cleanup_on_soft_delete() -> None:
     """Verify move-to-trash removes share links and cancels shares only when empty."""
     log_section("Share Cleanup On Soft Delete")
@@ -3684,6 +3799,7 @@ def main() -> None:
     test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cleanup()
     test_restore_preserves_ref_count_storage_used_and_removes_trash()
     test_restore_trash_delete_suppression_rolls_back_and_retries()
+    test_file_trash_parent_count_failures_roll_back_and_retry()
     test_share_cleanup_on_soft_delete()
     test_folder_soft_delete_snapshot_preserves_ref_count_and_storage()
     test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_share_cleanup()

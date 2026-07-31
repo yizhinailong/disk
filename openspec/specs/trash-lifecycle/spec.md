@@ -21,6 +21,10 @@ The system SHALL move deleted files or folders into trash instead of immediately
 - **WHEN** an item is moved to trash
 - **THEN** the system SHALL continue counting its storage usage until permanent deletion
 
+#### Scenario: A nested file is soft-deleted
+- **WHEN** an explicit file is moved from a non-root folder into trash
+- **THEN** the delete transaction SHALL decrement the source folder's direct item count or roll back every trash and active-namespace write
+
 ### Requirement: Trash Listing
 The system SHALL allow users to list their trash items with deletion and expiry metadata.
 
@@ -50,6 +54,10 @@ The system SHALL allow users to restore trash items when possible and SHALL reso
 #### Scenario: File restore consumption fails
 - **WHEN** an active file is recreated but its trash row cannot be consumed in the same restore attempt
 - **THEN** the restore transaction SHALL roll back every write so a retry consumes the trash item exactly once without changing content references or quota
+
+#### Scenario: A file is restored into a non-root folder
+- **WHEN** a file is restored into an existing original parent folder
+- **THEN** the restore transaction SHALL increment that folder's direct item count exactly once or roll back the active file and trash consumption
 
 ### Requirement: Permanent Delete
 The system SHALL permanently delete trash items and release storage only during permanent deletion or equivalent cleanup.

@@ -316,6 +316,7 @@ namespace disk::trash {
 
                 std::vector<disk::file::utils::TrashInsertItem> trash_items;
                 trash_items.reserve(file_map.size() + top_level_folder_ids.size());
+                std::unordered_map<uint64_t, int> explicit_file_parent_deltas;
                 file_ids_to_delete.clear();
                 folder_ids_to_delete.clear();
                 file_ids_to_delete.reserve(file_map.size() + covered_file_ids.size());
@@ -349,6 +350,9 @@ namespace disk::trash {
                         .item_data = Json::writeString(builder, item_data),
                     });
                     file_ids_to_delete.push_back(file.getValueOfId());
+                    if (file.getValueOfFolderId() > 0) {
+                        --explicit_file_parent_deltas[file.getValueOfFolderId()];
+                    }
                     ++deleted_file_count;
                 }
 
@@ -397,6 +401,26 @@ namespace disk::trash {
                 );
                 if (!insert_ok) {
                     co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
+                }
+
+                std::vector<std::pair<uint64_t, int>> ordered_parent_deltas(
+                    explicit_file_parent_deltas.begin(),
+                    explicit_file_parent_deltas.end()
+                );
+                std::sort(ordered_parent_deltas.begin(), ordered_parent_deltas.end());
+                for (const auto& [parent_id, delta] : ordered_parent_deltas) {
+                    auto parent_updated = co_await folder_repository.ApplyItemCountDelta(
+                        transaction,
+                        parent_id,
+                        user_id,
+                        delta,
+                        trantor::Date::now()
+                    );
+                    if (!parent_updated) {
+                        co_return std::unexpected(
+                            ErrorInfo(ErrorCode::InternalError, "Failed to delete items")
+                        );
+                    }
                 }
 
                 auto share_stats = co_await CleanupShareLinksForMovedItems(
@@ -1177,6 +1201,21 @@ namespace disk::trash {
                     CoroMapper<Files> file_mapper(transaction);
                     auto inserted_file = co_await file_mapper.insert(file);
                     restored_file_id = inserted_file.getValueOfId();
+
+                    if (target_folder_id > 0) {
+                        auto parent_updated = co_await folder_repository.ApplyItemCountDelta(
+                            transaction,
+                            target_folder_id,
+                            user_id,
+                            1,
+                            trantor::Date::now()
+                        );
+                        if (!parent_updated) {
+                            co_return std::unexpected(
+                                ErrorInfo(ErrorCode::InternalError, "Failed to restore file")
+                            );
+                        }
+                    }
 
                     auto delete_result = co_await transaction->execSqlCoro(
                         "DELETE FROM trash "

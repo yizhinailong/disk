@@ -147,6 +147,65 @@ namespace disk::trash {
             EXPECT_LT(trash_delete, affected_rows);
         }
 
+        TEST(TrashQuerySqlContractTest, FileTrashTransitionsUpdateParentCountsAtomically) {
+            const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
+            const auto move_begin = service_source.find("auto TrashService::MoveToTrash(");
+            const auto move_end = service_source.find(
+                "auto TrashService::CleanupShareLinksForMovedItems(",
+                move_begin
+            );
+            const auto restore_begin = service_source.find(
+                "auto TrashService::RestoreFile(\n        const TrashLifecycleRecord&"
+            );
+            const auto restore_end = service_source.find(
+                "auto TrashService::RestoreFolder(",
+                restore_begin
+            );
+
+            ASSERT_NE(move_begin, std::string::npos);
+            ASSERT_NE(move_end, std::string::npos);
+            ASSERT_NE(restore_begin, std::string::npos);
+            ASSERT_NE(restore_end, std::string::npos);
+            const auto move_body = service_source.substr(move_begin, move_end - move_begin);
+            const auto restore_body = service_source.substr(
+                restore_begin,
+                restore_end - restore_begin
+            );
+
+            const auto trash_insert = move_body.find("co_await CreateTrashRecords(");
+            const auto parent_deltas = move_body.find(
+                "explicit_file_parent_deltas",
+                trash_insert
+            );
+            const auto delete_count_update = move_body.find(
+                "ApplyItemCountDelta(",
+                parent_deltas
+            );
+            const auto active_delete = move_body.find("DeleteFilesByIds(", delete_count_update);
+            ASSERT_NE(trash_insert, std::string::npos);
+            ASSERT_NE(parent_deltas, std::string::npos);
+            ASSERT_NE(delete_count_update, std::string::npos);
+            ASSERT_NE(active_delete, std::string::npos);
+            EXPECT_LT(trash_insert, parent_deltas);
+            EXPECT_LT(parent_deltas, delete_count_update);
+            EXPECT_LT(delete_count_update, active_delete);
+
+            const auto active_insert = restore_body.find("file_mapper.insert(");
+            const auto restore_count_update = restore_body.find(
+                "ApplyItemCountDelta(",
+                active_insert
+            );
+            const auto trash_delete = restore_body.find(
+                "DELETE FROM trash",
+                restore_count_update
+            );
+            ASSERT_NE(active_insert, std::string::npos);
+            ASSERT_NE(restore_count_update, std::string::npos);
+            ASSERT_NE(trash_delete, std::string::npos);
+            EXPECT_LT(active_insert, restore_count_update);
+            EXPECT_LT(restore_count_update, trash_delete);
+        }
+
         TEST(TrashQuerySqlContractTest, ExpiredFetchKeepsCursorAndLifecycleInService) {
             const auto query_source = ReadSourceFile("src/services/TrashQuery.cpp");
             const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
