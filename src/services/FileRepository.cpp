@@ -114,7 +114,7 @@ namespace disk::file {
         co_return !result.empty();
     }
 
-    auto FileRepository::FetchOwnedFilesByIds(
+    auto FileRepository::FetchOwnedFilesByIdsForUpdate(
         const drogon::orm::DbClientPtr& client,
         const std::vector<uint64_t>& file_ids,
         uint64_t user_id
@@ -124,14 +124,21 @@ namespace disk::file {
             co_return files;
         }
 
-        auto chunks = BatchUtils::Chunk(file_ids, DEFAULT_BATCH_CHUNK_SIZE);
+        auto sorted_file_ids = file_ids;
+        std::sort(sorted_file_ids.begin(), sorted_file_ids.end());
+        sorted_file_ids.erase(
+            std::unique(sorted_file_ids.begin(), sorted_file_ids.end()),
+            sorted_file_ids.end()
+        );
+
+        auto chunks = BatchUtils::Chunk(sorted_file_ids, DEFAULT_BATCH_CHUNK_SIZE);
         for (const auto& chunk : chunks) {
             if (chunk.empty()) {
                 continue;
             }
             auto result = co_await client->execSqlCoro(
                 std::string(kSelectOwnedFilesPrefixSql) + BatchUtils::BuildSafeNumericInClause(chunk) +
-                    ") AND user_id = $1 ORDER BY id ASC",
+                    ") AND user_id = $1 ORDER BY id ASC FOR UPDATE",
                 user_id
             );
             files.reserve(files.size() + result.size());

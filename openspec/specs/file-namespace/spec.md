@@ -69,6 +69,10 @@ The system SHALL allow users to move files or folders to an accessible target fo
 - **WHEN** the target folder is missing, inaccessible, or would create an invalid folder relationship
 - **THEN** the system SHALL reject the invalid move
 
+#### Scenario: Same-named files are concurrently moved into one folder
+- **WHEN** multiple requests concurrently move same-named files from different source folders into one target folder
+- **THEN** exactly one file SHALL move, while every other conflicting item SHALL remain at its source and its batch request SHALL succeed with that item excluded from the moved count
+
 ### Requirement: Copy Items
 The system SHALL allow users to copy files or folders while preserving content-sharing and quota semantics.
 

@@ -193,29 +193,52 @@ namespace disk::file {
         auto transaction_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
                 if (!file_ids.empty()) {
+                    auto fetched_files = co_await m_file_repository.FetchOwnedFilesByIdsForUpdate(
+                        transaction,
+                        file_ids,
+                        user_id
+                    );
+
+                    std::unordered_map<uint64_t, std::pair<uint64_t, std::string>> files;
+                    files.reserve(fetched_files.size());
+                    std::vector<std::string> candidate_names;
+                    candidate_names.reserve(fetched_files.size());
+                    for (const auto& file : fetched_files) {
+                        auto id = file.getValueOfId();
+                        auto folder_id = file.getValueOfFolderId();
+                        auto name = file.getValueOfName();
+                        files[id] = { folder_id, name };
+                        if (folder_id != request.target_folder_id) {
+                            candidate_names.push_back(std::move(name));
+                        }
+                    }
+
+                    std::sort(candidate_names.begin(), candidate_names.end());
+                    candidate_names.erase(
+                        std::unique(candidate_names.begin(), candidate_names.end()),
+                        candidate_names.end()
+                    );
+                    for (const auto& name : candidate_names) {
+                        co_await m_file_repository.AcquireNameLock(
+                            transaction,
+                            user_id,
+                            request.target_folder_id,
+                            name
+                        );
+                    }
+
                     auto chunks = BatchUtils::Chunk(file_ids, DEFAULT_BATCH_CHUNK_SIZE);
                     for (const auto& chunk : chunks) {
                         if (chunk.empty()) {
                             continue;
                         }
 
-                        auto fetched_files = co_await m_file_repository.FetchOwnedFilesByIds(
-                            transaction,
-                            chunk,
-                            user_id
-                        );
-
-                        std::unordered_map<uint64_t, std::pair<uint64_t, std::string>> files;
-                        files.reserve(fetched_files.size());
-                        std::vector<std::string> candidate_names;
-                        candidate_names.reserve(fetched_files.size());
-                        for (const auto& file : fetched_files) {
-                            auto id = file.getValueOfId();
-                            auto folder_id = file.getValueOfFolderId();
-                            auto name = file.getValueOfName();
-                            files[id] = { folder_id, name };
-                            if (folder_id != request.target_folder_id) {
-                                candidate_names.push_back(name);
+                        std::vector<std::string> chunk_candidate_names;
+                        chunk_candidate_names.reserve(chunk.size());
+                        for (const auto file_id : chunk) {
+                            auto it = files.find(file_id);
+                            if (it != files.end() && it->second.first != request.target_folder_id) {
+                                chunk_candidate_names.push_back(it->second.second);
                             }
                         }
 
@@ -223,7 +246,7 @@ namespace disk::file {
                             transaction,
                             request.target_folder_id,
                             user_id,
-                            candidate_names
+                            chunk_candidate_names
                         );
 
                         std::unordered_map<uint64_t, int> source_deltas;
@@ -261,7 +284,12 @@ namespace disk::file {
                                 updated_at
                             );
                             if (!updated) {
-                                continue;
+                                Logger::Error(log_context)
+                                    << "File location update affected no rows: file_id=" << file_id;
+                                co_return std::unexpected(ErrorInfo(
+                                    ErrorCode::InternalError,
+                                    "Failed to move items"
+                                ));
                             }
 
                             if (source_folder_id > 0) {
@@ -277,13 +305,22 @@ namespace disk::file {
                             if (delta == 0) {
                                 continue;
                             }
-                            co_await m_folder_repository.ApplyItemCountDelta(
+                            auto count_updated = co_await m_folder_repository.ApplyItemCountDelta(
                                 transaction,
                                 folder_id,
                                 user_id,
                                 delta,
                                 trantor::Date::now()
                             );
+                            if (!count_updated) {
+                                Logger::Error(log_context)
+                                    << "Move item-count update affected no rows: folder_id="
+                                    << folder_id;
+                                co_return std::unexpected(ErrorInfo(
+                                    ErrorCode::InternalError,
+                                    "Failed to move items"
+                                ));
+                            }
                         }
                     }
                 }

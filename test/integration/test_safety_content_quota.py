@@ -689,6 +689,33 @@ def install_file_rename_delay_trigger(user_id: int, folder_id: int, target_name:
     return lambda: drop_failure_trigger("files", trigger_name, function_name)
 
 
+def install_file_move_delay_trigger(user_id: int, folder_id: int, target_name: str):
+    """Delay matching file moves so concurrent prechecks overlap."""
+    function_name = safe_test_identifier("delay_file_move_fn")
+    trigger_name = safe_test_identifier("delay_file_move_trg")
+    escaped_target = target_name.replace("'", "''")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.user_id = {int(user_id)}
+               AND NEW.folder_id = {int(folder_id)}
+               AND NEW.name = '{escaped_target}'
+               AND OLD.folder_id <> NEW.folder_id THEN
+                PERFORM pg_sleep(0.5);
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON files '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("files", trigger_name, function_name)
+
+
 def assert_delete_transaction_error(label: str, resp) -> None:
     """Assert delete transaction failures keep the stable public error contract."""
     assert_equal(f"{label} returns HTTP 500", resp.status_code, 500)
@@ -1712,6 +1739,104 @@ def test_concurrent_file_rename_has_one_winner_and_stable_conflicts() -> None:
     )
 
 
+def test_concurrent_same_name_file_moves_skip_conflicts() -> None:
+    """Verify concurrent same-name moves serialize and preserve partial success."""
+    log_section("Concurrent Same-Name File Move Single Winner")
+    target_id = create_folder(f"safety_file_move_target_{unique_name()}")
+    concurrency = 8
+    source_ids = [
+        create_folder(f"safety_file_move_source_{index}_{unique_name()}")
+        for index in range(concurrency)
+    ]
+    filename = f"safety_file_move_collision_{unique_name()}.bin"
+    file_ids = [
+        upload_file(filename, f"file-move-payload-{index}-{unique_name()}".encode(), source_ids[index])
+        for index in range(concurrency)
+    ]
+    source_paths = [
+        str(scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (source_id, USER_ID)) or "")
+        for source_id in source_ids
+    ]
+    target_path = str(
+        scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID)) or ""
+    )
+    barrier = threading.Barrier(concurrency)
+    cleanup_trigger = install_file_move_delay_trigger(USER_ID, target_id, filename)
+
+    def move_to_same_target(index: int):
+        barrier.wait(timeout=10)
+        return fetch(
+            "/api/file/move",
+            method="PUT",
+            headers=auth_headers(request_id=f"safety-file-move-{index}-{unique_name()}"),
+            json_body={"file_ids": [file_ids[index]], "folder_ids": [], "target_folder_id": target_id},
+        )
+
+    try:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            responses = list(executor.map(move_to_same_target, range(concurrency)))
+    finally:
+        cleanup_trigger()
+
+    for index, response in enumerate(responses):
+        save_evidence(f"{EVIDENCE_PREFIX}-file-move-concurrent-{index}.json", response.text)
+
+    successful_responses = [
+        response
+        for response in responses
+        if response.status_code == 200 and json_field(response.text, "code") == "0"
+    ]
+    moved_counts = [int(json_field(response.text, "data.moved_file_count") or 0) for response in responses]
+    target_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM files "
+            "WHERE user_id = %s AND folder_id = %s AND name = %s AND path = %s",
+            (USER_ID, target_id, filename, f"{target_path}{filename}"),
+        )
+        or 0
+    )
+    source_rows = sum(
+        int(
+            scalar(
+                "SELECT COUNT(*) FROM files "
+                "WHERE id = %s AND user_id = %s AND folder_id = %s AND path = %s",
+                (file_ids[index], USER_ID, source_ids[index], f"{source_paths[index]}{filename}"),
+            )
+            or 0
+        )
+        for index in range(concurrency)
+    )
+    folder_ids = [target_id, *source_ids]
+    mismatched_counts = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders f "
+            "WHERE f.id = ANY(%s) AND f.user_id = %s "
+            "AND f.item_count <> ("
+            "SELECT COUNT(*) FROM files child_file "
+            "WHERE child_file.user_id = f.user_id AND child_file.folder_id = f.id"
+            ") + ("
+            "SELECT COUNT(*) FROM folders child_folder "
+            "WHERE child_folder.user_id = f.user_id AND child_folder.parent_id = f.id"
+            ")",
+            (folder_ids, USER_ID),
+        )
+        or 0
+    )
+    server_log = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+
+    assert_equal("concurrent file move returns every response", len(responses), concurrency)
+    assert_equal("concurrent file move keeps every batch response successful", len(successful_responses), concurrency)
+    assert_equal("concurrent file move counts exactly one winner", sum(moved_counts), 1)
+    assert_equal("concurrent file move stores one target row and path", target_rows, 1)
+    assert_equal("concurrent file move preserves seven source rows and paths", source_rows, concurrency - 1)
+    assert_equal("concurrent file move keeps all parent counts exact", mismatched_counts, 0)
+    assert_equal(
+        "concurrent file move does not expose the uniqueness constraint",
+        "uk_files_user_folder_name" in server_log,
+        False,
+    )
+
+
 def test_copy_quota_rejection_no_side_effects() -> None:
     """Verify over-quota copy leaves no files or ref-count changes behind."""
     log_section("Copy Quota Rejection")
@@ -2457,6 +2582,7 @@ def main() -> None:
     test_folder_create_is_atomic_and_concurrent_conflicts_are_stable()
     test_concurrent_folder_rename_has_one_winner_and_stable_conflicts()
     test_concurrent_file_rename_has_one_winner_and_stable_conflicts()
+    test_concurrent_same_name_file_moves_skip_conflicts()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()

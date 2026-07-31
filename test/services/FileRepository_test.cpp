@@ -78,7 +78,7 @@ namespace disk::file {
 
             static_assert(std::is_same_v<decltype(&FileRepository::FindOwnedFile), FindOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::FindOwnedFileForUpdate), FindOwnedSignature>);
-            static_assert(std::is_same_v<decltype(&FileRepository::FetchOwnedFilesByIds), FetchOwnedSignature>);
+            static_assert(std::is_same_v<decltype(&FileRepository::FetchOwnedFilesByIdsForUpdate), FetchOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::RenameOwnedFile), RenameSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::AcquireNameLock), NameLockSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::NameExistsExcluding), NameExistsSignature>);
@@ -111,10 +111,12 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "auto FileRepository::FindOwnedFile("));
             EXPECT_TRUE(Contains(source, "FROM files WHERE id = $1 AND user_id = $2"));
 
-            EXPECT_TRUE(Contains(source, "auto FileRepository::FetchOwnedFilesByIds("));
-            EXPECT_TRUE(Contains(source, "BatchUtils::Chunk(file_ids, DEFAULT_BATCH_CHUNK_SIZE)"));
+            EXPECT_TRUE(Contains(source, "auto FileRepository::FetchOwnedFilesByIdsForUpdate("));
+            EXPECT_TRUE(Contains(source, "std::sort(sorted_file_ids.begin(), sorted_file_ids.end())"));
+            EXPECT_TRUE(Contains(source, "BatchUtils::Chunk(sorted_file_ids, DEFAULT_BATCH_CHUNK_SIZE)"));
             EXPECT_TRUE(Contains(source, "BatchUtils::BuildSafeNumericInClause(chunk)"));
-            EXPECT_TRUE(Contains(source, ") AND user_id = $1 ORDER BY id ASC"));
+            EXPECT_TRUE(Contains(source, ") AND user_id = $1 ORDER BY id ASC FOR UPDATE"));
+            EXPECT_FALSE(Contains(source, "auto FileRepository::FetchOwnedFilesByIds("));
         }
 
         TEST(FileRepositorySqlContractTest, MoveAndRenameUpdatesKeepUserPredicates) {

@@ -110,6 +110,32 @@ namespace disk::file {
             EXPECT_FALSE(Contains(utils_header, "struct ServiceValidationException"));
         }
 
+        TEST(FileMutationServiceMoveContractTest, MoveLocksRowsAndNamesBeforeConflictChecks) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto move_body = ExtractMoveBody(source);
+
+            ASSERT_FALSE(move_body.empty());
+            const auto transaction = move_body.find("transaction_runner.Run(");
+            const auto row_locks = move_body.find("FetchOwnedFilesByIdsForUpdate(", transaction);
+            const auto sort_names = move_body.find("std::sort(candidate_names.begin(), candidate_names.end())", row_locks);
+            const auto name_locks = move_body.find("m_file_repository.AcquireNameLock(", sort_names);
+            const auto conflict_check = move_body.find("utils::QueryOccupiedNames(", name_locks);
+            const auto location_update = move_body.find("m_file_repository.UpdateFileLocation(", conflict_check);
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(row_locks, std::string::npos);
+            ASSERT_NE(sort_names, std::string::npos);
+            ASSERT_NE(name_locks, std::string::npos);
+            ASSERT_NE(conflict_check, std::string::npos);
+            ASSERT_NE(location_update, std::string::npos);
+            EXPECT_LT(transaction, row_locks);
+            EXPECT_LT(row_locks, sort_names);
+            EXPECT_LT(sort_names, name_locks);
+            EXPECT_LT(name_locks, conflict_check);
+            EXPECT_LT(conflict_check, location_update);
+            EXPECT_TRUE(Contains(move_body, "if (!updated)"));
+            EXPECT_TRUE(Contains(move_body, "if (!count_updated)"));
+        }
+
         TEST(FileMutationServiceMoveContractTest, MovePreservesValidationAndInvalidatesSharedCacheGeneration) {
             const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
             const auto move_body = ExtractMoveBody(source);

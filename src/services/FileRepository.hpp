@@ -61,7 +61,7 @@ namespace disk::file {
         ) const -> drogon::Task<bool>;
 
         [[nodiscard]]
-        auto FetchOwnedFilesByIds(
+        auto FetchOwnedFilesByIdsForUpdate(
             const drogon::orm::DbClientPtr& client,
             const std::vector<uint64_t>& file_ids,
             uint64_t user_id
