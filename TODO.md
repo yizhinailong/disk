@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，分享码查询公开面收紧）：全仓调用审计确认，`ShareService::FindShareByCode` 只有分享访问与失败访问处理两个同类内部调用，控制器不依赖该数据库查询 helper；`CompleteDownload` 仍是下载控制器需要的公开协作入口。OpenSpec 与单元测试文档先行后，查询 helper 已移入私有区，源码合同负向拒绝重新公开并正向保留下载完成入口。clang-format、完整构建、分享管理/密码/审计/令牌安全/下载/拓扑聚焦 CTest 7/7 和 OpenSpec 24/24 通过；完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 508.93 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；查询错误、失败计数、审计、下载统计、REST、schema、配置及迁移行为未改变，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，周期播种阶段公开面收紧）：全仓调用审计确认，`ScheduledTasks::SeedOnce` 只有私有事件循环触发器 `TriggerSeed` 一个调用方，进程入口只依赖初始化、注册、停止与 drain 观察生命周期。OpenSpec 与单元测试文档先行后，播种阶段已移入私有区，C++23 concept 在编译期拒绝重新公开。clang-format、完整构建、ScheduledTasks 直接 GoogleTest 4/4、调度角色/Worker 接管/拓扑聚焦 CTest 9/9 和 OpenSpec 24/24 通过；完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 508.03 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；首次与周期触发、持久去重、错误日志、角色归属、关停、REST、schema、配置及迁移行为未改变，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1896,6 +1896,14 @@ clang-format、完整构建、CleanupService/分布式拓扑/真实管理员清�
 `FindShareByCode` 声明现位于 `ShareService` 首个私有区，查询实现与两个调用点未改；`CompleteDownload` 及九个控制器协作命令继续公开。`ShareLogContextContractTest` 从类声明起点截取首个公开区，负向拒绝查询 helper 重新暴露并正向要求下载完成入口存在；既有上下文调用点计数继续覆盖查询、失败计数、审计和下载更新链路。
 
 clang-format、完整构建、分享源码合同/管理/密码保护/审计/令牌安全/下载/分布式拓扑聚焦 CTest 7/7 和 OpenSpec 严格校验 24/24 通过；不带命令行 `--timeout` 的完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 508.93 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；本批不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支，也不构成目标 HA、TLS/KMS、长稳或压力验收，因此 Phase 3/6/9/10 及最终 Definition of Done 继续保持未勾选。
+
+### 15.73 周期播种阶段公开面收紧记录（2026-07-31）
+
+后端低风险清理 OpenSpec 与单元测试文档先行固定周期任务生命周期边界。全仓声明、定义和调用审计确认，`ScheduledTasks::SeedOnce` 只有同类私有事件循环触发器 `TriggerSeed` 一个调用方；`main.cpp` 只依赖 `Initialize`、`Register`、`Stop`，关停协调只读取 `IsDrained`。播种执行阶段不是进程入口、REST、迁移、回滚或目标环境兼容能力，继续公开会允许调用方绕过正常事件循环和角色所有权。
+
+`SeedOnce` 声明现位于 `ScheduledTasks` 私有区，定义和 `TriggerSeed` 调用点未改；初始化、注册、停止和 drain 观察继续公开。`ScheduledTasks_test.cpp` 新增 C++23 concept，在编译期拒绝该阶段重新成为公开能力。60 秒定时器、注册后的首次立即触发、持久任务去重、固定错误记录、scheduler 角色归属及停止等待语义均未改变。
+
+clang-format、完整构建、ScheduledTasks 直接 GoogleTest 4/4、调度生命周期/角色切换/Worker 接管/分布式拓扑聚焦 CTest 9/9 和 OpenSpec 严格校验 24/24 通过；不带命令行 `--timeout` 的完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 508.03 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。本批不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支，也不构成目标 HA、TLS/KMS、长稳或压力验收，因此 Phase 3/6/9/10 及最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

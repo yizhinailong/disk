@@ -21,7 +21,16 @@ namespace disk::services {
             scheduler.IsAccepting();
         };
 
+        template <typename T>
+        concept HasPublicSeedOnce = requires(
+            T& scheduler,
+            std::chrono::system_clock::time_point now
+        ) {
+            scheduler.SeedOnce(now);
+        };
+
         static_assert(!HasIsAccepting<ScheduledTasks>);
+        static_assert(!HasPublicSeedOnce<ScheduledTasks>);
 
         auto RepositoryRoot() -> std::filesystem::path {
             return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();

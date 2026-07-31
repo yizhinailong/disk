@@ -55,9 +55,6 @@ namespace disk::services {
         static auto Stop() -> void;
 
         [[nodiscard]]
-        auto SeedOnce(std::chrono::system_clock::time_point now) -> drogon::Task<Result<PeriodicSeedResult>>;
-
-        [[nodiscard]]
         auto IsDrained() const noexcept -> bool;
 
         ~ScheduledTasks() = default;
@@ -68,6 +65,9 @@ namespace disk::services {
 
     private:
         ScheduledTasks() = default;
+
+        [[nodiscard]]
+        auto SeedOnce(std::chrono::system_clock::time_point now) -> drogon::Task<Result<PeriodicSeedResult>>;
 
         auto TriggerSeed() -> void;
 

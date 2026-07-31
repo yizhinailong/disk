@@ -308,3 +308,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that `ShareService::FindShareByCode` is called only by share access and failed-access handling inside `ShareService`
 - **THEN** the lookup helper SHALL become private while controller-facing share commands, the public download-completion hook, lookup errors, access throttling, audit writes, and request context propagation remain unchanged
+
+#### Scenario: Periodic seeding execution stays internal
+
+- **WHEN** a whole-repository call-site audit confirms that `ScheduledTasks::SeedOnce` is called only by the private event-loop trigger
+- **THEN** the seeding stage SHALL become private while initialization, registration, shutdown, drain observation, immediate and periodic triggers, durable deduplication, fixed error handling, and role ownership remain unchanged
