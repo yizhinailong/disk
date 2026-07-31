@@ -77,6 +77,10 @@ The system SHALL allow users to move files or folders to an accessible target fo
 - **WHEN** multiple requests concurrently move same-named folder subtrees from different source parents into one target folder
 - **THEN** exactly one complete subtree SHALL move, while every other conflicting subtree SHALL remain at its source and its batch request SHALL succeed with that folder excluded from the moved count
 
+#### Scenario: One folder is concurrently moved into different folders
+- **WHEN** multiple requests concurrently move the same folder subtree into different valid target folders
+- **THEN** the transactions SHALL serialize on the source root, each committed move SHALL use the latest parent, and the final subtree paths and every traversed parent count SHALL match the final inventory
+
 ### Requirement: Copy Items
 The system SHALL allow users to copy files or folders while preserving content-sharing and quota semantics.
 

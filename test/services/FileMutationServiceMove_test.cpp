@@ -177,6 +177,33 @@ namespace disk::file {
             EXPECT_LT(conflict_check, location_update);
         }
 
+        TEST(FileMutationServiceMoveContractTest, MoveLocksFolderRootsBeforeLoadingPlans) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto move_body = ExtractMoveBody(source);
+
+            ASSERT_FALSE(move_body.empty());
+            const auto transaction = move_body.find("transaction_runner.Run(");
+            const auto root_loop = move_body.find(
+                "for (const auto folder_id : folder_ids)",
+                transaction
+            );
+            const auto root_lock = move_body.find(
+                "m_folder_repository.FindOwnedFolderForUpdate(",
+                root_loop
+            );
+            const auto folder_plans = move_body.find(
+                "FetchBatchFolderDeletePlans(",
+                root_lock
+            );
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(root_loop, std::string::npos);
+            ASSERT_NE(root_lock, std::string::npos);
+            ASSERT_NE(folder_plans, std::string::npos);
+            EXPECT_LT(transaction, root_loop);
+            EXPECT_LT(root_loop, root_lock);
+            EXPECT_LT(root_lock, folder_plans);
+        }
+
         TEST(FileMutationServiceMoveContractTest, MovePreservesValidationAndInvalidatesSharedCacheGeneration) {
             const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
             const auto move_body = ExtractMoveBody(source);

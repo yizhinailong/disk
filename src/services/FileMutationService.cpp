@@ -325,6 +325,15 @@ namespace disk::file {
                     }
                 }
 
+                for (const auto folder_id : folder_ids) {
+                    auto locked_folder = co_await m_folder_repository.FindOwnedFolderForUpdate(
+                        transaction,
+                        folder_id,
+                        user_id
+                    );
+                    (void)locked_folder;
+                }
+
                 std::unordered_map<uint64_t, utils::FolderDeletePlan> folder_plans =
                     co_await m_folder_repository.FetchBatchFolderDeletePlans(transaction, folder_ids, user_id);
 
