@@ -26,6 +26,8 @@
 #include "models/Users.hpp"
 #include "services/ContentService.hpp"
 #include "services/FileListCache.hpp"
+#include "services/FileRepository.hpp"
+#include "services/FolderRepository.hpp"
 #include "services/QuotaService.hpp"
 #include "services/TransactionRunner.hpp"
 #include "services/TrashContentIdResolver.hpp"
@@ -194,124 +196,199 @@ namespace disk::trash {
         auto requested_file_ids = normalize_ids(std::move(request.file_ids));
         auto requested_folder_ids = normalize_ids(std::move(request.folder_ids));
 
-        std::unordered_map<uint64_t, disk::file::utils::FolderDeletePlan> folder_plans =
-            co_await disk::file::utils::FetchBatchFolderDeletePlans(m_db_client, requested_folder_ids, user_id);
-
-        auto top_level_folder_ids = disk::file::utils::FilterCoveredFolderIds(requested_folder_ids, folder_plans);
-        auto covered_file_ids = disk::file::utils::CollectCoveredFileIds(top_level_folder_ids, folder_plans);
-
-        std::vector<uint64_t> explicit_file_ids;
-        explicit_file_ids.reserve(requested_file_ids.size());
-        for (const auto file_id : requested_file_ids) {
-            if (covered_file_ids.contains(file_id)) {
-                Logger::Debug(log_context) << "Skipping explicit file delete covered by folder delete: file_id=" << file_id;
-                continue;
-            }
-            explicit_file_ids.push_back(file_id);
-        }
-
-        std::unordered_map<uint64_t, Files> file_map;
-        file_map.reserve(explicit_file_ids.size());
-        auto file_chunks = BatchUtils::Chunk(explicit_file_ids, DEFAULT_BATCH_CHUNK_SIZE);
-        for (const auto& chunk : file_chunks) {
-            if (chunk.empty()) {
-                continue;
-            }
-
-            try {
-                auto result = co_await m_db_client->execSqlCoro(
-                    "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, " "is_favorite, download_count, last_accessed_at, created_at, updated_at " "FROM files WHERE id IN (" + BatchUtils::BuildSafeNumericInClause(chunk) + ") AND user_id = $1",
-                    user_id
-                );
-
-                for (const auto& row : result) {
-                    auto file = Files(row, -1);
-                    file_map[file.getValueOfId()] = std::move(file);
-                }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Warn(log_context) << "File batch fetch failed in move-to-trash, skipping chunk: " << e.base().what();
-            }
-        }
-
-        std::vector<disk::file::utils::TrashInsertItem> trash_items;
-        trash_items.reserve(file_map.size() + top_level_folder_ids.size());
-
-        std::vector<uint64_t> file_ids_to_delete;
-        file_ids_to_delete.reserve(file_map.size() + covered_file_ids.size());
-
         int deleted_file_count = 0;
-        for (const auto file_id : explicit_file_ids) {
-            auto it = file_map.find(file_id);
-            if (it == file_map.end()) {
-                Logger::Warn(log_context) << "File not found or delete failed, skipping: file_id=" << file_id;
-                continue;
-            }
-
-            const auto& file = it->second;
-            Json::Value item_data;
-            if (file.getContentId()) {
-                item_data["content_id"] = static_cast<Json::UInt64>(*file.getContentId());
-            }
-            item_data["mime_type"] = file.getValueOfMimeType();
-            Json::StreamWriterBuilder builder;
-            builder["indentation"] = "";
-
-            trash_items.push_back({
-                .item_type = "file",
-                .item_id = static_cast<uint64_t>(file.getValueOfId()),
-                .item_name = file.getValueOfName(),
-                .item_size = static_cast<uint64_t>(file.getValueOfSize()),
-                .original_folder_id = static_cast<uint64_t>(file.getValueOfFolderId()),
-                .original_path = file.getValueOfPath(),
-                .content_id = file.getContentId() ? std::optional<uint64_t>(*file.getContentId()) : std::nullopt,
-                .item_data = Json::writeString(builder, item_data),
-            });
-            file_ids_to_delete.push_back(file.getValueOfId());
-            ++deleted_file_count;
-        }
-
-        std::vector<uint64_t> folder_ids_to_delete;
         int deleted_folder_count = 0;
-        for (const auto folder_id : top_level_folder_ids) {
-            auto plan_it = folder_plans.find(folder_id);
-            if (plan_it == folder_plans.end()) {
-                continue;
-            }
-
-            const auto& plan = plan_it->second;
-            trash_items.push_back({
-                .item_type = "folder",
-                .item_id = static_cast<uint64_t>(plan.root.getValueOfId()),
-                .item_name = plan.root.getValueOfName(),
-                .item_size = plan.item_size,
-                .original_folder_id = static_cast<uint64_t>(plan.root.getValueOfParentId()),
-                .original_path = plan.root.getValueOfPath(),
-                .content_id = std::nullopt,
-                .item_data = disk::file::utils::BuildFolderSnapshot(plan),
-            });
-
-            for (const auto& file : plan.files) {
-                file_ids_to_delete.push_back(file.getValueOfId());
-            }
-            for (const auto& folder : plan.folders) {
-                folder_ids_to_delete.push_back(folder.getValueOfId());
-            }
-            ++deleted_folder_count;
-        }
-
-        file_ids_to_delete = normalize_ids(std::move(file_ids_to_delete));
-        folder_ids_to_delete = normalize_ids(std::move(folder_ids_to_delete));
-
-        if (trash_items.empty()) {
-            co_return std::unexpected(ErrorInfo(
-                ErrorCode::FileNotFound,
-                "No deletable files or folders found for the given IDs"
-            ));
-        }
-
+        std::vector<uint64_t> file_ids_to_delete;
+        std::vector<uint64_t> folder_ids_to_delete;
         disk::file::TransactionRunner transaction_runner(m_db_client, log_context);
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                disk::folder::FolderRepository folder_repository;
+                std::unordered_set<uint64_t> locked_folder_ids;
+                std::unordered_map<uint64_t, disk::file::utils::FolderDeletePlan> folder_plans;
+                std::vector<uint64_t> top_level_folder_ids;
+
+                while (true) {
+                    folder_plans = co_await disk::file::utils::FetchBatchFolderDeletePlans(
+                        transaction,
+                        requested_folder_ids,
+                        user_id
+                    );
+                    top_level_folder_ids = disk::file::utils::FilterCoveredFolderIds(
+                        requested_folder_ids,
+                        folder_plans
+                    );
+
+                    std::vector<uint64_t> discovered_folder_ids;
+                    for (const auto folder_id : top_level_folder_ids) {
+                        auto plan_it = folder_plans.find(folder_id);
+                        if (plan_it == folder_plans.end()) {
+                            continue;
+                        }
+                        for (const auto& folder : plan_it->second.folders) {
+                            discovered_folder_ids.push_back(folder.getValueOfId());
+                        }
+                    }
+                    discovered_folder_ids = normalize_ids(std::move(discovered_folder_ids));
+
+                    std::vector<uint64_t> folder_ids_to_lock;
+                    folder_ids_to_lock.reserve(discovered_folder_ids.size());
+                    for (const auto folder_id : discovered_folder_ids) {
+                        if (!locked_folder_ids.contains(folder_id)) {
+                            folder_ids_to_lock.push_back(folder_id);
+                        }
+                    }
+                    if (folder_ids_to_lock.empty()) {
+                        break;
+                    }
+
+                    auto newly_locked_folders = co_await folder_repository.FetchOwnedFoldersByIdsForUpdate(
+                        transaction,
+                        folder_ids_to_lock,
+                        user_id
+                    );
+                    (void)newly_locked_folders;
+                    locked_folder_ids.insert(folder_ids_to_lock.begin(), folder_ids_to_lock.end());
+                }
+
+                auto covered_file_ids = disk::file::utils::CollectCoveredFileIds(
+                    top_level_folder_ids,
+                    folder_plans
+                );
+                disk::file::FileRepository file_repository;
+                std::vector<uint64_t> file_ids_to_lock = requested_file_ids;
+                file_ids_to_lock.insert(
+                    file_ids_to_lock.end(),
+                    covered_file_ids.begin(),
+                    covered_file_ids.end()
+                );
+                file_ids_to_lock = normalize_ids(std::move(file_ids_to_lock));
+                auto locked_files = co_await file_repository.FetchOwnedFilesByIdsForUpdate(
+                    transaction,
+                    file_ids_to_lock,
+                    user_id
+                );
+                std::unordered_map<uint64_t, const Files*> file_map;
+                file_map.reserve(locked_files.size());
+                for (const auto& file : locked_files) {
+                    file_map[file.getValueOfId()] = &file;
+                }
+
+                for (const auto folder_id : top_level_folder_ids) {
+                    auto plan_it = folder_plans.find(folder_id);
+                    if (plan_it == folder_plans.end()) {
+                        continue;
+                    }
+
+                    auto& plan = plan_it->second;
+                    std::unordered_set<uint64_t> plan_folder_ids;
+                    plan_folder_ids.reserve(plan.folders.size());
+                    for (const auto& folder : plan.folders) {
+                        plan_folder_ids.insert(folder.getValueOfId());
+                    }
+
+                    plan.files.clear();
+                    plan.item_size = 0;
+                    for (const auto& file : locked_files) {
+                        if (!plan_folder_ids.contains(file.getValueOfFolderId())) {
+                            continue;
+                        }
+                        plan.files.push_back(file);
+                        plan.item_size += file.getValueOfSize();
+                    }
+                }
+
+                covered_file_ids = disk::file::utils::CollectCoveredFileIds(
+                    top_level_folder_ids,
+                    folder_plans
+                );
+                std::vector<uint64_t> explicit_file_ids;
+                explicit_file_ids.reserve(requested_file_ids.size());
+                for (const auto file_id : requested_file_ids) {
+                    if (covered_file_ids.contains(file_id)) {
+                        Logger::Debug(log_context)
+                            << "Skipping explicit file delete covered by folder delete: file_id="
+                            << file_id;
+                        continue;
+                    }
+                    explicit_file_ids.push_back(file_id);
+                }
+
+                std::vector<disk::file::utils::TrashInsertItem> trash_items;
+                trash_items.reserve(file_map.size() + top_level_folder_ids.size());
+                file_ids_to_delete.clear();
+                folder_ids_to_delete.clear();
+                file_ids_to_delete.reserve(file_map.size() + covered_file_ids.size());
+                deleted_file_count = 0;
+                deleted_folder_count = 0;
+
+                for (const auto file_id : explicit_file_ids) {
+                    auto it = file_map.find(file_id);
+                    if (it == file_map.end()) {
+                        Logger::Warn(log_context) << "File not found or delete failed, skipping: file_id=" << file_id;
+                        continue;
+                    }
+
+                    const auto& file = *it->second;
+                    Json::Value item_data;
+                    if (file.getContentId()) {
+                        item_data["content_id"] = static_cast<Json::UInt64>(*file.getContentId());
+                    }
+                    item_data["mime_type"] = file.getValueOfMimeType();
+                    Json::StreamWriterBuilder builder;
+                    builder["indentation"] = "";
+
+                    trash_items.push_back({
+                        .item_type = "file",
+                        .item_id = static_cast<uint64_t>(file.getValueOfId()),
+                        .item_name = file.getValueOfName(),
+                        .item_size = static_cast<uint64_t>(file.getValueOfSize()),
+                        .original_folder_id = static_cast<uint64_t>(file.getValueOfFolderId()),
+                        .original_path = file.getValueOfPath(),
+                        .content_id = file.getContentId() ? std::optional<uint64_t>(*file.getContentId()) : std::nullopt,
+                        .item_data = Json::writeString(builder, item_data),
+                    });
+                    file_ids_to_delete.push_back(file.getValueOfId());
+                    ++deleted_file_count;
+                }
+
+                for (const auto folder_id : top_level_folder_ids) {
+                    auto plan_it = folder_plans.find(folder_id);
+                    if (plan_it == folder_plans.end()) {
+                        continue;
+                    }
+
+                    const auto& plan = plan_it->second;
+                    trash_items.push_back({
+                        .item_type = "folder",
+                        .item_id = static_cast<uint64_t>(plan.root.getValueOfId()),
+                        .item_name = plan.root.getValueOfName(),
+                        .item_size = plan.item_size,
+                        .original_folder_id = static_cast<uint64_t>(plan.root.getValueOfParentId()),
+                        .original_path = plan.root.getValueOfPath(),
+                        .content_id = std::nullopt,
+                        .item_data = disk::file::utils::BuildFolderSnapshot(plan),
+                    });
+
+                    for (const auto& file : plan.files) {
+                        file_ids_to_delete.push_back(file.getValueOfId());
+                    }
+                    for (const auto& folder : plan.folders) {
+                        folder_ids_to_delete.push_back(folder.getValueOfId());
+                    }
+                    ++deleted_folder_count;
+                }
+
+                file_ids_to_delete = normalize_ids(std::move(file_ids_to_delete));
+                folder_ids_to_delete = normalize_ids(std::move(folder_ids_to_delete));
+
+                if (trash_items.empty()) {
+                    co_return std::unexpected(ErrorInfo(
+                        ErrorCode::FileNotFound,
+                        "No deletable files or folders found for the given IDs"
+                    ));
+                }
+
                 auto insert_ok = co_await CreateTrashRecords(
                     transaction,
                     trash_items,
@@ -354,6 +431,9 @@ namespace disk::trash {
             }
         );
         if (!tx_result) {
+            if (tx_result.error().code == ErrorCode::FileNotFound) {
+                co_return std::unexpected(tx_result.error());
+            }
             Logger::Error(log_context) << "Delete transaction failed: " << tx_result.error().message;
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to delete items"));
         }

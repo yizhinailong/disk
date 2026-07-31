@@ -13,6 +13,10 @@ The system SHALL move deleted files or folders into trash instead of immediately
 - **WHEN** an authenticated user deletes an accessible file or folder
 - **THEN** the system SHALL remove it from its active namespace and create trash state for possible recovery
 
+#### Scenario: A folder subtree changes during soft delete
+- **WHEN** files or folders are concurrently copied, uploaded, created, or moved into a folder subtree being soft-deleted
+- **THEN** the delete transaction SHALL stabilize the subtree under row locks so committed descendants enter the trash snapshot and no active row references a removed folder
+
 #### Scenario: Soft-deleted item still consumes storage
 - **WHEN** an item is moved to trash
 - **THEN** the system SHALL continue counting its storage usage until permanent deletion

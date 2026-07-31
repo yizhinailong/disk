@@ -51,6 +51,13 @@ namespace disk::folder {
             uint64_t user_id
         ) const -> drogon::Task<std::optional<drogon_model::disk::Folders>>;
 
+        [[nodiscard]]
+        auto FetchOwnedFoldersByIdsForUpdate(
+            const drogon::orm::DbClientPtr& client,
+            const std::vector<uint64_t>& folder_ids,
+            uint64_t user_id
+        ) const -> drogon::Task<std::vector<drogon_model::disk::Folders>>;
+
         auto AcquireNameLock(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,

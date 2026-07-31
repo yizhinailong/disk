@@ -1461,6 +1461,73 @@ def test_file_copy_serializes_with_concurrently_moved_target() -> None:
     assert_equal("moving-target file copy keeps target count exact", actual_target_count, direct_target_items)
 
 
+def test_folder_soft_delete_includes_concurrently_copied_file() -> None:
+    """Verify folder soft delete snapshots a copy committed before row deletion."""
+    log_section("Folder Soft Delete Includes Concurrently Copied File")
+    target_id = create_folder(f"safety_delete_copy_target_{unique_name()}")
+    filename = f"safety_delete_copy_{unique_name()}.bin"
+    source_file_id = upload_file(filename, f"delete-copy-{unique_name()}".encode())
+    content_id = int(file_row(source_file_id)["content_id"])
+    ref_before = int(content_row(content_id)["ref_count"])
+    cleanup_trigger = install_file_copy_delay_trigger(USER_ID, target_id, filename)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            copy_future = executor.submit(copy_items_response, [source_file_id], [], target_id)
+            time.sleep(0.15)
+            delete_response = fetch(
+                "/api/file",
+                method="DELETE",
+                headers=auth_headers(request_id=f"safety-delete-copy-{unique_name()}"),
+                json_body={"file_ids": [], "folder_ids": [target_id]},
+            )
+            copy_response = copy_future.result(timeout=10)
+    finally:
+        cleanup_trigger()
+
+    copied_file_id = int(json_field(copy_response.text, "data.new_files.0.new_id") or 0)
+    trash_row = query_one(
+        "SELECT item_data FROM trash WHERE user_id = %s AND item_type = 'folder' AND item_id = %s "
+        "ORDER BY id DESC LIMIT 1",
+        (USER_ID, target_id),
+    )
+    snapshot = dict(trash_row["item_data"]) if trash_row is not None else {}
+    snapshot_file_ids = {int(file.get("id", 0)) for file in snapshot.get("files", [])}
+    active_copy_rows = int(
+        scalar("SELECT COUNT(*) FROM files WHERE id = %s AND user_id = %s", (copied_file_id, USER_ID))
+        or 0
+    )
+    active_target_rows = int(
+        scalar("SELECT COUNT(*) FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID))
+        or 0
+    )
+    orphan_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM files f LEFT JOIN folders parent ON parent.id = f.folder_id "
+            "WHERE f.id = %s AND f.user_id = %s AND f.folder_id > 0 AND parent.id IS NULL",
+            (copied_file_id, USER_ID),
+        )
+        or 0
+    )
+
+    assert_equal("delete-copy race copy returns HTTP 200", copy_response.status_code, 200)
+    assert_equal("delete-copy race copy succeeds", json_field(copy_response.text, "code"), "0")
+    assert_equal("delete-copy race copy counts one file", json_field(copy_response.text, "data.copied_file_count"), "1")
+    assert_equal("delete-copy race delete returns HTTP 200", delete_response.status_code, 200)
+    assert_equal("delete-copy race delete succeeds", json_field(delete_response.text, "code"), "0")
+    assert_equal("delete-copy race delete counts target folder", json_field(delete_response.text, "data.deleted_folder_count"), "1")
+    assert_equal("delete-copy race creates folder trash snapshot", trash_row is not None, True)
+    assert_equal("delete-copy race snapshot contains copied file", copied_file_id in snapshot_file_ids, True)
+    assert_equal("delete-copy race removes copied active file", active_copy_rows, 0)
+    assert_equal("delete-copy race removes target active folder", active_target_rows, 0)
+    assert_equal("delete-copy race leaves no orphan active file", orphan_rows, 0)
+    assert_numeric_delta(
+        "delete-copy race preserves copied content reference in trash",
+        ref_before,
+        int(content_row(content_id)["ref_count"]),
+        1,
+    )
+
+
 def test_commit_under_reservation_retains_recovery_artifacts() -> None:
     """Verify a reserved-to-used underflow leaves a recoverable finalizing task."""
     log_section("Reserved-To-Used Under-Reservation Rolls Back")
@@ -3464,6 +3531,7 @@ def main() -> None:
         sys.exit(1)
     USER_ID = current_user_id()
     log_info(f"Using user_id={USER_ID}, base_url={BASE_URL}")
+    redis_delete_pattern(f"rate:folder:{USER_ID}:*")
 
     test_instant_upload_dedup_ref_count()
     test_instant_upload_content_ref_increment_failure_rolls_back()
@@ -3472,6 +3540,7 @@ def main() -> None:
     test_copy_ref_count_and_quota()
     test_file_copy_target_count_zero_rows_rolls_back_batch()
     test_file_copy_serializes_with_concurrently_moved_target()
+    test_folder_soft_delete_includes_concurrently_copied_file()
     test_upload_quota_rejection_no_leak()
     test_upload_task_insert_failure_rolls_back_reservation_and_retries()
     test_concurrent_upload_init_reuses_one_task_and_reservation()

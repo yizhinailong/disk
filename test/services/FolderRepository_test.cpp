@@ -87,6 +87,9 @@ namespace disk::folder {
             using BatchPlanSignature = drogon::Task<std::unordered_map<uint64_t, FolderDeletePlan>> (
                 FolderRepository::*
             )(const drogon::orm::DbClientPtr&, const std::vector<uint64_t>&, uint64_t) const;
+            using BatchFolderSignature = drogon::Task<std::vector<drogon_model::disk::Folders>> (
+                FolderRepository::*
+            )(const drogon::orm::DbClientPtr&, const std::vector<uint64_t>&, uint64_t) const;
             using InsertSignature = drogon::Task<std::optional<drogon_model::disk::Folders>> (
                 FolderRepository::*
             )(
@@ -117,6 +120,7 @@ namespace disk::folder {
             static_assert(std::is_same_v<decltype(&FolderRepository::FindOwnedFolder), FindOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::FetchFolderSubtree), SubtreeSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::FetchBatchFolderDeletePlans), BatchPlanSignature>);
+            static_assert(std::is_same_v<decltype(&FolderRepository::FetchOwnedFoldersByIdsForUpdate), BatchFolderSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::InsertIfNameAvailable), InsertSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::ApplyItemCountDelta), ItemCountSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::FindOwnedFolderForUpdate), FindOwnedSignature>);
@@ -138,11 +142,11 @@ namespace disk::folder {
 
             EXPECT_EQ(
                 CountOccurrences(header, "const drogon::orm::DbClientPtr& client,"),
-                15U
+                16U
             );
             EXPECT_EQ(
                 CountOccurrences(source, "const drogon::orm::DbClientPtr& client,"),
-                15U
+                16U
             );
             EXPECT_FALSE(Contains(header, "m_db_client"));
             EXPECT_FALSE(Contains(header, "FolderRepository(drogon::orm::DbClientPtr"));
@@ -217,6 +221,8 @@ namespace disk::folder {
             const auto service = ReadSourceFile("src/services/FolderService.cpp");
 
             EXPECT_TRUE(Contains(source, "auto FolderRepository::FindOwnedFolderForUpdate("));
+            EXPECT_TRUE(Contains(source, "auto FolderRepository::FetchOwnedFoldersByIdsForUpdate("));
+            EXPECT_TRUE(Contains(source, "ORDER BY id ASC FOR UPDATE"));
             EXPECT_TRUE(Contains(source, "FOR UPDATE"));
             EXPECT_TRUE(Contains(source, "auto FolderRepository::AcquireNameLock("));
             EXPECT_TRUE(Contains(source, "pg_advisory_xact_lock(hashtextextended($1, 0))"));
@@ -283,6 +289,60 @@ namespace disk::folder {
 
             EXPECT_FALSE(Contains(source, "DeleteByPrefix"));
             EXPECT_FALSE(Contains(source, "newTransactionCoro"));
+        }
+
+        TEST(FolderRepositorySqlContractTest, MoveToTrashStabilizesPlansUnderRowLocks) {
+            const auto source = ReadSourceFile("src/services/TrashService.cpp");
+
+            const auto transaction = source.find("transaction_runner.Run(");
+            const auto plan_fetch = source.find(
+                "FetchBatchFolderDeletePlans(",
+                transaction
+            );
+            const auto transaction_client = source.find("transaction,", plan_fetch);
+            const auto folder_locks = source.find(
+                "FetchOwnedFoldersByIdsForUpdate(",
+                transaction_client
+            );
+            const auto explicit_file_locks = source.find(
+                "FetchOwnedFilesByIdsForUpdate(",
+                folder_locks
+            );
+            const auto covered_file_locks = source.find(
+                "file_ids_to_lock.insert(",
+                folder_locks
+            );
+            const auto locked_plan_files = source.find(
+                "plan.files.clear()",
+                explicit_file_locks
+            );
+            const auto snapshot = source.find("BuildFolderSnapshot(", explicit_file_locks);
+            const auto trash_insert = source.find("co_await CreateTrashRecords(", snapshot);
+            const auto file_delete = source.find("DeleteFilesByIds(", trash_insert);
+            const auto folder_delete = source.find("DeleteFoldersByIds(", file_delete);
+
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(plan_fetch, std::string::npos);
+            ASSERT_NE(transaction_client, std::string::npos);
+            ASSERT_NE(folder_locks, std::string::npos);
+            ASSERT_NE(covered_file_locks, std::string::npos);
+            ASSERT_NE(explicit_file_locks, std::string::npos);
+            ASSERT_NE(locked_plan_files, std::string::npos);
+            ASSERT_NE(snapshot, std::string::npos);
+            ASSERT_NE(trash_insert, std::string::npos);
+            ASSERT_NE(file_delete, std::string::npos);
+            ASSERT_NE(folder_delete, std::string::npos);
+            EXPECT_LT(transaction, plan_fetch);
+            EXPECT_LT(plan_fetch, transaction_client);
+            EXPECT_LT(transaction_client, folder_locks);
+            EXPECT_LT(folder_locks, covered_file_locks);
+            EXPECT_LT(covered_file_locks, explicit_file_locks);
+            EXPECT_LT(explicit_file_locks, locked_plan_files);
+            EXPECT_LT(locked_plan_files, snapshot);
+            EXPECT_LT(snapshot, trash_insert);
+            EXPECT_LT(trash_insert, file_delete);
+            EXPECT_LT(file_delete, folder_delete);
+            EXPECT_TRUE(Contains(source, "while (true)"));
         }
 
         TEST(FolderRepositoryLogContextContractTest, SharedPersistenceFailuresKeepCallerContext) {

@@ -144,6 +144,36 @@ namespace disk::folder {
         co_return Folders(result[0], -1);
     }
 
+    auto FolderRepository::FetchOwnedFoldersByIdsForUpdate(
+        const drogon::orm::DbClientPtr& client,
+        const std::vector<uint64_t>& folder_ids,
+        uint64_t user_id
+    ) const -> drogon::Task<std::vector<Folders>> {
+        auto sorted_folder_ids = folder_ids;
+        std::sort(sorted_folder_ids.begin(), sorted_folder_ids.end());
+        sorted_folder_ids.erase(
+            std::unique(sorted_folder_ids.begin(), sorted_folder_ids.end()),
+            sorted_folder_ids.end()
+        );
+
+        std::vector<Folders> folders;
+        auto chunks = BatchUtils::Chunk(sorted_folder_ids);
+        for (const auto& chunk : chunks) {
+            auto result = co_await client->execSqlCoro(
+                "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
+                "FROM folders WHERE id IN (" +
+                    BatchUtils::BuildSafeNumericInClause(chunk) +
+                    ") AND user_id = $1 ORDER BY id ASC FOR UPDATE",
+                user_id
+            );
+            folders.reserve(folders.size() + result.size());
+            for (const auto& row : result) {
+                folders.emplace_back(row, -1);
+            }
+        }
+        co_return folders;
+    }
+
     auto FolderRepository::AcquireNameLock(
         const drogon::orm::DbClientPtr& client,
         uint64_t user_id,
