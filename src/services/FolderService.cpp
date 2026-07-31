@@ -54,81 +54,80 @@ namespace disk::folder {
                                    << "\", parent_id=" << request.parent_id
                                    << ", user_id=" << user_id;
 
-        /// 1. 验证父文件夹（如果 parent_id > 0）
-        std::string parent_path = "/";
-        uint32_t parent_depth = 0;
-
-        if (request.parent_id > 0) {
-            auto parent_result = co_await FindAndValidateParent(
-                request.parent_id,
-                user_id,
-                log_context
-            );
-            if (!parent_result) {
-                Logger::Warn(log_context)
-                    << "Parent folder validation failed: parent_id=" << request.parent_id;
-                co_return std::unexpected(parent_result.error());
-            }
-
-            const auto& parent = *parent_result;
-            parent_path = parent.getValueOfPath();
-            parent_depth = parent.getValueOfDepth();
-            Logger::Debug(log_context) << "Parent folder validated: path=" << parent_path
-                                       << ", depth=" << parent_depth;
-        }
-
-        /// 2. 检查同名文件夹是否已存在
-        if (co_await IsFolderNameExists(
-                request.name,
-                request.parent_id,
-                user_id,
-                log_context
-            )) {
-            Logger::Warn(log_context)
-                << "Folder with same name already exists: name=\"" << request.name
-                << "\", parent_id=" << request.parent_id;
-            co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
-        }
-
-        /// 3. 计算路径和深度
-        std::string folder_path = parent_path + request.name + "/";
-        uint32_t folder_depth = parent_depth + 1;
-
-        Logger::Debug(log_context) << "Calculated folder path: path=\"" << folder_path
-                                   << "\", depth=" << folder_depth;
-
-        /// 4. 创建文件夹记录
         Folders folder;
-        folder.setUserId(user_id);
-        folder.setParentId(request.parent_id);
-        folder.setName(request.name);
-        folder.setPath(folder_path);
-        folder.setDepth(folder_depth);
-        folder.setItemCount(0);
-        folder.setCreatedAt(trantor::Date::now());
-        folder.setUpdatedAt(trantor::Date::now());
+        disk::file::TransactionRunner transaction_runner(
+            m_db_client,
+            ErrorInfo(ErrorCode::InternalError, "Failed to create folder, please try again later"),
+            log_context
+        );
+        auto transaction_result = co_await transaction_runner.Run(
+            [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                std::string parent_path = "/";
+                uint32_t parent_depth = 0;
 
-        /// 5. 插入数据库
-        try {
-            CoroMapper<Folders> mapper(m_db_client);
-            folder = co_await mapper.insert(folder);
-            Logger::Info(log_context)
-                << "Folder created successfully: name=\"" << request.name << "\" (ID: "
-                << folder.getValueOfId() << ", user_id: " << user_id << ")";
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Folder creation failed: name=\"" << request.name << "\" - "
-                << e.base().what();
-            co_return std::unexpected(ErrorInfo(
-                ErrorCode::InternalError,
-                "Failed to create folder, please try again later"
-            ));
+                if (request.parent_id > 0) {
+                    auto parent_updated = co_await m_folder_repository.ApplyItemCountDelta(
+                        transaction,
+                        request.parent_id,
+                        user_id,
+                        1,
+                        trantor::Date::now()
+                    );
+                    if (!parent_updated) {
+                        co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+                    }
+
+                    auto parent = co_await m_folder_repository.FindOwnedFolder(
+                        transaction,
+                        request.parent_id,
+                        user_id
+                    );
+                    if (!parent.has_value()) {
+                        co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+                    }
+                    parent_path = parent->getValueOfPath();
+                    parent_depth = parent->getValueOfDepth();
+                }
+
+                const auto now = trantor::Date::now();
+                folder.setUserId(user_id);
+                folder.setParentId(request.parent_id);
+                folder.setName(request.name);
+                folder.setPath(BuildFolderPath(parent_path, request.name));
+                folder.setDepth(parent_depth + 1);
+                folder.setItemCount(0);
+                folder.setCreatedAt(now);
+                folder.setUpdatedAt(now);
+
+                auto inserted = co_await m_folder_repository.InsertIfNameAvailable(
+                    transaction,
+                    folder
+                );
+                if (!inserted.has_value()) {
+                    co_return std::unexpected(ErrorInfo(ErrorCode::FolderAlreadyExists));
+                }
+                folder = std::move(inserted.value());
+                co_return {};
+            }
+        );
+        if (!transaction_result) {
+            if (transaction_result.error().code == ErrorCode::FolderAlreadyExists) {
+                Logger::Warn(log_context)
+                    << "Folder with same name already exists: name=\"" << request.name
+                    << "\", parent_id=" << request.parent_id;
+            } else if (transaction_result.error().code == ErrorCode::FolderNotFound) {
+                Logger::Warn(log_context)
+                    << "Parent folder does not exist or belongs to another user: parent_id="
+                    << request.parent_id << ", user_id=" << user_id;
+            } else {
+                Logger::Error(log_context) << "Folder creation transaction failed";
+            }
+            co_return std::unexpected(transaction_result.error());
         }
 
-        /// 6. 更新父文件夹的 item_count（如果 parent_id > 0）
-        if (request.parent_id > 0) {
-            co_await IncrementParentItemCount(request.parent_id, log_context);
-        }
+        Logger::Info(log_context)
+            << "Folder created successfully: name=\"" << request.name << "\" (ID: "
+            << folder.getValueOfId() << ", user_id: " << user_id << ")";
 
         co_await disk::file::FileListCache::Invalidate(
             m_redis_service,
@@ -136,7 +135,6 @@ namespace disk::folder {
             log_context
         );
 
-        /// 7. 构造响应
         CreateFolderResponse response;
         response.id = folder.getValueOfId();
         response.name = folder.getValueOfName();
@@ -300,32 +298,6 @@ namespace disk::folder {
         }
     }
 
-    auto FolderService::FindAndValidateParent(
-        uint64_t parent_id,
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) const
-        -> drogon::Task<Result<Folders>> {
-
-        try {
-            auto parent = co_await m_folder_repository.FindOwnedFolder(m_db_client, parent_id, user_id);
-            if (!parent) {
-                Logger::Warn(log_context)
-                    << "Parent folder does not exist or belongs to another user: parent_id="
-                    << parent_id << ", user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
-            }
-
-            co_return *parent;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context)
-                << "Parent folder does not exist: parent_id=" << parent_id << " - "
-                << e.base().what();
-            co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
-        }
-    }
-
     auto FolderService::IsFolderNameExists(
         const std::string& name,
         uint64_t parent_id,
@@ -354,21 +326,6 @@ namespace disk::folder {
                 << "Failed to check folder name: name=\"" << name << "\" - "
                 << e.base().what();
             co_return false;
-        }
-    }
-
-    auto FolderService::IncrementParentItemCount(
-        uint64_t parent_id,
-        disk::utils::LogContext log_context
-    ) -> drogon::Task<void> {
-        try {
-            co_await m_folder_repository.IncrementItemCount(m_db_client, parent_id);
-            Logger::Debug(log_context)
-                << "Updated parent folder item_count: parent_id=" << parent_id;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context)
-                << "Failed to update parent folder item_count: parent_id=" << parent_id << " - "
-                << e.base().what();
         }
     }
 

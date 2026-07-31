@@ -612,6 +612,29 @@ def install_upload_task_insert_failure_trigger(user_id: int, filename: str):
     return lambda: drop_failure_trigger("upload_tasks", trigger_name, function_name)
 
 
+def install_parent_item_count_failure_trigger(parent_id: int):
+    """Install a trigger that rejects item-count changes for one parent folder."""
+    function_name = safe_test_identifier("fail_parent_item_count_fn")
+    trigger_name = safe_test_identifier("fail_parent_item_count_trg")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF OLD.id = {parent_id} AND NEW.item_count <> OLD.item_count THEN
+                RAISE EXCEPTION 'injected parent item count failure';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON folders '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("folders", trigger_name, function_name)
+
+
 def assert_delete_transaction_error(label: str, resp) -> None:
     """Assert delete transaction failures keep the stable public error contract."""
     assert_equal(f"{label} returns HTTP 500", resp.status_code, 500)
@@ -1362,6 +1385,118 @@ def test_concurrent_upload_init_reuses_one_task_and_reservation() -> None:
     assert_equal("concurrent init cancellation restores quota", quota_after_cancel, quota_before)
 
 
+def test_folder_create_is_atomic_and_concurrent_conflicts_are_stable() -> None:
+    """Verify nested folder creation is atomic and unique conflicts are stable."""
+    log_section("Folder Create Atomicity And Concurrent Conflict")
+    parent_id = create_folder(f"safety_folder_create_parent_{unique_name()}")
+    child_name = f"safety_folder_create_child_{unique_name()}"
+    parent_before = query_one(
+        "SELECT item_count FROM folders WHERE id = %s AND user_id = %s",
+        (parent_id, USER_ID),
+    )
+    if parent_before is None:
+        log_fail("folder create atomicity parent exists")
+        print_summary()
+    count_before = int(parent_before["item_count"])
+    cleanup_trigger = install_parent_item_count_failure_trigger(parent_id)
+
+    try:
+        failed_response = fetch(
+            "/api/folder/create",
+            method="POST",
+            headers=auth_headers(),
+            json_body={"name": child_name, "parent_id": parent_id},
+        )
+        save_evidence(f"{EVIDENCE_PREFIX}-folder-create-parent-count-failure.json", failed_response.text)
+    finally:
+        cleanup_trigger()
+
+    failed_child_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders WHERE user_id = %s AND parent_id = %s AND name = %s",
+            (USER_ID, parent_id, child_name),
+        )
+        or 0
+    )
+    count_after_failure = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (parent_id, USER_ID))
+        or 0
+    )
+
+    if failed_child_count > 0:
+        execute(
+            "DELETE FROM folders WHERE user_id = %s AND parent_id = %s AND name = %s",
+            (USER_ID, parent_id, child_name),
+        )
+
+    retry_response = fetch(
+        "/api/folder/create",
+        method="POST",
+        headers=auth_headers(),
+        json_body={"name": child_name, "parent_id": parent_id},
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-folder-create-parent-count-retry.json", retry_response.text)
+    count_after_retry = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (parent_id, USER_ID))
+        or 0
+    )
+
+    concurrent_name = f"safety_folder_create_concurrent_{unique_name()}"
+    concurrency = 8
+    barrier = threading.Barrier(concurrency)
+
+    def create_same_folder(index: int):
+        barrier.wait(timeout=10)
+        return fetch(
+            "/api/folder/create",
+            method="POST",
+            headers=auth_headers(request_id=f"safety-folder-create-{index}-{unique_name()}"),
+            json_body={"name": concurrent_name, "parent_id": parent_id},
+        )
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        concurrent_responses = list(executor.map(create_same_folder, range(concurrency)))
+
+    for index, response in enumerate(concurrent_responses):
+        save_evidence(f"{EVIDENCE_PREFIX}-folder-create-concurrent-{index}.json", response.text)
+
+    success_responses = [response for response in concurrent_responses if response.status_code == 200]
+    conflict_responses = [response for response in concurrent_responses if response.status_code == 409]
+    concurrent_row_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders WHERE user_id = %s AND parent_id = %s AND name = %s",
+            (USER_ID, parent_id, concurrent_name),
+        )
+        or 0
+    )
+    count_after_concurrent = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (parent_id, USER_ID))
+        or 0
+    )
+
+    assert_equal("parent count failure returns HTTP 500", failed_response.status_code, 500)
+    assert_equal("parent count failure returns InternalError", json_field(failed_response.text, "code"), "10006")
+    assert_equal(
+        "parent count failure returns stable message",
+        json_field(failed_response.text, "message"),
+        "Failed to create folder, please try again later",
+    )
+    assert_equal("parent count failure rolls back child folder", failed_child_count, 0)
+    assert_equal("parent count failure preserves parent count", count_after_failure, count_before)
+    assert_equal("folder create retry returns HTTP 200", retry_response.status_code, 200)
+    assert_equal("folder create retry succeeds", json_field(retry_response.text, "code"), "0")
+    assert_numeric_delta("folder create retry increments parent once", count_before, count_after_retry, 1)
+    assert_equal("concurrent folder create has one success", len(success_responses), 1)
+    assert_equal("concurrent folder create has seven conflicts", len(conflict_responses), concurrency - 1)
+    assert_equal(
+        "concurrent folder conflicts use FolderAlreadyExists",
+        {json_field(response.text, "code") for response in conflict_responses},
+        {"50010"},
+    )
+    assert_equal("concurrent folder create inserts one row", concurrent_row_count, 1)
+    assert_numeric_delta("concurrent folder create increments parent once", count_after_retry, count_after_concurrent, 1)
+
+
 def test_copy_quota_rejection_no_side_effects() -> None:
     """Verify over-quota copy leaves no files or ref-count changes behind."""
     log_section("Copy Quota Rejection")
@@ -2104,6 +2239,7 @@ def main() -> None:
     test_upload_quota_rejection_no_leak()
     test_upload_task_insert_failure_rolls_back_reservation_and_retries()
     test_concurrent_upload_init_reuses_one_task_and_reservation()
+    test_folder_create_is_atomic_and_concurrent_conflicts_are_stable()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()

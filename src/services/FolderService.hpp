@@ -127,22 +127,6 @@ namespace disk::folder {
 
     private:
         /**
-         * @brief 查找父文件夹并验证归属
-         *
-         * @param parent_id 父文件夹 ID
-         * @param user_id 用户 ID
-         * @param log_context 请求日志上下文
-         * @return drogon::Task<Result<drogon_model::disk::Folders>> 成功返回父文件夹，失败返回错误
-         */
-        [[nodiscard]]
-        auto FindAndValidateParent(
-            uint64_t parent_id,
-            uint64_t user_id,
-            disk::utils::LogContext log_context
-        ) const
-            -> drogon::Task<Result<drogon_model::disk::Folders>>;
-
-        /**
          * @brief 检查文件夹名称是否已存在
          *
          * @param name 文件夹名称
@@ -159,18 +143,6 @@ namespace disk::folder {
             disk::utils::LogContext log_context
         ) const
             -> drogon::Task<bool>;
-
-        /**
-         * @brief 更新父文件夹的 item_count
-         *
-         * @param parent_id 父文件夹 ID
-         * @param log_context 请求日志上下文
-         * @return drogon::Task<void>
-         */
-        auto IncrementParentItemCount(
-            uint64_t parent_id,
-            disk::utils::LogContext log_context
-        ) -> drogon::Task<void>;
 
         /**
          * @brief 验证父文件夹归属

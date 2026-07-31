@@ -87,10 +87,25 @@ namespace disk::folder {
             using BatchPlanSignature = drogon::Task<std::unordered_map<uint64_t, FolderDeletePlan>> (
                 FolderRepository::*
             )(const drogon::orm::DbClientPtr&, const std::vector<uint64_t>&, uint64_t) const;
+            using InsertSignature = drogon::Task<std::optional<drogon_model::disk::Folders>> (
+                FolderRepository::*
+            )(
+                const drogon::orm::DbClientPtr&,
+                drogon_model::disk::Folders
+            ) const;
+            using ItemCountSignature = drogon::Task<bool> (FolderRepository::*)(
+                const drogon::orm::DbClientPtr&,
+                uint64_t,
+                uint64_t,
+                int,
+                const trantor::Date&
+            ) const;
 
             static_assert(std::is_same_v<decltype(&FolderRepository::FindOwnedFolder), FindOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::FetchFolderSubtree), SubtreeSignature>);
             static_assert(std::is_same_v<decltype(&FolderRepository::FetchBatchFolderDeletePlans), BatchPlanSignature>);
+            static_assert(std::is_same_v<decltype(&FolderRepository::InsertIfNameAvailable), InsertSignature>);
+            static_assert(std::is_same_v<decltype(&FolderRepository::ApplyItemCountDelta), ItemCountSignature>);
             static_assert(std::is_default_constructible_v<FolderRepository>);
             static_assert(std::is_empty_v<FolderRepository>);
 
@@ -118,6 +133,8 @@ namespace disk::folder {
             EXPECT_FALSE(Contains(source, "FolderRepository::FolderRepository("));
             EXPECT_FALSE(Contains(header, "FetchFolderDeletePlan("));
             EXPECT_FALSE(Contains(source, "FolderRepository::FetchFolderDeletePlan("));
+            EXPECT_FALSE(Contains(header, "IncrementItemCount("));
+            EXPECT_FALSE(Contains(source, "FolderRepository::IncrementItemCount("));
             EXPECT_FALSE(Contains(utils_header, "FetchFolderDeletePlan("));
             EXPECT_FALSE(Contains(utils, "auto FetchFolderDeletePlan("));
             EXPECT_EQ(CountOccurrences(utils, "FolderRepository repository;"), 2U);
@@ -146,6 +163,34 @@ namespace disk::folder {
 
             EXPECT_TRUE(Contains(source, "auto FolderRepository::ResolveOwnedFolderLocation("));
             EXPECT_TRUE(Contains(source, "SELECT path, depth FROM folders WHERE id = $1 AND user_id = $2"));
+        }
+
+        TEST(FolderRepositorySqlContractTest, CreationUsesUniqueArbiterAndCheckedParentCount) {
+            const auto source = ReadSourceFile("src/services/FolderRepository.cpp");
+            const auto service = ReadSourceFile("src/services/FolderService.cpp");
+
+            EXPECT_TRUE(Contains(source, "auto FolderRepository::InsertIfNameAvailable("));
+            EXPECT_TRUE(Contains(source, "INSERT INTO folders ("));
+            EXPECT_TRUE(Contains(source, "ON CONFLICT (user_id, parent_id, name) DO NOTHING"));
+            EXPECT_TRUE(Contains(source, "RETURNING id, user_id, parent_id, name, path, depth"));
+            EXPECT_TRUE(Contains(source, "co_return result.affectedRows() > 0;"));
+
+            const auto transaction = service.find("disk::file::TransactionRunner transaction_runner(");
+            const auto parent_count = service.find("ApplyItemCountDelta(", transaction);
+            const auto parent_read = service.find(
+                "FindOwnedFolder(\n" "                        transaction",
+                parent_count
+            );
+            const auto folder_insert = service.find("InsertIfNameAvailable(", parent_read);
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(parent_count, std::string::npos);
+            ASSERT_NE(parent_read, std::string::npos);
+            ASSERT_NE(folder_insert, std::string::npos);
+            EXPECT_LT(transaction, parent_count);
+            EXPECT_LT(parent_count, parent_read);
+            EXPECT_LT(parent_read, folder_insert);
+            EXPECT_TRUE(Contains(service, "ErrorInfo(ErrorCode::FolderAlreadyExists)"));
+            EXPECT_FALSE(Contains(service, "auto FolderService::IncrementParentItemCount("));
         }
 
         TEST(FolderRepositorySqlContractTest, RecursiveSqlIsNamedVisibleAndUserScoped) {

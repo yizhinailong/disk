@@ -26,6 +26,13 @@ namespace disk::folder {
             "SELECT id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at "
             "FROM folders WHERE id = $1 AND user_id = $2";
 
+        constexpr auto kInsertFolderIfNameAvailableSql =
+            "INSERT INTO folders ("
+            "user_id, parent_id, name, path, depth, item_count, created_at, updated_at"
+            ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) "
+            "ON CONFLICT (user_id, parent_id, name) DO NOTHING "
+            "RETURNING id, user_id, parent_id, name, path, depth, item_count, created_at, updated_at";
+
         constexpr auto kResolveOwnedFolderLocationSql =
             "SELECT path, depth FROM folders WHERE id = $1 AND user_id = $2";
 
@@ -96,9 +103,6 @@ namespace disk::folder {
         constexpr auto kApplyItemCountDeltaSql =
             "UPDATE folders SET item_count = GREATEST(item_count + $1, 0), updated_at = $2 "
             "WHERE id = $3 AND user_id = $4";
-
-        constexpr auto kIncrementItemCountSql =
-            "UPDATE folders SET item_count = item_count + 1 WHERE id = $1";
     } ///< namespace
 
     auto FolderRepository::FindOwnedFolder(
@@ -107,6 +111,27 @@ namespace disk::folder {
         uint64_t user_id
     ) const -> drogon::Task<std::optional<Folders>> {
         auto result = co_await client->execSqlCoro(kSelectOwnedFolderSql, folder_id, user_id);
+        if (result.empty()) {
+            co_return std::nullopt;
+        }
+        co_return Folders(result[0], -1);
+    }
+
+    auto FolderRepository::InsertIfNameAvailable(
+        const drogon::orm::DbClientPtr& client,
+        Folders folder
+    ) const -> drogon::Task<std::optional<Folders>> {
+        auto result = co_await client->execSqlCoro(
+            kInsertFolderIfNameAvailableSql,
+            folder.getValueOfUserId(),
+            folder.getValueOfParentId(),
+            folder.getValueOfName(),
+            folder.getValueOfPath(),
+            folder.getValueOfDepth(),
+            folder.getValueOfItemCount(),
+            folder.getValueOfCreatedAt(),
+            folder.getValueOfUpdatedAt()
+        );
         if (result.empty()) {
             co_return std::nullopt;
         }
@@ -350,21 +375,15 @@ namespace disk::folder {
         uint64_t user_id,
         int delta,
         const trantor::Date& updated_at
-    ) const -> drogon::Task<void> {
-        co_await client->execSqlCoro(
+    ) const -> drogon::Task<bool> {
+        auto result = co_await client->execSqlCoro(
             kApplyItemCountDeltaSql,
             delta,
             updated_at,
             folder_id,
             user_id
         );
-    }
-
-    auto FolderRepository::IncrementItemCount(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t folder_id
-    ) const -> drogon::Task<void> {
-        co_await client->execSqlCoro(kIncrementItemCountSql, folder_id);
+        co_return result.affectedRows() > 0;
     }
 
 } ///< namespace disk::folder

@@ -1957,6 +1957,14 @@ API、数据库、系统测试、单元测试、ADR 和 OpenSpec 先行固定相
 
 真实 HTTP/PostgreSQL 安全网用 8 个 barrier 同步请求初始化同一非秒传 hash，全部返回 HTTP 200/业务码 0 和同一 `upload_id`，数据库只新增一个活跃任务，reserved 仅增加一次文件大小，无归属预留量不变，取消后配额精确恢复。Python 语法、clang-format、完整构建、相关直接 GoogleTest 22/22、内容/配额安全网 245/245、上传生命周期/仓储/状态机/拓扑聚焦 CTest 32/32（133.83 秒）和 OpenSpec 严格校验 24/24 通过。不带命令行额外超时的完整 CTest 共 1425 项：1418 通过、7 项按环境门控跳过、0 失败，总耗时 504.95 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与数据库事务合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.80 文件夹创建原子性与并发冲突记录（2026-07-31）
+
+API、数据库、系统测试、单元测试和 OpenSpec 先行固定嵌套文件夹创建原子性与同名并发语义。调用链审计确认旧流程在事务外读取父目录并执行同名预检查，随后 standalone 插入子目录，再通过吞掉数据库异常的 `IncrementParentItemCount` best-effort 更新父目录计数；父计数更新失败会返回成功但留下计数偏差，两个并发请求也可能同时通过预检查并把唯一约束异常暴露成 HTTP 500。新的编译期/源码合同在生产实现前按预期因缺少 conflict-safe 插入、父计数仍返回 `Task<void>` 及旧吞错入口仍存在而失败。
+
+创建路径现由一个 `TransactionRunner` 先对当前用户的父目录执行受影响行数可检查的 `item_count + 1`，借该更新取得行锁并确认父目录仍存在，再读取稳定路径/深度，最后通过 `INSERT ... ON CONFLICT (user_id, parent_id, name) DO NOTHING RETURNING` 插入子目录；缺失父目录、唯一冲突和数据库失败都会回滚计数，唯一冲突稳定映射为 `FolderAlreadyExists`。无检查的仓储 `IncrementItemCount`、服务层 `IncrementParentItemCount` 和事务外父目录 helper 已删除，既有缺失父目录结构化警告合同保留。真实 PostgreSQL trigger 拒绝目标父目录计数更新时，HTTP 500/`10006` 和稳定消息不变，子目录与父计数均不变；移除 trigger 后重试只创建一行并增加一次计数。8 个 barrier 同步同名请求恰好一个 HTTP 200，其余七个均为 `409/50010`，数据库行与父计数只增加一次。
+
+Python 语法、差异检查、完整构建、相关直接 GoogleTest 7/7、内容/配额安全网 258/258、上传日志安全网 67/67、文件夹/变更/上传/拓扑聚焦 CTest 26/26（21.07 秒）和 OpenSpec 严格校验 24/24 通过。首次完整回归因事务化时遗漏既有缺失父目录日志标记而在 `SafetyUploadInvariantsIntegration` 失败；恢复受约束警告后该注册测试 1/1 通过（117.70 秒），最终不带命令行额外超时的完整 CTest 共 1426 项：1419 通过、7 项按环境门控跳过、0 失败，总耗时 508.73 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与数据库事务合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

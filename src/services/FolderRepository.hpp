@@ -45,6 +45,12 @@ namespace disk::folder {
         ) const -> drogon::Task<std::optional<drogon_model::disk::Folders>>;
 
         [[nodiscard]]
+        auto InsertIfNameAvailable(
+            const drogon::orm::DbClientPtr& client,
+            drogon_model::disk::Folders folder
+        ) const -> drogon::Task<std::optional<drogon_model::disk::Folders>>;
+
+        [[nodiscard]]
         auto ResolveOwnedFolderLocation(
             const drogon::orm::DbClientPtr& client,
             uint64_t folder_id,
@@ -127,12 +133,7 @@ namespace disk::folder {
             uint64_t user_id,
             int delta,
             const trantor::Date& updated_at
-        ) const -> drogon::Task<void>;
-
-        auto IncrementItemCount(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t folder_id
-        ) const -> drogon::Task<void>;
+        ) const -> drogon::Task<bool>;
     };
 
 } ///< namespace disk::folder

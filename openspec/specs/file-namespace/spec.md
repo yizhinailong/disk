@@ -25,11 +25,19 @@ The system SHALL allow users to create folders under valid parent folders while 
 
 #### Scenario: Folder creation succeeds
 - **WHEN** an authenticated user creates a folder with a valid name under an accessible parent
-- **THEN** the system SHALL create the folder and return its metadata
+- **THEN** the system SHALL atomically create the folder, increment the parent item count when applicable, and return its metadata
 
 #### Scenario: Folder name is invalid or conflicts
 - **WHEN** the folder name is invalid or conflicts with an existing folder in the same parent
 - **THEN** the system SHALL reject the creation request
+
+#### Scenario: Parent count update fails during nested creation
+- **WHEN** PostgreSQL rejects the parent folder item-count update for a nested folder creation
+- **THEN** the transaction SHALL leave both the child folder inventory and parent item count unchanged
+
+#### Scenario: The same folder name is created concurrently
+- **WHEN** multiple requests concurrently create the same name for one user and parent folder
+- **THEN** exactly one request SHALL create the folder and increment the parent count, while every loser SHALL receive `FolderAlreadyExists`
 
 ### Requirement: Rename Items
 The system SHALL allow users to rename files or folders while enforcing naming validation and conflict rules.

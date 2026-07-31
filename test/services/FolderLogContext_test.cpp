@@ -112,11 +112,13 @@ namespace disk::folder {
             EXPECT_FALSE(Contains(dto_source, "static const char forbidden_chars[]"));
             EXPECT_EQ(
                 CountOccurrences(service_body, "disk::utils::LogContext log_context"),
-                8
+                6
             );
-            EXPECT_TRUE(Contains(service_body, "FindAndValidateParent("));
             EXPECT_TRUE(Contains(service_body, "IsFolderNameExists("));
-            EXPECT_TRUE(Contains(service_body, "IncrementParentItemCount(request.parent_id, log_context)"));
+            EXPECT_TRUE(Contains(service_body, "disk::file::TransactionRunner transaction_runner("));
+            EXPECT_TRUE(Contains(service_body, "m_folder_repository.InsertIfNameAvailable("));
+            EXPECT_FALSE(Contains(service_body, "FindAndValidateParent("));
+            EXPECT_FALSE(Contains(service_body, "IncrementParentItemCount("));
             EXPECT_TRUE(Contains(service_body, "ValidateParentOwnership("));
             EXPECT_TRUE(Contains(
                 service_body,
