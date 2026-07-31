@@ -137,17 +137,9 @@ namespace disk::services {
         }
     }
 
-    auto ScheduledTasks::Initialize(
-        drogon::orm::DbClientPtr db_client,
-        std::string instance_id
-    ) -> void {
+    auto ScheduledTasks::Initialize(drogon::orm::DbClientPtr db_client) -> void {
         if (db_client == nullptr) {
             throw std::invalid_argument("Periodic task database client is required");
-        }
-        if (instance_id.empty() || instance_id.size() > 128) {
-            throw std::invalid_argument(
-                "Periodic task instance ID must contain 1 to 128 characters"
-            );
         }
 
         auto instance = GetInstance();

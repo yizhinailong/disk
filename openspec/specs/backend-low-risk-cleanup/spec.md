@@ -277,7 +277,12 @@ Backend shared services SHALL expose only command capabilities used by productio
 #### Scenario: Worker runtime retains no unused identity input
 
 - **WHEN** a whole-repository data-flow audit confirms that `StorageWorkerRuntime` only validates and discards its instance ID while `StorageJobWorker` independently validates, stores, and uses the same configured identity for lease ownership
-- **THEN** the runtime constructor SHALL accept only its execution callback and polling options while Worker lease identity, scheduled-task identity, structured-log instance registration, polling, drain, and shutdown behavior remain unchanged
+- **THEN** the runtime constructor SHALL accept only its execution callback and polling options while Worker lease identity, scheduler deduplication, structured-log instance registration, polling, drain, and shutdown behavior remain unchanged
+
+#### Scenario: Scheduled tasks retain no unused identity input
+
+- **WHEN** a whole-repository data-flow audit confirms that `ScheduledTasks::Initialize` only validates and discards its instance ID while `StorageJobWorker` owns lease identity and PostgreSQL dedupe keys coordinate periodic seeding
+- **THEN** scheduler initialization SHALL accept only its database dependency while Worker lease ownership, structured-log instance registration, six-job seed plans, deduplication, role admission, drain, and shutdown behavior remain unchanged
 
 #### Scenario: Unused share timestamp helper is removed
 

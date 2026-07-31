@@ -45,10 +45,7 @@ namespace disk::services {
         friend class disk::utils::Singleton<ScheduledTasks>;
 
     public:
-        static auto Initialize(
-            drogon::orm::DbClientPtr db_client,
-            std::string instance_id
-        ) -> void;
+        static auto Initialize(drogon::orm::DbClientPtr db_client) -> void;
 
         static auto Register() -> void;
 

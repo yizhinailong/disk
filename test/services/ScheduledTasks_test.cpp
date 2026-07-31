@@ -29,6 +29,19 @@ namespace disk::services {
             scheduler.SeedOnce(now);
         };
 
+        template <typename T>
+        concept HasClientOnlyInitialize = requires(const drogon::orm::DbClientPtr& client) {
+            T::Initialize(client);
+        };
+
+        template <typename T>
+        concept HasIdentityInitialize = requires(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& instance_id
+        ) {
+            T::Initialize(client, instance_id);
+        };
+
         static_assert(!HasIsAccepting<ScheduledTasks>);
         static_assert(!HasPublicSeedOnce<ScheduledTasks>);
 
@@ -108,6 +121,23 @@ namespace disk::services {
             EXPECT_FALSE(Contains(runtime_source, "instance_id="));
             EXPECT_FALSE(Contains(runtime_source, "m_instance_id"));
             EXPECT_FALSE(Contains(header, "m_instance_id"));
+        }
+
+        TEST(ScheduledTasksSurfaceContractTest, InitializeUsesOnlySchedulerDependencies) {
+            const auto header = ReadSourceFile("src/services/ScheduledTasks.hpp");
+            const auto source = ReadSourceFile("src/services/ScheduledTasks.cpp");
+            const auto main_source = ReadSourceFile("src/main.cpp");
+
+            EXPECT_TRUE(HasClientOnlyInitialize<ScheduledTasks>);
+            EXPECT_FALSE(HasIdentityInitialize<ScheduledTasks>);
+            EXPECT_FALSE(Contains(header, "std::string instance_id"));
+            EXPECT_FALSE(Contains(source, "std::string instance_id"));
+            EXPECT_FALSE(Contains(source, "Periodic task instance ID must contain"));
+            EXPECT_TRUE(Contains(main_source, "ScheduledTasks::Initialize(db_client);"));
+            EXPECT_FALSE(Contains(
+                main_source,
+                "ScheduledTasks::Initialize(db_client, config->GetInstanceId())"
+            ));
         }
 
         TEST(ScheduledTasksTest, BuildsSixBoundedFirstPageJobsForUtcWindows) {

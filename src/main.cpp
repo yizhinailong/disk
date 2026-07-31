@@ -376,7 +376,7 @@ auto main() -> int {
                 }
             );
 
-            disk::services::ScheduledTasks::Initialize(db_client, config->GetInstanceId());
+            disk::services::ScheduledTasks::Initialize(db_client);
             disk::services::ScheduledTasks::Register();
             worker_runtime->Start(drogon::app().getLoop());
             runtime_services->worker_runtime.store(std::move(worker_runtime));

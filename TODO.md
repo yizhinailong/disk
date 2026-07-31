@@ -2165,6 +2165,14 @@ clang-format、差异检查、后端与测试目标完整构建、直接 UploadT
 
 clang-format、差异检查、后端与测试目标完整构建、直接 UploadTaskRepository GoogleTest 13/13、仓储/灰度/local 迁移/contract-readiness/真实状态机与上传安全网聚焦 CTest 19/19（152.84 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1446 项：1439 项通过、7 项按环境门控跳过、0 失败，总耗时 525.12 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.106 周期播种器实例伪输入清理记录（2026-08-01）
+
+部署运维、系统测试、单元测试和后端低风险清理 OpenSpec 先行纠正周期播种身份职责。全仓调用点与实现数据流审计确认，`ScheduledTasks::Initialize` 的 `instance_id` 只在入口检查 1 至 128 字符，之后既不保存也不参与播种计划、去重、日志、准入或关停；唯一生产调用发生在 `main`，同一配置身份此前已由 `ConfigMgr` 解析校验、由 `ProcessRuntime` 保存，并由 `StorageJobWorker` 独立校验和持有以执行真实 lease owner 操作。新增初始化能力合同在旧实现上按预期 0/1 失败，新/旧调用形状、声明、实现、重复校验和 `main` 调用共命中 7 个失败点。
+
+`ScheduledTasks::Initialize` 现只接收播种所需的数据库客户端，重复的实例参数和长度校验已删除，`main` 唯一调用点同步使用最小形状。数据库客户端必选校验、单例幂等初始化、首次立即播种、60 秒周期、六任务 UTC 计划、PostgreSQL dedupe key、角色准入、停止接收和 drain 观察均未改变；持久任务租约身份继续由 `StorageJobWorker` 持有，顶层日志实例继续来自 `Logger::SetInstanceId`。文档不再把播种去重误述为 Scheduler 独立身份，构造能力与源码合同正向锁定数据库单参数形状并拒绝旧伪输入回归。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 ScheduledTasks GoogleTest 5/5、Scheduler/Worker 运行时/进程身份/真实角色切换/contract-readiness/排空接管/拓扑聚焦 CTest 25/25（43.18 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1447 项：1440 项通过、7 项按环境门控跳过、0 失败，总耗时 525.46 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
