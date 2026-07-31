@@ -87,12 +87,22 @@ namespace disk::file {
             -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
 
         [[nodiscard]]
-        auto FindInProgressByUserAndHash(uint64_t user_id, const std::string& file_hash) const
+        auto FindActiveByUserAndHash(uint64_t user_id, const std::string& file_hash) const
             -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
 
         [[nodiscard]]
-        auto FindInProgressIdByUserAndHash(uint64_t user_id, const std::string& file_hash) const
-            -> drogon::Task<std::optional<std::string>>;
+        auto FindActiveByUserAndHash(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            const std::string& file_hash
+        ) const -> drogon::Task<std::optional<drogon_model::disk::UploadTasks>>;
+
+        [[nodiscard]]
+        auto AcquireUploadInitLock(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            const std::string& file_hash
+        ) const -> drogon::Task<void>;
 
         [[nodiscard]]
         auto Create(

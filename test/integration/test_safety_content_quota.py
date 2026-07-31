@@ -14,7 +14,9 @@ import atexit
 import json
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 EVIDENCE_ROOT = Path(os.environ.get("EVIDENCE_DIR", ".sisyphus/evidence"))
@@ -1283,6 +1285,83 @@ def test_upload_task_insert_failure_rolls_back_reservation_and_retries() -> None
     assert_equal("task insert retry cancellation restores quota", user_quota(), quota_before)
 
 
+def test_concurrent_upload_init_reuses_one_task_and_reservation() -> None:
+    """Verify concurrent identical init requests share one task and reservation."""
+    log_section("Concurrent Upload Init Single Winner")
+    concurrency = 8
+    payload = f"concurrent-upload-init-{unique_name()}".encode()
+    filename = f"safety_concurrent_upload_init_{unique_name()}.bin"
+    file_hash = md5_bytes(payload)
+    request_body = {
+        "filename": filename,
+        "file_size": len(payload),
+        "file_hash": file_hash,
+        "parent_id": 0,
+    }
+    quota_before = user_quota()
+    unexplained_before = unexplained_reserved_bytes()
+    active_before = int(
+        scalar(
+            "SELECT COUNT(*) FROM upload_tasks "
+            "WHERE user_id = %s AND file_hash = %s AND status IN (0, 4)",
+            (USER_ID, file_hash),
+        )
+        or 0
+    )
+    barrier = threading.Barrier(concurrency)
+
+    def initialize(index: int):
+        barrier.wait(timeout=10)
+        return fetch(
+            "/api/file/upload/init",
+            method="POST",
+            headers=auth_headers(request_id=f"safety-concurrent-init-{index}-{unique_name()}"),
+            json_body=request_body,
+        )
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        responses = list(executor.map(initialize, range(concurrency)))
+
+    for index, response in enumerate(responses):
+        save_evidence(f"{EVIDENCE_PREFIX}-concurrent-init-{index}.json", response.text)
+
+    upload_ids = {
+        str(upload_id)
+        for response in responses
+        if (upload_id := json_field(response.text, "data.upload_id"))
+    }
+    quota_during = user_quota()
+    unexplained_during = unexplained_reserved_bytes()
+    active_during = int(
+        scalar(
+            "SELECT COUNT(*) FROM upload_tasks "
+            "WHERE user_id = %s AND file_hash = %s AND status IN (0, 4)",
+            (USER_ID, file_hash),
+        )
+        or 0
+    )
+
+    for upload_id in upload_ids:
+        cancel_upload(upload_id)
+    quota_after_cancel = user_quota()
+
+    assert_equal("concurrent init returns every response", len(responses), concurrency)
+    assert_equal("concurrent init returns HTTP 200", {response.status_code for response in responses}, {200})
+    assert_equal("concurrent init returns success code", {json_field(response.text, "code") for response in responses}, {"0"})
+    assert_equal("concurrent init returns non-empty upload ids", len(upload_ids) > 0, True)
+    assert_equal("concurrent init returns one upload id", len(upload_ids), 1)
+    assert_numeric_delta("concurrent init creates one active task", active_before, active_during, 1)
+    assert_numeric_delta(
+        "concurrent init reserves file bytes once",
+        quota_before["storage_reserved"],
+        quota_during["storage_reserved"],
+        len(payload),
+    )
+    assert_equal("concurrent init preserves used quota", quota_during["storage_used"], quota_before["storage_used"])
+    assert_equal("concurrent init creates no unexplained reservation", unexplained_during, unexplained_before)
+    assert_equal("concurrent init cancellation restores quota", quota_after_cancel, quota_before)
+
+
 def test_copy_quota_rejection_no_side_effects() -> None:
     """Verify over-quota copy leaves no files or ref-count changes behind."""
     log_section("Copy Quota Rejection")
@@ -2024,6 +2103,7 @@ def main() -> None:
     test_copy_ref_count_and_quota()
     test_upload_quota_rejection_no_leak()
     test_upload_task_insert_failure_rolls_back_reservation_and_retries()
+    test_concurrent_upload_init_reuses_one_task_and_reservation()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()

@@ -93,42 +93,44 @@ namespace disk::file {
         co_return UploadTasks(result[0], -1);
     }
 
-    auto UploadTaskRepository::FindInProgressByUserAndHash(
+    auto UploadTaskRepository::FindActiveByUserAndHash(
         uint64_t user_id,
         const std::string& file_hash
     ) const -> drogon::Task<std::optional<UploadTasks>> {
-        try {
-            CoroMapper<UploadTasks> mapper(m_db_client);
-            co_return co_await mapper.findOne(
-                Criteria(UploadTasks::Cols::_user_id, CompareOperator::EQ, user_id) &&
-                Criteria(UploadTasks::Cols::_file_hash, CompareOperator::EQ, file_hash) &&
-                Criteria(
-                    UploadTasks::Cols::_status,
-                    CompareOperator::EQ,
-                    disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
-                )
-            );
-        } catch (const drogon::orm::DrogonDbException&) {
-            co_return std::nullopt;
-        }
+        co_return co_await FindActiveByUserAndHash(m_db_client, user_id, file_hash);
     }
 
-    auto UploadTaskRepository::FindInProgressIdByUserAndHash(
+    auto UploadTaskRepository::FindActiveByUserAndHash(
+        const drogon::orm::DbClientPtr& client,
         uint64_t user_id,
         const std::string& file_hash
-    ) const -> drogon::Task<std::optional<std::string>> {
-        auto result = co_await m_db_client->execSqlCoro(
-            "SELECT id FROM upload_tasks " "WHERE user_id = $1 AND file_hash = $2 AND status = $3 LIMIT 1",
+    ) const -> drogon::Task<std::optional<UploadTasks>> {
+        auto result = co_await client->execSqlCoro(
+            "SELECT * FROM upload_tasks " "WHERE user_id = $1 AND file_hash = $2 AND status IN ($3, $4) " "ORDER BY created_at, id LIMIT 1",
             user_id,
             file_hash,
-            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress)
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::InProgress),
+            disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing)
         );
 
         if (result.empty()) {
             co_return std::nullopt;
         }
 
-        co_return result[0]["id"].as<std::string>();
+        co_return UploadTasks(result[0], -1);
+    }
+
+    auto UploadTaskRepository::AcquireUploadInitLock(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t user_id,
+        const std::string& file_hash
+    ) const -> drogon::Task<void> {
+        const auto lock_key = "upload-init:" + std::to_string(user_id) + ":" + file_hash;
+        co_await client->execSqlCoro(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+            lock_key
+        );
+        co_return;
     }
 
     auto UploadTaskRepository::Create(

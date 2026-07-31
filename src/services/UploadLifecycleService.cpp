@@ -485,14 +485,14 @@ namespace disk::upload {
 
         disk::content::ContentService content_service(m_db_client);
         auto existing_content = co_await content_service.FindByMd5(command.file_hash, log_context);
-        auto existing_task_id = co_await upload_task_repository.FindInProgressIdByUserAndHash(
+        auto existing_task = co_await upload_task_repository.FindActiveByUserAndHash(
             command.user_id,
             command.file_hash
         );
         UploadCacheInvalidation pending_invalidation;
         auto init_decision = DecideInitFlow(
             existing_content.has_value(),
-            existing_task_id.value_or(std::string{})
+            existing_task.has_value() ? existing_task->getValueOfId() : std::string{}
         );
 
         if (init_decision.type == InitDecisionType::InstantUpload) {
@@ -602,10 +602,6 @@ namespace disk::upload {
         }
 
         if (init_decision.type == InitDecisionType::ResumeUpload) {
-            auto existing_task = co_await upload_task_repository.FindInProgressByUserAndHash(
-                command.user_id,
-                command.file_hash
-            );
             if (existing_task.has_value()) {
                 const auto& task = existing_task.value();
                 const auto& task_id = task.getValueOfId();
@@ -697,8 +693,23 @@ namespace disk::upload {
             transaction_log_context
         );
         disk::quota::QuotaService quota_service(m_db_client);
+        std::optional<drogon_model::disk::UploadTasks> concurrent_task;
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                co_await upload_task_repository.AcquireUploadInitLock(
+                    transaction,
+                    command.user_id,
+                    command.file_hash
+                );
+                concurrent_task = co_await upload_task_repository.FindActiveByUserAndHash(
+                    transaction,
+                    command.user_id,
+                    command.file_hash
+                );
+                if (concurrent_task.has_value()) {
+                    co_return {};
+                }
+
                 auto quota_result = co_await quota_service.ReserveUploadStorage(
                     transaction,
                     command.user_id,
@@ -721,6 +732,29 @@ namespace disk::upload {
         );
         if (!tx_result) {
             co_return std::unexpected(tx_result.error());
+        }
+
+        if (concurrent_task.has_value()) {
+            const auto& concurrent_task_value = concurrent_task.value();
+            const auto& concurrent_upload_id = concurrent_task_value.getValueOfId();
+            log_context.upload_id = concurrent_upload_id;
+            auto uploaded_chunks = co_await upload_task_repository.ListUploadedChunkIndices(
+                concurrent_upload_id
+            );
+
+            InitUploadOutcome outcome;
+            outcome.upload_id = concurrent_upload_id;
+            outcome.chunk_size = concurrent_task_value.getValueOfChunkSize();
+            outcome.total_chunks = concurrent_task_value.getValueOfTotalChunks();
+            outcome.uploaded_chunks = std::move(uploaded_chunks);
+            outcome.instant_upload = false;
+            outcome.invalidation = std::move(pending_invalidation);
+            outcome.invalidation.upload_task_ids.push_back(concurrent_upload_id);
+
+            Logger::Debug(log_context)
+                << "Concurrent upload init reused active task: upload_id="
+                << concurrent_upload_id;
+            co_return outcome;
         }
 
         log_context.upload_id = task.getValueOfId();

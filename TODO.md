@@ -1949,6 +1949,14 @@ clang-format、Python 语法、完整构建、相关直接 GoogleTest 73/73、�
 
 clang-format、Python 语法、完整构建、相关直接 GoogleTest 27/27、内容/配额安全网 235/235、上传/配额/仓储/状态机/拓扑聚焦 CTest 32/32（133.77 秒）和 OpenSpec 严格校验 24/24 通过。不带命令行额外超时的完整 CTest 共 1425 项：1418 通过、7 项按环境门控跳过、0 失败，总耗时 513.37 秒。本批没有重跑 15.74/15.75 的带门禁环境复验，也不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.79 相同哈希并发初始化单赢家记录（2026-07-31）
+
+API、数据库、系统测试、单元测试、ADR 和 OpenSpec 先行固定相同用户/文件哈希的并发初始化语义。调用链审计确认旧流程在事务外查询 `InProgress`，随后才进入配额预留与任务插入事务；两个 API/连接可同时看到空结果，各自创建任务并重复增加 `storage_reserved`。旧查询还忽略 `Finalizing`，会在完成租约持有期间创建同哈希新任务。新的源码合同在生产实现前重新编译，并按预期因缺少事务锁、事务内复查和仍存在两条旧查询而 1/1 失败。
+
+`UploadTaskRepository` 现以一个可复用的 `FindActiveByUserAndHash` 替代两条重复查询，同时提供显式 transaction client 重载和 `AcquireUploadInitLock`。非秒传新任务事务先按 `upload-init:<user_id>:<file_hash>` 获取 PostgreSQL `pg_advisory_xact_lock(hashtextextended(...))`，再用同一连接复查 `InProgress/Finalizing`；命中时返回已提交任务及分片进度，未命中时才预留配额并插入任务。锁随事务自动释放，不依赖进程内 mutex 或实例亲和；local `WriteChunk` 自身幂等创建分片目录，因此并发输家在创建者返回前重放任务不会引入首写目录竞态。
+
+真实 HTTP/PostgreSQL 安全网用 8 个 barrier 同步请求初始化同一非秒传 hash，全部返回 HTTP 200/业务码 0 和同一 `upload_id`，数据库只新增一个活跃任务，reserved 仅增加一次文件大小，无归属预留量不变，取消后配额精确恢复。Python 语法、clang-format、完整构建、相关直接 GoogleTest 22/22、内容/配额安全网 245/245、上传生命周期/仓储/状态机/拓扑聚焦 CTest 32/32（133.83 秒）和 OpenSpec 严格校验 24/24 通过。不带命令行额外超时的完整 CTest 共 1425 项：1418 通过、7 项按环境门控跳过、0 失败，总耗时 504.95 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与数据库事务合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

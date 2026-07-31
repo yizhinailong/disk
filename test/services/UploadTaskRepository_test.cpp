@@ -66,17 +66,38 @@ namespace disk::file {
             return source.find(expected) != std::string::npos;
         }
 
-        TEST(UploadTaskRepositoryLookupContractTest, LookupMethodsKeepOwnershipAndResumableGuards) {
+        TEST(UploadTaskRepositoryLookupContractTest, LookupMethodsKeepOwnershipAndActiveUploadGuards) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
+            const auto lifecycle_source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
 
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::FindByIdForUser("));
             EXPECT_TRUE(Contains(source, "Criteria(UploadTasks::Cols::_id, CompareOperator::EQ, upload_id)"));
             EXPECT_TRUE(Contains(source, "Criteria(UploadTasks::Cols::_user_id, CompareOperator::EQ, user_id)"));
 
-            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::FindInProgressByUserAndHash("));
-            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::FindInProgressIdByUserAndHash("));
-            EXPECT_TRUE(Contains(source, "WHERE user_id = $1 AND file_hash = $2 AND status = $3 LIMIT 1"));
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::AcquireUploadInitLock("));
+            EXPECT_TRUE(Contains(source, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))"));
+            EXPECT_TRUE(Contains(source, "\"upload-init:\" + std::to_string(user_id) + \":\" + file_hash"));
+            EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::FindActiveByUserAndHash("));
+            EXPECT_TRUE(Contains(source, "const drogon::orm::DbClientPtr& client,"));
+            EXPECT_TRUE(Contains(source, "status IN ($3, $4)"));
+            EXPECT_TRUE(Contains(source, "ORDER BY created_at, id LIMIT 1"));
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::InProgress"));
+            EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Finalizing"));
+            EXPECT_FALSE(Contains(source, "FindInProgressByUserAndHash"));
+            EXPECT_FALSE(Contains(source, "FindInProgressIdByUserAndHash"));
+
+            const auto lock = lifecycle_source.find("AcquireUploadInitLock(");
+            const auto active_recheck = lifecycle_source.find("FindActiveByUserAndHash(\n                    transaction", lock);
+            const auto quota_reserve = lifecycle_source.find("ReserveUploadStorage(", active_recheck);
+            const auto task_create = lifecycle_source.find("upload_task_repository.Create(", quota_reserve);
+            ASSERT_NE(lock, std::string::npos);
+            ASSERT_NE(active_recheck, std::string::npos);
+            ASSERT_NE(quota_reserve, std::string::npos);
+            ASSERT_NE(task_create, std::string::npos);
+            EXPECT_LT(lock, active_recheck);
+            EXPECT_LT(active_recheck, quota_reserve);
+            EXPECT_LT(quota_reserve, task_create);
+            EXPECT_FALSE(Contains(lifecycle_source, "std::mutex"));
         }
 
         TEST(UploadTaskRepositorySurfaceContractTest, DeadRepositoryMethodsStayRemoved) {

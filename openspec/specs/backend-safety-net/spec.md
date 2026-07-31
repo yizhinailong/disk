@@ -75,6 +75,10 @@ The system SHALL provide integration safety tests that characterize current quot
 - **WHEN** a PostgreSQL failure-injection trigger rejects creation of a new non-instant upload task
 - **THEN** initialization MUST return the stable internal error without changing the user's quota or task inventory, and removing the trigger then retrying MUST create a task that follows the normal cancellation cleanup path
 
+#### Scenario: Concurrent identical initialization has one winner
+- **WHEN** eight synchronized requests initialize the same user's novel file hash
+- **THEN** every request MUST succeed with the same `upload_id`, exactly one active upload task and one reservation MUST be created, unexplained reserved bytes MUST remain unchanged, and canceling the task MUST restore the quota baseline
+
 ### Requirement: File and folder namespace safety invariants
 The system SHALL provide integration safety tests that characterize current move, copy, and path consistency behavior for files and folders.
 

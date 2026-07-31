@@ -794,6 +794,7 @@ Authorization: Bearer <access_token>
 > - 如果 `storage_used + storage_reserved + file_size > storage_quota`，返回 `400 + 50004 StorageQuotaExceeded`
 > - 秒传（文件哈希已存在）不经过预占用流程，直接创建 `files` 记录
 > - 取消上传或超时后，预占用的空间通过 `storage_reserved` 释放
+> - 同一用户并发初始化相同 `file_hash` 时，服务端以 PostgreSQL 事务级 advisory lock 串行化“活跃任务复查、配额预留、任务插入”；所有成功请求返回同一 `upload_id`，只允许一个任务和一次预留。`InProgress` 与 `Finalizing` 都属于可复用的活跃会话。
 >
 > **回滚截止语义**：当启动期配置 `upload_task_creation_enabled=false` 时，本接口仍先解析秒传和同用户同 hash 的断点续传。秒传继续创建文件引用，断点续传继续返回原 `upload_id` 与分片进度；只有需要创建新任务的请求返回 `503 + 50012 UploadTaskCreationDisabled`。拒绝发生在配额预留和任务 INSERT 之前，不会回退为 local staging，也不会改写既有任务的 backend/prefix。已有任务的分片、完成和取消接口不受该开关影响，但必须路由到理解其 schema 和 staging 描述符的兼容版本。
 >

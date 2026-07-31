@@ -17,6 +17,10 @@ The system SHALL initialize file uploads by validating the target folder, filena
 - **WHEN** the upload metadata is invalid, target folder is inaccessible, or storage is insufficient
 - **THEN** the system SHALL reject initialization without creating an active upload task
 
+#### Scenario: Identical uploads are initialized concurrently
+- **WHEN** the same user concurrently initializes the same non-instant file hash through one or more API instances
+- **THEN** PostgreSQL transaction-scoped coordination SHALL allow exactly one active `InProgress` or `Finalizing` task and one quota reservation, and every successful request SHALL return the same `upload_id`
+
 ### Requirement: Upload Task Creation Cutoff
 The system SHALL provide a startup-controlled rollback cutoff for creating upload tasks. When the cutoff is closed, upload initialization SHALL still resolve resumable and instant-upload outcomes before deciding whether a new task is required, and SHALL reject only the new-task outcome before reserving storage or inserting task state.
 
