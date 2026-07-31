@@ -1941,6 +1941,14 @@ clang-format、完整构建、相关直接 GoogleTest 53/53、上传生命周期
 
 clang-format、Python 语法、完整构建、相关直接 GoogleTest 73/73、配额/回收站/对账/清理/拓扑聚焦 CTest 95/95（16.04 秒）和 OpenSpec 严格校验 24/24 通过。不带命令行额外超时的完整 CTest 共 1425 项：1418 通过、7 项按环境门控跳过、0 失败，总耗时 506.15 秒。本批没有重跑 15.74/15.75 的带门禁环境复验，也不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.78 上传初始化配额/任务原子化记录（2026-07-31）
+
+数据库设计、系统测试、单元测试和 OpenSpec 先行固定非秒传上传初始化原子性。调用链审计确认旧流程先用 standalone PostgreSQL 更新预留配额，再独立插入 `upload_tasks`；API 在两步之间退出，或任务插入失败后的 best-effort 释放再次失败时，会留下没有进行中任务归属的 `storage_reserved`。两个返回 `Task<void>` 的 `ReleaseReservedStorage` facade 又会只记录 checked 释放错误并正常返回，无法让调用方可靠感知补偿失败。
+
+上传配置与分片数验证现先于任何配额写入完成；新任务路径通过一个 `TransactionRunner` 在同一 transaction client 上依次执行条件预留和任务插入，`UploadTaskRepository::Create` 不再隐式使用仓储默认 client，staging session 外部 I/O 仍只在数据库提交后执行。三个 init 补偿释放分支与两个 unchecked facade 已删除，取消、过期和复制继续显式处理 `ReleaseReservedStorageChecked`。真实 PostgreSQL trigger 只拒绝目标用户/文件名的任务插入，实测 HTTP 500/`10006` 与稳定消息不变，任务、used、reserved 和无归属预留量均不变；移除 trigger 后同请求重试成功，精确预留并可正常取消恢复。新静态合同在实现前按预期因两个 facade 仍公开而编译失败；首次集成运行在安装 trigger 前因新用例误写既有 helper 名称中止，修正两个调用后整套安全网通过。
+
+clang-format、Python 语法、完整构建、相关直接 GoogleTest 27/27、内容/配额安全网 235/235、上传/配额/仓储/状态机/拓扑聚焦 CTest 32/32（133.77 秒）和 OpenSpec 严格校验 24/24 通过。不带命令行额外超时的完整 CTest 共 1425 项：1418 通过、7 项按环境门控跳过、0 失败，总耗时 513.37 秒。本批没有重跑 15.74/15.75 的带门禁环境复验，也不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

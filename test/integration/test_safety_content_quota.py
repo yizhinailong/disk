@@ -586,6 +586,30 @@ def install_used_storage_decrement_failure_trigger(user_id: int):
     return lambda: drop_failure_trigger("users", trigger_name, function_name)
 
 
+def install_upload_task_insert_failure_trigger(user_id: int, filename: str):
+    """Install a trigger that rejects one user's named upload task insert."""
+    function_name = safe_test_identifier("fail_upload_task_insert_fn")
+    trigger_name = safe_test_identifier("fail_upload_task_insert_trg")
+    escaped_filename = filename.replace("'", "''")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.user_id = {int(user_id)} AND NEW.filename = '{escaped_filename}' THEN
+                RAISE EXCEPTION 'injected upload task insert failure for user %', NEW.user_id;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE INSERT ON upload_tasks '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("upload_tasks", trigger_name, function_name)
+
+
 def assert_delete_transaction_error(label: str, resp) -> None:
     """Assert delete transaction failures keep the stable public error contract."""
     assert_equal(f"{label} returns HTTP 500", resp.status_code, 500)
@@ -1178,6 +1202,85 @@ def test_upload_quota_rejection_no_leak() -> None:
     assert_equal("upload quota rejection creates no task", after_task_count, before_task_count)
     assert_equal("upload quota rejection restores used", restored["storage_used"], original["storage_used"])
     assert_equal("upload quota rejection restores reserved", restored["storage_reserved"], original["storage_reserved"])
+
+
+def test_upload_task_insert_failure_rolls_back_reservation_and_retries() -> None:
+    """Verify task insertion and quota reservation share one transaction."""
+    log_section("Upload Task Insert Failure Atomic Rollback And Retry")
+    payload = f"upload-task-insert-rollback-{unique_name()}".encode()
+    filename = f"safety_upload_task_insert_{unique_name()}.bin"
+    request_body = {
+        "filename": filename,
+        "file_size": len(payload),
+        "file_hash": md5_bytes(payload),
+        "parent_id": 0,
+    }
+    quota_before = user_quota()
+    unexplained_before = unexplained_reserved_bytes()
+    task_count_before = int(
+        scalar(
+            "SELECT COUNT(*) FROM upload_tasks WHERE user_id = %s AND filename = %s",
+            (USER_ID, filename),
+        )
+        or 0
+    )
+    cleanup_trigger = install_upload_task_insert_failure_trigger(USER_ID, filename)
+
+    try:
+        response = fetch(
+            "/api/file/upload/init",
+            method="POST",
+            headers=auth_headers(),
+            json_body=request_body,
+        )
+        save_evidence(f"{EVIDENCE_PREFIX}-upload-task-insert-failure.json", response.text)
+    finally:
+        cleanup_trigger()
+
+    assert_equal("task insert failure returns HTTP 500", response.status_code, 500)
+    assert_equal("task insert failure returns InternalError", json_field(response.text, "code"), "10006")
+    assert_equal(
+        "task insert failure returns stable message",
+        json_field(response.text, "message"),
+        "Failed to create upload task",
+    )
+    assert_equal(
+        "task insert failure creates no task",
+        int(
+            scalar(
+                "SELECT COUNT(*) FROM upload_tasks WHERE user_id = %s AND filename = %s",
+                (USER_ID, filename),
+            )
+            or 0
+        ),
+        task_count_before,
+    )
+    assert_equal("task insert failure rolls back quota", user_quota(), quota_before)
+    assert_equal(
+        "task insert failure creates no unexplained reservation",
+        unexplained_reserved_bytes(),
+        unexplained_before,
+    )
+
+    retry = fetch(
+        "/api/file/upload/init",
+        method="POST",
+        headers=auth_headers(),
+        json_body=request_body,
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-upload-task-insert-retry.json", retry.text)
+    assert_equal("task insert retry returns HTTP 200", retry.status_code, 200)
+    assert_equal("task insert retry succeeds", json_field(retry.text, "code"), "0")
+    upload_id = json_field(retry.text, "data.upload_id")
+    assert_equal("task insert retry creates an upload task", bool(upload_id), True)
+    assert_numeric_delta(
+        "task insert retry reserves exact bytes",
+        quota_before["storage_reserved"],
+        user_quota()["storage_reserved"],
+        len(payload),
+    )
+    cancel_upload(str(upload_id))
+    assert_equal("task insert retry cancellation restores quota", user_quota(), quota_before)
 
 
 def test_copy_quota_rejection_no_side_effects() -> None:
@@ -1920,6 +2023,7 @@ def main() -> None:
     test_commit_under_reservation_retains_recovery_artifacts()
     test_copy_ref_count_and_quota()
     test_upload_quota_rejection_no_leak()
+    test_upload_task_insert_failure_rolls_back_reservation_and_retries()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()

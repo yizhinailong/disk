@@ -132,6 +132,7 @@ namespace disk::file {
     }
 
     auto UploadTaskRepository::Create(
+        const drogon::orm::DbClientPtr& client,
         UploadTasks task,
         const disk::storage::UploadStagingSession& staging_session,
         uint32_t expiry_seconds
@@ -143,7 +144,7 @@ namespace disk::file {
             throw std::invalid_argument("Staging session prefix must not be empty");
         }
 
-        auto result = co_await m_db_client->execSqlCoro(
+        auto result = co_await client->execSqlCoro(
             "INSERT INTO upload_tasks (" "id, user_id, folder_id, filename, file_size, file_hash, chunk_size, total_chunks, " "reserved_bytes, temp_path, staging_backend, staging_prefix, status, expires_at" ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, " "NOW() + ($14::integer * INTERVAL '1 second')) RETURNING *",
             task.getValueOfId(),
             task.getValueOfUserId(),

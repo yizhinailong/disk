@@ -96,6 +96,7 @@ namespace disk::file {
 
         [[nodiscard]]
         auto Create(
+            const drogon::orm::DbClientPtr& client,
             drogon_model::disk::UploadTasks task,
             const disk::storage::UploadStagingSession& staging_session,
             uint32_t expiry_seconds

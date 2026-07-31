@@ -647,26 +647,8 @@ namespace disk::upload {
             co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskCreationDisabled));
         }
 
-        disk::quota::QuotaService quota_service(m_db_client);
-        auto quota_result = co_await quota_service.ReserveUploadStorage(
-            m_db_client,
-            command.user_id,
-            command.file_size,
-            log_context
-        );
-        if (!quota_result) {
-            Logger::Warn(log_context) << "Upload storage quota reservation failed";
-            co_return std::unexpected(quota_result.error());
-        }
-
         if (command.chunk_size == 0) {
             Logger::Error(log_context) << "Invalid upload chunk size configured: 0";
-            co_await quota_service.ReleaseReservedStorage(
-                m_db_client,
-                command.user_id,
-                command.file_size,
-                log_context
-            );
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Invalid upload chunk size configuration")
             );
@@ -679,19 +661,12 @@ namespace disk::upload {
                 << "\", file_size=" << command.file_size
                 << ", chunk_size=" << command.chunk_size
                 << ", total_chunks=" << total_chunks_u64;
-            co_await quota_service.ReleaseReservedStorage(
-                m_db_client,
-                command.user_id,
-                command.file_size,
-                log_context
-            );
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::ValidationFailed, "File requires too many chunks")
             );
         }
         auto total_chunks = static_cast<uint32_t>(total_chunks_u64);
         auto upload_id = drogon::utils::getUuid();
-        log_context.upload_id = upload_id;
         const auto config = disk::utils::ConfigMgr::GetInstance();
         const auto staging_backend = config->GetUploadStagingBackend() == disk::utils::StorageBackend::S3 ? disk::storage::UploadStagingBackend::S3 : disk::storage::UploadStagingBackend::Local;
         const auto staging_prefix = staging_backend == disk::storage::UploadStagingBackend::S3 ? config->GetS3StorageConfig().staging_prefix + "/" + upload_id : upload_id;
@@ -714,62 +689,67 @@ namespace disk::upload {
         task.setTempPath(upload_id);
         task.setStatus(ToStorageValue(UploadTaskStatus::InProgress));
 
-        bool create_task_failed = false;
-        try {
-            task = co_await upload_task_repository.Create(
-                std::move(task),
-                staging_session,
-                static_cast<uint32_t>(command.expiry_seconds)
-            );
-            log_context.upload_id = task.getValueOfId();
-
-            Logger::Debug(log_context)
-                << "Upload task created successfully: upload_id=" << task.getValueOfId()
-                << ", total_chunks=" << total_chunks;
-
-            if (m_upload_staging_storage != nullptr) {
-                auto ensure_result = co_await m_upload_staging_storage->EnsureUploadSession(
-                    staging_session,
+        auto transaction_log_context = log_context;
+        transaction_log_context.upload_id = upload_id;
+        disk::file::TransactionRunner transaction_runner(
+            m_db_client,
+            ErrorInfo(ErrorCode::InternalError, "Failed to create upload task"),
+            transaction_log_context
+        );
+        disk::quota::QuotaService quota_service(m_db_client);
+        auto tx_result = co_await transaction_runner.Run(
+            [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                auto quota_result = co_await quota_service.ReserveUploadStorage(
+                    transaction,
+                    command.user_id,
+                    command.file_size,
                     log_context
                 );
-                if (!ensure_result) {
-                    Logger::Warn(log_context)
-                        << "Failed to ensure upload temp directory: upload_id="
-                        << task.getValueOfId();
+                if (!quota_result) {
+                    Logger::Warn(log_context) << "Upload storage quota reservation failed";
+                    co_return std::unexpected(quota_result.error());
                 }
+
+                task = co_await upload_task_repository.Create(
+                    transaction,
+                    task,
+                    staging_session,
+                    static_cast<uint32_t>(command.expiry_seconds)
+                );
+                co_return {};
             }
-
-            InitUploadOutcome outcome;
-            outcome.upload_id = task.getValueOfId();
-            outcome.chunk_size = task.getValueOfChunkSize();
-            outcome.total_chunks = task.getValueOfTotalChunks();
-            outcome.uploaded_chunks = {};
-            outcome.instant_upload = false;
-            outcome.invalidation = std::move(pending_invalidation);
-            outcome.invalidation.upload_task_ids.push_back(task.getValueOfId());
-
-            co_return outcome;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to create upload task: " << e.base().what();
-            create_task_failed = true;
+        );
+        if (!tx_result) {
+            co_return std::unexpected(tx_result.error());
         }
 
-        if (create_task_failed) {
-            co_await quota_service.ReleaseReservedStorage(
-                m_db_client,
-                command.user_id,
-                command.file_size,
+        log_context.upload_id = task.getValueOfId();
+        Logger::Debug(log_context)
+            << "Upload task created successfully: upload_id=" << task.getValueOfId()
+            << ", total_chunks=" << total_chunks;
+
+        if (m_upload_staging_storage != nullptr) {
+            auto ensure_result = co_await m_upload_staging_storage->EnsureUploadSession(
+                staging_session,
                 log_context
             );
-            co_return std::unexpected(
-                ErrorInfo(ErrorCode::InternalError, "Failed to create upload task")
-            );
+            if (!ensure_result) {
+                Logger::Warn(log_context)
+                    << "Failed to ensure upload temp directory: upload_id="
+                    << task.getValueOfId();
+            }
         }
 
-        co_return std::unexpected(
-            ErrorInfo(ErrorCode::InternalError, "Unexpected upload initialization state")
-        );
+        InitUploadOutcome outcome;
+        outcome.upload_id = task.getValueOfId();
+        outcome.chunk_size = task.getValueOfChunkSize();
+        outcome.total_chunks = task.getValueOfTotalChunks();
+        outcome.uploaded_chunks = {};
+        outcome.instant_upload = false;
+        outcome.invalidation = std::move(pending_invalidation);
+        outcome.invalidation.upload_task_ids.push_back(task.getValueOfId());
+
+        co_return outcome;
     }
 
     auto UploadLifecycleService::CompleteUpload(

@@ -71,6 +71,10 @@ The system SHALL provide integration safety tests that characterize current quot
 - **WHEN** a PostgreSQL failure-injection trigger rejects the target user's `storage_used` decrement during permanent trash deletion
 - **THEN** the request MUST report the item failure and the transaction MUST preserve the trash row, content reference count, quota counters, Blob GC job inventory, and physical Blob, while removing the trigger and retrying MUST converge through the normal permanent-deletion path
 
+#### Scenario: Upload task insertion failure rolls back reservation
+- **WHEN** a PostgreSQL failure-injection trigger rejects creation of a new non-instant upload task
+- **THEN** initialization MUST return the stable internal error without changing the user's quota or task inventory, and removing the trigger then retrying MUST create a task that follows the normal cancellation cleanup path
+
 ### Requirement: File and folder namespace safety invariants
 The system SHALL provide integration safety tests that characterize current move, copy, and path consistency behavior for files and folders.
 

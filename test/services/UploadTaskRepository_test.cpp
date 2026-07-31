@@ -155,7 +155,19 @@ namespace disk::file {
 
             EXPECT_TRUE(Contains(lifecycle_source, "config->GetUploadStagingBackend()"));
             EXPECT_TRUE(Contains(lifecycle_source, "config->GetS3StorageConfig().staging_prefix + \"/\" + upload_id"));
-            EXPECT_TRUE(Contains(lifecycle_source, "upload_task_repository.Create("));
+            EXPECT_TRUE(Contains(
+                repository_source,
+                "auto UploadTaskRepository::Create(\n" "        const drogon::orm::DbClientPtr& client,"
+            ));
+            EXPECT_TRUE(Contains(repository_source, "auto result = co_await client->execSqlCoro("));
+            EXPECT_TRUE(Contains(
+                lifecycle_source,
+                "task = co_await upload_task_repository.Create(\n" "                    transaction,"
+            ));
+            EXPECT_TRUE(Contains(
+                lifecycle_source,
+                "disk::file::TransactionRunner transaction_runner(\n" "            m_db_client,\n" "            ErrorInfo(ErrorCode::InternalError, \"Failed to create upload task\")"
+            ));
             EXPECT_TRUE(Contains(lifecycle_source, "command.expiry_seconds"));
             EXPECT_TRUE(Contains(lifecycle_source, "FindStagingSessionForUser("));
             EXPECT_TRUE(Contains(lifecycle_source, "BuildStagingCleanupJob("));

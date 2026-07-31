@@ -78,32 +78,6 @@ namespace disk::quota {
         co_return co_await ReserveStorage(client, user_id, bytes, log_context);
     }
 
-    auto QuotaService::ReleaseReservedStorage(
-        uint64_t user_id,
-        uint64_t bytes,
-        disk::utils::LogContext log_context
-    ) const
-        -> drogon::Task<void> {
-        co_await ReleaseReservedStorage(m_db_client, user_id, bytes, log_context);
-    }
-
-    auto QuotaService::ReleaseReservedStorage(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t user_id,
-        uint64_t bytes,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<void> {
-        auto result = co_await ReleaseReservedStorageChecked(
-            client,
-            user_id,
-            bytes,
-            log_context
-        );
-        if (!result) {
-            Logger::Error(log_context) << "Reserved quota release failed";
-        }
-    }
-
     auto QuotaService::ReleaseReservedStorageChecked(
         const drogon::orm::DbClientPtr& client,
         uint64_t user_id,

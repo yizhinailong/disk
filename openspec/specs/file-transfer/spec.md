@@ -273,3 +273,7 @@ Upload lifecycle implementation SHALL coordinate content reference operations an
 #### Scenario: Upload path changes quota accounting
 - **WHEN** upload initialization, completion, cancellation, or expiry changes reserved or used storage
 - **THEN** quota reservation, release, and reserved-to-used commit SHALL flow through the quota/accounting boundary while preserving atomic database consistency
+
+#### Scenario: New upload task creation is atomic with reservation
+- **WHEN** a non-instant upload requires a new task and PostgreSQL rejects the `upload_tasks` insert after evaluating quota
+- **THEN** reservation and task creation SHALL roll back together without unexplained reserved bytes, while removing the fault and retrying the same initialization SHALL create one normally cancellable task

@@ -101,9 +101,25 @@ namespace disk::quota {
             );
         };
 
+        template <typename Service>
+        concept HasStandaloneUncheckedReservedRelease = requires(const Service& service) {
+            service.ReleaseReservedStorage(uint64_t{ 1 }, uint64_t{ 1 });
+        };
+
+        template <typename Service>
+        concept HasClientUncheckedReservedRelease = requires(const Service& service) {
+            service.ReleaseReservedStorage(
+                std::declval<const drogon::orm::DbClientPtr&>(),
+                uint64_t{ 1 },
+                uint64_t{ 1 }
+            );
+        };
+
         static_assert(!HasStandaloneReconciliation<QuotaService>);
         static_assert(!HasClientReconciliation<QuotaService>);
         static_assert(!HasUncheckedUsedStorageAdjustment<QuotaService>);
+        static_assert(!HasStandaloneUncheckedReservedRelease<QuotaService>);
+        static_assert(!HasClientUncheckedReservedRelease<QuotaService>);
 
         TEST(QuotaServiceCompileTest, CanConstructWithNullDbClient) {
             QuotaService service(nullptr);
@@ -168,11 +184,11 @@ namespace disk::quota {
 
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                10U
+                8U
             );
             EXPECT_EQ(CountOccurrences(source, "Logger::Debug(log_context)"), 5U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 3U);
-            EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 8U);
+            EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 7U);
             EXPECT_EQ(
                 CountOccurrences(
                     source,
@@ -189,21 +205,18 @@ namespace disk::quota {
                 "co_return co_await ReserveStorage(",
                 3U
             ));
-            EXPECT_TRUE(EveryCallContainsContext(
-                source,
-                "co_await ReleaseReservedStorage(",
-                1U
-            ));
-            EXPECT_TRUE(EveryCallContainsContext(
-                source,
-                "co_await ReleaseReservedStorageChecked(",
-                1U
-            ));
+            EXPECT_FALSE(Contains(header, "auto ReleaseReservedStorage("));
+            EXPECT_FALSE(Contains(source, "QuotaService::ReleaseReservedStorage("));
             EXPECT_FALSE(Contains(source, "co_await AdjustUsedStorageChecked("));
             EXPECT_TRUE(EveryCallContainsContext(
                 upload_lifecycle,
                 "quota_service.",
-                8U
+                5U
+            ));
+            EXPECT_FALSE(Contains(upload_lifecycle, "quota_service.ReleaseReservedStorage("));
+            EXPECT_TRUE(Contains(
+                upload_lifecycle,
+                "auto quota_result = co_await quota_service.ReserveUploadStorage(\n" "                    transaction,"
             ));
             EXPECT_TRUE(EveryCallContainsContext(
                 file_mutation,
