@@ -1093,11 +1093,41 @@ namespace disk::file {
                 std::vector<FileIdMapping> staged_folder_mappings;
                 std::vector<FileIdMapping> staged_file_mappings;
                 uint64_t staged_copied_size = 0;
+                uint64_t staged_released_size = 0;
                 int staged_folder_count = 0;
                 int staged_file_count = 0;
 
                 auto tx_result = co_await transaction_runner.Run(
                     [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                        co_await m_folder_repository.AcquireNameLock(
+                            transaction,
+                            user_id,
+                            request.target_folder_id,
+                            root_name
+                        );
+                        auto transaction_occupied_names = co_await utils::QueryOccupiedFolderNames(
+                            transaction,
+                            request.target_folder_id,
+                            user_id,
+                            std::vector<std::string>{ root_name }
+                        );
+                        if (transaction_occupied_names.contains(root_name)) {
+                            Logger::Warn(log_context)
+                                << "Target folder acquired folder with same name, skipping copy: "
+                                << root_name;
+                            auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
+                                transaction,
+                                user_id,
+                                plan.item_size,
+                                log_context
+                            );
+                            if (!release_result) {
+                                co_return std::unexpected(release_result.error());
+                            }
+                            staged_released_size = plan.item_size;
+                            co_return {};
+                        }
+
                         auto increment_result = co_await content_service.IncrementRefCountsChecked(
                             transaction,
                             content_ref_increment,
@@ -1249,6 +1279,7 @@ namespace disk::file {
                 copied_folder_count += staged_folder_count;
                 copied_file_count += staged_file_count;
                 actual_copy_size += staged_copied_size;
+                released_copy_size += staged_released_size;
                 new_folders.insert(new_folders.end(), staged_folder_mappings.begin(), staged_folder_mappings.end());
                 new_files.insert(new_files.end(), staged_file_mappings.begin(), staged_file_mappings.end());
             }

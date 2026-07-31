@@ -2005,6 +2005,14 @@ API、数据库、系统测试、单元测试和 OpenSpec 先行固定不同源�
 
 新增真实场景现为 10/10，完整内容/配额安全网为 296/296：8 个并发请求均为 HTTP 200/业务码 0，`moved_folder_count` 合计恰好为 1，目标名称与根路径只有一行，七个输家保留源父目录与根路径，只有赢家的后代路径随子树更新，目标、源父目录、移动根和后代的 `item_count` 均匹配实际直属项，日志不再包含该唯一约束名。Python 语法、clang-format、差异检查、完整构建、相关直接 GoogleTest 14/14 和 OpenSpec 严格校验 24/24 通过；文件/文件夹仓储、缓存、变更、文件夹生命周期、移动路径和拓扑聚焦 CTest 28 项通过、1 项按 PgBouncer 环境门控跳过、0 失败（27.80 秒）。最终不带命令行额外超时的完整 CTest 共 1432 项：1425 通过、7 项按环境门控跳过、0 失败，总耗时 521.72 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与 PostgreSQL transaction advisory lock 合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.86 文件夹并发复制同名锁内跳过记录（2026-07-31）
+
+API、数据库、系统测试、单元测试和 OpenSpec 先行固定同一文件夹或不同父目录下同名文件夹并发复制到同一目标目录时的完整子树、引用与配额语义。调用链审计确认旧流程先在事务外查询目标根名称占用，随后每棵子树事务先增加内容引用，再插入根、后代文件夹与文件并更新目标计数；多个请求可同时通过快照查重，正常冲突依赖根插入唯一约束使整笔事务回滚。带 0.5 秒 PostgreSQL `BEFORE INSERT` 延迟 trigger 的手工旧二进制复现中，8 个请求均为 HTTP 200/业务码 0，只有一棵含根、子目录和文件的完整子树创建，`ref_count`、`storage_used` 与目标 `item_count` 各增加一次且无预留泄漏，但服务器日志出现 14 次 `uk_folders_user_parent_name`。新增源码顺序合同在生产实现前按预期因缺少文件夹名称锁而失败；旧二进制运行新增真实场景时完整安全网为 309/310，唯一失败正是约束日志泄漏。
+
+每棵文件夹子树复制现在进入既有 `TransactionRunner` 后，先获取 `FolderRepository::AcquireNameLock` 的 `folder-name:<user_id>:<target_folder_id>:<root_name>` PostgreSQL transaction advisory lock，再用同一 transaction client 复查目标占用。锁内命中并发冲突时，通过 `ReleaseReservedStorageChecked` 在该事务中释放整棵子树对应预留并立即返回；输家不执行 `IncrementRefCountsChecked`、根/后代文件夹与文件插入、目标 `item_count` 更新或预留转已用。事务提交成功后才把释放大小或赢家的复制计数、实际大小与 ID 映射合入公开响应；事务外查重继续作为无写入快照优化，原批量成功 envelope 和外层失败释放语义保持不变。
+
+新增真实场景现为 16/16，完整内容/配额安全网为 310/310：8 个并发请求均为 HTTP 200/业务码 0，复制计数合计只包含一棵根、子目录与文件均完整的子树，目标各层路径和直属计数精确，`ref_count`、`storage_used` 与目标 `item_count` 各增加一次，`storage_reserved` 回到基线且日志不再包含该唯一约束名。Python 语法、clang-format、差异检查、完整构建、相关直接 GoogleTest 15/15 和 OpenSpec 严格校验 24/24 通过。首次配额/文件与文件夹仓储/缓存/变更/复制原子性/生命周期/移动路径/拓扑聚焦 CTest 仅因 `QuotaService_test.cpp` 仍要求旧 5 个调用而 1 项失败；显式上下文计数更新为包含文件夹锁内释放的 6 个调用后，聚焦 CTest 35 项通过、1 项按 PgBouncer 环境门控跳过、0 失败（30.26 秒）。最终不带命令行额外超时的完整 CTest 共 1433 项：1426 通过、7 项按环境门控跳过、0 失败，总耗时 515.39 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与 PostgreSQL transaction advisory lock 合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

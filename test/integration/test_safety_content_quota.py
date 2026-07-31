@@ -769,6 +769,32 @@ def install_file_copy_delay_trigger(user_id: int, folder_id: int, target_name: s
     return lambda: drop_failure_trigger("files", trigger_name, function_name)
 
 
+def install_folder_copy_delay_trigger(user_id: int, parent_id: int, target_name: str):
+    """Delay matching copied-folder roots so concurrent prechecks overlap."""
+    function_name = safe_test_identifier("delay_folder_copy_fn")
+    trigger_name = safe_test_identifier("delay_folder_copy_trg")
+    escaped_target = target_name.replace("'", "''")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.user_id = {int(user_id)}
+               AND NEW.parent_id = {int(parent_id)}
+               AND NEW.name = '{escaped_target}' THEN
+                PERFORM pg_sleep(0.5);
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE INSERT ON folders '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("folders", trigger_name, function_name)
+
+
 def assert_delete_transaction_error(label: str, resp) -> None:
     """Assert delete transaction failures keep the stable public error contract."""
     assert_equal(f"{label} returns HTTP 500", resp.status_code, 500)
@@ -2090,6 +2116,164 @@ def test_concurrent_same_name_file_copies_skip_before_insert() -> None:
     )
 
 
+def test_concurrent_same_name_folder_copies_skip_before_subtree_writes() -> None:
+    """Verify concurrent folder copies serialize before refs and subtree inserts."""
+    log_section("Concurrent Same-Name Folder Copy Single Winner")
+    target_id = create_folder(f"safety_folder_copy_target_{unique_name()}")
+    root_name = f"safety_folder_copy_root_{unique_name()}"
+    source_root_id = create_folder(root_name)
+    child_name = f"safety_folder_copy_child_{unique_name()}"
+    source_child_id = create_folder(child_name, source_root_id)
+    filename = f"safety_folder_copy_file_{unique_name()}.bin"
+    payload = f"folder-copy-payload-{unique_name()}".encode()
+    source_file_id = upload_file(filename, payload, source_child_id)
+    content_id = int(file_row(source_file_id)["content_id"])
+    ref_before = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    target_count_before = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID))
+        or 0
+    )
+    target_path = str(
+        scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID)) or ""
+    )
+    target_root_path = f"{target_path}{root_name}/"
+    target_child_path = f"{target_root_path}{child_name}/"
+    concurrency = 8
+    barrier = threading.Barrier(concurrency)
+    cleanup_trigger = install_folder_copy_delay_trigger(USER_ID, target_id, root_name)
+
+    def copy_to_same_target(index: int):
+        barrier.wait(timeout=10)
+        return fetch(
+            "/api/file/copy",
+            method="POST",
+            headers=auth_headers(request_id=f"safety-folder-copy-{index}-{unique_name()}"),
+            json_body={
+                "file_ids": [],
+                "folder_ids": [source_root_id],
+                "target_folder_id": target_id,
+            },
+        )
+
+    try:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            responses = list(executor.map(copy_to_same_target, range(concurrency)))
+    finally:
+        cleanup_trigger()
+
+    for index, response in enumerate(responses):
+        save_evidence(f"{EVIDENCE_PREFIX}-folder-copy-concurrent-{index}.json", response.text)
+
+    successful_responses = [
+        response
+        for response in responses
+        if response.status_code == 200 and json_field(response.text, "code") == "0"
+    ]
+    copied_folder_counts = [
+        int(json_field(response.text, "data.copied_folder_count") or 0) for response in responses
+    ]
+    copied_file_counts = [
+        int(json_field(response.text, "data.copied_file_count") or 0) for response in responses
+    ]
+    copied_counts = [int(json_field(response.text, "data.copied_count") or 0) for response in responses]
+    target_root_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders "
+            "WHERE user_id = %s AND parent_id = %s AND name = %s AND path = %s",
+            (USER_ID, target_id, root_name, target_root_path),
+        )
+        or 0
+    )
+    target_root_id = int(
+        scalar(
+            "SELECT id FROM folders "
+            "WHERE user_id = %s AND parent_id = %s AND name = %s AND path = %s",
+            (USER_ID, target_id, root_name, target_root_path),
+        )
+        or 0
+    )
+    target_child_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders "
+            "WHERE user_id = %s AND parent_id = %s AND name = %s AND path = %s",
+            (USER_ID, target_root_id, child_name, target_child_path),
+        )
+        or 0
+    )
+    target_child_id = int(
+        scalar(
+            "SELECT id FROM folders "
+            "WHERE user_id = %s AND parent_id = %s AND name = %s AND path = %s",
+            (USER_ID, target_root_id, child_name, target_child_path),
+        )
+        or 0
+    )
+    target_file_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM files "
+            "WHERE user_id = %s AND folder_id = %s AND content_id = %s AND name = %s AND path = %s",
+            (USER_ID, target_child_id, content_id, filename, f"{target_child_path}{filename}"),
+        )
+        or 0
+    )
+    target_count_after = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID))
+        or 0
+    )
+    mismatched_counts = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders f "
+            "WHERE f.id = ANY(%s) AND f.user_id = %s "
+            "AND f.item_count <> ("
+            "SELECT COUNT(*) FROM files child_file "
+            "WHERE child_file.user_id = f.user_id AND child_file.folder_id = f.id"
+            ") + ("
+            "SELECT COUNT(*) FROM folders child_folder "
+            "WHERE child_folder.user_id = f.user_id AND child_folder.parent_id = f.id"
+            ")",
+            ([target_id, target_root_id, target_child_id], USER_ID),
+        )
+        or 0
+    )
+    ref_after = int(content_row(content_id)["ref_count"])
+    quota_after = user_quota()
+    server_log = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+
+    assert_equal("concurrent folder copy returns every response", len(responses), concurrency)
+    assert_equal("concurrent folder copy keeps every batch response successful", len(successful_responses), concurrency)
+    assert_equal("concurrent folder copy counts one root and child", sum(copied_folder_counts), 2)
+    assert_equal("concurrent folder copy counts one descendant file", sum(copied_file_counts), 1)
+    assert_equal("concurrent folder copy total count is one complete subtree", sum(copied_counts), 3)
+    assert_equal("concurrent folder copy stores one target root", target_root_rows, 1)
+    assert_equal("concurrent folder copy stores one target child", target_child_rows, 1)
+    assert_equal("concurrent folder copy stores one target file", target_file_rows, 1)
+    assert_numeric_delta("concurrent folder copy increments ref_count once", ref_before, ref_after, 1)
+    assert_numeric_delta(
+        "concurrent folder copy consumes used quota once",
+        quota_before["storage_used"],
+        quota_after["storage_used"],
+        len(payload),
+    )
+    assert_equal(
+        "concurrent folder copy releases every reservation",
+        quota_after["storage_reserved"],
+        quota_before["storage_reserved"],
+    )
+    assert_numeric_delta(
+        "concurrent folder copy increments target count once",
+        target_count_before,
+        target_count_after,
+        1,
+    )
+    assert_equal("concurrent folder copy keeps copied subtree counts exact", mismatched_counts, 0)
+    assert_equal(
+        "concurrent folder copy does not expose the uniqueness constraint",
+        "uk_folders_user_parent_name" in server_log,
+        False,
+    )
+
+
 def test_copy_quota_rejection_no_side_effects() -> None:
     """Verify over-quota copy leaves no files or ref-count changes behind."""
     log_section("Copy Quota Rejection")
@@ -2838,6 +3022,7 @@ def main() -> None:
     test_concurrent_same_name_file_moves_skip_conflicts()
     test_concurrent_same_name_folder_moves_skip_conflicts()
     test_concurrent_same_name_file_copies_skip_before_insert()
+    test_concurrent_same_name_folder_copies_skip_before_subtree_writes()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()

@@ -92,6 +92,10 @@ The system SHALL allow users to copy files or folders while preserving content-s
 - **WHEN** multiple requests concurrently copy the same-named file into one target folder
 - **THEN** exactly one copy SHALL be created, while every other conflicting item SHALL be excluded from the copied count without consuming content references, used quota, or reserved quota
 
+#### Scenario: Same-named folder subtrees are concurrently copied into one folder
+- **WHEN** multiple requests concurrently copy the same folder subtree or same-named folder subtrees into one target folder
+- **THEN** exactly one complete subtree SHALL be created, while every other conflicting subtree SHALL be excluded from all copied counts without inserting descendants, changing content references or target counts, or consuming used or reserved quota
+
 ### Requirement: Search Namespace
 The system SHALL allow users to search files and folders by keyword within their own namespace.
 

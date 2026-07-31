@@ -227,6 +227,52 @@ namespace disk::file {
             EXPECT_LT(quota_commit, quota_release);
         }
 
+        TEST(FileMutationServiceCopyContractTest, CopyLocksFolderRootBeforeSubtreeWrites) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto copy_body = ExtractCopyBody(source);
+
+            ASSERT_FALSE(copy_body.empty());
+            const auto staged_folders = copy_body.find(
+                "std::vector<FileIdMapping> staged_folder_mappings;"
+            );
+            const auto transaction = copy_body.find(
+                "auto tx_result = co_await transaction_runner.Run(",
+                staged_folders
+            );
+            const auto name_lock = copy_body.find(
+                "m_folder_repository.AcquireNameLock(",
+                transaction
+            );
+            const auto conflict_check = copy_body.find(
+                "utils::QueryOccupiedFolderNames(",
+                name_lock
+            );
+            const auto quota_release = copy_body.find(
+                "quota_service.ReleaseReservedStorageChecked(",
+                conflict_check
+            );
+            const auto ref_increment = copy_body.find(
+                "content_service.IncrementRefCountsChecked(",
+                quota_release
+            );
+            const auto root_insert = copy_body.find(
+                "folder_mapper.insert(root_folder)",
+                ref_increment
+            );
+            ASSERT_NE(staged_folders, std::string::npos);
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(name_lock, std::string::npos);
+            ASSERT_NE(conflict_check, std::string::npos);
+            ASSERT_NE(quota_release, std::string::npos);
+            ASSERT_NE(ref_increment, std::string::npos);
+            ASSERT_NE(root_insert, std::string::npos);
+            EXPECT_LT(transaction, name_lock);
+            EXPECT_LT(name_lock, conflict_check);
+            EXPECT_LT(conflict_check, quota_release);
+            EXPECT_LT(quota_release, ref_increment);
+            EXPECT_LT(ref_increment, root_insert);
+        }
+
         TEST(FileMutationLogContextContractTest, ControllerAndServicesUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/FileController.cpp");
             const auto mutation_source = ReadSourceFile("src/services/FileMutationService.cpp");
