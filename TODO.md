@@ -2157,6 +2157,14 @@ clang-format、差异检查、后端与测试目标完整构建、直接 Storage
 
 clang-format、差异检查、后端与测试目标完整构建、直接 UploadTaskRepository GoogleTest 12/12、状态机/仓储/真实上传安全网聚焦 CTest 19/19（119.91 秒）和 OpenSpec 严格校验 24/24 通过。首轮完整 CTest 共 1445 项，唯一失败为 `ContractReadinessCycleIntegration` 的数据库观察时长略低于配置 TTL；该用例随后定向复验 1/1 通过（7.82 秒）。第二轮不带命令行额外超时的完整 CTest 共 1445 项：1438 项通过、7 项按环境门控跳过、0 失败，总耗时 523.84 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.105 清理记录重复旧路径投影清理记录（2026-08-01）
+
+数据库设计、单元测试和后端低风险清理 OpenSpec 先行固定上传清理描述符与旧 local 路径兼容边界。全仓字段与查询审计确认，`UploadTaskCleanupRecord::temp_path` 只在通用行映射器中赋值，取消、单项过期和批量过期流程均不读取它；三条清理查询已经在 SQL 内通过 `COALESCE(staging_prefix, temp_path) AS staging_prefix` 生成实际消费的统一描述符。新增合同在旧实现上按预期 0/1 失败，分别检出成员、映射、两条 `RETURNING` 和一条 `SELECT` 的独立投影，而四处兼容 fallback 数量合同保持通过。
+
+`UploadTaskCleanupRecord::temp_path`、通用映射赋值和三条清理查询的独立 `temp_path` 投影已删除。`upload_tasks.temp_path` 数据库列、新任务写入、V002/V003 混跑字段、`FindStagingSessionForUser` 及三条清理查询中的全部四处 `COALESCE` 兼容读取均未改变；取消和过期流程继续消费同一 backend/prefix 描述符，释放原预留配额、入队持久 cleanup、删除分片并传播状态版本。源码合同同时拒绝重复状态回归，并锁定两条最小 `RETURNING`、一条最小 `SELECT` 和四处 legacy fallback。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 UploadTaskRepository GoogleTest 13/13、仓储/灰度/local 迁移/contract-readiness/真实状态机与上传安全网聚焦 CTest 19/19（152.84 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1446 项：1439 项通过、7 项按环境门控跳过、0 失败，总耗时 525.12 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

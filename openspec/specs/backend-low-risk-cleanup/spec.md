@@ -155,6 +155,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** unused C++ repository methods are removed before migration-retirement approval
 - **THEN** persisted upload status values, local-staging descriptors, legacy path fallback, and nullable migration fields SHALL remain available until their dedicated retirement contract admits removal
 
+#### Scenario: Cleanup records omit duplicate legacy path state
+
+- **WHEN** cancellation and expiration flows consume only the unified staging descriptor produced by `COALESCE(staging_prefix, temp_path)` and never read the separately projected legacy path
+- **THEN** `UploadTaskCleanupRecord::temp_path`, its independent query projections, and row assignment SHALL be removed while the database column, legacy fallback expression, backend, unified prefix, quota release, cleanup enqueue, and migration compatibility remain unchanged
+
 #### Scenario: Test-only upload-state rules are removed
 
 - **WHEN** a whole-repository call-site audit confirms that generic transition, in-memory lease, and legacy complete/cancel/expire guards are called only by `UploadStateMachine` unit tests while production uses request decisions and PostgreSQL conditional mutations

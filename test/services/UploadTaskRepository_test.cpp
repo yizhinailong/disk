@@ -53,6 +53,11 @@ namespace disk::file {
             result.finalize_attempts;
         };
 
+        template <typename Record>
+        concept HasTempPath = requires(Record record) {
+            record.temp_path;
+        };
+
         static_assert(!HasDefaultClientRenewFinalizeLease<UploadTaskRepository>);
         static_assert(HasExplicitClientRenewFinalizeLease<UploadTaskRepository>);
 
@@ -69,6 +74,16 @@ namespace disk::file {
 
         auto Contains(const std::string& source, const std::string& expected) -> bool {
             return source.find(expected) != std::string::npos;
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t offset = 0;
+            while ((offset = source.find(expected, offset)) != std::string::npos) {
+                ++count;
+                offset += expected.size();
+            }
+            return count;
         }
 
         TEST(UploadTaskRepositoryLookupContractTest, LookupMethodsKeepOwnershipAndActiveUploadGuards) {
@@ -234,6 +249,24 @@ namespace disk::file {
             EXPECT_FALSE(disk::storage::ParseUploadStagingBackend("filesystem").has_value());
         }
 
+        TEST(UploadTaskRepositoryStagingContractTest, CleanupRecordOmitsDuplicateLegacyPathState) {
+            const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
+
+            EXPECT_FALSE(HasTempPath<UploadTaskCleanupRecord>);
+            EXPECT_FALSE(Contains(source, ".temp_path ="));
+            EXPECT_FALSE(Contains(source, "RETURNING id, temp_path, user_id"));
+            EXPECT_EQ(
+                CountOccurrences(source, "RETURNING id, user_id, reserved_bytes, staging_backend"),
+                2U
+            );
+            EXPECT_FALSE(Contains(source, "SELECT id, temp_path, user_id, reserved_bytes"));
+            EXPECT_TRUE(Contains(source, "SELECT id, user_id, reserved_bytes, staging_backend"));
+            EXPECT_EQ(
+                CountOccurrences(source, "COALESCE(staging_prefix, temp_path) AS staging_prefix"),
+                4U
+            );
+        }
+
         TEST(UploadTaskRepositoryStatusTransitionContractTest, CancellationAndExpiryTransitionsAreGuardedByInProgressStatus) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
 
@@ -248,7 +281,7 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2, "));
             EXPECT_TRUE(Contains(source, "state_version = state_version + 1 "));
             EXPECT_TRUE(Contains(source, "WHERE id = $3 AND status = $4 AND expires_at < NOW() "));
-            EXPECT_TRUE(Contains(source, "RETURNING id, temp_path, user_id, reserved_bytes"));
+            EXPECT_TRUE(Contains(source, "RETURNING id, user_id, reserved_bytes"));
             EXPECT_TRUE(Contains(source, "AS staging_prefix, state_version"));
             EXPECT_TRUE(Contains(source, "disk::upload::UploadTaskStatus::Expired"));
         }
@@ -260,7 +293,7 @@ namespace disk::file {
             const auto controller_source = ReadSourceFile("src/controllers/FileController.cpp");
 
             EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::MarkCancelledIfInProgressReturning("));
-            EXPECT_TRUE(Contains(repository_source, "RETURNING id, temp_path, user_id, reserved_bytes, staging_backend"));
+            EXPECT_TRUE(Contains(repository_source, "RETURNING id, user_id, reserved_bytes, staging_backend"));
             EXPECT_TRUE(Contains(repository_source, "AS staging_prefix, state_version"));
             EXPECT_TRUE(Contains(repository_source, "auto UploadTaskRepository::FindCancellationStateByIdForUser("));
             EXPECT_TRUE(Contains(repository_source, "SELECT status, state_version, expires_at < NOW() AS task_expired"));
@@ -394,7 +427,7 @@ namespace disk::file {
             EXPECT_TRUE(Contains(repository_source, "UPDATE upload_tasks SET status = $1, finalized_at = NOW(), fail_reason = $2, "));
             EXPECT_TRUE(Contains(repository_source, "state_version = state_version + 1 "));
             EXPECT_TRUE(Contains(repository_source, "WHERE id = $3 AND status = $4 AND expires_at < NOW() "));
-            EXPECT_TRUE(Contains(repository_source, "RETURNING id, temp_path, user_id, reserved_bytes"));
+            EXPECT_TRUE(Contains(repository_source, "RETURNING id, user_id, reserved_bytes"));
             EXPECT_TRUE(Contains(repository_source, "AS staging_prefix, state_version"));
             EXPECT_TRUE(Contains(repository_source, "ORDER BY expires_at, id LIMIT $2"));
 

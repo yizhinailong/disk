@@ -25,7 +25,6 @@ namespace disk::file {
 
     struct UploadTaskCleanupRecord {
         std::string id;
-        std::string temp_path;
         uint64_t user_id{ 0 };
         uint64_t reserved_bytes{ 0 };
         disk::storage::UploadStagingSession staging_session;
