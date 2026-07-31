@@ -61,7 +61,6 @@ namespace disk::file {
     struct FinalizeClaimResult {
         FinalizeClaimDisposition disposition{ FinalizeClaimDisposition::NotFound };
         uint64_t state_version{ 0 };
-        uint32_t finalize_attempts{ 0 };
         std::optional<uint64_t> completed_file_id;
     };
 

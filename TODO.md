@@ -2149,6 +2149,14 @@ clang-format、差异检查、后端与测试目标完整构建、直接 Operati
 
 clang-format、差异检查、后端与测试目标完整构建、直接 StorageWorkerRuntime GoogleTest 7/7、运行时/进程身份/角色切换/真实排空接管/拓扑聚焦 CTest 19/19（35.29 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1444 项：1437 项通过、7 项按环境门控跳过、0 失败，总耗时 523.65 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.104 完成认领冗余诊断投影清理记录（2026-08-01）
+
+数据库设计、单元测试和后端低风险清理 OpenSpec 先行固定完成认领的最小返回边界。全仓字段读写与 SQL 审计确认，`FinalizeClaimResult::finalize_attempts` 只在认领成功和 CAS 未命中两条查询路径中赋值，`UploadLifecycleService` 及其他生产、测试、工具和迁移调用从不读取它；数据库列本身仍由认领/接管 CAS 原子递增，并被故障测试和运维诊断直接读取。新增合同在旧实现上按预期 0/1 失败，分别检出结果成员、两条查询投影和两处映射仍存在，而 SQL 自增正向合同保持通过。
+
+`FinalizeClaimResult::finalize_attempts`、认领成功的 `RETURNING` 投影、CAS 未命中的 `SELECT` 投影及两处结果映射已删除。数据库 `upload_tasks.finalize_attempts` 列、非负约束、迁移兼容、认领与接管原子自增、运维查询和真实故障断言均未改变；认领结果继续返回 disposition、`state_version` 与完成重放所需的 `completed_file_id`，分片完整性、PostgreSQL 时间、owner/version 租约和全部完成状态分支保持原语义。源码合同同时拒绝冗余投影回归并正向锁定持久计数自增。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 UploadTaskRepository GoogleTest 12/12、状态机/仓储/真实上传安全网聚焦 CTest 19/19（119.91 秒）和 OpenSpec 严格校验 24/24 通过。首轮完整 CTest 共 1445 项，唯一失败为 `ContractReadinessCycleIntegration` 的数据库观察时长略低于配置 TTL；该用例随后定向复验 1/1 通过（7.82 秒）。第二轮不带命令行额外超时的完整 CTest 共 1445 项：1438 项通过、7 项按环境门控跳过、0 失败，总耗时 523.84 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

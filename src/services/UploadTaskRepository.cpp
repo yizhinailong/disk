@@ -202,7 +202,7 @@ namespace disk::file {
         ValidateLeaseArguments(lease_owner, lease_duration_seconds);
 
         auto claimed = co_await m_db_client->execSqlCoro(
-            "UPDATE upload_tasks AS task SET " "status = $1, lease_owner = $2, " "lease_expires_at = NOW() + ($3::integer * INTERVAL '1 second'), " "state_version = state_version + 1, " "finalize_attempts = finalize_attempts + 1, " "last_error_code = NULL, last_error_at = NULL " "WHERE task.id = $4 AND task.user_id = $5 AND (" "  (task.status = $6 AND task.expires_at >= NOW() AND (" "    SELECT COUNT(*) = task.total_chunks " "       AND COALESCE(MAX(chunk.chunk_index), -1) = task.total_chunks - 1 " "    FROM upload_task_chunks AS chunk WHERE chunk.task_id = task.id" "  )) " "  OR (task.status = $1 AND task.lease_expires_at <= NOW())" ") " "RETURNING state_version, finalize_attempts",
+            "UPDATE upload_tasks AS task SET " "status = $1, lease_owner = $2, " "lease_expires_at = NOW() + ($3::integer * INTERVAL '1 second'), " "state_version = state_version + 1, " "finalize_attempts = finalize_attempts + 1, " "last_error_code = NULL, last_error_at = NULL " "WHERE task.id = $4 AND task.user_id = $5 AND (" "  (task.status = $6 AND task.expires_at >= NOW() AND (" "    SELECT COUNT(*) = task.total_chunks " "       AND COALESCE(MAX(chunk.chunk_index), -1) = task.total_chunks - 1 " "    FROM upload_task_chunks AS chunk WHERE chunk.task_id = task.id" "  )) " "  OR (task.status = $1 AND task.lease_expires_at <= NOW())" ") " "RETURNING state_version",
             disk::upload::ToStorageValue(disk::upload::UploadTaskStatus::Finalizing),
             lease_owner,
             static_cast<int32_t>(lease_duration_seconds),
@@ -215,12 +215,11 @@ namespace disk::file {
             co_return FinalizeClaimResult{
                 .disposition = FinalizeClaimDisposition::Acquired,
                 .state_version = claimed[0]["state_version"].as<uint64_t>(),
-                .finalize_attempts = claimed[0]["finalize_attempts"].as<uint32_t>(),
             };
         }
 
         auto current = co_await m_db_client->execSqlCoro(
-            "SELECT status, state_version, finalize_attempts, completed_file_id, " "COALESCE(lease_expires_at <= NOW(), FALSE) AS lease_expired, " "expires_at < NOW() AS task_expired " "FROM upload_tasks WHERE id = $1 AND user_id = $2",
+            "SELECT status, state_version, completed_file_id, " "COALESCE(lease_expires_at <= NOW(), FALSE) AS lease_expired, " "expires_at < NOW() AS task_expired " "FROM upload_tasks WHERE id = $1 AND user_id = $2",
             upload_id,
             user_id
         );
@@ -237,7 +236,6 @@ namespace disk::file {
 
         FinalizeClaimResult result{
             .state_version = row["state_version"].as<uint64_t>(),
-            .finalize_attempts = row["finalize_attempts"].as<uint32_t>(),
         };
         if (!row["completed_file_id"].isNull()) {
             result.completed_file_id = row["completed_file_id"].as<uint64_t>();

@@ -48,6 +48,11 @@ namespace disk::file {
             );
         };
 
+        template <typename Result>
+        concept HasFinalizeAttempts = requires(Result result) {
+            result.finalize_attempts;
+        };
+
         static_assert(!HasDefaultClientRenewFinalizeLease<UploadTaskRepository>);
         static_assert(HasExplicitClientRenewFinalizeLease<UploadTaskRepository>);
 
@@ -296,6 +301,18 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "auto UploadTaskRepository::RecordFinalizeErrorIfLeaseOwned("));
             EXPECT_TRUE(Contains(source, "AND lease_owner = $5 AND state_version = $6 "));
             EXPECT_TRUE(Contains(source, "AND lease_expires_at > NOW()"));
+        }
+
+        TEST(UploadTaskRepositoryFinalizeLeaseContractTest, ClaimResultOmitsUnreadAttemptProjection) {
+            const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
+
+            EXPECT_FALSE(HasFinalizeAttempts<FinalizeClaimResult>);
+            EXPECT_TRUE(Contains(source, "finalize_attempts = finalize_attempts + 1"));
+            EXPECT_FALSE(Contains(source, "RETURNING state_version, finalize_attempts"));
+            EXPECT_TRUE(Contains(source, "RETURNING state_version"));
+            EXPECT_FALSE(Contains(source, "SELECT status, state_version, finalize_attempts"));
+            EXPECT_TRUE(Contains(source, "SELECT status, state_version, completed_file_id"));
+            EXPECT_FALSE(Contains(source, ".finalize_attempts ="));
         }
 
         TEST(UploadTaskRepositoryFinalizeLeaseContractTest, LifecycleClaimsAndRenewsBeforeLeaseGuardedCommit) {
