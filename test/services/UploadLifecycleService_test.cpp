@@ -16,6 +16,19 @@
 namespace disk::upload {
     namespace {
 
+        template <typename Service>
+        concept HasPublicBatchExpiration = requires(const Service& service) {
+            service.ExpireInProgressUploads(1);
+        };
+
+        template <typename Service>
+        concept HasPublicSingleExpiration = requires(const Service& service) {
+            service.ExpireInProgressUpload("upload-id");
+        };
+
+        static_assert(HasPublicBatchExpiration<UploadLifecycleService>);
+        static_assert(!HasPublicSingleExpiration<UploadLifecycleService>);
+
         TEST(UploadLifecycleInitDecisionTest, ExistingContentWins) {
             auto decision = DecideInitFlow(true, "upload-id");
             EXPECT_EQ(decision.type, InitDecisionType::InstantUpload);

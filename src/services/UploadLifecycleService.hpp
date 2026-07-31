@@ -167,13 +167,6 @@ namespace disk::upload {
         ) const -> drogon::Task<Result<uint64_t>>;
 
         [[nodiscard]]
-        auto ExpireInProgressUpload(
-            const std::string& upload_id,
-            disk::utils::LogContext log_context = {}
-        ) const
-            -> drogon::Task<Result<bool>>;
-
-        [[nodiscard]]
         auto ExpireInProgressUploads(
             size_t limit,
             disk::utils::LogContext log_context = {}
@@ -181,6 +174,13 @@ namespace disk::upload {
             -> drogon::Task<Result<UploadExpirationBatchResult>>;
 
     private:
+        [[nodiscard]]
+        auto ExpireInProgressUpload(
+            const std::string& upload_id,
+            disk::utils::LogContext log_context = {}
+        ) const
+            -> drogon::Task<Result<bool>>;
+
         drogon::orm::DbClientPtr m_db_client;
         disk::storage::UploadStagingStorage* m_upload_staging_storage{};
         disk::storage::IBlobStore* m_blob_store{};

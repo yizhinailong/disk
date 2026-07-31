@@ -313,3 +313,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that `ScheduledTasks::SeedOnce` is called only by the private event-loop trigger
 - **THEN** the seeding stage SHALL become private while initialization, registration, shutdown, drain observation, immediate and periodic triggers, durable deduplication, fixed error handling, and role ownership remain unchanged
+
+#### Scenario: Per-upload expiration execution stays internal
+
+- **WHEN** a whole-repository call-site audit confirms that `UploadLifecycleService::ExpireInProgressUpload` is called only by initialization-time stale-task handling and the bounded batch expiration flow inside the same class
+- **THEN** the per-upload stage SHALL become private while external cleanup and Worker callers retain the public bounded batch entry point and PostgreSQL conditional transition, quota release, durable cleanup enqueue, chunk deletion, cache invalidation, logging context, and error propagation remain unchanged

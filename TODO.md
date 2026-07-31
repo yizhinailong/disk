@@ -1925,6 +1925,14 @@ Compose 使用该镜像启动 PostgreSQL、Redis、固定 MinIO/mc、两个 API�
 
 与 15.74 的六项门禁完整 CTest 合并对账后，7 个常规环境门禁均已有当前候选证据，注册库存折算为 1425/1425 通过、0 项未执行、0 失败；该数字不等同于一次启用全部七项门禁的 1425 项完整 CTest。Compose 容器、网络、三个数据卷、测试环境文件、虚拟机磁盘和临时 Docker/QEMU/rootless 工具均已清理。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；隔离单机容器拓扑不替代目标 TLS/KMS、高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据、兼容路径退役或预发布灰度，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.76 上传过期单任务阶段公开面收紧记录（2026-07-31）
+
+后端低风险清理 OpenSpec 与单元测试文档先行固定上传过期编排边界。全仓声明、定义和调用点审计确认，`UploadLifecycleService::ExpireInProgressUpload` 只由同类的初始化时旧任务检查与有界批量过期流程调用；`CleanupService` 与 `StorageJobWorker` 只依赖公开的 `ExpireInProgressUploads`。单任务阶段不是 REST、Worker、迁移、回滚或目标环境兼容能力，继续公开会允许新调用点绕过有界批量编排。
+
+`ExpireInProgressUpload` 声明现已移入私有区，实现与两个内部调用点未改；`UploadLifecycleService_test.cpp` 以 C++23 concept 正向要求批量入口可调用，并在编译期拒绝单任务阶段重新公开。PostgreSQL 条件状态迁移、配额释放、持久 staging cleanup 入队、分片删除、初始化时过期检查、批量边界、错误传播与结构化日志语义均未改。
+
+clang-format、完整构建、相关直接 GoogleTest 53/53、上传生命周期/仓储/Worker/手动清理/真实状态机/安全不变量/拓扑聚焦 CTest 57/57（120.17 秒）和 OpenSpec 严格校验 24/24 通过。不带命令行额外超时的完整 CTest 共 1425 项：1418 通过、7 项按环境门控跳过、0 失败，总耗时 507.89 秒。本批没有重跑 15.74/15.75 的带门禁环境复验，也不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
