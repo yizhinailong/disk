@@ -17,6 +17,7 @@
 #include <spdlog/sinks/ostream_sink.h>
 #include <spdlog/spdlog.h>
 
+#include "services/SystemService.hpp"
 #include "utils/LogHelper.hpp"
 #include "utils/StageTimer.hpp"
 
@@ -61,6 +62,21 @@ namespace disk::system {
             return source.substr(begin, end - begin);
         }
 
+        template <typename Service>
+        concept HasContextOnlyGetInfo = requires(Service& service) {
+            service.GetInfo(disk::utils::LogContext{});
+        };
+
+        template <typename Service>
+        concept HasUserScopedGetInfo = requires(Service& service) {
+            service.GetInfo(uint64_t{ 1 }, disk::utils::LogContext{});
+        };
+
+        TEST(SystemServiceContractTest, RetainsOnlyUsedRequestAndInfrastructureInputs) {
+            EXPECT_TRUE(HasContextOnlyGetInfo<SystemService>);
+            EXPECT_FALSE(HasUserScopedGetInfo<SystemService>);
+        }
+
         TEST(SystemLogContextContractTest, ControllerServiceAndStageTimerKeepExplicitContext) {
             const auto controller_source = ReadSourceFile("src/controllers/SystemController.cpp");
             const auto service_header = ReadSourceFile("src/services/SystemService.hpp");
@@ -84,10 +100,13 @@ namespace disk::system {
                 ),
                 1
             );
-            EXPECT_TRUE(Contains(
-                controller_source,
-                "m_system_service->GetInfo(user_id, log_context)"
-            ));
+            EXPECT_TRUE(Contains(controller_source, "attributes()->find(\"user_id\")"));
+            EXPECT_TRUE(Contains(controller_source, "ErrorCode::TokenMissing"));
+            EXPECT_FALSE(Contains(controller_source, "attributes()->get<uint64_t>(\"user_id\")"));
+            EXPECT_TRUE(Contains(controller_source, "m_system_service->GetInfo(log_context)"));
+            EXPECT_FALSE(Contains(controller_source, "getRedisClient()"));
+            EXPECT_FALSE(Contains(service_header, "RedisClient"));
+            EXPECT_FALSE(Contains(service_header, "m_redis_client"));
             EXPECT_TRUE(Contains(
                 service_header,
                 "disk::utils::LogContext log_context = {}"

@@ -299,6 +299,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** the only standalone `ContentService` operation is an MD5 lookup whose active callers already own a database client while every content mutation receives a standalone or transaction client explicitly
 - **THEN** the standalone lookup overload and stored client SHALL be removed, `ContentService` SHALL be empty and default-constructible, every production operation SHALL pass its client explicitly, and reference-gate and Blob-GC repository calls SHALL use that same operation client without changing SQL, locking, enqueue, logging, or response behavior
 
+#### Scenario: System information retains no unused inputs
+
+- **WHEN** whole-repository source and object audits confirm that `SystemService::GetInfo` never reads its user-id argument and the constructor-injected Redis client is only stored while connection-pool reporting reads configuration
+- **THEN** the user-id argument and Redis client dependency SHALL be removed, the controller SHALL retain its authenticated `user_id` attribute gate and `TokenMissing` response before calling the service with context only, and system information, DB queries, configured pool sizes, logging, route authentication, and response behavior SHALL remain unchanged
+
 #### Scenario: Unused token-lifetime config facade is removed
 
 - **WHEN** a whole-repository read/write audit confirms that the `ConfigMgr` access/refresh token lifetime getters and fixed members have no production or test caller and no JSON or environment loading path

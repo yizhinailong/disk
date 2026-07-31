@@ -2125,6 +2125,14 @@ standalone MD5 查找重载与 `m_db_client` 已删除，`ContentService` 现为
 
 clang-format、差异检查、完整构建、直接 ContentService GoogleTest 4/4、内容合同与完整内容/配额安全网聚焦 CTest 5/5（25.73 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1441 项：1434 项通过、7 项按环境门控跳过、0 失败，总耗时 529.24 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.101 系统信息服务伪输入清理记录（2026-07-31）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定系统信息服务的最小输入边界。全仓源码与已编译对象审计确认，`SystemService::GetInfo` 的 `user_id` 只被 Controller 读取并传入，服务实现从未使用；构造器注入的 Redis client 也只保存到 `m_redis_client`，没有任何读取点，响应中的 Redis 连接池大小始终由 `ConfigMgr` 提供。Controller 对 JWT 写入的 `user_id` 属性存在性检查与 `TokenMissing` 分支是真实认证门禁，不属于可删输入。新增合同在实现前为 0/2：context-only 服务形状、无 user-scoped 形状、无 Redis 依赖与 Controller 精确调用均按预期失败，而认证属性和错误码正向合同保持通过。
+
+`SystemService` 构造器现只接收存储统计 SQL 必需的 DB client，Redis include、构造参数和成员状态已删除；`GetInfo` 只按值接收可选 `LogContext`。`SystemController` 不再注入 `getRedisClient()`，也不再读取/传递 user ID 值，但仍在任何服务调用前检查 `user_id` 属性并保留原 `TokenMissing` 响应。精确路由、认证语义、DB 查询、配置池大小、uptime/版本/聚合统计、`system_get_info` StageTimer、错误日志与公开响应均未改变。
+
+clang-format、差异检查、完整构建、直接 SystemService/LogContext GoogleTest 5/5、系统服务合同与真实系统信息认证/响应聚焦 CTest 6/6（3.52 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1442 项：1435 项通过、7 项按环境门控跳过、0 失败，总耗时 547.05 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

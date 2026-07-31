@@ -22,20 +22,14 @@ namespace disk::system {
     using disk::utils::ConfigMgr;
     using disk::utils::StageTimer;
 
-    SystemService::SystemService(
-        drogon::orm::DbClientPtr db_client,
-        drogon::nosql::RedisClientPtr redis_client
-    )
+    SystemService::SystemService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)),
-          m_redis_client(std::move(redis_client)),
           m_start_time(std::chrono::steady_clock::now()) {
         Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=system";
     }
 
-    auto SystemService::GetInfo(
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) -> drogon::Task<Result<SystemInfo>> {
+    auto SystemService::GetInfo(disk::utils::LogContext log_context)
+        -> drogon::Task<Result<SystemInfo>> {
         StageTimer timer("system_get_info", log_context);
 
         SystemInfo info;

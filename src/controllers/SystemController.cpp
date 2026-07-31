@@ -18,8 +18,7 @@ namespace disk::system {
     SystemController::SystemController()
         : m_system_service(
               std::make_unique<SystemService>(
-                  disk::metrics::ObserveDbClient(drogon::app().getDbClient()),
-                  drogon::app().getRedisClient()
+                  disk::metrics::ObserveDbClient(drogon::app().getDbClient())
               )
           ) {
     }
@@ -31,15 +30,14 @@ namespace disk::system {
         Logger::Debug(log_context)
             << "Received system info request: " << request->getPeerAddr().toIpPort();
 
-        /// 提取 user_id（由 JwtAuthFilter 设置）
+        /// 确认 JwtAuthFilter 已建立认证上下文
         if (!request->attributes()->find("user_id")) {
             Logger::Warn(log_context) << "System info request missing user_id attribute";
             co_return Response::Error(ErrorInfo(ErrorCode::TokenMissing));
         }
-        const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 获取系统信息
-        auto info_result = co_await m_system_service->GetInfo(user_id, log_context);
+        auto info_result = co_await m_system_service->GetInfo(log_context);
         if (!info_result) {
             Logger::Error(log_context)
                 << "Failed to get system info: " << info_result.error().message;

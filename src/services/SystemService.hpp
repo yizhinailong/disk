@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <string>
 
-#include <drogon/nosql/RedisClient.h>
 #include <drogon/orm/DbClient.h>
 #include <json/json.h>
 
@@ -79,16 +78,11 @@ namespace disk::system {
 
     class SystemService {
     public:
-        SystemService(
-            drogon::orm::DbClientPtr db_client,
-            drogon::nosql::RedisClientPtr redis_client
-        );
+        explicit SystemService(drogon::orm::DbClientPtr db_client);
 
         [[nodiscard]]
-        auto GetInfo(
-            uint64_t user_id,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<Result<SystemInfo>>;
+        auto GetInfo(disk::utils::LogContext log_context = {})
+            -> drogon::Task<Result<SystemInfo>>;
 
     private:
         [[nodiscard]]
@@ -100,7 +94,6 @@ namespace disk::system {
         static auto GetBuildTime() -> std::string;
 
         drogon::orm::DbClientPtr m_db_client;
-        drogon::nosql::RedisClientPtr m_redis_client;
         std::chrono::steady_clock::time_point m_start_time;
     };
 
