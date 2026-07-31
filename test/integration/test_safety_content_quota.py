@@ -1294,7 +1294,7 @@ def test_completion_dedup_race_ref_count_and_accounting_current_rule() -> None:
 
 
 def test_copy_ref_count_and_quota() -> None:
-    """Verify copying file increments content ref-count and used storage."""
+    """Verify copying file increments content ref-count, quota, and target count."""
     log_section("Copy Ref-Count And Quota")
     payload = f"copy-ref-quota-{unique_name()}".encode()
     source_file_id = upload_file(f"safety_copy_src_{unique_name()}.bin", payload)
@@ -1304,6 +1304,13 @@ def test_copy_ref_count_and_quota() -> None:
     quota_before = user_quota()
 
     copy_target_id = create_folder(f"safety_copy_target_{unique_name()}")
+    target_count_before = int(
+        scalar(
+            "SELECT item_count FROM folders WHERE id = %s AND user_id = %s",
+            (copy_target_id, USER_ID),
+        )
+        or 0
+    )
     mappings = copy_file(source_file_id, copy_target_id)
     if not mappings:
         log_fail("copy produced at least one new file mapping")
@@ -1312,11 +1319,146 @@ def test_copy_ref_count_and_quota() -> None:
     copied_file = file_row(copied_file_id)
     after_ref = int(content_row(content_id)["ref_count"])
     quota_after = user_quota()
+    target_count_after = int(
+        scalar(
+            "SELECT item_count FROM folders WHERE id = %s AND user_id = %s",
+            (copy_target_id, USER_ID),
+        )
+        or 0
+    )
 
     assert_equal("copied file reuses source content_id", int(copied_file["content_id"]), content_id)
     assert_numeric_delta("copy increments ref_count", before_ref, after_ref, 1)
     assert_numeric_delta("copy increases used storage by logical file size", quota_before["storage_used"], quota_after["storage_used"], len(payload))
     assert_equal("copy commits and clears reservation", quota_after["storage_reserved"], quota_before["storage_reserved"])
+    assert_numeric_delta("copy increments target item count", target_count_before, target_count_after, 1)
+
+
+def test_file_copy_target_count_zero_rows_rolls_back_batch() -> None:
+    """Verify a suppressed target count update rolls back a copied file batch."""
+    log_section("File Copy Target Count Zero Rows Rolls Back")
+    target_id = create_folder(f"safety_file_copy_count_target_{unique_name()}")
+    filename = f"safety_file_copy_count_{unique_name()}.bin"
+    payload = f"file-copy-count-{unique_name()}".encode()
+    source_file_id = upload_file(filename, payload)
+    content_id = int(file_row(source_file_id)["content_id"])
+    ref_before = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    target_count_before = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID))
+        or 0
+    )
+    cleanup_trigger = install_parent_item_count_suppression_trigger(target_id)
+    try:
+        response = copy_items_response([source_file_id], [], target_id)
+    finally:
+        cleanup_trigger()
+
+    copied_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = %s AND name = %s",
+            (USER_ID, target_id, filename),
+        )
+        or 0
+    )
+    quota_after = user_quota()
+
+    assert_equal("file copy count miss keeps success HTTP status", response.status_code, 200)
+    assert_equal("file copy count miss keeps success envelope", json_field(response.text, "code"), "0")
+    assert_equal(
+        "file copy count miss excludes files from response",
+        json_field(response.text, "data.copied_file_count"),
+        "0",
+    )
+    assert_equal("file copy count miss excludes batch from total", json_field(response.text, "data.copied_count"), "0")
+    assert_equal("file copy count miss rolls back copied files", copied_rows, 0)
+    assert_equal("file copy count miss rolls back content reference", int(content_row(content_id)["ref_count"]), ref_before)
+    assert_equal("file copy count miss rolls back used quota", quota_after["storage_used"], quota_before["storage_used"])
+    assert_equal(
+        "file copy count miss releases reserved quota",
+        quota_after["storage_reserved"],
+        quota_before["storage_reserved"],
+    )
+    assert_equal(
+        "file copy count miss preserves target count",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (target_id,)) or 0),
+        target_count_before,
+    )
+
+
+def test_file_copy_serializes_with_concurrently_moved_target() -> None:
+    """Verify file copy and target move preserve the final path and count."""
+    log_section("File Copy Serializes With Concurrently Moved Target")
+    old_parent_id = create_folder(f"safety_file_copy_old_parent_{unique_name()}")
+    new_parent_id = create_folder(f"safety_file_copy_new_parent_{unique_name()}")
+    target_name = f"safety_file_copy_moving_target_{unique_name()}"
+    target_id = create_folder(target_name, old_parent_id)
+    filename = f"safety_file_copy_moving_{unique_name()}.bin"
+    source_file_id = upload_file(filename, f"file-copy-moving-{unique_name()}".encode())
+    new_parent_path = str(
+        scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (new_parent_id, USER_ID))
+        or ""
+    )
+    cleanup_trigger = install_file_copy_delay_trigger(USER_ID, target_id, filename)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            copy_future = executor.submit(copy_items_response, [source_file_id], [], target_id)
+            time.sleep(0.15)
+            move_response = fetch(
+                "/api/file/move",
+                method="PUT",
+                headers=auth_headers(request_id=f"safety-file-copy-moving-target-{unique_name()}"),
+                json_body={
+                    "file_ids": [],
+                    "folder_ids": [target_id],
+                    "target_folder_id": new_parent_id,
+                },
+            )
+            copy_response = copy_future.result(timeout=10)
+    finally:
+        cleanup_trigger()
+
+    expected_target_path = f"{new_parent_path}{target_name}/"
+    copied_row = query_one(
+        "SELECT path FROM files WHERE user_id = %s AND folder_id = %s AND name = %s",
+        (USER_ID, target_id, filename),
+    )
+    actual_target_count = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID))
+        or 0
+    )
+    direct_target_items = int(
+        scalar(
+            "SELECT (SELECT COUNT(*) FROM folders WHERE user_id = %s AND parent_id = %s) + "
+            "(SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = %s)",
+            (USER_ID, target_id, USER_ID, target_id),
+        )
+        or 0
+    )
+
+    assert_equal("moving-target file copy returns HTTP 200", copy_response.status_code, 200)
+    assert_equal("moving-target file copy succeeds", json_field(copy_response.text, "code"), "0")
+    assert_equal("moving-target file copy counts one file", json_field(copy_response.text, "data.copied_file_count"), "1")
+    assert_equal("file copy target move returns HTTP 200", move_response.status_code, 200)
+    assert_equal("file copy target move succeeds", json_field(move_response.text, "code"), "0")
+    assert_equal("file copy target move counts target root", json_field(move_response.text, "data.moved_folder_count"), "1")
+    assert_equal(
+        "moving-target file copy stores target parent",
+        int(scalar("SELECT parent_id FROM folders WHERE id = %s", (target_id,)) or 0),
+        new_parent_id,
+    )
+    assert_equal(
+        "moving-target file copy stores latest target path",
+        scalar("SELECT path FROM folders WHERE id = %s", (target_id,)),
+        expected_target_path,
+    )
+    assert_equal("moving-target file copy creates one file", copied_row is not None, True)
+    assert_equal(
+        "moving-target file copy stores latest file path",
+        str(copied_row["path"]) if copied_row is not None else "",
+        f"{expected_target_path}{filename}",
+    )
+    assert_equal("moving-target file copy keeps target count exact", actual_target_count, direct_target_items)
 
 
 def test_commit_under_reservation_retains_recovery_artifacts() -> None:
@@ -3328,6 +3470,8 @@ def main() -> None:
     test_completion_dedup_race_ref_count_and_accounting_current_rule()
     test_commit_under_reservation_retains_recovery_artifacts()
     test_copy_ref_count_and_quota()
+    test_file_copy_target_count_zero_rows_rolls_back_batch()
+    test_file_copy_serializes_with_concurrently_moved_target()
     test_upload_quota_rejection_no_leak()
     test_upload_task_insert_failure_rolls_back_reservation_and_retries()
     test_concurrent_upload_init_reuses_one_task_and_reservation()

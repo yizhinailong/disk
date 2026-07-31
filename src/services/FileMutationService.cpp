@@ -865,6 +865,17 @@ namespace disk::file {
                         );
                     }
 
+                    if (request.target_folder_id > 0) {
+                        auto locked_target = co_await m_folder_repository.FindOwnedFolderForUpdate(
+                            transaction,
+                            request.target_folder_id,
+                            user_id
+                        );
+                        if (!locked_target) {
+                            co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+                        }
+                    }
+
                     auto transaction_occupied_names = co_await utils::QueryOccupiedNames(
                         transaction,
                         request.target_folder_id,
@@ -929,6 +940,22 @@ namespace disk::file {
                     );
                     if (!id_mappings_result) {
                         co_return std::unexpected(id_mappings_result.error());
+                    }
+
+                    if (request.target_folder_id > 0 && !id_mappings_result->empty()) {
+                        auto target_count_updated = co_await m_folder_repository.ApplyItemCountDelta(
+                            transaction,
+                            request.target_folder_id,
+                            user_id,
+                            static_cast<int>(id_mappings_result->size()),
+                            trantor::Date::now()
+                        );
+                        if (!target_count_updated) {
+                            co_return std::unexpected(ErrorInfo(
+                                ErrorCode::InternalError,
+                                "Failed to update target folder item count"
+                            ));
+                        }
                     }
 
                     auto commit_quota_result = co_await quota_service.CommitReservedToUsed(

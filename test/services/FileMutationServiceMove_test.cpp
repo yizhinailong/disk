@@ -257,7 +257,7 @@ namespace disk::file {
             EXPECT_LT(result_check, cache_invalidation);
         }
 
-        TEST(FileMutationServiceCopyContractTest, CopyLocksNamesAndRechecksConflictsInsideBatchTransaction) {
+        TEST(FileMutationServiceCopyContractTest, CopyLocksTargetAndChecksCountInsideBatchTransaction) {
             const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
             const auto copy_body = ExtractCopyBody(source);
 
@@ -265,26 +265,44 @@ namespace disk::file {
             const auto transaction = copy_body.find("auto tx_result = co_await transaction_runner.Run(");
             const auto sort_names = copy_body.find("std::sort(transaction_names.begin(), transaction_names.end())", transaction);
             const auto name_locks = copy_body.find("m_file_repository.AcquireNameLock(", sort_names);
-            const auto conflict_check = copy_body.find("utils::QueryOccupiedNames(", name_locks);
+            const auto target_lock = copy_body.find(
+                "m_folder_repository.FindOwnedFolderForUpdate(",
+                name_locks
+            );
+            const auto conflict_check = copy_body.find("utils::QueryOccupiedNames(", target_lock);
             const auto ref_increment = copy_body.find("content_service.IncrementRefCountsChecked(", conflict_check);
             const auto insert = copy_body.find("InsertCopiedFiles(", ref_increment);
-            const auto quota_commit = copy_body.find("quota_service.CommitReservedToUsed(", insert);
+            const auto target_count = copy_body.find(
+                "m_folder_repository.ApplyItemCountDelta(",
+                insert
+            );
+            const auto target_count_check = copy_body.find("if (!target_count_updated)", target_count);
+            const auto quota_commit = copy_body.find("quota_service.CommitReservedToUsed(", target_count_check);
             const auto quota_release = copy_body.find("quota_service.ReleaseReservedStorageChecked(", quota_commit);
+            const auto folder_phase = copy_body.find("std::vector<std::string> root_folder_names;");
             ASSERT_NE(transaction, std::string::npos);
             ASSERT_NE(sort_names, std::string::npos);
             ASSERT_NE(name_locks, std::string::npos);
+            ASSERT_NE(target_lock, std::string::npos);
             ASSERT_NE(conflict_check, std::string::npos);
             ASSERT_NE(ref_increment, std::string::npos);
             ASSERT_NE(insert, std::string::npos);
+            ASSERT_NE(target_count, std::string::npos);
+            ASSERT_NE(target_count_check, std::string::npos);
             ASSERT_NE(quota_commit, std::string::npos);
             ASSERT_NE(quota_release, std::string::npos);
+            ASSERT_NE(folder_phase, std::string::npos);
             EXPECT_LT(transaction, sort_names);
             EXPECT_LT(sort_names, name_locks);
-            EXPECT_LT(name_locks, conflict_check);
+            EXPECT_LT(name_locks, target_lock);
+            EXPECT_LT(target_lock, conflict_check);
             EXPECT_LT(conflict_check, ref_increment);
             EXPECT_LT(ref_increment, insert);
-            EXPECT_LT(insert, quota_commit);
+            EXPECT_LT(insert, target_count);
+            EXPECT_LT(target_count, target_count_check);
+            EXPECT_LT(target_count_check, quota_commit);
             EXPECT_LT(quota_commit, quota_release);
+            EXPECT_LT(quota_release, folder_phase);
         }
 
         TEST(FileMutationServiceCopyContractTest, CopyLocksFolderRootBeforeSubtreeWrites) {

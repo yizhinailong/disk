@@ -108,6 +108,18 @@ The system SHALL allow users to copy files or folders while preserving content-s
 - **WHEN** multiple requests concurrently copy the same-named file into one target folder
 - **THEN** exactly one copy SHALL be created, while every other conflicting item SHALL be excluded from the copied count without consuming content references, used quota, or reserved quota
 
+#### Scenario: Explicit file copy target accounting
+- **WHEN** one or more explicit files are copied into a non-root target folder
+- **THEN** the batch SHALL lock the target, build paths from its committed location, and atomically increase its item count by the number of inserted files
+
+#### Scenario: Explicit file copy target count update misses
+- **WHEN** copied file rows are inserted but updating the target folder item count affects no row
+- **THEN** the entire file batch SHALL roll back, its reservation SHALL be released, and the successful response SHALL exclude the batch from copied counts
+
+#### Scenario: An explicit file copy target moves concurrently
+- **WHEN** explicit files are copied while their target folder is concurrently moved
+- **THEN** both transactions SHALL serialize on the target row and every copied file path SHALL follow the target's committed location
+
 #### Scenario: Same-named folder subtrees are concurrently copied into one folder
 - **WHEN** multiple requests concurrently copy the same folder subtree or same-named folder subtrees into one target folder
 - **THEN** exactly one complete subtree SHALL be created, while every other conflicting subtree SHALL be excluded from all copied counts without inserting descendants, changing content references or target counts, or consuming used or reserved quota
