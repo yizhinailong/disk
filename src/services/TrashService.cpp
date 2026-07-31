@@ -1018,45 +1018,6 @@ namespace disk::trash {
     /// ==================== 私有方法实现 ====================
 
     auto TrashService::RestoreFile(
-        uint64_t trash_id,
-        uint64_t user_id,
-        BatchResultItem& result,
-        disk::utils::LogContext log_context
-    )
-        -> drogon::Task<void> {
-
-        try {
-            CoroMapper<Trash> trash_mapper(m_db_client);
-            auto trash_model = co_await trash_mapper.findOne(
-                Criteria(Trash::Cols::_id, CompareOperator::EQ, trash_id)
-            );
-
-            TrashLifecycleRecord trash_item;
-            trash_item.id = trash_model.getValueOfId();
-            trash_item.user_id = trash_model.getValueOfUserId();
-            trash_item.item_type = trash_model.getValueOfItemType();
-            trash_item.item_id = trash_model.getValueOfItemId();
-            trash_item.item_name = trash_model.getValueOfItemName();
-            trash_item.item_size = trash_model.getValueOfItemSize();
-            trash_item.original_folder_id = trash_model.getValueOfOriginalFolderId();
-            trash_item.original_path = trash_model.getValueOfOriginalPath();
-            trash_item.item_data =
-                trash_model.getItemData() ? *trash_model.getItemData() : "";
-            if (trash_model.getContentId()) {
-                trash_item.content_id = *trash_model.getContentId();
-            }
-
-            co_await RestoreFile(trash_item, user_id, result, log_context);
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to restore file: trash_id=" << trash_id << " - " << e.base().what();
-            result.status = "failed";
-            result.code = static_cast<uint16_t>(ErrorCode::InternalError);
-            result.message = "Failed to restore file";
-        }
-    }
-
-    auto TrashService::RestoreFile(
         const TrashLifecycleRecord& trash_item,
         uint64_t user_id,
         BatchResultItem& result,
@@ -1284,46 +1245,6 @@ namespace disk::trash {
             << "File restored successfully: trash_id=" << trash_item.id
             << ", file_id=" << restored_file_id << ", name=" << restored_name
             << ", path=" << restored_path;
-    }
-
-    auto TrashService::RestoreFolder(
-        uint64_t trash_id,
-        uint64_t user_id,
-        BatchResultItem& result,
-        disk::utils::LogContext log_context
-    )
-        -> drogon::Task<void> {
-
-        try {
-            CoroMapper<Trash> trash_mapper(m_db_client);
-            auto trash_model = co_await trash_mapper.findOne(
-                Criteria(Trash::Cols::_id, CompareOperator::EQ, trash_id)
-            );
-
-            TrashLifecycleRecord trash_item;
-            trash_item.id = trash_model.getValueOfId();
-            trash_item.user_id = trash_model.getValueOfUserId();
-            trash_item.item_type = trash_model.getValueOfItemType();
-            trash_item.item_id = trash_model.getValueOfItemId();
-            trash_item.item_name = trash_model.getValueOfItemName();
-            trash_item.item_size = trash_model.getValueOfItemSize();
-            trash_item.original_folder_id = trash_model.getValueOfOriginalFolderId();
-            trash_item.original_path = trash_model.getValueOfOriginalPath();
-            trash_item.item_data =
-                trash_model.getItemData() ? *trash_model.getItemData() : "";
-            if (trash_model.getContentId()) {
-                trash_item.content_id = *trash_model.getContentId();
-            }
-
-            co_await RestoreFolder(trash_item, user_id, result, log_context);
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to restore folder: trash_id=" << trash_id << " - "
-                << e.base().what();
-            result.status = "failed";
-            result.code = static_cast<uint16_t>(ErrorCode::InternalError);
-            result.message = "Failed to restore folder";
-        }
     }
 
     auto TrashService::RestoreFolder(
@@ -1590,47 +1511,6 @@ namespace disk::trash {
     }
 
     auto TrashService::DeleteFile(
-        uint64_t trash_id,
-        uint64_t user_id,
-        BatchResultItem& result,
-        disk::utils::LogContext log_context
-    )
-        -> drogon::Task<uint64_t> {
-
-        try {
-            CoroMapper<Trash> trash_mapper(m_db_client);
-            auto trash_model = co_await trash_mapper.findOne(
-                Criteria(Trash::Cols::_id, CompareOperator::EQ, trash_id)
-            );
-
-            TrashLifecycleRecord trash_item;
-            trash_item.id = trash_model.getValueOfId();
-            trash_item.user_id = trash_model.getValueOfUserId();
-            trash_item.item_type = trash_model.getValueOfItemType();
-            trash_item.item_id = trash_model.getValueOfItemId();
-            trash_item.item_name = trash_model.getValueOfItemName();
-            trash_item.item_size = trash_model.getValueOfItemSize();
-            trash_item.original_folder_id = trash_model.getValueOfOriginalFolderId();
-            trash_item.original_path = trash_model.getValueOfOriginalPath();
-            trash_item.item_data =
-                trash_model.getItemData() ? *trash_model.getItemData() : "";
-            if (trash_model.getContentId()) {
-                trash_item.content_id = *trash_model.getContentId();
-            }
-
-            co_return co_await DeleteFile(trash_item, user_id, result, log_context);
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to permanently delete file: trash_id=" << trash_id << " - "
-                << e.base().what();
-            result.status = "failed";
-            result.code = static_cast<uint16_t>(ErrorCode::InternalError);
-            result.message = "Failed to permanently delete file";
-            co_return 0;
-        }
-    }
-
-    auto TrashService::DeleteFile(
         const TrashLifecycleRecord& trash_item,
         uint64_t user_id,
         BatchResultItem& result,
@@ -1680,47 +1560,6 @@ namespace disk::trash {
             result.status = "failed";
             result.code = static_cast<uint16_t>(ErrorCode::InternalError);
             result.message = "Failed to permanently delete file";
-            co_return 0;
-        }
-    }
-
-    auto TrashService::DeleteFolder(
-        uint64_t trash_id,
-        uint64_t user_id,
-        BatchResultItem& result,
-        disk::utils::LogContext log_context
-    )
-        -> drogon::Task<uint64_t> {
-
-        try {
-            CoroMapper<Trash> trash_mapper(m_db_client);
-            auto trash_model = co_await trash_mapper.findOne(
-                Criteria(Trash::Cols::_id, CompareOperator::EQ, trash_id)
-            );
-
-            TrashLifecycleRecord trash_item;
-            trash_item.id = trash_model.getValueOfId();
-            trash_item.user_id = trash_model.getValueOfUserId();
-            trash_item.item_type = trash_model.getValueOfItemType();
-            trash_item.item_id = trash_model.getValueOfItemId();
-            trash_item.item_name = trash_model.getValueOfItemName();
-            trash_item.item_size = trash_model.getValueOfItemSize();
-            trash_item.original_folder_id = trash_model.getValueOfOriginalFolderId();
-            trash_item.original_path = trash_model.getValueOfOriginalPath();
-            trash_item.item_data =
-                trash_model.getItemData() ? *trash_model.getItemData() : "";
-            if (trash_model.getContentId()) {
-                trash_item.content_id = *trash_model.getContentId();
-            }
-
-            co_return co_await DeleteFolder(trash_item, user_id, result, log_context);
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to permanently delete folder: trash_id=" << trash_id << " - "
-                << e.base().what();
-            result.status = "failed";
-            result.code = static_cast<uint16_t>(ErrorCode::InternalError);
-            result.message = "Failed to permanently delete folder";
             co_return 0;
         }
     }

@@ -259,18 +259,12 @@ namespace disk::trash {
         /**
          * @brief 恢复单个文件
          *
-         * @param trash_id 回收站项目 ID
+         * @param trash_item 回收站生命周期记录
          * @param user_id 用户 ID
          * @param result 输出参数：操作结果
          * @param log_context 请求日志上下文
          * @return drogon::Task<void>
          */
-        auto RestoreFile(
-            uint64_t trash_id,
-            uint64_t user_id,
-            BatchResultItem& result,
-            disk::utils::LogContext log_context
-        ) -> drogon::Task<void>;
         auto RestoreFile(
             const TrashLifecycleRecord& trash_item,
             uint64_t user_id,
@@ -282,18 +276,12 @@ namespace disk::trash {
         /**
          * @brief 恢复单个文件夹
          *
-         * @param trash_id 回收站项目 ID
+         * @param trash_item 回收站生命周期记录
          * @param user_id 用户 ID
          * @param result 输出参数：操作结果
          * @param log_context 请求日志上下文
          * @return drogon::Task<void>
          */
-        auto RestoreFolder(
-            uint64_t trash_id,
-            uint64_t user_id,
-            BatchResultItem& result,
-            disk::utils::LogContext log_context
-        ) -> drogon::Task<void>;
         auto RestoreFolder(
             const TrashLifecycleRecord& trash_item,
             uint64_t user_id,
@@ -304,18 +292,12 @@ namespace disk::trash {
         /**
          * @brief 永久删除单个文件
          *
-         * @param trash_id 回收站项目 ID
+         * @param trash_item 回收站生命周期记录
          * @param user_id 用户 ID
          * @param result 输出参数：操作结果
          * @param log_context 请求日志上下文
          * @return drogon::Task<uint64_t> 返回释放的空间大小
          */
-        auto DeleteFile(
-            uint64_t trash_id,
-            uint64_t user_id,
-            BatchResultItem& result,
-            disk::utils::LogContext log_context
-        ) -> drogon::Task<uint64_t>;
         auto DeleteFile(
             const TrashLifecycleRecord& trash_item,
             uint64_t user_id,
@@ -327,18 +309,12 @@ namespace disk::trash {
         /**
          * @brief 永久删除单个文件夹
          *
-         * @param trash_id 回收站项目 ID
+         * @param trash_item 回收站生命周期记录
          * @param user_id 用户 ID
          * @param result 输出参数：操作结果
          * @param log_context 请求日志上下文
          * @return drogon::Task<uint64_t> 返回释放的空间大小
          */
-        auto DeleteFolder(
-            uint64_t trash_id,
-            uint64_t user_id,
-            BatchResultItem& result,
-            disk::utils::LogContext log_context
-        ) -> drogon::Task<uint64_t>;
         auto DeleteFolder(
             const TrashLifecycleRecord& trash_item,
             uint64_t user_id,

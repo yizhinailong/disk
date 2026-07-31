@@ -318,3 +318,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that `UploadLifecycleService::ExpireInProgressUpload` is called only by initialization-time stale-task handling and the bounded batch expiration flow inside the same class
 - **THEN** the per-upload stage SHALL become private while external cleanup and Worker callers retain the public bounded batch entry point and PostgreSQL conditional transition, quota release, durable cleanup enqueue, chunk deletion, cache invalidation, logging context, and error propagation remain unchanged
+
+#### Scenario: Unused trash ID forwarding overloads are removed
+
+- **WHEN** a whole-repository call-site audit confirms that the private `TrashService` overloads which accept only a `trash_id` for file/folder restore or permanent delete are never called because the active batch entries prefetch `TrashLifecycleRecord` values
+- **THEN** those four standalone-query forwarding overloads SHALL be removed while the record-based restore and permanent-delete paths retain their locked transactions, batch results, content references, quota accounting, cache invalidation, and logging context
