@@ -316,7 +316,7 @@ namespace disk::trash {
 
                 std::vector<disk::file::utils::TrashInsertItem> trash_items;
                 trash_items.reserve(file_map.size() + top_level_folder_ids.size());
-                std::unordered_map<uint64_t, int> explicit_file_parent_deltas;
+                std::unordered_map<uint64_t, int> parent_deltas;
                 file_ids_to_delete.clear();
                 folder_ids_to_delete.clear();
                 file_ids_to_delete.reserve(file_map.size() + covered_file_ids.size());
@@ -351,7 +351,7 @@ namespace disk::trash {
                     });
                     file_ids_to_delete.push_back(file.getValueOfId());
                     if (file.getValueOfFolderId() > 0) {
-                        --explicit_file_parent_deltas[file.getValueOfFolderId()];
+                        --parent_deltas[file.getValueOfFolderId()];
                     }
                     ++deleted_file_count;
                 }
@@ -373,6 +373,9 @@ namespace disk::trash {
                         .content_id = std::nullopt,
                         .item_data = disk::file::utils::BuildFolderSnapshot(plan),
                     });
+                    if (plan.root.getValueOfParentId() > 0) {
+                        --parent_deltas[plan.root.getValueOfParentId()];
+                    }
 
                     for (const auto& file : plan.files) {
                         file_ids_to_delete.push_back(file.getValueOfId());
@@ -404,8 +407,8 @@ namespace disk::trash {
                 }
 
                 std::vector<std::pair<uint64_t, int>> ordered_parent_deltas(
-                    explicit_file_parent_deltas.begin(),
-                    explicit_file_parent_deltas.end()
+                    parent_deltas.begin(),
+                    parent_deltas.end()
                 );
                 std::sort(ordered_parent_deltas.begin(), ordered_parent_deltas.end());
                 for (const auto& [parent_id, delta] : ordered_parent_deltas) {

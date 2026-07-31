@@ -1563,6 +1563,93 @@ def test_folder_soft_delete_includes_concurrently_copied_file() -> None:
     )
 
 
+def test_folder_soft_delete_parent_count_failure_rolls_back_and_retries() -> None:
+    """Verify a nested folder delete decrements its external parent atomically."""
+    log_section("Folder Soft Delete Parent Count Failure Rolls Back And Retries")
+    parent_id = create_folder(f"safety_folder_trash_parent_{unique_name()}")
+    folder_name = f"safety_folder_trash_root_{unique_name()}"
+    folder_id = create_folder(folder_name, parent_id)
+    filename = f"safety_folder_trash_file_{unique_name()}.bin"
+    payload = f"folder-trash-parent-{unique_name()}".encode()
+    file_id = upload_file(filename, payload, folder_id)
+    content_id = int(file_row(file_id)["content_id"])
+    ref_before = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    assert_equal(
+        "folder trash parent fixture starts at one",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0),
+        1,
+    )
+
+    cleanup_trigger = install_parent_item_count_suppression_trigger(parent_id)
+    try:
+        delete_response = delete_folder_to_trash_response(folder_id)
+    finally:
+        cleanup_trigger()
+
+    active_folder_after_failure = int(
+        scalar("SELECT COUNT(*) FROM folders WHERE id = %s AND user_id = %s", (folder_id, USER_ID))
+        or 0
+    )
+    active_file_after_failure = int(
+        scalar("SELECT COUNT(*) FROM files WHERE id = %s AND user_id = %s", (file_id, USER_ID))
+        or 0
+    )
+    trash_after_failure = query_one(
+        "SELECT id FROM trash WHERE user_id = %s AND item_type = 'folder' AND item_id = %s "
+        "ORDER BY id DESC LIMIT 1",
+        (USER_ID, folder_id),
+    )
+    assert_equal("folder parent decrement failure returns HTTP 500", delete_response.status_code, 500)
+    assert_equal(
+        "folder parent decrement failure returns InternalError",
+        json_field(delete_response.text, "code"),
+        "10006",
+    )
+    assert_equal("folder parent decrement failure keeps active root", active_folder_after_failure, 1)
+    assert_equal("folder parent decrement failure keeps active file", active_file_after_failure, 1)
+    assert_equal("folder parent decrement failure creates no trash row", trash_after_failure is None, True)
+    assert_equal(
+        "folder parent decrement failure keeps parent count",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0),
+        1,
+    )
+
+    if active_folder_after_failure == 1:
+        trash_id = delete_folder_to_trash(folder_id)
+    else:
+        trash_id = int(trash_after_failure["id"])
+    assert_equal(
+        "successful nested folder soft delete decrements external parent count",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0),
+        0,
+    )
+    assert_equal(
+        "successful nested folder soft delete removes active root",
+        int(scalar("SELECT COUNT(*) FROM folders WHERE id = %s", (folder_id,)) or 0),
+        0,
+    )
+    assert_equal(
+        "successful nested folder soft delete removes active file",
+        int(scalar("SELECT COUNT(*) FROM files WHERE id = %s", (file_id,)) or 0),
+        0,
+    )
+    assert_equal(
+        "successful nested folder soft delete keeps one trash snapshot",
+        int(scalar("SELECT COUNT(*) FROM trash WHERE id = %s", (trash_id,)) or 0),
+        1,
+    )
+    assert_equal("folder parent transition keeps ref_count", int(content_row(content_id)["ref_count"]), ref_before)
+    assert_equal("folder parent transition keeps quota", user_quota(), quota_before)
+    execute(
+        "UPDATE folders SET item_count = "
+        "(SELECT COUNT(*) FROM files WHERE folder_id = %s AND user_id = %s) + "
+        "(SELECT COUNT(*) FROM folders WHERE parent_id = %s AND user_id = %s) "
+        "WHERE id = %s AND user_id = %s",
+        (parent_id, USER_ID, parent_id, USER_ID, parent_id, USER_ID),
+    )
+
+
 def test_commit_under_reservation_retains_recovery_artifacts() -> None:
     """Verify a reserved-to-used underflow leaves a recoverable finalizing task."""
     log_section("Reserved-To-Used Under-Reservation Rolls Back")
@@ -3776,6 +3863,7 @@ def main() -> None:
     test_file_copy_target_count_zero_rows_rolls_back_batch()
     test_file_copy_serializes_with_concurrently_moved_target()
     test_folder_soft_delete_includes_concurrently_copied_file()
+    test_folder_soft_delete_parent_count_failure_rolls_back_and_retries()
     test_upload_quota_rejection_no_leak()
     test_upload_task_insert_failure_rolls_back_reservation_and_retries()
     test_concurrent_upload_init_reuses_one_task_and_reservation()

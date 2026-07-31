@@ -317,8 +317,13 @@ namespace disk::folder {
                 explicit_file_locks
             );
             const auto snapshot = source.find("BuildFolderSnapshot(", explicit_file_locks);
+            const auto folder_parent_delta = source.find(
+                "--parent_deltas[plan.root.getValueOfParentId()]",
+                snapshot
+            );
             const auto trash_insert = source.find("co_await CreateTrashRecords(", snapshot);
-            const auto file_delete = source.find("DeleteFilesByIds(", trash_insert);
+            const auto parent_count_update = source.find("ApplyItemCountDelta(", trash_insert);
+            const auto file_delete = source.find("DeleteFilesByIds(", parent_count_update);
             const auto folder_delete = source.find("DeleteFoldersByIds(", file_delete);
 
             ASSERT_NE(transaction, std::string::npos);
@@ -329,7 +334,9 @@ namespace disk::folder {
             ASSERT_NE(explicit_file_locks, std::string::npos);
             ASSERT_NE(locked_plan_files, std::string::npos);
             ASSERT_NE(snapshot, std::string::npos);
+            ASSERT_NE(folder_parent_delta, std::string::npos);
             ASSERT_NE(trash_insert, std::string::npos);
+            ASSERT_NE(parent_count_update, std::string::npos);
             ASSERT_NE(file_delete, std::string::npos);
             ASSERT_NE(folder_delete, std::string::npos);
             EXPECT_LT(transaction, plan_fetch);
@@ -339,8 +346,10 @@ namespace disk::folder {
             EXPECT_LT(covered_file_locks, explicit_file_locks);
             EXPECT_LT(explicit_file_locks, locked_plan_files);
             EXPECT_LT(locked_plan_files, snapshot);
-            EXPECT_LT(snapshot, trash_insert);
-            EXPECT_LT(trash_insert, file_delete);
+            EXPECT_LT(snapshot, folder_parent_delta);
+            EXPECT_LT(folder_parent_delta, trash_insert);
+            EXPECT_LT(trash_insert, parent_count_update);
+            EXPECT_LT(parent_count_update, file_delete);
             EXPECT_LT(file_delete, folder_delete);
             EXPECT_TRUE(Contains(source, "while (true)"));
         }

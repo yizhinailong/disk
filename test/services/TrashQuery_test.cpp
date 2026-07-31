@@ -174,7 +174,7 @@ namespace disk::trash {
 
             const auto trash_insert = move_body.find("co_await CreateTrashRecords(");
             const auto parent_deltas = move_body.find(
-                "explicit_file_parent_deltas",
+                "parent_deltas",
                 trash_insert
             );
             const auto delete_count_update = move_body.find(

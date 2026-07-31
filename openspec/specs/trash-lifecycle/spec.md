@@ -25,6 +25,10 @@ The system SHALL move deleted files or folders into trash instead of immediately
 - **WHEN** an explicit file is moved from a non-root folder into trash
 - **THEN** the delete transaction SHALL decrement the source folder's direct item count or roll back every trash and active-namespace write
 
+#### Scenario: A nested folder subtree is soft-deleted
+- **WHEN** a top-level delete root is moved from a non-root parent into trash
+- **THEN** the delete transaction SHALL decrement that external parent's direct item count exactly once or roll back the snapshot and every active-subtree write
+
 ### Requirement: Trash Listing
 The system SHALL allow users to list their trash items with deletion and expiry metadata.
 
