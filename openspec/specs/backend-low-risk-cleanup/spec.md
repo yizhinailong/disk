@@ -304,6 +304,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** whole-repository source and object audits confirm that `SystemService::GetInfo` never reads its user-id argument and the constructor-injected Redis client is only stored while connection-pool reporting reads configuration
 - **THEN** the user-id argument and Redis client dependency SHALL be removed, the controller SHALL retain its authenticated `user_id` attribute gate and `TokenMissing` response before calling the service with context only, and system information, DB queries, configured pool sizes, logging, route authentication, and response behavior SHALL remain unchanged
 
+#### Scenario: Operation-log reads omit redundant user state
+
+- **WHEN** the current-user operation-log query already scopes both count and page reads with `WHERE user_id = $1` while the response never emits the stored user ID
+- **THEN** `OperationLogItem::user_id`, its SELECT projection, and row assignment SHALL be removed while the user predicate, database schema, pagination, audit writes, logging, errors, and JSON response remain unchanged
+
 #### Scenario: Unused token-lifetime config facade is removed
 
 - **WHEN** a whole-repository read/write audit confirms that the `ConfigMgr` access/refresh token lifetime getters and fixed members have no production or test caller and no JSON or environment loading path

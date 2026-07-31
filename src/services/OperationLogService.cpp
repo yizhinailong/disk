@@ -38,7 +38,7 @@ namespace disk::log {
             }
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, user_id, action, target_type, target_id, target_name, details, " "ip_address, created_at FROM operation_logs " "WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+                "SELECT id, action, target_type, target_id, target_name, details, " "ip_address, created_at FROM operation_logs " "WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
                 static_cast<int64_t>(user_id),
                 static_cast<int64_t>(page_size),
                 static_cast<int64_t>(offset)
@@ -47,7 +47,6 @@ namespace disk::log {
             for (const auto& row : result) {
                 OperationLogItem item;
                 item.id = row["id"].as<uint64_t>();
-                item.user_id = row["user_id"].as<uint64_t>();
                 item.action = row["action"].as<std::string>();
                 item.target_type = row["target_type"].as<std::string>();
                 item.target_id = row["target_id"].isNull() ? 0 : row["target_id"].as<uint64_t>();

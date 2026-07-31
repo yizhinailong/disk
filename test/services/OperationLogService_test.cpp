@@ -7,6 +7,7 @@
  *
  * 验证：
  * - 当前用户分页查询的 PostgreSQL 绑定与显式日志上下文
+ * - 已按用户过滤且不进入响应的冗余读取状态不得回归
  * - 无调用通用写入子图不得回归
  * - Auth、Share、Admin、Storage Job 与 Recovery 保留领域审计写入
  */
@@ -45,12 +46,29 @@ namespace disk::log {
             return count;
         }
 
+        template <typename Item>
+        concept HasUserId = requires(Item item) {
+            item.user_id;
+        };
+
         TEST(OperationLogQueryContractTest, PaginationUsesPostgresqlInt64Bindings) {
             const auto source = ReadSourceFile("src/services/OperationLogService.cpp");
 
             EXPECT_NE(source.find("static_cast<int64_t>(user_id)"), std::string::npos);
             EXPECT_NE(source.find("static_cast<int64_t>(page_size)"), std::string::npos);
             EXPECT_NE(source.find("static_cast<int64_t>(offset)"), std::string::npos);
+        }
+
+        TEST(OperationLogQueryContractTest, OmitsRedundantFilteredUserState) {
+            const auto source = ReadSourceFile("src/services/OperationLogService.cpp");
+            const auto json = OperationLogItem{}.ToJson();
+
+            EXPECT_FALSE(HasUserId<OperationLogItem>);
+            EXPECT_FALSE(json.isMember("user_id"));
+            EXPECT_EQ(source.find("SELECT id, user_id, action"), std::string::npos);
+            EXPECT_NE(source.find("SELECT id, action"), std::string::npos);
+            EXPECT_EQ(source.find("item.user_id ="), std::string::npos);
+            EXPECT_EQ(CountOccurrences(source, "WHERE user_id = $1"), 2U);
         }
 
         TEST(OperationLogQueryContractTest, RequestBoundaryUsesExplicitRedactedContext) {

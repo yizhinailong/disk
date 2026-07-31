@@ -22,7 +22,6 @@ namespace disk::log {
 
     struct OperationLogItem {
         uint64_t id{ 0 };
-        uint64_t user_id{ 0 };
         std::string action;
         std::string target_type;
         uint64_t target_id{ 0 };

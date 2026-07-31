@@ -2133,6 +2133,14 @@ clang-format、差异检查、完整构建、直接 ContentService GoogleTest 4/
 
 clang-format、差异检查、完整构建、直接 SystemService/LogContext GoogleTest 5/5、系统服务合同与真实系统信息认证/响应聚焦 CTest 6/6（3.52 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1442 项：1435 项通过、7 项按环境门控跳过、0 失败，总耗时 547.05 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.102 操作日志冗余读取状态清理记录（2026-07-31）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定当前用户操作日志的最小读取模型。全仓字段读写与 SQL 审计确认，`OperationLogItem::user_id` 只在分页查询映射时被赋值，`ToJson()` 和其他生产、测试调用从不读取或公开它；计数与分页查询已分别使用参数化 `WHERE user_id = $1` 限定当前认证用户，因此再次投影并保存同一 ID 不提供授权或响应价值。新增合同在旧实现上按预期 0/1 失败，分别检出该成员、SELECT 投影和行赋值仍存在，而 JSON 排除与两处用户谓词正向合同保持通过。
+
+`OperationLogItem::user_id`、分页 SELECT 的 `user_id` 列和结果行赋值已删除。两个查询继续使用原 user ID 参数与 PostgreSQL 占位符，计数、排序、LIMIT/OFFSET、空值映射、错误日志和 `Result` 均未改变；`operation_logs` schema、用户过滤、五个领域审计写入所有者、已存审计内容和公开 JSON 响应也保持不变。源码合同同时锁定读取模型无该成员、分页 SQL 不再投影它、行映射不再赋值，并要求两个查询的用户谓词继续存在。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 OperationLog GoogleTest 5/5、操作日志合同与真实分页/日志安全网聚焦 CTest 6/6（118.81 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1443 项：1436 项通过、7 项按环境门控跳过、0 失败，总耗时 524.65 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
