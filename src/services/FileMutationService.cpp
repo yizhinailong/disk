@@ -645,7 +645,7 @@ namespace disk::file {
         }
 
         TransactionRunner transaction_runner(m_db_client, log_context);
-        disk::quota::QuotaService quota_service(m_db_client);
+        disk::quota::QuotaService quota_service;
         disk::content::ContentService content_service(m_db_client);
 
         if (total_copy_size > 0) {

@@ -26,7 +26,7 @@ namespace disk::quota {
      */
     class QuotaService {
     public:
-        explicit QuotaService(drogon::orm::DbClientPtr db_client);
+        QuotaService();
         ~QuotaService() = default;
         QuotaService(const QuotaService&) = delete;
         auto operator=(const QuotaService&) -> QuotaService& = delete;
@@ -35,27 +35,11 @@ namespace disk::quota {
 
         [[nodiscard]]
         auto ReserveStorage(
-            uint64_t user_id,
-            uint64_t bytes,
-            disk::utils::LogContext log_context = {}
-        ) const
-            -> drogon::Task<Result<void>>;
-
-        [[nodiscard]]
-        auto ReserveStorage(
             const drogon::orm::DbClientPtr& client,
             uint64_t user_id,
             uint64_t bytes,
             disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
-
-        [[nodiscard]]
-        auto ReserveUploadStorage(
-            uint64_t user_id,
-            uint64_t bytes,
-            disk::utils::LogContext log_context = {}
-        ) const
-            -> drogon::Task<Result<void>>;
 
         [[nodiscard]]
         auto ReserveUploadStorage(
@@ -96,9 +80,6 @@ namespace disk::quota {
             int64_t delta,
             disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
-
-    private:
-        drogon::orm::DbClientPtr m_db_client;
     };
 
 } // namespace disk::quota

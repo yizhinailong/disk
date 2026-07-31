@@ -289,6 +289,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** whole-repository call-site and object-relocation audits confirm that both `QuotaService::GetReconciliation` overloads only reference each other, their result type is only exercised by a field-assignment test, and `StorageReconciliationService` owns the durable users-scope reconciliation flow
 - **THEN** both overloads, their dedicated result type, SQL, log event, and dead test SHALL be removed while active quota mutations and durable quota findings retain their existing transaction, context, and failure behavior
 
+#### Scenario: Quota mutations require an explicit database client
+
+- **WHEN** a whole-repository call-site and object-relocation audit confirms that the standalone `QuotaService::ReserveStorage` and `ReserveUploadStorage` overloads have no caller while every active mutation supplies a standalone or transaction client
+- **THEN** the two default-client overloads and stored client SHALL be removed, `QuotaService` SHALL be empty and default-constructible, and all active quota SQL, checked results, logging context, and construction event behavior SHALL remain unchanged
+
 #### Scenario: Unused token-lifetime config facade is removed
 
 - **WHEN** a whole-repository read/write audit confirms that the `ConfigMgr` access/refresh token lifetime getters and fixed members have no production or test caller and no JSON or environment loading path

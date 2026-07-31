@@ -9,22 +9,10 @@
 
 #include "QuotaService.hpp"
 
-#include <utility>
-
 namespace disk::quota {
 
-    QuotaService::QuotaService(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)) {
+    QuotaService::QuotaService() {
         Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=quota";
-    }
-
-    auto QuotaService::ReserveStorage(
-        uint64_t user_id,
-        uint64_t bytes,
-        disk::utils::LogContext log_context
-    ) const
-        -> drogon::Task<Result<void>> {
-        co_return co_await ReserveStorage(m_db_client, user_id, bytes, log_context);
     }
 
     auto QuotaService::ReserveStorage(
@@ -58,15 +46,6 @@ namespace disk::quota {
                 ErrorInfo(ErrorCode::InternalError, "Failed to reserve storage quota")
             );
         }
-    }
-
-    auto QuotaService::ReserveUploadStorage(
-        uint64_t user_id,
-        uint64_t bytes,
-        disk::utils::LogContext log_context
-    ) const
-        -> drogon::Task<Result<void>> {
-        co_return co_await ReserveStorage(m_db_client, user_id, bytes, log_context);
     }
 
     auto QuotaService::ReserveUploadStorage(

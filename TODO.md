@@ -2109,6 +2109,14 @@ clang-format、差异检查、完整构建、回收站直接源码合同 7/7、�
 
 clang-format、差异检查、完整构建、回收站直接源码合同 7/7、回收站与清理聚焦 CTest 86/86（3.88 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1441 项：1434 项通过、7 项按环境门控跳过、0 失败，总耗时 529.93 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.99 配额服务默认客户端死状态清理记录（2026-07-31）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定配额写入的显式 client 边界。全仓调用点与已编译对象重定位审计确认，不接收 `DbClientPtr` 的 `QuotaService::ReserveStorage` 和 `ReserveUploadStorage` 两个重载没有生产、测试、工具、迁移或客户端调用；上传初始化和文件/文件夹复制的全部预留已经显式传入当前 transaction client。两个无调用重载是 `m_db_client` 字段的唯一用途，继续保留会让新调用点绕开上层事务。新增合同在实现前为 3/5：显式 client 正向合同和既有对账清理合同通过，无状态类型合同与源码合同因类型非空、不可默认构造、两个 standalone 形状、8 个默认上下文入口和默认 client 字段仍存在而失败。
+
+两个 standalone 预留重载及 `m_db_client` 已删除，`QuotaService` 现为空类型并提供无参构造；构造期 `service=quota` 进程日志原样保留。UploadLifecycleService 的 5 个、FileMutationService 和 TrashService 各 1 个生产构造点改为默认构造，全部实际配额写入继续显式传入原 standalone client 或当前 transaction client。活跃公开面收敛为 6 个显式 client 入口；预留、释放、reserved-to-used、直接消费和已用量调整的 PostgreSQL SQL、条件行检查、零值短路、错误码、15 条操作事件、调用方日志上下文和公开响应均未改变。
+
+clang-format、差异检查、完整构建、相关直接 GoogleTest 16/16、配额合同与完整内容/配额安全网聚焦 CTest 6/6（25.64 秒）和 OpenSpec 严格校验 24/24 通过；聚焦真实安全网继续覆盖上传初始化、复制、永久删除、引用与配额故障注入。最终不带命令行额外超时的完整 CTest 共 1441 项：1434 项通过、7 项按环境门控跳过、0 失败，总耗时 546.30 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

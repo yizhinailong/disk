@@ -1591,7 +1591,7 @@ namespace disk::trash {
                 throw std::runtime_error("Chunk delete affected rows mismatch");
             }
 
-            disk::quota::QuotaService quota_service(m_db_client);
+            disk::quota::QuotaService quota_service;
             for (const auto& [user_id, delta] : user_storage_delta) {
                 if (delta != 0) {
                     auto quota_result = co_await quota_service.AdjustUsedStorageChecked(

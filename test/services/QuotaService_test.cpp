@@ -115,15 +115,27 @@ namespace disk::quota {
             );
         };
 
+        template <typename Service>
+        concept HasStandaloneStorageReservation = requires(const Service& service) {
+            service.ReserveStorage(uint64_t{ 1 }, uint64_t{ 1 });
+        };
+
+        template <typename Service>
+        concept HasStandaloneUploadStorageReservation = requires(const Service& service) {
+            service.ReserveUploadStorage(uint64_t{ 1 }, uint64_t{ 1 });
+        };
+
         static_assert(!HasStandaloneReconciliation<QuotaService>);
         static_assert(!HasClientReconciliation<QuotaService>);
         static_assert(!HasUncheckedUsedStorageAdjustment<QuotaService>);
         static_assert(!HasStandaloneUncheckedReservedRelease<QuotaService>);
         static_assert(!HasClientUncheckedReservedRelease<QuotaService>);
 
-        TEST(QuotaServiceCompileTest, CanConstructWithNullDbClient) {
-            QuotaService service(nullptr);
-            SUCCEED();
+        TEST(QuotaServiceCompileTest, IsStatelessAndRequiresExplicitClients) {
+            EXPECT_TRUE(std::is_empty_v<QuotaService>);
+            EXPECT_TRUE(std::is_default_constructible_v<QuotaService>);
+            EXPECT_FALSE(HasStandaloneStorageReservation<QuotaService>);
+            EXPECT_FALSE(HasStandaloneUploadStorageReservation<QuotaService>);
         }
 
         TEST(QuotaServiceContractTest, ExposesGenericReservationForTransactions) {
@@ -184,7 +196,7 @@ namespace disk::quota {
 
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                8U
+                6U
             );
             EXPECT_EQ(CountOccurrences(source, "Logger::Debug(log_context)"), 5U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 3U);
@@ -203,7 +215,17 @@ namespace disk::quota {
             EXPECT_TRUE(EveryCallContainsContext(
                 source,
                 "co_return co_await ReserveStorage(",
-                3U
+                1U
+            ));
+            EXPECT_FALSE(Contains(header, "m_db_client"));
+            EXPECT_FALSE(Contains(source, "std::move(db_client)"));
+            EXPECT_FALSE(Contains(
+                source,
+                "QuotaService::ReserveStorage(\n        uint64_t user_id,"
+            ));
+            EXPECT_FALSE(Contains(
+                source,
+                "QuotaService::ReserveUploadStorage(\n        uint64_t user_id,"
             ));
             EXPECT_FALSE(Contains(header, "auto ReleaseReservedStorage("));
             EXPECT_FALSE(Contains(source, "QuotaService::ReleaseReservedStorage("));

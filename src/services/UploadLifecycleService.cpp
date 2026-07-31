@@ -522,7 +522,7 @@ namespace disk::upload {
                         co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
                     }
 
-                    disk::quota::QuotaService quota_service(m_db_client);
+                    disk::quota::QuotaService quota_service;
                     auto quota_result = co_await quota_service.ConsumeUsedStorage(
                         transaction,
                         command.user_id,
@@ -692,7 +692,7 @@ namespace disk::upload {
             ErrorInfo(ErrorCode::InternalError, "Failed to create upload task"),
             transaction_log_context
         );
-        disk::quota::QuotaService quota_service(m_db_client);
+        disk::quota::QuotaService quota_service;
         std::optional<drogon_model::disk::UploadTasks> concurrent_task;
         auto tx_result = co_await transaction_runner.Run(
             [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
@@ -1360,7 +1360,7 @@ namespace disk::upload {
                     );
                 }
 
-                disk::quota::QuotaService quota_service(m_db_client);
+                disk::quota::QuotaService quota_service;
                 auto transfer_result = co_await quota_service.CommitReservedToUsed(
                     transaction,
                     command.user_id,
@@ -1506,7 +1506,7 @@ namespace disk::upload {
                     co_return {};
                 }
 
-                disk::quota::QuotaService quota_service(m_db_client);
+                disk::quota::QuotaService quota_service;
                 auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
                     transaction,
                     user_id,
@@ -1623,7 +1623,7 @@ namespace disk::upload {
 
                 user_id = expired_record->cleanup.user_id;
                 reserved_bytes = expired_record->cleanup.reserved_bytes;
-                disk::quota::QuotaService quota_service(m_db_client);
+                disk::quota::QuotaService quota_service;
                 auto release_result = co_await quota_service.ReleaseReservedStorageChecked(
                     transaction,
                     user_id,
