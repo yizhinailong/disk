@@ -64,12 +64,14 @@ namespace disk::trash {
             using ListSignature = drogon::Task<std::vector<TrashListRecord>> (TrashQuery::*)(uint64_t, int, int) const;
             using CountSignature = drogon::Task<int> (TrashQuery::*)(uint64_t) const;
             using IdPrefetchSignature = drogon::Task<std::vector<TrashLifecycleRecord>> (TrashQuery::*)(const std::vector<uint64_t>&) const;
+            using LockedFetchSignature = drogon::Task<std::optional<TrashLifecycleRecord>> (TrashQuery::*)(const drogon::orm::DbClientPtr&, uint64_t, uint64_t) const;
             using UserFetchSignature = drogon::Task<std::vector<TrashLifecycleRecord>> (TrashQuery::*)(uint64_t) const;
             using ExpiredFetchSignature = drogon::Task<std::vector<TrashLifecycleRecord>> (TrashQuery::*)(uint64_t, int) const;
 
             static_assert(std::is_same_v<decltype(&TrashQuery::FetchListPageForUser), ListSignature>);
             static_assert(std::is_same_v<decltype(&TrashQuery::CountForUser), CountSignature>);
             static_assert(std::is_same_v<decltype(&TrashQuery::PrefetchLifecycleRowsByIds), IdPrefetchSignature>);
+            static_assert(std::is_same_v<decltype(&TrashQuery::FetchLifecycleRowForUpdate), LockedFetchSignature>);
             static_assert(std::is_same_v<decltype(&TrashQuery::FetchLifecycleRowsForUser), UserFetchSignature>);
             static_assert(std::is_same_v<decltype(&TrashQuery::FetchExpiredLifecycleBatchAfterId), ExpiredFetchSignature>);
         }
@@ -99,6 +101,50 @@ namespace disk::trash {
             EXPECT_TRUE(Contains(service_source, "if (trash_item.user_id != user_id)"));
             EXPECT_TRUE(Contains(service_source, "result.message = \"Trash item not found\";"));
             EXPECT_TRUE(Contains(service_source, "m_trash_query.PrefetchLifecycleRowsByIds(trash_ids)"));
+        }
+
+        TEST(TrashQuerySqlContractTest, FileRestoreLocksAndConsumesTrashAtomically) {
+            const auto query_source = ReadSourceFile("src/services/TrashQuery.cpp");
+            const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
+            const auto restore_begin = service_source.find(
+                "auto TrashService::RestoreFile(\n        const TrashLifecycleRecord&"
+            );
+            const auto restore_end = service_source.find(
+                "auto TrashService::RestoreFolder(",
+                restore_begin
+            );
+
+            ASSERT_NE(restore_begin, std::string::npos);
+            ASSERT_NE(restore_end, std::string::npos);
+            const auto restore_body = service_source.substr(
+                restore_begin,
+                restore_end - restore_begin
+            );
+
+            EXPECT_TRUE(Contains(query_source, "auto TrashQuery::FetchLifecycleRowForUpdate("));
+            EXPECT_TRUE(Contains(query_source, "WHERE id = $1 AND user_id = $2 FOR UPDATE"));
+
+            const auto transaction = restore_body.find("transaction_runner.Run(");
+            const auto trash_lock = restore_body.find("FetchLifecycleRowForUpdate(", transaction);
+            const auto name_lock = restore_body.find("AcquireNameLock(", trash_lock);
+            const auto parent_lock = restore_body.find("FindOwnedFolderForUpdate(", name_lock);
+            const auto file_insert = restore_body.find("file_mapper.insert(", parent_lock);
+            const auto trash_delete = restore_body.find("DELETE FROM trash", file_insert);
+            const auto affected_rows = restore_body.find("affectedRows() != 1", trash_delete);
+
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(trash_lock, std::string::npos);
+            ASSERT_NE(name_lock, std::string::npos);
+            ASSERT_NE(parent_lock, std::string::npos);
+            ASSERT_NE(file_insert, std::string::npos);
+            ASSERT_NE(trash_delete, std::string::npos);
+            ASSERT_NE(affected_rows, std::string::npos);
+            EXPECT_LT(transaction, trash_lock);
+            EXPECT_LT(trash_lock, name_lock);
+            EXPECT_LT(name_lock, parent_lock);
+            EXPECT_LT(parent_lock, file_insert);
+            EXPECT_LT(file_insert, trash_delete);
+            EXPECT_LT(trash_delete, affected_rows);
         }
 
         TEST(TrashQuerySqlContractTest, ExpiredFetchKeepsCursorAndLifecycleInService) {

@@ -783,11 +783,12 @@ namespace disk::trash {
                 result.status = "failed";
                 result.code = static_cast<uint16_t>(ErrorCode::ValidationFailed);
                 result.message = "Unknown item type";
-                response.summary.failure_count++;
             }
 
             if (result.status == "success") {
                 response.summary.success_count++;
+            } else {
+                response.summary.failure_count++;
             }
             response.results.push_back(result);
         }
@@ -1034,117 +1035,213 @@ namespace disk::trash {
         BatchResultItem& result,
         disk::utils::LogContext log_context
     ) -> drogon::Task<void> {
+        uint64_t restored_file_id = 0;
+        uint64_t resolved_content_id = 0;
+        std::string restored_name;
+        std::string restored_path;
+        bool restored_to_root = false;
+        bool resolved_legacy_content_id = false;
+        bool invalid_content_id = false;
+        std::string invalid_content_value;
+        std::optional<ErrorInfo> restore_error;
+        bool restored = false;
 
-        try {
-            auto trash_id = trash_item.id;
-            auto original_folder_id = trash_item.original_folder_id;
-            auto item_name = trash_item.item_name;
+        disk::file::TransactionRunner transaction_runner(
+            m_db_client,
+            ErrorInfo(ErrorCode::InternalError, "Failed to restore file"),
+            log_context
+        );
+        for (uint16_t candidate_index = 0; candidate_index <= 1000; ++candidate_index) {
+            bool candidate_occupied = false;
+            restored_to_root = false;
+            resolved_legacy_content_id = false;
 
-            auto target_folder_id = original_folder_id;
-            std::string parent_path = "/";
-
-            if (!co_await IsFolderExists(original_folder_id, user_id, log_context)) {
-                Logger::Debug(log_context)
-                    << "Original folder not found, restoring to root: original_folder_id="
-                    << original_folder_id;
-                target_folder_id = 0;
-            }
-
-            if (target_folder_id > 0) {
-                CoroMapper<Folders> folder_mapper(m_db_client);
-                try {
-                    auto parent_folder = co_await folder_mapper.findOne(
-                        Criteria(Folders::Cols::_id, CompareOperator::EQ, target_folder_id)
+            auto transaction_result = co_await transaction_runner.Run(
+                [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                    auto locked_trash_item = co_await m_trash_query.FetchLifecycleRowForUpdate(
+                        transaction,
+                        trash_item.id,
+                        user_id
                     );
-                    parent_path = parent_folder.getValueOfPath();
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    Logger::Warn(log_context)
-                        << "Failed to get parent folder path, using root: folder_id="
-                        << target_folder_id;
-                    target_folder_id = 0;
-                    parent_path = "/";
+                    if (!locked_trash_item.has_value() || locked_trash_item->item_type != "file") {
+                        co_return std::unexpected(
+                            ErrorInfo(ErrorCode::ResourceNotFound, "Trash item not found")
+                        );
+                    }
+
+                    auto content_id_result =
+                        disk::services::trash_content_internal::ResolveRequiredContentId(
+                            locked_trash_item->content_id,
+                            locked_trash_item->item_data
+                        );
+                    if (!content_id_result.has_value()) {
+                        invalid_content_id = true;
+                        invalid_content_value = locked_trash_item->content_id.has_value()
+                                                       ? std::to_string(*locked_trash_item->content_id)
+                                                       : "NULL";
+                        co_return std::unexpected(content_id_result.error());
+                    }
+                    resolved_content_id = content_id_result->value;
+                    resolved_legacy_content_id =
+                        content_id_result->source ==
+                        disk::services::trash_content_internal::ContentIdSource::ItemData;
+
+                    const auto base_name = ExtractBaseName(locked_trash_item->item_name);
+                    const auto extension = ExtractExtension(locked_trash_item->item_name);
+                    restored_name = locked_trash_item->item_name;
+                    if (candidate_index > 0) {
+                        restored_name =
+                            base_name + " (" + std::to_string(candidate_index) + ")";
+                        if (!extension.empty()) {
+                            restored_name += "." + extension;
+                        }
+                    }
+
+                    uint64_t target_folder_id = locked_trash_item->original_folder_id;
+                    std::string parent_path = "/";
+                    disk::folder::FolderRepository folder_repository;
+                    if (target_folder_id > 0) {
+                        auto parent_snapshot = co_await folder_repository.FindOwnedFolder(
+                            transaction,
+                            target_folder_id,
+                            user_id
+                        );
+                        if (!parent_snapshot.has_value()) {
+                            restored_to_root = true;
+                            target_folder_id = 0;
+                        }
+                    }
+
+                    disk::file::FileRepository file_repository;
+                    co_await file_repository.AcquireNameLock(
+                        transaction,
+                        user_id,
+                        target_folder_id,
+                        restored_name
+                    );
+
+                    if (target_folder_id > 0) {
+                        auto parent_folder = co_await folder_repository.FindOwnedFolderForUpdate(
+                            transaction,
+                            target_folder_id,
+                            user_id
+                        );
+                        if (parent_folder.has_value()) {
+                            parent_path = parent_folder->getValueOfPath();
+                        } else {
+                            restored_to_root = true;
+                            target_folder_id = 0;
+                            co_await file_repository.AcquireNameLock(
+                                transaction,
+                                user_id,
+                                target_folder_id,
+                                restored_name
+                            );
+                        }
+                    }
+
+                    if (co_await file_repository.NameExistsExcluding(
+                            transaction,
+                            restored_name,
+                            target_folder_id,
+                            user_id,
+                            0
+                        )) {
+                        candidate_occupied = true;
+                        co_return std::unexpected(
+                            ErrorInfo(ErrorCode::ResourceConflict, "Restore filename occupied")
+                        );
+                    }
+
+                    Json::Value item_data;
+                    Json::Reader reader;
+                    reader.parse(locked_trash_item->item_data, item_data);
+                    restored_path = parent_path + restored_name;
+
+                    Files file;
+                    file.setUserId(user_id);
+                    file.setContentId(resolved_content_id);
+                    file.setFolderId(target_folder_id);
+                    file.setName(restored_name);
+                    file.setExtension(ExtractExtension(restored_name));
+                    file.setSize(locked_trash_item->item_size);
+                    file.setMimeType(
+                        item_data.get("mime_type", "application/octet-stream").asString()
+                    );
+                    file.setPath(restored_path);
+                    file.setIsFavorite(false);
+                    file.setDownloadCount(0);
+                    file.setCreatedAt(trantor::Date::now());
+                    file.setUpdatedAt(trantor::Date::now());
+
+                    CoroMapper<Files> file_mapper(transaction);
+                    auto inserted_file = co_await file_mapper.insert(file);
+                    restored_file_id = inserted_file.getValueOfId();
+
+                    auto delete_result = co_await transaction->execSqlCoro(
+                        "DELETE FROM trash "
+                        "WHERE id = $1 AND user_id = $2 AND item_type = 'file'",
+                        locked_trash_item->id,
+                        user_id
+                    );
+                    if (delete_result.affectedRows() != 1) {
+                        co_return std::unexpected(
+                            ErrorInfo(ErrorCode::InternalError, "Failed to restore file")
+                        );
+                    }
+
+                    co_return {};
                 }
+            );
+
+            if (transaction_result.has_value()) {
+                restored = true;
+                break;
             }
-
-            auto final_name = item_name;
-            if (co_await IsFilenameExists(target_folder_id, item_name, user_id, log_context)) {
-                final_name = co_await GenerateUniqueFilename(
-                    target_folder_id,
-                    item_name,
-                    user_id,
-                    true,
-                    log_context
-                );
-                Logger::Debug(log_context)
-                    << "Filename conflict, auto-renamed: " << item_name << " -> " << final_name;
+            if (candidate_occupied) {
+                continue;
             }
-
-            auto content_id_result =
-                disk::services::trash_content_internal::ResolveRequiredContentId(
-                    trash_item.content_id,
-                    trash_item.item_data
-                );
-            if (!content_id_result.has_value()) {
-                Logger::Warn(log_context)
-                    << "Cannot restore trash file without valid content_id: trash_id=" << trash_id;
-                result.status = "failed";
-                result.code = static_cast<uint16_t>(content_id_result.error().code);
-                result.message = content_id_result.error().message;
-                result.field = "content_id";
-                result.value = trash_item.content_id.has_value() ? std::to_string(trash_item.content_id.value()) : "NULL";
-                co_return;
-            }
-
-            if (content_id_result->source ==
-                disk::services::trash_content_internal::ContentIdSource::ItemData) {
-                Logger::Debug(log_context)
-                    << "Resolved legacy trash content_id from item_data during restore: trash_id="
-                    << trash_id << ", content_id=" << content_id_result->value;
-            }
-
-            Json::Value item_data;
-            Json::Reader reader;
-            reader.parse(trash_item.item_data, item_data);
-
-            std::string file_path = parent_path + final_name;
-
-            Files file;
-            file.setUserId(user_id);
-            file.setContentId(content_id_result->value);
-            file.setFolderId(target_folder_id);
-            file.setName(final_name);
-            file.setExtension(ExtractExtension(final_name));
-            file.setSize(trash_item.item_size);
-            file.setMimeType(item_data.get("mime_type", "application/octet-stream").asString());
-            file.setPath(file_path);
-            file.setIsFavorite(false);
-            file.setDownloadCount(0);
-            file.setCreatedAt(trantor::Date::now());
-            file.setUpdatedAt(trantor::Date::now());
-
-            CoroMapper<Files> file_mapper(m_db_client);
-            auto inserted_file = co_await file_mapper.insert(file);
-
-            CoroMapper<Trash> trash_mapper(m_db_client);
-            co_await trash_mapper.deleteByPrimaryKey(trash_id);
-
-            result.status = "success";
-            result.file_id = inserted_file.getValueOfId();
-            result.path = file_path;
-
-            Logger::Info(log_context)
-                << "File restored successfully: trash_id=" << trash_id
-                << ", file_id=" << inserted_file.getValueOfId() << ", name=" << final_name
-                << ", path=" << file_path;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to restore file: trash_id=" << trash_item.id << " - "
-                << e.base().what();
-            result.status = "failed";
-            result.code = static_cast<uint16_t>(ErrorCode::InternalError);
-            result.message = "Failed to restore file";
+            restore_error = transaction_result.error();
+            break;
         }
+
+        if (!restored) {
+            if (!restore_error.has_value()) {
+                restore_error = ErrorInfo(ErrorCode::InternalError, "Failed to restore file");
+            }
+            result.status = "failed";
+            result.code = static_cast<uint16_t>(restore_error->code);
+            result.message = restore_error->message;
+            if (invalid_content_id) {
+                result.field = "content_id";
+                result.value = invalid_content_value;
+                Logger::Warn(log_context)
+                    << "Cannot restore trash file without valid content_id: trash_id="
+                    << trash_item.id;
+            } else {
+                Logger::Error(log_context)
+                    << "Failed to restore file: trash_id=" << trash_item.id;
+            }
+            co_return;
+        }
+
+        result.status = "success";
+        result.file_id = restored_file_id;
+        result.path = restored_path;
+
+        if (restored_to_root) {
+            Logger::Debug(log_context)
+                << "Original folder not found, restored file to root: trash_id=" << trash_item.id;
+        }
+        if (resolved_legacy_content_id) {
+            Logger::Debug(log_context)
+                << "Resolved legacy trash content_id from item_data during restore: trash_id="
+                << trash_item.id << ", content_id=" << resolved_content_id;
+        }
+        Logger::Info(log_context)
+            << "File restored successfully: trash_id=" << trash_item.id
+            << ", file_id=" << restored_file_id << ", name=" << restored_name
+            << ", path=" << restored_path;
     }
 
     auto TrashService::RestoreFolder(

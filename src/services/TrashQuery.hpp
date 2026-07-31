@@ -65,6 +65,13 @@ namespace disk::trash {
             -> drogon::Task<std::vector<TrashLifecycleRecord>>;
 
         [[nodiscard]]
+        auto FetchLifecycleRowForUpdate(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t trash_id,
+            uint64_t user_id
+        ) const -> drogon::Task<std::optional<TrashLifecycleRecord>>;
+
+        [[nodiscard]]
         auto FetchLifecycleRowsForUser(uint64_t user_id) const
             -> drogon::Task<std::vector<TrashLifecycleRecord>>;
 

@@ -122,6 +122,24 @@ namespace disk::trash {
         co_return records;
     }
 
+    auto TrashQuery::FetchLifecycleRowForUpdate(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t trash_id,
+        uint64_t user_id
+    ) const -> drogon::Task<std::optional<TrashLifecycleRecord>> {
+        auto result = co_await client->execSqlCoro(
+            "SELECT id, user_id, item_type, item_id, item_name, item_size, "
+            "original_folder_id, original_path, item_data, content_id "
+            "FROM trash WHERE id = $1 AND user_id = $2 FOR UPDATE",
+            trash_id,
+            user_id
+        );
+        if (result.empty()) {
+            co_return std::nullopt;
+        }
+        co_return MapLifecycleRecord(result[0]);
+    }
+
     auto TrashQuery::FetchLifecycleRowsForUser(uint64_t user_id) const
         -> drogon::Task<std::vector<TrashLifecycleRecord>> {
         auto result = co_await m_db_client->execSqlCoro(

@@ -47,6 +47,10 @@ The system SHALL allow users to restore trash items when possible and SHALL reso
 - **WHEN** a restored item name conflicts at the target location
 - **THEN** the system SHALL generate a non-conflicting restored name
 
+#### Scenario: File restore consumption fails
+- **WHEN** an active file is recreated but its trash row cannot be consumed in the same restore attempt
+- **THEN** the restore transaction SHALL roll back every write so a retry consumes the trash item exactly once without changing content references or quota
+
 ### Requirement: Permanent Delete
 The system SHALL permanently delete trash items and release storage only during permanent deletion or equivalent cleanup.
 

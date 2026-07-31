@@ -447,6 +447,29 @@ def install_trash_insert_failure_trigger(item_name: str):
     return lambda: drop_failure_trigger("trash", trigger_name, function_name)
 
 
+def install_trash_restore_delete_suppression_trigger(trash_id: int):
+    """Install a trigger that suppresses deletion of one restored trash row."""
+    function_name = safe_test_identifier("suppress_trash_restore_delete_fn")
+    trigger_name = safe_test_identifier("suppress_trash_restore_delete_trg")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF OLD.id = {int(trash_id)} THEN
+                RETURN NULL;
+            END IF;
+            RETURN OLD;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE DELETE ON trash '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("trash", trigger_name, function_name)
+
+
 def install_file_delete_failure_trigger(file_id: int):
     """Install a trigger that fails active file row deletion for one file."""
     function_name = safe_test_identifier("fail_file_delete_fn")
@@ -947,6 +970,18 @@ def restore_trash(trash_id: int) -> int:
         print(resp.text)
         print_summary()
     return int(restored_file_id)
+
+
+def restore_trash_response(trash_id: int):
+    """Restore one trash item and return the raw HTTP response."""
+    resp = fetch(
+        "/api/trash/restore",
+        method="POST",
+        headers=auth_headers(),
+        json_body={"trash_ids": [trash_id]},
+    )
+    save_evidence(f"{EVIDENCE_PREFIX}-trash-restore-raw-{trash_id}.json", resp.text)
+    return resp
 
 
 def run_expired_cleanup() -> dict[str, int]:
@@ -3181,6 +3216,91 @@ def test_restore_preserves_ref_count_storage_used_and_removes_trash() -> None:
     assert_equal("restore keeps storage_used", quota_after["storage_used"], quota_before["storage_used"])
 
 
+def test_restore_trash_delete_suppression_rolls_back_and_retries() -> None:
+    """Verify file insertion rolls back when restore cannot consume its trash row."""
+    log_section("Restore Trash Delete Suppression Rolls Back And Retries")
+    payload = f"restore-delete-suppression-{unique_name()}".encode()
+    filename = f"safety_restore_delete_suppression_{unique_name()}.bin"
+    file_id = upload_file(filename, payload)
+    content_id = int(file_row(file_id)["content_id"])
+    before_ref = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    trash_id = delete_file_to_trash(file_id)
+    cleanup_trigger = install_trash_restore_delete_suppression_trigger(trash_id)
+    try:
+        response = restore_trash_response(trash_id)
+    finally:
+        cleanup_trigger()
+
+    active_after_failure = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = 0 AND name = %s",
+            (USER_ID, filename),
+        )
+        or 0
+    )
+    trash_after_failure = int(
+        scalar("SELECT COUNT(*) FROM trash WHERE id = %s AND user_id = %s", (trash_id, USER_ID))
+        or 0
+    )
+
+    assert_equal(
+        "restore delete suppression keeps HTTP 200 batch envelope",
+        response.status_code,
+        200,
+    )
+    assert_equal(
+        "restore delete suppression keeps success envelope",
+        json_field(response.text, "code"),
+        "0",
+    )
+    assert_equal(
+        "restore delete suppression reports one failed item",
+        json_field(response.text, "data.summary.failure_count"),
+        "1",
+    )
+    assert_equal(
+        "restore delete suppression reports stable item status",
+        json_field(response.text, "data.results.0.status"),
+        "failed",
+    )
+    assert_equal(
+        "restore delete suppression reports InternalError",
+        json_field(response.text, "data.results.0.error.code"),
+        "10006",
+    )
+    assert_equal("restore delete suppression creates no active file", active_after_failure, 0)
+    assert_equal("restore delete suppression keeps trash row", trash_after_failure, 1)
+    assert_equal(
+        "restore delete suppression keeps ref_count",
+        int(content_row(content_id)["ref_count"]),
+        before_ref,
+    )
+    assert_equal("restore delete suppression keeps quota", user_quota(), quota_before)
+
+    restored_file_id = restore_trash(trash_id)
+    restored_count = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = 0 AND content_id = %s",
+            (USER_ID, content_id),
+        )
+        or 0
+    )
+    assert_equal(
+        "restore retry returns expected filename",
+        file_row(restored_file_id)["name"],
+        filename,
+    )
+    assert_equal("restore retry creates exactly one active file", restored_count, 1)
+    assert_db_row_absent(
+        "restore retry consumes trash row",
+        "SELECT id FROM trash WHERE id = %s",
+        (trash_id,),
+    )
+    assert_equal("restore retry keeps ref_count", int(content_row(content_id)["ref_count"]), before_ref)
+    assert_equal("restore retry keeps quota", user_quota(), quota_before)
+
+
 def test_share_cleanup_on_soft_delete() -> None:
     """Verify move-to-trash removes share links and cancels shares only when empty."""
     log_section("Share Cleanup On Soft Delete")
@@ -3563,6 +3683,7 @@ def main() -> None:
     test_move_to_trash_trash_insert_failure_preserves_active_state()
     test_move_to_trash_active_file_delete_failure_rolls_back_trash_and_share_cleanup()
     test_restore_preserves_ref_count_storage_used_and_removes_trash()
+    test_restore_trash_delete_suppression_rolls_back_and_retries()
     test_share_cleanup_on_soft_delete()
     test_folder_soft_delete_snapshot_preserves_ref_count_and_storage()
     test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_share_cleanup()
