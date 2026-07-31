@@ -49,6 +49,7 @@ from lib_py import (  # noqa: E402
     md5_bytes,
     print_summary,
     query_one,
+    redis_delete_pattern,
     save_evidence,
     scalar,
     sha256_bytes,
@@ -2486,6 +2487,108 @@ def test_folder_copy_target_count_zero_rows_rolls_back_subtree() -> None:
     )
 
 
+def test_folder_copy_uses_latest_concurrently_moved_target_path() -> None:
+    """Verify folder copy serializes with a concurrent target move."""
+    log_section("Folder Copy Uses Latest Concurrently Moved Target Path")
+    old_parent_id = create_folder(f"safety_copy_target_old_parent_{unique_name()}")
+    new_parent_id = create_folder(f"safety_copy_target_new_parent_{unique_name()}")
+    target_name = f"safety_copy_moving_target_{unique_name()}"
+    target_id = create_folder(target_name, old_parent_id)
+    root_name = f"safety_copy_moving_root_{unique_name()}"
+    source_root_id = create_folder(root_name)
+    child_name = f"safety_copy_moving_child_{unique_name()}"
+    source_child_id = create_folder(child_name, source_root_id)
+    filename = f"safety_copy_moving_file_{unique_name()}.bin"
+    source_file_id = upload_file(filename, f"copy-moving-target-{unique_name()}".encode(), source_child_id)
+    new_parent_path = str(
+        scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (new_parent_id, USER_ID)) or ""
+    )
+    cleanup_trigger = install_folder_copy_delay_trigger(USER_ID, target_id, root_name)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            copy_future = executor.submit(copy_items_response, [], [source_root_id], target_id)
+            time.sleep(0.15)
+            move_response = fetch(
+                "/api/file/move",
+                method="PUT",
+                headers=auth_headers(request_id=f"safety-copy-moving-target-{unique_name()}"),
+                json_body={
+                    "file_ids": [],
+                    "folder_ids": [target_id],
+                    "target_folder_id": new_parent_id,
+                },
+            )
+            copy_response = copy_future.result(timeout=10)
+    finally:
+        cleanup_trigger()
+
+    expected_target_path = f"{new_parent_path}{target_name}/"
+    expected_root_path = f"{expected_target_path}{root_name}/"
+    expected_child_path = f"{expected_root_path}{child_name}/"
+    copied_root_id = int(
+        scalar(
+            "SELECT id FROM folders WHERE user_id = %s AND parent_id = %s AND name = %s",
+            (USER_ID, target_id, root_name),
+        )
+        or 0
+    )
+    copied_child_id = int(
+        scalar(
+            "SELECT id FROM folders WHERE user_id = %s AND parent_id = %s AND name = %s",
+            (USER_ID, copied_root_id, child_name),
+        )
+        or 0
+    )
+    actual_target_count = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID))
+        or 0
+    )
+    direct_target_items = int(
+        scalar(
+            "SELECT (SELECT COUNT(*) FROM folders WHERE user_id = %s AND parent_id = %s) + "
+            "(SELECT COUNT(*) FROM files WHERE user_id = %s AND folder_id = %s)",
+            (USER_ID, target_id, USER_ID, target_id),
+        )
+        or 0
+    )
+
+    assert_equal("moving-target folder copy returns HTTP 200", copy_response.status_code, 200)
+    assert_equal("moving-target folder copy succeeds", json_field(copy_response.text, "code"), "0")
+    assert_equal("moving-target folder copy includes complete subtree", json_field(copy_response.text, "data.copied_count"), "3")
+    assert_equal("copy target move returns HTTP 200", move_response.status_code, 200)
+    assert_equal("copy target move succeeds", json_field(move_response.text, "code"), "0")
+    assert_equal("copy target move counts target root", json_field(move_response.text, "data.moved_folder_count"), "1")
+    assert_equal(
+        "moving-target folder copy stores target parent",
+        int(scalar("SELECT parent_id FROM folders WHERE id = %s", (target_id,)) or 0),
+        new_parent_id,
+    )
+    assert_equal(
+        "moving-target folder copy stores latest target path",
+        scalar("SELECT path FROM folders WHERE id = %s", (target_id,)),
+        expected_target_path,
+    )
+    assert_equal(
+        "moving-target folder copy stores latest root path",
+        scalar("SELECT path FROM folders WHERE id = %s", (copied_root_id,)),
+        expected_root_path,
+    )
+    assert_equal(
+        "moving-target folder copy stores latest child path",
+        scalar("SELECT path FROM folders WHERE id = %s", (copied_child_id,)),
+        expected_child_path,
+    )
+    assert_equal(
+        "moving-target folder copy stores latest file path",
+        scalar(
+            "SELECT path FROM files WHERE user_id = %s AND folder_id = %s AND name = %s",
+            (USER_ID, copied_child_id, filename),
+        ),
+        f"{expected_child_path}{filename}",
+    )
+    assert_equal("moving-target folder copy keeps target count exact", actual_target_count, direct_target_items)
+
+
 def test_copy_quota_rejection_no_side_effects() -> None:
     """Verify over-quota copy leaves no files or ref-count changes behind."""
     log_section("Copy Quota Rejection")
@@ -3237,6 +3340,7 @@ def main() -> None:
     test_concurrent_same_name_file_copies_skip_before_insert()
     test_concurrent_same_name_folder_copies_skip_before_subtree_writes()
     test_folder_copy_target_count_zero_rows_rolls_back_subtree()
+    test_folder_copy_uses_latest_concurrently_moved_target_path()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()
@@ -3254,6 +3358,7 @@ def main() -> None:
     test_permanent_delete_ref_count_and_blob_retention()
     test_expired_trash_cleanup_ref_count_quota_and_blob_retention()
 
+    redis_delete_pattern(f"rate:folder:{USER_ID}:*")
     print_summary()
 
 

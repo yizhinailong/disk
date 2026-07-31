@@ -92,6 +92,10 @@ The system SHALL allow users to copy files or folders while preserving content-s
 - **WHEN** a folder subtree is inserted but incrementing the target folder item count affects no row
 - **THEN** that subtree transaction SHALL roll back, its reservation SHALL be released, and the successful batch response SHALL exclude all nodes from its copied counts
 
+#### Scenario: A copy target moves concurrently
+- **WHEN** a folder subtree is copied while its target folder is concurrently moved
+- **THEN** both transactions SHALL serialize on the target row and all copied subtree paths SHALL follow the target's committed location
+
 #### Scenario: Copy succeeds
 - **WHEN** an authenticated user copies accessible items with sufficient quota
 - **THEN** the system SHALL create copied metadata and update content reference counts as needed

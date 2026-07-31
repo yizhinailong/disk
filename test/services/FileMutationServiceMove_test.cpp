@@ -362,6 +362,46 @@ namespace disk::file {
             EXPECT_FALSE(Contains(copy_body, "UPDATE folders SET item_count = item_count + 1"));
         }
 
+        TEST(FileMutationServiceCopyContractTest, CopyLocksTargetBeforeBuildingFolderPaths) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto copy_body = ExtractCopyBody(source);
+
+            ASSERT_FALSE(copy_body.empty());
+            const auto staged_folders = copy_body.find(
+                "std::vector<FileIdMapping> staged_folder_mappings;"
+            );
+            const auto transaction = copy_body.find(
+                "auto tx_result = co_await transaction_runner.Run(",
+                staged_folders
+            );
+            const auto name_lock = copy_body.find(
+                "m_folder_repository.AcquireNameLock(",
+                transaction
+            );
+            const auto target_lock = copy_body.find(
+                "m_folder_repository.FindOwnedFolderForUpdate(",
+                name_lock
+            );
+            const auto conflict_check = copy_body.find(
+                "utils::QueryOccupiedFolderNames(",
+                target_lock
+            );
+            const auto root_path = copy_body.find(
+                "utils::BuildFolderPath(transaction_target_location.path, root_name)",
+                conflict_check
+            );
+            ASSERT_NE(staged_folders, std::string::npos);
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(name_lock, std::string::npos);
+            ASSERT_NE(target_lock, std::string::npos);
+            ASSERT_NE(conflict_check, std::string::npos);
+            ASSERT_NE(root_path, std::string::npos);
+            EXPECT_LT(transaction, name_lock);
+            EXPECT_LT(name_lock, target_lock);
+            EXPECT_LT(target_lock, conflict_check);
+            EXPECT_LT(conflict_check, root_path);
+        }
+
         TEST(FileMutationLogContextContractTest, ControllerAndServicesUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/FileController.cpp");
             const auto mutation_source = ReadSourceFile("src/services/FileMutationService.cpp");

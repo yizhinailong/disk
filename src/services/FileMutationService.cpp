@@ -1151,6 +1151,21 @@ namespace disk::file {
                             request.target_folder_id,
                             root_name
                         );
+                        auto transaction_target_location = target_location_result.value();
+                        if (request.target_folder_id > 0) {
+                            auto locked_target = co_await m_folder_repository.FindOwnedFolderForUpdate(
+                                transaction,
+                                request.target_folder_id,
+                                user_id
+                            );
+                            if (!locked_target) {
+                                co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
+                            }
+                            transaction_target_location.path = locked_target->getValueOfPath();
+                            transaction_target_location.depth = static_cast<uint32_t>(
+                                locked_target->getValueOfDepth()
+                            );
+                        }
                         auto transaction_occupied_names = co_await utils::QueryOccupiedFolderNames(
                             transaction,
                             request.target_folder_id,
@@ -1205,8 +1220,8 @@ namespace disk::file {
                         folder_id_map.reserve(plan.folders.size());
                         folder_path_map.reserve(plan.folders.size());
 
-                        auto root_path = utils::BuildFolderPath(target_location_result->path, root_name);
-                        auto root_depth = target_location_result->depth + 1;
+                        auto root_path = utils::BuildFolderPath(transaction_target_location.path, root_name);
+                        auto root_depth = transaction_target_location.depth + 1;
 
                         Folders root_folder;
                         root_folder.setUserId(user_id);
