@@ -60,7 +60,7 @@ Sources: `src/controllers/FileController.hpp:27`, `src/controllers/FolderControl
 
 ### JWT execution risk
 
-The JWT filter validates the bearer token and inserts `user_id`, `username`, `role`, and `status` into request attributes before route-level filters and controllers execute. Public-path exemptions are centralized in `JwtAuthFilter::IsPublicPath`.
+The JWT filter validates the bearer token and inserts `user_id`, `username`, `role`, and `status` into request attributes before route-level filters and controllers execute. Public-path exemptions are centralized inside `JwtAuthFilter.cpp` and are reached only through the filter's `doFilter` entrypoint.
 
 Confirmed framework behavior: Drogon `GlobalFilters` registers its configured plugin instance as pre-routing advice and runs its filter list before routing. Drogon then routes the request and runs route-level middlewares/filters before handling. Because plugin instances are addressed by plugin name, duplicate `drogon::plugin::GlobalFilters` entries are unsafe: a later entry can replace the earlier configuration. The configuration therefore uses one entry containing all global filters, and the ownership test asserts that uniqueness.
 

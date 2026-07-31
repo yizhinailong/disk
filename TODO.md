@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，请求追踪生成/校验 helper 内部化）：全仓库精确调用点和已编译对象审计确认 `RequestTraceFilter::GenerateRequestId()` 与 `IsValidRequestId()` 没有外部生产消费者，而 `main.cpp.o` 仍依赖 `ResolveRequestId()`。前两者已下沉为实现文件本地 helper，旧成员符号从后端与测试二进制消失，公开解析入口继续供 pre-routing advice 与全局过滤器共用；编译期合同拒绝旧公开面回归，行为测试通过活跃入口覆盖合法 128 字符边界、非法值 UUID 回退和已有属性保留。完整构建、请求追踪/进程准入/分布式拓扑/健康日志聚焦 CTest 16/16 和 OpenSpec 24/24 通过；完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 506.04 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；响应头、日志关联、请求准入、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，JWT 公开路径分类 helper 内部化）：全仓库精确调用点和已编译对象审计确认 `JwtAuthFilter::IsPublicPath()` 只有同一实现文件的生产消费和直接路径单测，没有其他消费者。该成员已下沉为实现文件本地 helper，旧成员符号从后端与测试二进制消失；编译期合同拒绝公开面回归，三个认证、三个健康、精确 metrics、三类公开分享前缀及受保护近似路径全部改经真实 `doFilter()` 覆盖。相邻过滤器归属源码合同同步后定向 1/1、聚焦 CTest 61/61 和 OpenSpec 24/24 通过；第二轮完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 506.96 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；全局 JWT 所有权、route-level 分享保护、认证属性、响应、日志、限流顺序、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1856,6 +1856,14 @@ utility 转发与仓储单项方法已一并删除，`FolderRepository` 从 13 �
 生成与校验成员声明和定义已删除，原逻辑下沉为 `RequestTraceFilter.cpp` 匿名命名空间 helper；重建后的实现对象将两者标记为本地 `t` 符号，后端和测试二进制不再包含旧成员符号，公开 `ResolveRequestId()` 符号与生产链接关系继续存在。`RequestTraceFilter_test.cpp` 通过 C++23 concept 拒绝两个旧公开能力回归并正向保留解析入口，行为只经活跃解析/过滤入口验证合法上游 ID、128 字符边界、空值、超长、空格、斜杠、CR/LF 的 UUID v4 回退以及已有 `request_id` 属性不被覆盖。响应 `X-Request-Id`、结构化日志关联、进程排空请求准入、REST、schema 和迁移合同均未改变。
 
 完整构建、请求追踪/进程准入/分布式拓扑/健康日志聚焦 CTest 16/16 和 OpenSpec 24/24 通过。完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 506.04 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.68 JWT 公开路径分类 helper 内部化记录（2026-07-31）
+
+系统测试、单元测试、后端发现文档和 OpenSpec 先行固定 JWT 公开路径分类边界。全仓库精确调用点与已编译对象审计确认 `JwtAuthFilter::IsPublicPath()` 的唯一生产消费者是同一实现文件中的 `doFilter()`，其他直接调用仅来自两条路径单测；没有其他生产、集成、工具、客户端或迁移消费者。重建前的生产实现对象和测试对象各自携带该头文件内联弱定义，没有其他生产对象重定位。
+
+公开成员及头文件 `<string>` 依赖已删除，原路径集合和匹配规则下沉为 `JwtAuthFilter.cpp` 匿名命名空间 helper。重建后的实现对象只保留本地 `t` 分类符号，后端与测试二进制不再包含旧成员符号，公开 `doFilter()` 生产入口保持不变。`JwtAuthFilter_test.cpp` 以 C++23 concept 拒绝旧公开能力回归；三个公开认证入口、三个健康入口、精确 `/metrics`、公开分享 access/browse/download 前缀，以及 logout、健康/metrics 额外后缀、分享 owner 和无尾随斜杠等受保护近似路径，全部改经真实过滤器入口断言放行或既有 401。`FilterOwnershipTest` 同时拒绝头文件分类规则回归，并从实现文件锁定私有路径集合及 `doFilter()` 调用关系。
+
+首次聚焦回归的唯一失败是相邻归属合同仍从头文件读取路径字面量；同步后定向复验 1/1、完整聚焦 CTest 61/61 和 OpenSpec 24/24 通过。首次完整套件在既有 Redis 运行时用例出现连接已建立但未发命令的客户端挂起，Redis 同期可用且无 blocked client；中止后该用例定向 1/1（0.02 秒），带 300 秒默认单项上限的第二轮完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 506.96 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；全局 JWT 所有权、route-level 分享保护、认证属性、响应、日志、限流顺序、schema 和迁移合同均未改变，Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

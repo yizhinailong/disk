@@ -8,8 +8,6 @@
  */
 #pragma once
 
-#include <string>
-
 #include <drogon/HttpFilter.h>
 
 #include "services/TokenService.hpp"
@@ -17,17 +15,6 @@
 namespace disk::filters {
     class JwtAuthFilter : public drogon::HttpCoroFilter<JwtAuthFilter> {
     public:
-        [[nodiscard]]
-        static auto IsPublicPath(const std::string& path) -> bool {
-            return path == "/api/auth/register" || path == "/api/auth/login" ||
-                   path == "/api/auth/refresh" || path == "/api/health" ||
-                   path == "/api/health/live" || path == "/api/health/ready" ||
-                   path == "/metrics" ||
-                   path.rfind("/api/share/access/", 0) == 0 ||
-                   path.rfind("/api/share/browse/", 0) == 0 ||
-                   path.rfind("/api/share/download/", 0) == 0;
-        }
-
         /**
          * @brief JWT认证过滤器
          * @param request HTTP请求

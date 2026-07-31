@@ -15,9 +15,13 @@
 
 #include "filters/JwtAuthFilter.hpp"
 
+#include <array>
 #include <chrono>
 #include <string>
+#include <string_view>
 
+#include <drogon/HttpRequest.h>
+#include <drogon/utils/coroutine.h>
 #include <gtest/gtest.h>
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/open-source-parsers-jsoncpp/traits.h>
@@ -32,16 +36,54 @@ namespace {
 
     constexpr const char* TEST_JWT_SECRET = "test_secret_key_for_share_token_32b";
 
-    TEST(JwtAuthFilterPathTest, ExemptsAllHealthProbePathsExactly) {
-        EXPECT_TRUE(disk::filters::JwtAuthFilter::IsPublicPath("/api/health"));
-        EXPECT_TRUE(disk::filters::JwtAuthFilter::IsPublicPath("/api/health/live"));
-        EXPECT_TRUE(disk::filters::JwtAuthFilter::IsPublicPath("/api/health/ready"));
-        EXPECT_FALSE(disk::filters::JwtAuthFilter::IsPublicPath("/api/health/ready/extra"));
+    template <typename Filter>
+    concept HasPublicPathClassifier = requires(const std::string& path) {
+        Filter::IsPublicPath(path);
+    };
+
+    static_assert(!HasPublicPathClassifier<disk::filters::JwtAuthFilter>);
+
+    auto FilterPath(std::string_view path) -> drogon::HttpResponsePtr {
+        auto request = drogon::HttpRequest::newHttpRequest();
+        request->setPath(std::string(path));
+        return drogon::sync_wait(disk::filters::JwtAuthFilter{}.doFilter(request));
     }
 
-    TEST(JwtAuthFilterPathTest, ExemptsOnlyExactInternalMetricsPath) {
-        EXPECT_TRUE(disk::filters::JwtAuthFilter::IsPublicPath("/metrics"));
-        EXPECT_FALSE(disk::filters::JwtAuthFilter::IsPublicPath("/metrics/extra"));
+    TEST(JwtAuthFilterPathTest, ExemptsDocumentedPublicPathsThroughFilterEntryPoint) {
+        constexpr std::array<std::string_view, 10> public_paths{
+            "/api/auth/register",
+            "/api/auth/login",
+            "/api/auth/refresh",
+            "/api/health",
+            "/api/health/live",
+            "/api/health/ready",
+            "/metrics",
+            "/api/share/access/public-share",
+            "/api/share/browse/public-share",
+            "/api/share/download/public-share/file",
+        };
+
+        for (const auto path : public_paths) {
+            EXPECT_EQ(FilterPath(path), nullptr) << path;
+        }
+    }
+
+    TEST(JwtAuthFilterPathTest, ProtectsNonExemptAndNearMissPathsThroughFilterEntryPoint) {
+        constexpr std::array<std::string_view, 7> protected_paths{
+            "/api/auth/logout",
+            "/api/auth/register/extra",
+            "/api/health/ready/extra",
+            "/metrics/extra",
+            "/api/share",
+            "/api/share/access",
+            "/api/shares/access/public-share",
+        };
+
+        for (const auto path : protected_paths) {
+            const auto response = FilterPath(path);
+            ASSERT_NE(response, nullptr) << path;
+            EXPECT_EQ(response->getStatusCode(), drogon::k401Unauthorized) << path;
+        }
     }
 
     /// ================================================================================

@@ -96,6 +96,11 @@ Backend filters SHALL expose only helper capabilities consumed across production
 - **WHEN** whole-repository and compiled-object audits confirm that `RequestTraceFilter::GenerateRequestId` and `IsValidRequestId` have no external production consumer while `main.cpp` and the global filter both depend on `ResolveRequestId`
 - **THEN** generation and validation SHALL become implementation-private helpers while `ResolveRequestId`, safe upstream-ID acceptance, invalid-ID UUID fallback, existing-attribute preservation, response correlation, and process-drain request admission retain direct coverage
 
+#### Scenario: JWT public-path classification is internalized
+
+- **WHEN** whole-repository and compiled-object audits confirm that `JwtAuthFilter::IsPublicPath` is consumed in production only by the filter implementation while direct external calls belong only to unit tests
+- **THEN** public-path classification SHALL become implementation-private and auth, health, metrics, public-share, and protected near-miss behavior SHALL be covered through `JwtAuthFilter::doFilter` without changing global-filter ownership or route-level protection
+
 ### Requirement: Repository surfaces follow production use
 
 Backend repository classes SHALL expose only persistence primitives used by production flows, while persisted compatibility contracts remain governed by their separate migration-retirement gates.

@@ -112,7 +112,11 @@ TEST(FilterOwnershipTest, GlobalFiltersContainOnlyGlobalOwners) {
 }
 
 TEST(FilterOwnershipTest, PublicRoutesAreCentralJwtExemptions) {
-    const auto jwt_filter = ReadTextFile(SourceRoot() / "src" / "filters" / "JwtAuthFilter.hpp");
+    const auto jwt_header = ReadTextFile(SourceRoot() / "src" / "filters" / "JwtAuthFilter.hpp");
+    const auto jwt_filter = ReadTextFile(SourceRoot() / "src" / "filters" / "JwtAuthFilter.cpp");
+
+    EXPECT_EQ(jwt_header.find("IsPublicPath"), std::string::npos);
+    EXPECT_NE(jwt_filter.find("if (IsPublicPath(request->path()))"), std::string::npos);
 
     EXPECT_NE(jwt_filter.find("path == \"/api/auth/register\""), std::string::npos);
     EXPECT_NE(jwt_filter.find("path == \"/api/auth/login\""), std::string::npos);
