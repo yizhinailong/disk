@@ -1933,6 +1933,14 @@ Compose 使用该镜像启动 PostgreSQL、Redis、固定 MinIO/mc、两个 API�
 
 clang-format、完整构建、相关直接 GoogleTest 53/53、上传生命周期/仓储/Worker/手动清理/真实状态机/安全不变量/拓扑聚焦 CTest 57/57（120.17 秒）和 OpenSpec 严格校验 24/24 通过。不带命令行额外超时的完整 CTest 共 1425 项：1418 通过、7 项按环境门控跳过、0 失败，总耗时 507.89 秒。本批没有重跑 15.74/15.75 的带门禁环境复验，也不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.77 永久删除配额失败原子回滚记录（2026-07-31）
+
+数据库设计、系统测试、单元测试和 OpenSpec 先行固定永久删除原子性：`users.storage_used` 扣减失败时，同一事务内的回收站删除、内容 `ref_count` 扣减与 Blob GC 入队必须全部回滚。调用链审计确认 `TrashService` 原先使用返回 `Task<void>` 的 `QuotaService::AdjustUsedStorage`；该 facade 只记录 `AdjustUsedStorageChecked` 的错误并正常返回，会让外层事务在配额写入失败后继续提交，形成文件已永久删除而用户已用空间未释放的不一致状态。
+
+无检查 facade 的声明与实现已删除，永久删除改为调用 `AdjustUsedStorageChecked` 并把失败传播到既有事务回滚路径；配额 SQL、批量响应、成功语义与 Blob GC 协议均未改变。真实 PostgreSQL 集成测试为目标用户安装条件 trigger，强制拒绝 `storage_used` 扣减并证明该项返回稳定失败、回收站行与内容引用保留、配额和 GC 任务数不变、Blob 仍存在；移除 trigger 后重试永久删除，再证明配额释放、引用归零、GC 收敛和 Blob 删除。
+
+clang-format、Python 语法、完整构建、相关直接 GoogleTest 73/73、配额/回收站/对账/清理/拓扑聚焦 CTest 95/95（16.04 秒）和 OpenSpec 严格校验 24/24 通过。不带命令行额外超时的完整 CTest 共 1425 项：1418 通过、7 项按环境门控跳过、0 失败，总耗时 506.15 秒。本批没有重跑 15.74/15.75 的带门禁环境复验，也不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

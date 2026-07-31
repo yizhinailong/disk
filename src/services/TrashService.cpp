@@ -1564,12 +1564,15 @@ namespace disk::trash {
             disk::quota::QuotaService quota_service(m_db_client);
             for (const auto& [user_id, delta] : user_storage_delta) {
                 if (delta != 0) {
-                    co_await quota_service.AdjustUsedStorage(
+                    auto quota_result = co_await quota_service.AdjustUsedStorageChecked(
                         transaction,
                         user_id,
                         delta,
                         log_context
                     );
+                    if (!quota_result) {
+                        throw std::runtime_error(quota_result.error().message);
+                    }
                 }
             }
 

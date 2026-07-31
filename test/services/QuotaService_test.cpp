@@ -92,8 +92,18 @@ namespace disk::quota {
             );
         };
 
+        template <typename Service>
+        concept HasUncheckedUsedStorageAdjustment = requires(const Service& service) {
+            service.AdjustUsedStorage(
+                std::declval<const drogon::orm::DbClientPtr&>(),
+                uint64_t{ 1 },
+                int64_t{ -1 }
+            );
+        };
+
         static_assert(!HasStandaloneReconciliation<QuotaService>);
         static_assert(!HasClientReconciliation<QuotaService>);
+        static_assert(!HasUncheckedUsedStorageAdjustment<QuotaService>);
 
         TEST(QuotaServiceCompileTest, CanConstructWithNullDbClient) {
             QuotaService service(nullptr);
@@ -158,11 +168,11 @@ namespace disk::quota {
 
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                11U
+                10U
             );
             EXPECT_EQ(CountOccurrences(source, "Logger::Debug(log_context)"), 5U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 3U);
-            EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 9U);
+            EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 8U);
             EXPECT_EQ(
                 CountOccurrences(
                     source,
@@ -189,11 +199,7 @@ namespace disk::quota {
                 "co_await ReleaseReservedStorageChecked(",
                 1U
             ));
-            EXPECT_TRUE(EveryCallContainsContext(
-                source,
-                "co_await AdjustUsedStorageChecked(",
-                1U
-            ));
+            EXPECT_FALSE(Contains(source, "co_await AdjustUsedStorageChecked("));
             EXPECT_TRUE(EveryCallContainsContext(
                 upload_lifecycle,
                 "quota_service.",
@@ -205,6 +211,12 @@ namespace disk::quota {
                 4U
             ));
             EXPECT_TRUE(EveryCallContainsContext(trash, "quota_service.", 1U));
+            EXPECT_TRUE(Contains(
+                trash,
+                "auto quota_result = co_await quota_service.AdjustUsedStorageChecked("
+            ));
+            EXPECT_TRUE(Contains(trash, "if (!quota_result)"));
+            EXPECT_FALSE(Contains(trash, "quota_service.AdjustUsedStorage("));
 
             EXPECT_FALSE(Contains(source, "log_context."));
             EXPECT_FALSE(Contains(source, ".what()"));

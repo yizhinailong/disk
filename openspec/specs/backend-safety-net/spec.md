@@ -67,6 +67,10 @@ The system SHALL provide integration safety tests that characterize current quot
 - **WHEN** a file is moved to trash and then permanently deleted or removed by expired-trash cleanup through the deterministic cleanup trigger
 - **THEN** the safety test MUST verify that `users.storage_used` changes according to the current backend rule and that the observed rule is documented by the test name or assertion message
 
+#### Scenario: Trash quota adjustment failure rolls back permanent deletion
+- **WHEN** a PostgreSQL failure-injection trigger rejects the target user's `storage_used` decrement during permanent trash deletion
+- **THEN** the request MUST report the item failure and the transaction MUST preserve the trash row, content reference count, quota counters, Blob GC job inventory, and physical Blob, while removing the trigger and retrying MUST converge through the normal permanent-deletion path
+
 ### Requirement: File and folder namespace safety invariants
 The system SHALL provide integration safety tests that characterize current move, copy, and path consistency behavior for files and folders.
 

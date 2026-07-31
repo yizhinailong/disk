@@ -103,13 +103,6 @@ namespace disk::quota {
             disk::utils::LogContext log_context = {}
         ) const -> drogon::Task<Result<void>>;
 
-        auto AdjustUsedStorage(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t user_id,
-            int64_t delta,
-            disk::utils::LogContext log_context = {}
-        ) const -> drogon::Task<void>;
-
         [[nodiscard]]
         auto AdjustUsedStorageChecked(
             const drogon::orm::DbClientPtr& client,

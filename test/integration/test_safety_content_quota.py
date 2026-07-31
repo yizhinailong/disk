@@ -562,6 +562,30 @@ def install_reserved_release_failure_trigger(user_id: int):
     return lambda: drop_failure_trigger("users", trigger_name, function_name)
 
 
+def install_used_storage_decrement_failure_trigger(user_id: int):
+    """Install a trigger that rejects used-storage decrements for one user."""
+    function_name = safe_test_identifier("fail_used_decrement_fn")
+    trigger_name = safe_test_identifier("fail_used_decrement_trg")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.id = {int(user_id)}
+               AND NEW.storage_used < OLD.storage_used THEN
+                RAISE EXCEPTION 'injected used storage decrement failure for user %', NEW.id;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON users '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("users", trigger_name, function_name)
+
+
 def assert_delete_transaction_error(label: str, resp) -> None:
     """Assert delete transaction failures keep the stable public error contract."""
     assert_equal(f"{label} returns HTTP 500", resp.status_code, 500)
@@ -625,15 +649,21 @@ def share_status(share_id: int) -> int:
     return int(status)
 
 
-def permanently_delete_trash(trash_id: int) -> None:
-    """Permanently delete one trash item."""
+def permanently_delete_trash_response(trash_id: int, request_id: str | None = None):
+    """Permanently delete one trash item and return the raw HTTP response."""
     resp = fetch(
         "/api/trash",
         method="DELETE",
-        headers=auth_headers(),
+        headers=auth_headers(request_id=request_id),
         json_body={"trash_ids": [trash_id]},
     )
     save_evidence(f"{EVIDENCE_PREFIX}-trash-delete-{trash_id}.json", resp.text)
+    return resp
+
+
+def permanently_delete_trash(trash_id: int) -> None:
+    """Permanently delete one trash item."""
+    resp = permanently_delete_trash_response(trash_id)
     if resp.status_code != 200 or json_field(resp.text, "data.results.0.status") != "success":
         log_fail(f"permanent trash delete failed: trash_id={trash_id}")
         print(resp.text)
@@ -1705,6 +1735,82 @@ def test_delete_all_ref_count_quota_and_blob_cleanup() -> None:
     assert_path_absent("delete-all deletes blob at zero ref_count", blob_path)
 
 
+def test_permanent_delete_quota_failure_rolls_back_and_retries() -> None:
+    """Verify a failed used-storage decrement rolls back permanent deletion."""
+    log_section("Permanent Delete Quota Failure Rollback And Retry")
+    empty_trash()
+    payload = f"trash-quota-rollback-{unique_name()}".encode()
+    file_id = upload_file(f"safety_trash_quota_{unique_name()}.bin", payload)
+    content_id = int(file_row(file_id)["content_id"])
+    content = content_row(content_id)
+    blob_path = local_blob_path(str(content["storage_path"]))
+    trash_id = delete_file_to_trash(file_id)
+    quota_before = user_quota()
+    ref_before = int(content_row(content_id)["ref_count"])
+    job_key = f"blob-gc:{content_id}"
+    jobs_before = int(
+        scalar("SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s", (job_key,)) or 0
+    )
+    request_id = f"trash-quota-rollback-{unique_name()}"
+    cleanup_trigger = install_used_storage_decrement_failure_trigger(USER_ID)
+
+    try:
+        response = permanently_delete_trash_response(trash_id, request_id)
+    finally:
+        cleanup_trigger()
+
+    assert_equal("quota failure returns HTTP 200 batch response", response.status_code, 200)
+    assert_equal("quota failure keeps success envelope", json_field(response.text, "code"), "0")
+    assert_equal(
+        "quota failure reports one failed item",
+        json_field(response.text, "data.results.0.status"),
+        "failed",
+    )
+    assert_equal(
+        "quota failure reports InternalError",
+        json_field(response.text, "data.results.0.error.code"),
+        "10006",
+    )
+    assert_equal(
+        "quota failure returns stable item message",
+        json_field(response.text, "data.results.0.error.message"),
+        "Failed to permanently delete file",
+    )
+    assert_equal(
+        "quota failure keeps trash row",
+        query_one("SELECT id FROM trash WHERE id = %s", (trash_id,)) is not None,
+        True,
+    )
+    assert_equal(
+        "quota failure rolls back content decrement",
+        int(content_row(content_id)["ref_count"]),
+        ref_before,
+    )
+    assert_equal("quota failure preserves quota", user_quota(), quota_before)
+    assert_equal(
+        "quota failure rolls back Blob GC enqueue",
+        int(scalar("SELECT COUNT(*) FROM storage_jobs WHERE dedupe_key = %s", (job_key,)) or 0),
+        jobs_before,
+    )
+    assert_path_exists("quota failure retains physical Blob", blob_path)
+
+    permanently_delete_trash(trash_id)
+    assert_db_row_absent(
+        "quota retry removes trash row",
+        "SELECT id FROM trash WHERE id = %s",
+        (trash_id,),
+    )
+    assert_equal("quota retry reaches zero ref_count", int(content_row(content_id)["ref_count"]), 0)
+    assert_numeric_delta(
+        "quota retry releases used storage",
+        quota_before["storage_used"],
+        user_quota()["storage_used"],
+        -len(payload),
+    )
+    assert_storage_job_succeeded("quota retry Blob GC job converges", job_key)
+    assert_path_absent("quota retry deletes zero-reference Blob", blob_path)
+
+
 def test_permanent_delete_ref_count_and_blob_retention() -> None:
     """Verify selected permanent delete decrements refs and keeps shared blobs until zero refs."""
     log_section("Permanent Delete Ref-Count And Blob Retention")
@@ -1827,6 +1933,7 @@ def main() -> None:
     test_folder_soft_delete_snapshot_preserves_ref_count_and_storage()
     test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_share_cleanup()
     test_delete_all_ref_count_quota_and_blob_cleanup()
+    test_permanent_delete_quota_failure_rolls_back_and_retries()
     test_permanent_delete_ref_count_and_blob_retention()
     test_expired_trash_cleanup_ref_count_quota_and_blob_retention()
 

@@ -210,18 +210,6 @@ namespace disk::quota {
         }
     }
 
-    auto QuotaService::AdjustUsedStorage(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t user_id,
-        int64_t delta,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<void> {
-        auto result = co_await AdjustUsedStorageChecked(client, user_id, delta, log_context);
-        if (!result) {
-            Logger::Error(log_context) << "Storage usage adjustment failed";
-        }
-    }
-
     auto QuotaService::AdjustUsedStorageChecked(
         const drogon::orm::DbClientPtr& client,
         uint64_t user_id,
