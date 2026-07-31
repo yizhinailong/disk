@@ -8,16 +8,10 @@
 namespace disk::jobs {
 
     StorageWorkerRuntime::StorageWorkerRuntime(
-        std::string instance_id,
         RunCallback run_callback,
         StorageWorkerRuntimeOptions options
     ) : m_run_callback(std::move(run_callback)),
         m_options(options) {
-        if (instance_id.empty() || instance_id.size() > 128) {
-            throw std::invalid_argument(
-                "Storage worker runtime instance ID must contain 1 to 128 characters"
-            );
-        }
         if (!m_run_callback) {
             throw std::invalid_argument("Storage worker runtime callback is required");
         }

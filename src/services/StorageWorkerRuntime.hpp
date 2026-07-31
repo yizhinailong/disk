@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <string>
 
 #include <drogon/utils/coroutine.h>
 #include <trantor/net/EventLoop.h>
@@ -23,7 +22,6 @@ namespace disk::jobs {
             std::function<drogon::Task<Result<StorageJobRunResult>>()>;
 
         StorageWorkerRuntime(
-            std::string instance_id,
             RunCallback run_callback,
             StorageWorkerRuntimeOptions options = {}
         );

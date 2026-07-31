@@ -264,6 +264,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site audit confirms that `ScheduledTasks::IsAccepting` has no caller and `StorageWorkerRuntime::IsAccepting` is only used by redundant test assertions while `PollOnce` already proves the admission behavior
 - **THEN** both public probes and the redundant assertions SHALL be removed while internal admission state, Worker polling, scheduler seeding, drain or stop behavior, and in-flight drain observation remain unchanged
 
+#### Scenario: Worker runtime retains no unused identity input
+
+- **WHEN** a whole-repository data-flow audit confirms that `StorageWorkerRuntime` only validates and discards its instance ID while `StorageJobWorker` independently validates, stores, and uses the same configured identity for lease ownership
+- **THEN** the runtime constructor SHALL accept only its execution callback and polling options while Worker lease identity, scheduled-task identity, structured-log instance registration, polling, drain, and shutdown behavior remain unchanged
+
 #### Scenario: Unused share timestamp helper is removed
 
 - **WHEN** a whole-repository call-site audit confirms that `ShareService::UpdateTimestamp` has no production or test caller

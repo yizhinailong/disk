@@ -2141,6 +2141,14 @@ clang-format、差异检查、完整构建、直接 SystemService/LogContext Goo
 
 clang-format、差异检查、后端与测试目标完整构建、直接 OperationLog GoogleTest 5/5、操作日志合同与真实分页/日志安全网聚焦 CTest 6/6（118.81 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1443 项：1436 项通过、7 项按环境门控跳过、0 失败，总耗时 524.65 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.103 Worker 运行时实例伪输入清理记录（2026-08-01）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定 Worker 运行时的最小构造边界。全仓构造点与数据流审计确认，`StorageWorkerRuntime` 的 `instance_id` 参数只在构造期检查长度，之后既不保存也不参与轮询、排空、日志或关停；同一配置值已由先行构造的 `StorageJobWorker` 独立校验、保存并用于任务认领、续租和结果回写的 lease owner，`ScheduledTasks` 也独立持有实际播种身份。新增构造能力合同在旧实现上按预期 0/1 失败：回调/选项形状不可构造，而旧实例 ID/回调/选项形状仍可构造。
+
+`StorageWorkerRuntime` 构造器现只接收 `RunCallback` 与可选轮询配置，重复的实例参数、长度校验和不再需要的 `<string>` include 已删除；`main` 的唯一生产构造点不再向运行时重复传入实例 ID，单元夹具同步使用最小形状。`StorageJobWorker` 的实例参数、1 至 128 字符校验、`m_instance_id` 与全部仓储租约调用均未修改，ConfigMgr/ProcessRuntime 的实例校验、Scheduler 身份、`Logger::SetInstanceId`、回调必选和轮询间隔校验也保持不变。构造能力合同正向锁定新形状并拒绝旧伪输入回归。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 StorageWorkerRuntime GoogleTest 7/7、运行时/进程身份/角色切换/真实排空接管/拓扑聚焦 CTest 19/19（35.29 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1444 项：1437 项通过、7 项按环境门控跳过、0 失败，总耗时 523.65 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

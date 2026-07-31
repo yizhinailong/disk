@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -17,8 +18,6 @@
 
 namespace disk::jobs {
     namespace {
-        constexpr std::string_view CONSTRUCTOR_INSTANCE =
-            "constructor-runtime-instance-sensitive";
         constexpr std::string_view RESULT_SECRET =
             "result-secret sql=SELECT endpoint=http://database.internal";
         constexpr std::string_view EXCEPTION_SECRET =
@@ -36,6 +35,18 @@ namespace disk::jobs {
 
         static_assert(!HasIsStarted<StorageWorkerRuntime>);
         static_assert(!HasIsAccepting<StorageWorkerRuntime>);
+
+        TEST(StorageWorkerRuntimeContractTest, ConstructorUsesOnlyRuntimeInputs) {
+            EXPECT_TRUE((std::is_constructible_v<
+                         StorageWorkerRuntime,
+                         StorageWorkerRuntime::RunCallback,
+                         StorageWorkerRuntimeOptions>));
+            EXPECT_FALSE((std::is_constructible_v<
+                          StorageWorkerRuntime,
+                          std::string,
+                          StorageWorkerRuntime::RunCallback,
+                          StorageWorkerRuntimeOptions>));
+        }
 
         class StorageWorkerRuntimeLogTest : public ::testing::Test {
         protected:
@@ -128,16 +139,11 @@ namespace disk::jobs {
             };
 
             EXPECT_THROW(
-                StorageWorkerRuntime("", callback),
-                std::invalid_argument
-            );
-            EXPECT_THROW(
-                StorageWorkerRuntime("worker-1", {}),
+                StorageWorkerRuntime(StorageWorkerRuntime::RunCallback{}),
                 std::invalid_argument
             );
             EXPECT_THROW(
                 StorageWorkerRuntime(
-                    "worker-1",
                     callback,
                     StorageWorkerRuntimeOptions{ .poll_interval_ms = 99 }
                 ),
@@ -148,7 +154,6 @@ namespace disk::jobs {
         TEST(StorageWorkerRuntimeTest, DrainsReadyWorkBeforeWaitingForNextTimer) {
             size_t calls = 0;
             StorageWorkerRuntime runtime(
-                "worker-1",
                 [&calls]() -> drogon::Task<Result<StorageJobRunResult>> {
                     calls++;
                     if (calls == 2) {
@@ -170,7 +175,6 @@ namespace disk::jobs {
         TEST(StorageWorkerRuntimeTest, StopsContinuousDrainAfterRunnerFailure) {
             size_t calls = 0;
             StorageWorkerRuntime runtime(
-                "worker-1",
                 [&calls]() -> drogon::Task<Result<StorageJobRunResult>> {
                     calls++;
                     if (calls == 1) {
@@ -190,7 +194,6 @@ namespace disk::jobs {
         TEST(StorageWorkerRuntimeTest, ContainsRunnerFailuresAndCanPollAgain) {
             size_t calls = 0;
             StorageWorkerRuntime runtime(
-                "worker-1",
                 [&calls]() -> drogon::Task<Result<StorageJobRunResult>> {
                     calls++;
                     if (calls == 1) {
@@ -211,7 +214,6 @@ namespace disk::jobs {
         TEST(StorageWorkerRuntimeTest, DrainPermanentlyStopsNewClaims) {
             size_t calls = 0;
             StorageWorkerRuntime runtime(
-                "worker-1",
                 [&calls]() -> drogon::Task<Result<StorageJobRunResult>> {
                     calls++;
                     co_return StorageJobRunResult{};
@@ -229,7 +231,6 @@ namespace disk::jobs {
         TEST_F(StorageWorkerRuntimeLogTest, EmitsTypedContextWithoutFailureDetails) {
             size_t success_calls = 0;
             StorageWorkerRuntime successful_runtime(
-                std::string(CONSTRUCTOR_INSTANCE),
                 [&success_calls]() -> drogon::Task<Result<StorageJobRunResult>> {
                     success_calls++;
                     if (success_calls == 1) {
@@ -246,7 +247,6 @@ namespace disk::jobs {
             EXPECT_EQ(success_calls, 2U);
 
             StorageWorkerRuntime failed_runtime(
-                std::string(CONSTRUCTOR_INSTANCE),
                 []() -> drogon::Task<Result<StorageJobRunResult>> {
                     co_return std::unexpected(
                         ErrorInfo(ErrorCode::InternalError, std::string(RESULT_SECRET))
@@ -256,7 +256,6 @@ namespace disk::jobs {
             EXPECT_TRUE(drogon::sync_wait(failed_runtime.PollOnce()));
 
             StorageWorkerRuntime throwing_runtime(
-                std::string(CONSTRUCTOR_INSTANCE),
                 []() -> drogon::Task<Result<StorageJobRunResult>> {
                     throw std::runtime_error(std::string(EXCEPTION_SECRET));
                     co_return StorageJobRunResult{};
@@ -265,7 +264,6 @@ namespace disk::jobs {
             EXPECT_TRUE(drogon::sync_wait(throwing_runtime.PollOnce()));
 
             StorageWorkerRuntime draining_runtime(
-                std::string(CONSTRUCTOR_INSTANCE),
                 []() -> drogon::Task<Result<StorageJobRunResult>> {
                     co_return StorageJobRunResult{};
                 }
@@ -301,7 +299,6 @@ namespace disk::jobs {
             );
 
             const auto output = m_output.str();
-            EXPECT_EQ(output.find(CONSTRUCTOR_INSTANCE), std::string::npos);
             EXPECT_EQ(output.find(RESULT_SECRET), std::string::npos);
             EXPECT_EQ(output.find(EXCEPTION_SECRET), std::string::npos);
         }

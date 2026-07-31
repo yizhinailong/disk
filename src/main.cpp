@@ -368,7 +368,6 @@ auto main() -> int {
                 )
             );
             auto worker_runtime = std::make_shared<disk::jobs::StorageWorkerRuntime>(
-                config->GetInstanceId(),
                 [worker]() -> drogon::Task<Result<disk::jobs::StorageJobRunResult>> {
                     co_return co_await worker->RunOnce();
                 },
