@@ -323,3 +323,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that the private `TrashService` overloads which accept only a `trash_id` for file/folder restore or permanent delete are never called because the active batch entries prefetch `TrashLifecycleRecord` values
 - **THEN** those four standalone-query forwarding overloads SHALL be removed while the record-based restore and permanent-delete paths retain their locked transactions, batch results, content references, quota accounting, cache invalidation, and logging context
+
+#### Scenario: Unused trash permanent-delete wrappers are removed
+
+- **WHEN** a whole-repository call-site audit confirms that the record-based private `TrashService::DeleteFile` and `TrashService::DeleteFolder` wrappers have no caller because `Delete` validates each prefetched item and invokes `PermanentlyDeleteTrashItems` directly
+- **THEN** those two unreachable wrappers SHALL be removed while the active batch path retains per-item validation and results, atomic content-reference and quota updates, Blob GC enqueueing, error messages, and logging context

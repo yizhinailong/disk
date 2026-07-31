@@ -110,7 +110,7 @@ namespace disk::trash {
             EXPECT_EQ(CountOccurrences(dto_source, "disk::utils::LogContext log_context = {}"), 2);
             EXPECT_EQ(
                 CountOccurrences(service_body, "disk::utils::LogContext log_context"),
-                10
+                8
             );
             for (const auto* call_marker : {
                      "co_await RestoreFile(",
@@ -132,6 +132,8 @@ namespace disk::trash {
                      "auto TrashService::RestoreFolder(\n        uint64_t trash_id,",
                      "auto TrashService::DeleteFile(\n        uint64_t trash_id,",
                      "auto TrashService::DeleteFolder(\n        uint64_t trash_id,",
+                     "auto TrashService::DeleteFile(\n        const TrashLifecycleRecord& trash_item,",
+                     "auto TrashService::DeleteFolder(\n        const TrashLifecycleRecord& trash_item,",
                  }) {
                 EXPECT_FALSE(Contains(service_source, obsolete_helper));
             }

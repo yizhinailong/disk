@@ -154,7 +154,7 @@ namespace disk::trash {
                 "auto TrashService::RestoreFolder(\n        const TrashLifecycleRecord&"
             );
             const auto restore_end = service_source.find(
-                "auto TrashService::DeleteFile(",
+                "auto TrashService::PermanentlyDeleteTrashItems(",
                 restore_begin
             );
 

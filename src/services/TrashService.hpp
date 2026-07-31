@@ -290,40 +290,6 @@ namespace disk::trash {
         ) -> drogon::Task<void>;
 
         /**
-         * @brief 永久删除单个文件
-         *
-         * @param trash_item 回收站生命周期记录
-         * @param user_id 用户 ID
-         * @param result 输出参数：操作结果
-         * @param log_context 请求日志上下文
-         * @return drogon::Task<uint64_t> 返回释放的空间大小
-         */
-        auto DeleteFile(
-            const TrashLifecycleRecord& trash_item,
-            uint64_t user_id,
-            BatchResultItem& result,
-            disk::utils::LogContext log_context
-        )
-            -> drogon::Task<uint64_t>;
-
-        /**
-         * @brief 永久删除单个文件夹
-         *
-         * @param trash_item 回收站生命周期记录
-         * @param user_id 用户 ID
-         * @param result 输出参数：操作结果
-         * @param log_context 请求日志上下文
-         * @return drogon::Task<uint64_t> 返回释放的空间大小
-         */
-        auto DeleteFolder(
-            const TrashLifecycleRecord& trash_item,
-            uint64_t user_id,
-            BatchResultItem& result,
-            disk::utils::LogContext log_context
-        )
-            -> drogon::Task<uint64_t>;
-
-        /**
          * @brief 从文件名提取扩展名
          *
          * @param filename 文件名
