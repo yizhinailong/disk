@@ -76,6 +76,18 @@ namespace disk::share {
             ASSERT_FALSE(audit_header.empty());
             ASSERT_FALSE(audit_source.empty());
 
+            const auto service_class_begin = service_header.find("    class ShareService {");
+            ASSERT_NE(service_class_begin, std::string::npos);
+            const auto service_private_begin =
+                service_header.find("    private:", service_class_begin);
+            ASSERT_NE(service_private_begin, std::string::npos);
+            const auto public_service_interface = service_header.substr(
+                service_class_begin,
+                service_private_begin - service_class_begin
+            );
+            EXPECT_FALSE(Contains(public_service_interface, "auto FindShareByCode("));
+            EXPECT_TRUE(Contains(public_service_interface, "auto CompleteDownload("));
+
             EXPECT_EQ(
                 CountOccurrences(
                     controller_source,

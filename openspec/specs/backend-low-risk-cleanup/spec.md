@@ -303,3 +303,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that `CleanupService::CleanupExpiredTrash` and `CleanupService::CleanupExpiredUploadTasks` are called only by `RunExpiredCleanupOnce` in the same class
 - **THEN** both stage methods SHALL become private while the public composite entry point, aggregate result, trash and upload ordering, error propagation, logging context, and administrator route behavior remain unchanged
+
+#### Scenario: Internal share-code lookup stays private
+
+- **WHEN** a whole-repository call-site audit confirms that `ShareService::FindShareByCode` is called only by share access and failed-access handling inside `ShareService`
+- **THEN** the lookup helper SHALL become private while controller-facing share commands, the public download-completion hook, lookup errors, access throttling, audit writes, and request context propagation remain unchanged

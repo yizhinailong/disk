@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，手动清理阶段公开面收紧）：全仓调用审计确认，`CleanupService::CleanupExpiredTrash` 与 `CleanupExpiredUploadTasks` 只由同类的 `RunExpiredCleanupOnce` 组合入口调用，管理员路由没有阶段级消费者。OpenSpec 与单元测试文档先行后，两阶段方法已改为私有；C++23 concept 正向锁定唯一公开组合入口并拒绝阶段方法重新暴露，固定回收站优先、上传随后、聚合计数与错误传播行为未改。clang-format、完整构建、含真实管理员清理链路的聚焦 CTest 15/15 和 OpenSpec 24/24 通过；完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 508.39 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；受保护的 local/legacy 路由、REST、schema、配置及错误映射未改变，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，分享码查询公开面收紧）：全仓调用审计确认，`ShareService::FindShareByCode` 只有分享访问与失败访问处理两个同类内部调用，控制器不依赖该数据库查询 helper；`CompleteDownload` 仍是下载控制器需要的公开协作入口。OpenSpec 与单元测试文档先行后，查询 helper 已移入私有区，源码合同负向拒绝重新公开并正向保留下载完成入口。clang-format、完整构建、分享管理/密码/审计/令牌安全/下载/拓扑聚焦 CTest 7/7 和 OpenSpec 24/24 通过；完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 508.93 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；查询错误、失败计数、审计、下载统计、REST、schema、配置及迁移行为未改变，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1888,6 +1888,14 @@ clang-format、完整构建、Local/S3/readiness/对账/Worker/下载聚焦 CTes
 `CleanupService` 现在只公开 `RunExpiredCleanupOnce`，两个阶段声明移入私有区；实现、回收站优先于上传的执行顺序、任一阶段失败时的错误传播、`CleanupRunResult` 聚合计数、日志上下文与管理员 REST 行为均未改。`CleanupService_test.cpp` 以 C++23 concept 正向要求组合入口可调用，并在编译期拒绝两个阶段入口重新成为公开能力。
 
 clang-format、完整构建、CleanupService/分布式拓扑/真实管理员清理链路聚焦 CTest 15/15 和 OpenSpec 严格校验 24/24 通过；不带命令行 `--timeout` 的完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 508.39 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；本批不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支，也不构成目标 HA、TLS/KMS、长稳或压力验收，因此 Phase 3/6/9/10 及最终 Definition of Done 继续保持未勾选。
+
+### 15.72 分享码查询公开面收紧记录（2026-07-31）
+
+后端低风险清理 OpenSpec 与单元测试文档先行固定分享服务公开边界。全仓声明、定义和调用审计确认，`ShareService::FindShareByCode` 只由 `Access` 和失败访问处理流程在同类内部调用；分享控制器的九个业务命令不调用它，下载响应完成后只通过 `CompleteDownload` 更新统计并写审计。分享码查询 helper 不是 REST、迁移、回滚或目标环境兼容入口。
+
+`FindShareByCode` 声明现位于 `ShareService` 首个私有区，查询实现与两个调用点未改；`CompleteDownload` 及九个控制器协作命令继续公开。`ShareLogContextContractTest` 从类声明起点截取首个公开区，负向拒绝查询 helper 重新暴露并正向要求下载完成入口存在；既有上下文调用点计数继续覆盖查询、失败计数、审计和下载更新链路。
+
+clang-format、完整构建、分享源码合同/管理/密码保护/审计/令牌安全/下载/分布式拓扑聚焦 CTest 7/7 和 OpenSpec 严格校验 24/24 通过；不带命令行 `--timeout` 的完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 508.93 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；本批不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支，也不构成目标 HA、TLS/KMS、长稳或压力验收，因此 Phase 3/6/9/10 及最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

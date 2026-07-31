@@ -277,6 +277,18 @@ namespace disk::share {
             -> drogon::Task<Result<SaveShareItemsResponse>>;
 
         /**
+         * @brief 根据最终 HTTP 响应更新统计并写入下载审计
+         */
+        auto CompleteDownload(
+            const DownloadShareRequest& request,
+            uint64_t share_id,
+            const ShareDownloadOutcome& outcome,
+            const ShareAuditContext& audit_context,
+            disk::utils::LogContext log_context = {}
+        ) -> drogon::Task<void>;
+
+    private:
+        /**
          * @brief 根据分享码查找分享
          *
          * @param share_code 分享码
@@ -289,18 +301,6 @@ namespace disk::share {
         ) const
             -> drogon::Task<Result<drogon_model::disk::Shares>>;
 
-        /**
-         * @brief 根据最终 HTTP 响应更新统计并写入下载审计
-         */
-        auto CompleteDownload(
-            const DownloadShareRequest& request,
-            uint64_t share_id,
-            const ShareDownloadOutcome& outcome,
-            const ShareAuditContext& audit_context,
-            disk::utils::LogContext log_context = {}
-        ) -> drogon::Task<void>;
-
-    private:
         /**
          * @brief 生成唯一的分享码
          * @return std::string 分享码
