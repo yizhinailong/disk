@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，周期播种阶段公开面收紧）：全仓调用审计确认，`ScheduledTasks::SeedOnce` 只有私有事件循环触发器 `TriggerSeed` 一个调用方，进程入口只依赖初始化、注册、停止与 drain 观察生命周期。OpenSpec 与单元测试文档先行后，播种阶段已移入私有区，C++23 concept 在编译期拒绝重新公开。clang-format、完整构建、ScheduledTasks 直接 GoogleTest 4/4、调度角色/Worker 接管/拓扑聚焦 CTest 9/9 和 OpenSpec 24/24 通过；完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 508.03 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；首次与周期触发、持久去重、错误日志、角色归属、关停、REST、schema、配置及迁移行为未改变，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，当前候选六项环境门禁全量复验）：候选提交 `a3aa0452` 使用仓库固定且摘要匹配的 MinIO/mc/promtool 与已验证 PgBouncer 1.25.2 临时构建，逐项及完整套件内两次证明 PgBouncer、Prometheus、S3 adapter、S3 应用流、MinIO provisioning 和本地双 API/双 Worker 拓扑 6/6 通过。带门禁完整 CTest 共 1425 项，1424 通过、仅缺少 Docker 的 `DistributedFlowIntegration` 容器拓扑 1 项跳过、0 失败，总耗时 679.44 秒；四份 `0600` 原子证据已绑定 SHA-256，受管进程和临时数据均已清理。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；本机等价拓扑不替代真实 Nginx、TLS/KMS、高可用端点、独立故障域、长稳、压力、真实迁移数据或预发布灰度，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1904,6 +1904,16 @@ clang-format、完整构建、分享源码合同/管理/密码保护/审计/令�
 `SeedOnce` 声明现位于 `ScheduledTasks` 私有区，定义和 `TriggerSeed` 调用点未改；初始化、注册、停止和 drain 观察继续公开。`ScheduledTasks_test.cpp` 新增 C++23 concept，在编译期拒绝该阶段重新成为公开能力。60 秒定时器、注册后的首次立即触发、持久任务去重、固定错误记录、scheduler 角色归属及停止等待语义均未改变。
 
 clang-format、完整构建、ScheduledTasks 直接 GoogleTest 4/4、调度生命周期/角色切换/Worker 接管/分布式拓扑聚焦 CTest 9/9 和 OpenSpec 严格校验 24/24 通过；不带命令行 `--timeout` 的完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 508.03 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。本批不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支，也不构成目标 HA、TLS/KMS、长稳或压力验收，因此 Phase 3/6/9/10 及最终 Definition of Done 继续保持未勾选。
+
+### 15.74 当前候选六项环境门禁全量复验记录（2026-07-31）
+
+候选提交 `a3aa0452` 复用仓库固定测试依赖。MinIO `RELEASE.2025-04-22T22-12-26Z`、mc `RELEASE.2025-04-16T18-13-26Z` 与 promtool `3.13.1` 的摘要逐项匹配仓库引导合同；PgBouncer `1.25.2` 的既有临时构建重新通过版本探针并绑定二进制 SHA-256。当前机器没有 Docker/Podman/nerdctl，因此容器拓扑不具备执行条件；本批没有伪造替代容器运行结果。
+
+六个本机可执行环境门禁先独立通过，并在同一次完整套件中再次通过：PgBouncer 事务池 3.51 秒、Prometheus 规则 0.18 秒、S3 adapter 0.37 秒、S3 应用流 11.16 秒、MinIO provisioning 2.96 秒、本地双 API/双 Worker 拓扑 140.18 秒。最后一项使用隔离 PostgreSQL、持久 Redis、固定 MinIO、两个真实 API、两个真实 Worker 与无粘性代理完成 20 项检查，覆盖严格逐请求 A/B 交替、共享认证和缓存、终态竞态、租约接管、PostgreSQL/Redis/MinIO 故障恢复以及单 API 退出后入口继续服务。
+
+`distributed-flow-summary.json`、`s3-provisioning-summary.json`、`s3-large-promotion-summary.json` 与 `pgbouncer-transaction-pool-summary.json` 均以 `0600` 原子发布，SHA-256 分别为 `d510660413e113dfd78955ae5986df410de9e7e4ef2a3cfe1ed09d80c34adbb9`、`67658d44641e0a0fdf4bdad79d8317b617dacac674f87984971f0d14fd43a1a5`、`de0082e1c3f73c28aadda75958cbe98dcc2b582fe8c51cc362266a25f9401f4f`、`d5f1e28553e5c100c5160e65725000d5e9ce661c64e9d802d0108de17486b576`；字段审计未发现凭据、端口、路径或可重放令牌，全部受管进程与临时 MinIO 目录已清理。
+
+带六项门禁的完整 CTest 共 1425 项，1424 项通过、仅 `DistributedFlowIntegration` 1 项按环境门控跳过、0 失败，总耗时 679.44 秒。文档更新后，Python 语法检查、拓扑合同脚本直接执行与注册 CTest 1/1、OpenSpec 严格校验 24/24 通过；合同同时对账 7 项注册库存与本次 6 项启用结果。本机进程拓扑不能证明当前候选 Dockerfile/Compose 镜像构建，也不替代目标 Nginx、TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据、兼容路径退役或预发布灰度验收，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 

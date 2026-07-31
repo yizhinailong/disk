@@ -1097,6 +1097,25 @@ def main() -> int:
         require((root / relative_path).is_file(), f"documented test entry is missing: {relative_path}")
 
     test_cmake = (root / "test/CMakeLists.txt").read_text(encoding="utf-8")
+    registered_environment_gates = set(
+        re.findall(
+            r"add_disk_gated_integration_test\(\s*([A-Za-z0-9_]+)",
+            test_cmake,
+        )
+    )
+    expected_environment_gates = {
+        "PgBouncerTransactionPoolIntegration",
+        "PrometheusAlertRulesIntegration",
+        "S3StorageAdapterIntegration",
+        "S3AppFlowIntegration",
+        "S3ProvisioningIntegration",
+        "DistributedFlowIntegration",
+        "DistributedLocalFlowIntegration",
+    }
+    require(
+        registered_environment_gates == expected_environment_gates,
+        "CTest environment-gated inventory drifted",
+    )
     require(
         "NAME AuthClusterConsistencyIntegration" in test_cmake
         and "test_auth_cluster_consistency.py" in test_cmake,
@@ -1216,17 +1235,21 @@ def main() -> int:
 
     todo = (root / "TODO.md").read_text(encoding="utf-8")
     latest_verification = re.search(
-        r"^> 最近验证（[^\n]*?）：[^\n]*完整 CTest 共 (\d+) 项，(\d+) 通过、(\d+) 项按环境门控跳过[^\n]*0 失败[^\n]*$",
+        r"^> 最近验证（[^\n]*?）：[^\n]*带门禁完整 CTest 共 (\d+) 项，(\d+) 通过、[^\n]*?(\d+) 项跳过、0 失败[^\n]*$",
         todo,
         re.MULTILINE,
     )
     require(latest_verification is not None, "TODO latest verification summary is missing or malformed")
     total, passed_count, skipped_count = map(int, latest_verification.groups())
     require(
-        (total, passed_count, skipped_count) == (1425, 1418, 7),
+        (total, passed_count, skipped_count) == (1425, 1424, 1),
         "TODO latest CTest inventory drifted without an explicit contract update",
     )
     require(total == passed_count + skipped_count, "TODO latest CTest totals do not reconcile")
+    require(
+        "DistributedFlowIntegration" in latest_verification.group(0),
+        "TODO latest verification must name the sole skipped container gate",
+    )
     require(
         "环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行" in latest_verification.group(0),
         "TODO latest verification must retain the target-environment caveat",
