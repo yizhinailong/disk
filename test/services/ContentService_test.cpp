@@ -42,9 +42,10 @@ namespace disk::content {
             return count;
         }
 
-        auto EveryCallContainsContext(
+        auto EveryCallContains(
             const std::string& source,
             std::string_view marker,
+            std::string_view required,
             size_t expected_count
         ) -> bool {
             size_t count = 0;
@@ -52,8 +53,7 @@ namespace disk::content {
             while ((position = source.find(marker, position)) != std::string::npos) {
                 const auto end = source.find(");", position);
                 if (end == std::string::npos ||
-                    source.substr(position, end - position).find("log_context") ==
-                        std::string::npos) {
+                    source.substr(position, end - position).find(required) == std::string::npos) {
                     return false;
                 }
                 ++count;
@@ -62,9 +62,23 @@ namespace disk::content {
             return count == expected_count;
         }
 
-        TEST(ContentServiceCompileTest, CanConstructWithNullDbClient) {
-            ContentService service(nullptr);
-            SUCCEED();
+        auto EveryCallContainsContext(
+            const std::string& source,
+            std::string_view marker,
+            size_t expected_count
+        ) -> bool {
+            return EveryCallContains(source, marker, "log_context", expected_count);
+        }
+
+        template <typename Service>
+        concept HasStandaloneMd5Lookup = requires(const Service& service) {
+            service.FindByMd5(std::declval<const std::string&>());
+        };
+
+        TEST(ContentServiceCompileTest, IsStatelessAndRequiresExplicitClients) {
+            EXPECT_TRUE(std::is_empty_v<ContentService>);
+            EXPECT_TRUE(std::is_default_constructible_v<ContentService>);
+            EXPECT_FALSE(HasStandaloneMd5Lookup<ContentService>);
         }
 
         TEST(ContentServiceContractTest, NewContentCarriesImmutableBlobMetadata) {
@@ -82,9 +96,6 @@ namespace disk::content {
         TEST(ContentServiceContractTest, OwnsFileContentsLifecycleBoundary) {
             /// file_contents lookup, creation, ref-count mutation, and zero-ref verification are
             /// intentionally exposed together so callers keep DB changes transaction-aware.
-            using FindDefaultResult = decltype(std::declval<ContentService&>().FindByMd5(
-                std::declval<const std::string&>()
-            ));
             using FindWithClientResult = decltype(std::declval<ContentService&>().FindByMd5(
                 std::declval<const drogon::orm::DbClientPtr&>(),
                 std::declval<const std::string&>()
@@ -113,7 +124,6 @@ namespace disk::content {
                 std::declval<const std::unordered_map<uint64_t, uint64_t>&>()
             ));
 
-            EXPECT_TRUE((std::is_same_v<FindDefaultResult, drogon::Task<std::optional<ContentMetadata>>>));
             EXPECT_TRUE((std::is_same_v<FindWithClientResult, drogon::Task<std::optional<ContentMetadata>>>));
             EXPECT_TRUE((std::is_same_v<FindExistingIdsResult, drogon::Task<std::unordered_set<uint64_t>>>));
             EXPECT_TRUE((std::is_same_v<AcquireReferenceResult, drogon::Task<Result<ContentMetadata>>>));
@@ -140,7 +150,7 @@ namespace disk::content {
 
             EXPECT_EQ(
                 CountOccurrences(header, "disk::utils::LogContext log_context = {}"),
-                7U
+                6U
             );
             EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 7U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 2U);
@@ -171,18 +181,36 @@ namespace disk::content {
 
             EXPECT_TRUE(EveryCallContainsContext(
                 source,
-                "co_return co_await FindByMd5(",
-                1U
-            ));
-            EXPECT_TRUE(EveryCallContainsContext(
-                source,
                 "co_await CheckReferenceGate(",
                 4U
             ));
 
+            EXPECT_FALSE(Contains(header, "m_db_client"));
+            EXPECT_FALSE(Contains(source, "m_db_client"));
+            EXPECT_TRUE(Contains(source, "StorageJobRepository job_repository(client);"));
+            EXPECT_TRUE(Contains(source, "StorageJobRepository repository(client);"));
+
+            EXPECT_EQ(
+                CountOccurrences(upload_lifecycle, "ContentService content_service;"),
+                3U
+            );
+            EXPECT_EQ(CountOccurrences(file_mutation, "ContentService content_service;"), 1U);
+            EXPECT_EQ(CountOccurrences(share, "ContentService content_service;"), 1U);
+            EXPECT_EQ(CountOccurrences(trash, "ContentService content_service;"), 1U);
+            EXPECT_FALSE(Contains(upload_lifecycle, "ContentService content_service(m_db_client)"));
+            EXPECT_FALSE(Contains(file_mutation, "ContentService content_service(m_db_client)"));
+            EXPECT_FALSE(Contains(share, "ContentService content_service(m_db_client)"));
+            EXPECT_FALSE(Contains(trash, "ContentService content_service(m_db_client)"));
+
             EXPECT_TRUE(EveryCallContainsContext(
                 upload_lifecycle,
                 "content_service.FindByMd5(",
+                2U
+            ));
+            EXPECT_TRUE(EveryCallContains(
+                upload_lifecycle,
+                "content_service.FindByMd5(",
+                "m_db_client",
                 2U
             ));
             EXPECT_TRUE(EveryCallContainsContext(

@@ -483,8 +483,12 @@ namespace disk::upload {
             co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
         }
 
-        disk::content::ContentService content_service(m_db_client);
-        auto existing_content = co_await content_service.FindByMd5(command.file_hash, log_context);
+        disk::content::ContentService content_service;
+        auto existing_content = co_await content_service.FindByMd5(
+            m_db_client,
+            command.file_hash,
+            log_context
+        );
         auto existing_task = co_await upload_task_repository.FindActiveByUserAndHash(
             command.user_id,
             command.file_hash
@@ -1115,8 +1119,12 @@ namespace disk::upload {
         );
         auto lookup_result = co_await [this, &final_hash, &upload_task, &command, &log_context]() -> drogon::Task<FinalizeLookupResult> {
             FinalizeLookupResult lookup;
-            disk::content::ContentService content_service(m_db_client);
-            auto existing_content = co_await content_service.FindByMd5(final_hash, log_context);
+            disk::content::ContentService content_service;
+            auto existing_content = co_await content_service.FindByMd5(
+                m_db_client,
+                final_hash,
+                log_context
+            );
             if (existing_content.has_value()) {
                 lookup.existing_content = std::move(existing_content.value());
             }
@@ -1306,7 +1314,7 @@ namespace disk::upload {
                 }
                 const auto transaction_state_version = transaction_renew.value();
 
-                disk::content::ContentService content_service(m_db_client);
+                disk::content::ContentService content_service;
 
                 auto content_result = co_await content_service.AcquireReference(
                     transaction,

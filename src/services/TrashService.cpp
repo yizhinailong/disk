@@ -1573,7 +1573,7 @@ namespace disk::trash {
             }
 
             if (!content_ref_decrements.empty()) {
-                disk::content::ContentService content_service(m_db_client);
+                disk::content::ContentService content_service;
                 auto decrement_result = co_await content_service.DecrementRefCountsAndEnqueueGc(
                     transaction,
                     content_ref_decrements,

@@ -48,19 +48,12 @@ namespace disk::content {
      */
     class ContentService {
     public:
-        explicit ContentService(drogon::orm::DbClientPtr db_client);
+        ContentService();
         ~ContentService() = default;
         ContentService(const ContentService&) = delete;
         auto operator=(const ContentService&) -> ContentService& = delete;
         ContentService(ContentService&&) = default;
         auto operator=(ContentService&&) -> ContentService& = default;
-
-        [[nodiscard]]
-        auto FindByMd5(
-            const std::string& hash_md5,
-            disk::utils::LogContext log_context = {}
-        ) const
-            -> drogon::Task<std::optional<ContentMetadata>>;
 
         [[nodiscard]]
         auto FindByMd5(
@@ -115,8 +108,6 @@ namespace disk::content {
             uint64_t content_id,
             disk::utils::LogContext log_context
         ) const -> drogon::Task<Result<void>>;
-
-        drogon::orm::DbClientPtr m_db_client;
     };
 
 } // namespace disk::content

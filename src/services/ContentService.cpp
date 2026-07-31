@@ -61,17 +61,8 @@ namespace disk::content {
 
     } // namespace
 
-    ContentService::ContentService(drogon::orm::DbClientPtr db_client)
-        : m_db_client(std::move(db_client)) {
+    ContentService::ContentService() {
         Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=content";
-    }
-
-    auto ContentService::FindByMd5(
-        const std::string& hash_md5,
-        disk::utils::LogContext log_context
-    ) const
-        -> drogon::Task<std::optional<ContentMetadata>> {
-        co_return co_await FindByMd5(m_db_client, hash_md5, log_context);
     }
 
     auto ContentService::FindByMd5(
@@ -362,7 +353,7 @@ namespace disk::content {
                 zero_ref_contents.push_back({ .id = row["id"].as<uint64_t>(), .storage_path = row["storage_path"].as<std::string>() });
             }
 
-            disk::jobs::StorageJobRepository job_repository(m_db_client);
+            disk::jobs::StorageJobRepository job_repository(client);
             for (const auto& content : zero_ref_contents) {
                 Json::Value payload(Json::objectValue);
                 payload["content_id"] = Json::UInt64(content.id);
@@ -401,7 +392,7 @@ namespace disk::content {
         disk::utils::LogContext log_context
     ) const -> drogon::Task<Result<void>> {
         try {
-            disk::jobs::StorageJobRepository repository(m_db_client);
+            disk::jobs::StorageJobRepository repository(client);
             auto gate = co_await repository.CheckBlobGcReferenceGate(client, content_id);
             if (gate == disk::jobs::BlobGcReferenceGate::Blocked) {
                 co_return std::unexpected(ErrorInfo(

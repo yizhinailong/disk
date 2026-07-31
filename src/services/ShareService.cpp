@@ -1214,7 +1214,7 @@ namespace disk::share {
                 }
             }
 
-            disk::content::ContentService content_service(m_db_client);
+            disk::content::ContentService content_service;
             SaveShareItemsResponse response;
             uint64_t actual_size = 0;
             int saved_top_level_count = 0;

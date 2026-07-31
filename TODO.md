@@ -2117,6 +2117,14 @@ clang-format、差异检查、完整构建、回收站直接源码合同 7/7、�
 
 clang-format、差异检查、完整构建、相关直接 GoogleTest 16/16、配额合同与完整内容/配额安全网聚焦 CTest 6/6（25.64 秒）和 OpenSpec 严格校验 24/24 通过；聚焦真实安全网继续覆盖上传初始化、复制、永久删除、引用与配额故障注入。最终不带命令行额外超时的完整 CTest 共 1441 项：1434 项通过、7 项按环境门控跳过、0 失败，总耗时 546.30 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.100 内容服务显式客户端收敛记录（2026-07-31）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定内容操作的显式 client 边界。全仓调用点与已编译对象重定位审计确认，`ContentService` 只有 standalone `FindByMd5` 仍隐式使用构造期客户端，其两个生产调用者都已持有同一 `m_db_client`；其余查找、引用变更和 GC 入队入口已显式接收 standalone 或 transaction client。成员客户端还被用于构造 reference gate 与 Blob GC 入队仓储，尽管随后实际操作传入的是另一个显式 client，因而留下了可能错配事务归属的伪依赖。新增合同在实现前为 2/4：活跃内容边界和不变元数据用例通过，无状态类型与源码合同因非空类型、不可默认构造、standalone 查找、默认字段、隐式仓储构造及 6 个注入式服务构造点而失败。
+
+standalone MD5 查找重载与 `m_db_client` 已删除，`ContentService` 现为空类型并提供无参构造；构造期 `service=content` 进程日志原样保留。UploadLifecycleService 的 3 个、FileMutationService、ShareService 和 TrashService 各 1 个生产构造点改为默认构造；两个 MD5 查找显式传入原 `m_db_client`，reference gate 和 Blob GC 入队仓储改为绑定方法收到的同一操作 client。活跃公开面收敛为 6 个显式 client 入口；参数化 SQL、行锁、引用计数不变量、reference gate、GC 入队语义、9 条失败事件、调用方日志上下文和公开响应均未改变。
+
+clang-format、差异检查、完整构建、直接 ContentService GoogleTest 4/4、内容合同与完整内容/配额安全网聚焦 CTest 5/5（25.73 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1441 项：1434 项通过、7 项按环境门控跳过、0 失败，总耗时 529.24 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

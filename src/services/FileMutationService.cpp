@@ -646,7 +646,7 @@ namespace disk::file {
 
         TransactionRunner transaction_runner(m_db_client, log_context);
         disk::quota::QuotaService quota_service;
-        disk::content::ContentService content_service(m_db_client);
+        disk::content::ContentService content_service;
 
         if (total_copy_size > 0) {
             auto quota_result = co_await transaction_runner.Run(
