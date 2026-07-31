@@ -2173,6 +2173,14 @@ clang-format、差异检查、后端与测试目标完整构建、直接 UploadT
 
 clang-format、差异检查、后端与测试目标完整构建、直接 ScheduledTasks GoogleTest 5/5、Scheduler/Worker 运行时/进程身份/真实角色切换/contract-readiness/排空接管/拓扑聚焦 CTest 25/25（43.18 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1447 项：1440 项通过、7 项按环境门控跳过、0 失败，总耗时 525.46 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.107 应用组合上下文重复依赖状态清理记录（2026-08-01）
+
+ADR、单元测试文档和后端低风险清理 OpenSpec 先行固定应用组合上下文的最小持有边界。全仓成员读写与初始化数据流审计确认，`ApplicationContext` 的 DB、Redis 和上传暂存成员只在 `initialize()` 中被赋值并用于紧接着构造服务，初始化完成后没有访问器或其他生产路径再次读取；Blob store 则仍由文件和分享控制器通过上下文访问，必须保留。新增源码合同在旧实现上按预期为 0/1，共检出三个重复成员和三条仍经成员转发的服务接线失败；Blob store 保留合同通过。
+
+`ApplicationContext` 已删除 `m_db_client`、`m_redis_client` 和 `m_upload_staging_storage`，并把入口参数直接传给下载完整性、上传、文件查询、文件变更、文件夹、分享和清理服务；各服务仍按原构造器取得相同 shared DB/Redis client 或暂存指针。`m_blob_store`、`BlobStore()` 访问器、公开初始化签名、幂等初始化、JWT secret 移交、fallback 装配、controller 服务单例和启动顺序均未改变，因此不会缩短实际服务依赖的生命周期或改变 HTTP 行为。
+
+clang-format、差异检查、后端与测试目标完整构建、应用组合/存储能力/工厂直接 GoogleTest 5/5、核心领域/上传/变更/文件夹/分享/回收站真实服务装配聚焦 CTest 8/8（17.17 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 526.75 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

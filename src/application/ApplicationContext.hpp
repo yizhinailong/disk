@@ -87,9 +87,6 @@ namespace disk::application {
 
         auto ensureInitialized() -> void;
 
-        drogon::orm::DbClientPtr m_db_client{};
-        drogon::nosql::RedisClientPtr m_redis_client{};
-        disk::storage::UploadStagingStorage* m_upload_staging_storage{};
         disk::storage::IBlobStore* m_blob_store{};
 
         std::unique_ptr<disk::file::UploadService> m_upload_service{};

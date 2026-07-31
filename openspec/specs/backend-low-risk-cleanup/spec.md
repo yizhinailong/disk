@@ -25,6 +25,11 @@ The backend SHALL centralize construction of application services used by contro
 - **WHEN** composed services need DB, Redis, storage, configuration, or JWT-secret dependencies
 - **THEN** those dependencies SHALL be supplied through the composition boundary without changing the externally visible behavior of existing services
 
+#### Scenario: Composition state follows runtime access
+
+- **WHEN** DB, Redis, and upload-staging dependencies are consumed only while the application composition boundary constructs its services
+- **THEN** the boundary SHALL pass those dependencies directly into the constructed services without retaining duplicate member state, while the Blob store SHALL remain retained because controllers access it through the boundary after initialization
+
 ### Requirement: Controller helper extraction
 
 The backend SHALL provide small shared controller helpers for mechanical request-handling patterns without changing response envelopes, validation behavior, or endpoint-specific logging.

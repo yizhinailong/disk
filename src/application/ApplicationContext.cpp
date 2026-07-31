@@ -45,28 +45,25 @@ namespace disk::application {
             return;
         }
 
-        m_db_client = std::move(db_client);
-        m_redis_client = std::move(redis_client);
-        m_upload_staging_storage = upload_staging_storage;
         m_blob_store = blob_store;
 
         m_download_integrity_service =
-            std::make_unique<disk::download::DownloadIntegrityService>(m_db_client, m_blob_store);
+            std::make_unique<disk::download::DownloadIntegrityService>(db_client, m_blob_store);
 
         m_upload_service = std::make_unique<disk::file::UploadService>(
-            m_db_client,
-            m_upload_staging_storage,
+            db_client,
+            upload_staging_storage,
             m_blob_store
         );
-        m_file_query_service = std::make_unique<disk::file::FileQueryService>(m_db_client);
-        m_file_mutation_service = std::make_unique<disk::file::FileMutationService>(m_db_client);
-        m_folder_service = std::make_unique<disk::folder::FolderService>(m_db_client);
+        m_file_query_service = std::make_unique<disk::file::FileQueryService>(db_client);
+        m_file_mutation_service = std::make_unique<disk::file::FileMutationService>(db_client);
+        m_folder_service = std::make_unique<disk::folder::FolderService>(db_client);
         m_share_service = std::make_unique<disk::share::ShareService>(
-            m_db_client,
-            m_redis_client,
+            db_client,
+            redis_client,
             std::move(jwt_secret)
         );
-        m_cleanup_service = std::make_shared<disk::services::CleanupService>(m_db_client);
+        m_cleanup_service = std::make_shared<disk::services::CleanupService>(db_client);
     }
 
     auto ApplicationContext::ensureInitialized() -> void {

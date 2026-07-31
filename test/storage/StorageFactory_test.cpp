@@ -324,6 +324,20 @@ TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities)
     EXPECT_TRUE(Contains(s3_header, "auto ListFinalObjects("));
 }
 
+TEST(ApplicationCompositionBoundaryContractTest, RetainsOnlyRuntimeAccessibleInfrastructure) {
+    const auto application_header = ReadSourceFile("src/application/ApplicationContext.hpp");
+    const auto application_source = ReadSourceFile("src/application/ApplicationContext.cpp");
+
+    EXPECT_FALSE(Contains(application_header, "m_db_client"));
+    EXPECT_FALSE(Contains(application_header, "m_redis_client"));
+    EXPECT_FALSE(Contains(application_header, "m_upload_staging_storage"));
+    EXPECT_TRUE(Contains(application_header, "disk::storage::IBlobStore* m_blob_store{};"));
+
+    EXPECT_TRUE(Contains(application_source, "DownloadIntegrityService>(db_client, m_blob_store)"));
+    EXPECT_TRUE(Contains(application_source, "UploadService>(\n            db_client,"));
+    EXPECT_TRUE(Contains(application_source, "ShareService>(\n            db_client,\n            redis_client,"));
+}
+
 TEST_F(StorageFactoryTest, SelectsLocalStorageWithoutCreatingS3Client) {
     auto config_mgr = LoadStorageConfig("local", root);
     bool factory_called = false;
