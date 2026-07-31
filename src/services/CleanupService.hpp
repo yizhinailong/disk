@@ -58,6 +58,7 @@ namespace disk::services {
         auto RunExpiredCleanupOnce(disk::utils::LogContext log_context = {})
             -> drogon::Task<Result<CleanupRunResult>>;
 
+    private:
         /**
          * @brief 清理过期的回收站项目
          *
@@ -91,7 +92,6 @@ namespace disk::services {
         auto CleanupExpiredUploadTasks(disk::utils::LogContext log_context = {})
             -> drogon::Task<Result<int>>;
 
-    private:
         drogon::orm::DbClientPtr m_db_client;
     };
 

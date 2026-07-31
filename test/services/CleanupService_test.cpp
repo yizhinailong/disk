@@ -17,7 +17,25 @@ namespace disk::services {
             Utility::ValidateBatchInput(items);
         };
 
+        template <typename Service>
+        concept HasPublicCompositeCleanup = requires(Service& service) {
+            service.RunExpiredCleanupOnce();
+        };
+
+        template <typename Service>
+        concept HasPublicTrashCleanupStage = requires(Service& service) {
+            service.CleanupExpiredTrash();
+        };
+
+        template <typename Service>
+        concept HasPublicUploadCleanupStage = requires(Service& service) {
+            service.CleanupExpiredUploadTasks();
+        };
+
         static_assert(!HasBatchInputValidator<utils::BatchUtils>);
+        static_assert(HasPublicCompositeCleanup<CleanupService>);
+        static_assert(!HasPublicTrashCleanupStage<CleanupService>);
+        static_assert(!HasPublicUploadCleanupStage<CleanupService>);
 
         TEST(CleanupServiceCompileTest, CanConstructWithNullDbClient) {
             CleanupService service(nullptr);

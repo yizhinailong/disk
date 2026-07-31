@@ -298,3 +298,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that `detail::StartAuthCpuPoolMetricsTimer` and `detail::GetAuthCpuPoolActiveTaskCount` have no production or test caller
 - **THEN** those wrappers SHALL be removed while the Auth CPU work-loop bridge, startup-owned metrics timer, atomic counters, periodic metrics, and request execution behavior remain unchanged
+
+#### Scenario: Manual cleanup stages stay internal
+
+- **WHEN** a whole-repository call-site audit confirms that `CleanupService::CleanupExpiredTrash` and `CleanupService::CleanupExpiredUploadTasks` are called only by `RunExpiredCleanupOnce` in the same class
+- **THEN** both stage methods SHALL become private while the public composite entry point, aggregate result, trash and upload ordering, error propagation, logging context, and administrator route behavior remain unchanged

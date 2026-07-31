@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，存储诊断必选能力收紧）：活跃消费者与全部派生类审计确认，readiness、管理员上传诊断及 staging/final 对账依赖分片 HEAD 和两类 inventory；Local/S3 生产适配器已完整实现，基类的三条“不支持”默认分支没有生产落点。`HeadChunkObject`、`ListStagingObjects` 和 `ListFinalObjects` 已改为纯虚必选合同，旧 fallback 与三条错误消息删除；两个局部测试替身显式补齐签名。clang-format、完整构建、Local/S3/readiness/对账/Worker/下载聚焦 CTest 98/98 和 OpenSpec 24/24 通过；完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 519.58 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；受保护的 local/legacy 路由、REST、schema、配置及错误映射未改变，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，手动清理阶段公开面收紧）：全仓调用审计确认，`CleanupService::CleanupExpiredTrash` 与 `CleanupExpiredUploadTasks` 只由同类的 `RunExpiredCleanupOnce` 组合入口调用，管理员路由没有阶段级消费者。OpenSpec 与单元测试文档先行后，两阶段方法已改为私有；C++23 concept 正向锁定唯一公开组合入口并拒绝阶段方法重新暴露，固定回收站优先、上传随后、聚合计数与错误传播行为未改。clang-format、完整构建、含真实管理员清理链路的聚焦 CTest 15/15 和 OpenSpec 24/24 通过；完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 508.39 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；受保护的 local/legacy 路由、REST、schema、配置及错误映射未改变，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1880,6 +1880,14 @@ CMake 重新配置和完整构建通过；生成元数据对账 1348/1348 项携
 `UploadStagingStorage` 不再为 `HeadChunkObject` 和 `ListStagingObjects` 提供返回 `InternalError` 的默认协程，`IBlobStore` 不再为 `ListFinalObjects` 提供同类 fallback；三者都改为纯虚方法，新适配器遗漏任一诊断能力将在编译期失败，而不是启动后由 readiness、管理诊断或对账任务首次发现。旧默认实现和三条“不支持”错误消息删除；Worker cleanup 与 DownloadResponder 的局部测试替身只显式补齐本用例不调用的签名。现有存储边界源码合同锁定三个 `= 0`、旧错误文本消失及 Local/S3 生产声明完整。
 
 clang-format、完整构建、Local/S3/readiness/对账/Worker/下载聚焦 CTest 98/98 和 OpenSpec 严格校验 24/24 通过；完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 519.58 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；本批不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支，也不构成目标 HA、TLS/KMS、长稳或压力验收，因此 Phase 3/6/9/10 及最终 Definition of Done 继续保持未勾选。
+
+### 15.71 手动清理阶段公开面收紧记录（2026-07-31）
+
+后端低风险清理 OpenSpec 与单元测试文档先行固定手动清理边界。全仓声明、定义和调用审计确认，管理员控制器只调用 `CleanupService::RunExpiredCleanupOnce`；`CleanupExpiredTrash` 与 `CleanupExpiredUploadTasks` 在生产和测试中都没有类外消费者，只由组合入口按固定顺序调用。两个阶段原本公开会允许新增调用点绕过聚合结果与统一错误传播，但不是迁移、回滚或目标环境兼容入口。
+
+`CleanupService` 现在只公开 `RunExpiredCleanupOnce`，两个阶段声明移入私有区；实现、回收站优先于上传的执行顺序、任一阶段失败时的错误传播、`CleanupRunResult` 聚合计数、日志上下文与管理员 REST 行为均未改。`CleanupService_test.cpp` 以 C++23 concept 正向要求组合入口可调用，并在编译期拒绝两个阶段入口重新成为公开能力。
+
+clang-format、完整构建、CleanupService/分布式拓扑/真实管理员清理链路聚焦 CTest 15/15 和 OpenSpec 严格校验 24/24 通过；不带命令行 `--timeout` 的完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 508.39 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；本批不删除受存量任务与回滚合同保护的 `temp_path`、local staging、feature flag、schema 或迁移分支，也不构成目标 HA、TLS/KMS、长稳或压力验收，因此 Phase 3/6/9/10 及最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 
