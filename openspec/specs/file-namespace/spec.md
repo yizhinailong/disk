@@ -88,6 +88,10 @@ The system SHALL allow users to move files or folders to an accessible target fo
 ### Requirement: Copy Items
 The system SHALL allow users to copy files or folders while preserving content-sharing and quota semantics.
 
+#### Scenario: A copied folder cannot update its target count
+- **WHEN** a folder subtree is inserted but incrementing the target folder item count affects no row
+- **THEN** that subtree transaction SHALL roll back, its reservation SHALL be released, and the successful batch response SHALL exclude all nodes from its copied counts
+
 #### Scenario: Copy succeeds
 - **WHEN** an authenticated user copies accessible items with sufficient quota
 - **THEN** the system SHALL create copied metadata and update content reference counts as needed

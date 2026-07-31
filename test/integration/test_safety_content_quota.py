@@ -635,6 +635,29 @@ def install_parent_item_count_failure_trigger(parent_id: int):
     return lambda: drop_failure_trigger("folders", trigger_name, function_name)
 
 
+def install_parent_item_count_suppression_trigger(parent_id: int):
+    """Suppress item-count updates for one parent without raising an exception."""
+    function_name = safe_test_identifier("suppress_parent_item_count_fn")
+    trigger_name = safe_test_identifier("suppress_parent_item_count_trg")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF OLD.id = {int(parent_id)} AND NEW.item_count <> OLD.item_count THEN
+                RETURN NULL;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON folders '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("folders", trigger_name, function_name)
+
+
 def install_folder_rename_delay_trigger(user_id: int, parent_id: int, target_name: str):
     """Delay matching folder renames so concurrent prechecks overlap."""
     function_name = safe_test_identifier("delay_folder_rename_fn")
@@ -2391,6 +2414,78 @@ def test_concurrent_same_name_folder_copies_skip_before_subtree_writes() -> None
     )
 
 
+def test_folder_copy_target_count_zero_rows_rolls_back_subtree() -> None:
+    """Verify a suppressed target count update rolls back a copied subtree."""
+    log_section("Folder Copy Target Count Zero Rows Rolls Back")
+    target_id = create_folder(f"safety_folder_copy_count_target_{unique_name()}")
+    root_name = f"safety_folder_copy_count_root_{unique_name()}"
+    source_root_id = create_folder(root_name)
+    source_child_id = create_folder(f"safety_folder_copy_count_child_{unique_name()}", source_root_id)
+    filename = f"safety_folder_copy_count_file_{unique_name()}.bin"
+    payload = f"folder-copy-count-{unique_name()}".encode()
+    source_file_id = upload_file(filename, payload, source_child_id)
+    content_id = int(file_row(source_file_id)["content_id"])
+    target_path = str(
+        scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID)) or ""
+    )
+    copied_prefix = f"{target_path}{root_name}/"
+    ref_before = int(content_row(content_id)["ref_count"])
+    quota_before = user_quota()
+    target_count_before = int(
+        scalar("SELECT item_count FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID))
+        or 0
+    )
+    cleanup_trigger = install_parent_item_count_suppression_trigger(target_id)
+    try:
+        response = copy_items_response([], [source_root_id], target_id)
+    finally:
+        cleanup_trigger()
+
+    copied_folder_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders WHERE user_id = %s AND LEFT(path, LENGTH(%s)) = %s",
+            (USER_ID, copied_prefix, copied_prefix),
+        )
+        or 0
+    )
+    copied_file_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND LEFT(path, LENGTH(%s)) = %s",
+            (USER_ID, copied_prefix, copied_prefix),
+        )
+        or 0
+    )
+    quota_after = user_quota()
+
+    assert_equal("folder copy count miss keeps success HTTP status", response.status_code, 200)
+    assert_equal("folder copy count miss keeps success envelope", json_field(response.text, "code"), "0")
+    assert_equal(
+        "folder copy count miss excludes folders from response",
+        json_field(response.text, "data.copied_folder_count"),
+        "0",
+    )
+    assert_equal(
+        "folder copy count miss excludes files from response",
+        json_field(response.text, "data.copied_file_count"),
+        "0",
+    )
+    assert_equal("folder copy count miss excludes subtree from total", json_field(response.text, "data.copied_count"), "0")
+    assert_equal("folder copy count miss rolls back copied folders", copied_folder_rows, 0)
+    assert_equal("folder copy count miss rolls back copied files", copied_file_rows, 0)
+    assert_equal("folder copy count miss rolls back content reference", int(content_row(content_id)["ref_count"]), ref_before)
+    assert_equal("folder copy count miss rolls back used quota", quota_after["storage_used"], quota_before["storage_used"])
+    assert_equal(
+        "folder copy count miss releases reserved quota",
+        quota_after["storage_reserved"],
+        quota_before["storage_reserved"],
+    )
+    assert_equal(
+        "folder copy count miss preserves target count",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (target_id,)) or 0),
+        target_count_before,
+    )
+
+
 def test_copy_quota_rejection_no_side_effects() -> None:
     """Verify over-quota copy leaves no files or ref-count changes behind."""
     log_section("Copy Quota Rejection")
@@ -3141,6 +3236,7 @@ def main() -> None:
     test_concurrent_same_folder_moves_use_latest_parent_counts()
     test_concurrent_same_name_file_copies_skip_before_insert()
     test_concurrent_same_name_folder_copies_skip_before_subtree_writes()
+    test_folder_copy_target_count_zero_rows_rolls_back_subtree()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()
     test_copy_folder_skip_releases_quota_and_refs()

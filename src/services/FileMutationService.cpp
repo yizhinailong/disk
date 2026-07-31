@@ -1286,12 +1286,22 @@ namespace disk::file {
                         }
 
                         if (request.target_folder_id > 0) {
-                            co_await transaction->execSqlCoro(
-                                "UPDATE folders SET item_count = item_count + 1, updated_at = $1 " "WHERE id = $2 AND user_id = $3",
-                                trantor::Date::now(),
+                            auto target_count_updated = co_await m_folder_repository.ApplyItemCountDelta(
+                                transaction,
                                 request.target_folder_id,
-                                user_id
+                                user_id,
+                                1,
+                                trantor::Date::now()
                             );
+                            if (!target_count_updated) {
+                                Logger::Error(log_context)
+                                    << "Folder copy target item-count update affected no rows: folder_id="
+                                    << request.target_folder_id;
+                                co_return std::unexpected(ErrorInfo(
+                                    ErrorCode::InternalError,
+                                    "Failed to update target folder item count"
+                                ));
+                            }
                         }
 
                         auto commit_quota_result = co_await quota_service.CommitReservedToUsed(

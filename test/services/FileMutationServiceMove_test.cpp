@@ -333,6 +333,35 @@ namespace disk::file {
             EXPECT_LT(ref_increment, root_insert);
         }
 
+        TEST(FileMutationServiceCopyContractTest, CopyChecksTargetFolderCountBeforeQuotaCommit) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto copy_body = ExtractCopyBody(source);
+
+            ASSERT_FALSE(copy_body.empty());
+            const auto staged_folders = copy_body.find(
+                "std::vector<FileIdMapping> staged_folder_mappings;"
+            );
+            const auto root_insert = copy_body.find("folder_mapper.insert(root_folder)", staged_folders);
+            const auto target_count = copy_body.find(
+                "auto target_count_updated = co_await m_folder_repository.ApplyItemCountDelta(",
+                root_insert
+            );
+            const auto target_count_check = copy_body.find("if (!target_count_updated)", target_count);
+            const auto quota_commit = copy_body.find(
+                "quota_service.CommitReservedToUsed(",
+                target_count_check
+            );
+            ASSERT_NE(staged_folders, std::string::npos);
+            ASSERT_NE(root_insert, std::string::npos);
+            ASSERT_NE(target_count, std::string::npos);
+            ASSERT_NE(target_count_check, std::string::npos);
+            ASSERT_NE(quota_commit, std::string::npos);
+            EXPECT_LT(root_insert, target_count);
+            EXPECT_LT(target_count, target_count_check);
+            EXPECT_LT(target_count_check, quota_commit);
+            EXPECT_FALSE(Contains(copy_body, "UPDATE folders SET item_count = item_count + 1"));
+        }
+
         TEST(FileMutationLogContextContractTest, ControllerAndServicesUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/FileController.cpp");
             const auto mutation_source = ReadSourceFile("src/services/FileMutationService.cpp");
