@@ -22,6 +22,10 @@ The validation documentation SHALL enumerate backend test coverage for DTO valid
 - **WHEN** a developer needs to run backend tests
 - **THEN** the documentation SHALL provide CMake/CTest or executable-level commands for full and focused test execution
 
+#### Scenario: A discovered backend unit test stalls
+- **WHEN** CTest registers the individual GoogleTest cases discovered from `disk-test`
+- **THEN** every discovered case SHALL have a 60-second timeout, and a separate CTest contract SHALL fail when generated test metadata is missing, any discovered case lacks that timeout, or `RedisServiceRuntimeTest.SetGetExistsDeleteRoundTrip` is not explicitly covered
+
 ### Requirement: Distributed multi-instance integration validation
 The backend test suite SHALL provide serial, environment-gated CTest entries for the authoritative Compose topology and for an equivalent local-process runner when Docker is unavailable. Both entries SHALL execute the same distributed-flow assertions against two API processes, two Worker processes, one shared PostgreSQL database, one password-protected persistent Redis-compatible service, one shared MinIO service, and a non-sticky load-balancing endpoint.
 

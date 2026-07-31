@@ -227,7 +227,28 @@ target_link_libraries(disk-test
     GTest::gtest_main
 )
 
-gtest_discover_tests(disk-test)
+set(DISK_GTEST_TIMEOUT_SECONDS 60)
+gtest_discover_tests(
+    disk-test
+    PROPERTIES
+    TIMEOUT ${DISK_GTEST_TIMEOUT_SECONDS}
+)
+
+add_test(
+    NAME CTestDiscoveredUnitTimeoutContract
+    COMMAND
+        ${CMAKE_COMMAND}
+        "-DTEST_METADATA_FILE=${CMAKE_CURRENT_BINARY_DIR}/disk-test[1]_tests.cmake"
+        "-DEXPECTED_TIMEOUT_SECONDS=${DISK_GTEST_TIMEOUT_SECONDS}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyDiscoveredTestTimeouts.cmake"
+)
+set_tests_properties(
+    CTestDiscoveredUnitTimeoutContract
+    PROPERTIES
+    LABELS backend-harness
+    TIMEOUT 30
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
 
 function(add_disk_server_integration_test test_name script_name timeout_seconds)
     set(script_path "${CMAKE_SOURCE_DIR}/test/integration/${script_name}")

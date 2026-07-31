@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，JWT 公开路径分类 helper 内部化）：全仓库精确调用点和已编译对象审计确认 `JwtAuthFilter::IsPublicPath()` 只有同一实现文件的生产消费和直接路径单测，没有其他消费者。该成员已下沉为实现文件本地 helper，旧成员符号从后端与测试二进制消失；编译期合同拒绝公开面回归，三个认证、三个健康、精确 metrics、三类公开分享前缀及受保护近似路径全部改经真实 `doFilter()` 覆盖。相邻过滤器归属源码合同同步后定向 1/1、聚焦 CTest 61/61 和 OpenSpec 24/24 通过；第二轮完整 CTest 共 1424 项，1417 通过、7 项按环境门控跳过、0 失败，总耗时 506.96 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；全局 JWT 所有权、route-level 分享保护、认证属性、响应、日志、限流顺序、schema 和迁移均未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，GoogleTest 发现用例超时合同）：针对上一轮完整回归中 Redis 运行时用例曾无限挂起的已观察风险，`disk-test` 的 1348 个 GoogleTest 发现用例已统一携带 60 秒 CTest `TIMEOUT`；独立合同从生成元数据对账全部用例，并锁定 `RedisServiceRuntimeTest.SetGetExistsDeleteRoundTrip`。重新配置前的负向验证精确报告 1348 项中 0 项携带上限；重新配置/完整构建后元数据 1348/1348，代表性 Redis、超时与拓扑合同聚焦 CTest 3/3，OpenSpec 24/24 通过。不带命令行 `--timeout` 的完整 CTest 共 1425 项，1418 通过、7 项按环境门控跳过、0 失败，总耗时 511.62 秒。当前主机仍没有容器/Kubernetes、Nginx、PgBouncer、Prometheus 或 MinIO 命令与对应门控变量；环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行。Python 集成和环境门控用例的独立超时、串行和跳过语义未改变，Phase 6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1864,6 +1864,14 @@ utility 转发与仓储单项方法已一并删除，`FolderRepository` 从 13 �
 公开成员及头文件 `<string>` 依赖已删除，原路径集合和匹配规则下沉为 `JwtAuthFilter.cpp` 匿名命名空间 helper。重建后的实现对象只保留本地 `t` 分类符号，后端与测试二进制不再包含旧成员符号，公开 `doFilter()` 生产入口保持不变。`JwtAuthFilter_test.cpp` 以 C++23 concept 拒绝旧公开能力回归；三个公开认证入口、三个健康入口、精确 `/metrics`、公开分享 access/browse/download 前缀，以及 logout、健康/metrics 额外后缀、分享 owner 和无尾随斜杠等受保护近似路径，全部改经真实过滤器入口断言放行或既有 401。`FilterOwnershipTest` 同时拒绝头文件分类规则回归，并从实现文件锁定私有路径集合及 `doFilter()` 调用关系。
 
 首次聚焦回归的唯一失败是相邻归属合同仍从头文件读取路径字面量；同步后定向复验 1/1、完整聚焦 CTest 61/61 和 OpenSpec 24/24 通过。首次完整套件在既有 Redis 运行时用例出现连接已建立但未发命令的客户端挂起，Redis 同期可用且无 blocked client；中止后该用例定向 1/1（0.02 秒），带 300 秒默认单项上限的第二轮完整 CTest 共 1424 项，1417 项通过、7 项按环境门控跳过、0 失败，总耗时 506.96 秒。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行，PgBouncer 与 Prometheus 门控也仍待现场执行；全局 JWT 所有权、route-level 分享保护、认证属性、响应、日志、限流顺序、schema 和迁移合同均未改变，Phase 6/9/10 总项与最终 Definition of Done 继续保持未勾选。
+
+### 15.69 GoogleTest 发现用例超时合同记录（2026-07-31）
+
+系统测试计划、单元测试文档和 OpenSpec 先行固定 CTest 执行上限。上一批完整回归曾在 `RedisServiceRuntimeTest.SetGetExistsDeleteRoundTrip` 中出现连接已建立但未发命令的客户端无限等待；当时只能依靠命令行 300 秒默认上限重跑，仓库本身对 `gtest_discover_tests()` 产生的 1348 个独立用例没有任何 `TIMEOUT`。重新配置前直接对旧元数据执行新合同，它按预期失败并报告 1348 项中 0 项携带 60 秒上限，证明校验不会空过。
+
+`test/CMakeLists.txt` 现在通过 `gtest_discover_tests(... PROPERTIES TIMEOUT 60)` 统一绑定单测用例上限。新增 `VerifyDiscoveredTestTimeouts.cmake` 读取构建目录生成的 `disk-test[1]_tests.cmake`，对账 `add_test()` 数与携带精确上限的 `set_tests_properties()` 数，并额外确认上述代表性 Redis 用例存在且受限。元数据不存在、没有发现用例、数量不一致或代表用例缺失都会使 `CTestDiscoveredUnitTimeoutContract` 失败。Python 集成、故障注入和环境门控用例继续使用原有独立上限，没有改变串行、跳过或目标环境证据语义。
+
+CMake 重新配置和完整构建通过；生成元数据对账 1348/1348 项携带 60 秒上限。首次相邻聚焦的唯一失败是 `DistributedTopologyContract` 仍锁定旧的 1424/1417/7 测试库存；只同步为 1425/1418/7 后，Python 语法和拓扑脚本直接执行、代表性 Redis/超时/拓扑聚焦 CTest 3/3 以及 OpenSpec 严格校验 24/24 通过。不带命令行 `--timeout` 的最终完整 CTest 共 1425 项，1418 项通过、7 项按环境门控跳过、0 失败，总耗时 511.62 秒。当前主机无 Docker/Podman/nerdctl、Kubernetes/kind/minikube、Nginx、PgBouncer、promtool 或 MinIO/mc，也没有对应 `DISK_*` 门控变量；因此本批不构成目标高可用、TLS/KMS、独立故障域、长稳或压力验收，Phase 6/9/10 及最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 
