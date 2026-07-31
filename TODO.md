@@ -6,7 +6,7 @@
 >
 > 原则：本文件是执行索引，不替代 `docs/design/` 中的权威设计。每一阶段必须先更新对应设计/API/数据库/部署/测试文档，再修改代码。
 >
-> 最近验证（2026-07-31，当前候选六项环境门禁全量复验）：候选提交 `a3aa0452` 使用仓库固定且摘要匹配的 MinIO/mc/promtool 与已验证 PgBouncer 1.25.2 临时构建，逐项及完整套件内两次证明 PgBouncer、Prometheus、S3 adapter、S3 应用流、MinIO provisioning 和本地双 API/双 Worker 拓扑 6/6 通过。带门禁完整 CTest 共 1425 项，1424 通过、仅缺少 Docker 的 `DistributedFlowIntegration` 容器拓扑 1 项跳过、0 失败，总耗时 679.44 秒；四份 `0600` 原子证据已绑定 SHA-256，受管进程和临时数据均已清理。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；本机等价拓扑不替代真实 Nginx、TLS/KMS、高可用端点、独立故障域、长稳、压力、真实迁移数据或预发布灰度，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
+> 最近验证（2026-07-31，当前候选七项环境门禁合并复验）：候选实现提交 `a3aa0452` 的带六项门禁完整 CTest 共 1425 项，1424 通过、仅容器拓扑 1 项跳过、0 失败；从 `03bd04de` 工作树完整构建的镜像 `sha256:6cfe4eab68f45d8aca850e8ec87dfa9ae6d76a6dbc3dfededa131495b058b810` 又使 `DistributedFlowIntegration` 1/1 和 20 项检查通过。合并对账后的带门禁 CTest 注册库存共 1425 项，1425 通过、0 项跳过、0 失败；该结果由六项门禁完整套件与独立容器门禁组成，不等同于单次启用全部七项门禁的 1425 项完整 CTest。`0600` 原子证据已绑定 SHA-256，容器、网络、数据卷、虚拟机和临时密钥/工具均已清理。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；隔离单机拓扑不替代目标 Nginx、TLS/KMS、高可用端点、独立故障域、长稳、压力、真实迁移数据、兼容路径退役或预发布灰度，Phase 3/6/9/10 与最终 DoD 仍保持未勾选。
 
 ## 1. 目标与范围
 
@@ -1914,6 +1914,16 @@ clang-format、完整构建、ScheduledTasks 直接 GoogleTest 4/4、调度生�
 `distributed-flow-summary.json`、`s3-provisioning-summary.json`、`s3-large-promotion-summary.json` 与 `pgbouncer-transaction-pool-summary.json` 均以 `0600` 原子发布，SHA-256 分别为 `d510660413e113dfd78955ae5986df410de9e7e4ef2a3cfe1ed09d80c34adbb9`、`67658d44641e0a0fdf4bdad79d8317b617dacac674f87984971f0d14fd43a1a5`、`de0082e1c3f73c28aadda75958cbe98dcc2b582fe8c51cc362266a25f9401f4f`、`d5f1e28553e5c100c5160e65725000d5e9ce661c64e9d802d0108de17486b576`；字段审计未发现凭据、端口、路径或可重放令牌，全部受管进程与临时 MinIO 目录已清理。
 
 带六项门禁的完整 CTest 共 1425 项，1424 项通过、仅 `DistributedFlowIntegration` 1 项按环境门控跳过、0 失败，总耗时 679.44 秒。文档更新后，Python 语法检查、拓扑合同脚本直接执行与注册 CTest 1/1、OpenSpec 严格校验 24/24 通过；合同同时对账 7 项注册库存与本次 6 项启用结果。本机进程拓扑不能证明当前候选 Dockerfile/Compose 镜像构建，也不替代目标 Nginx、TLS/KMS、PostgreSQL/Redis/S3 高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据、兼容路径退役或预发布灰度验收，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
+### 15.75 当前候选容器拓扑补充复验记录（2026-07-31）
+
+宿主缺少 Docker/Podman 且当前内核没有可加载的 TUN 模块，因此没有把 rootless 启动失败误记为项目门禁结果。QEMU 11.0.2 的 17 个 Arch 软件包逐包通过发行签名验证，Alpine 3.24.1 virt ISO 的 SHA-256 与官方清单一致；在可用 `/dev/kvm` 上启动 8 GiB/4 vCPU 隔离来宾后，Docker Engine 29.5.3、Compose 5.1.4 和 overlay2 运行探针通过。
+
+从提交 `03bd04de` 的工作树完整执行仓库 `Dockerfile`，vcpkg 35/35 依赖和项目 187/187 步骤通过，GNU 14.2、PostgreSQL 16.9、OpenSSL 3.6 与 AWS SDK 1.11.710 均由 CMake 实际识别。最终镜像 `disk-distributed:local` 的 ID 为 `sha256:6cfe4eab68f45d8aca850e8ec87dfa9ae6d76a6dbc3dfededa131495b058b810`、大小为 217385075 字节，入口为 `/app/disk`，运行身份为 `10001:10001`，最终环境仅保留默认 `PATH`，没有构建代理或测试凭据。
+
+Compose 使用该镜像启动 PostgreSQL、Redis、固定 MinIO/mc、两个 API、两个 Worker 和真实 Nginx 无粘性入口。正式 `DistributedFlowIntegration` 1/1 通过（CTest 150.55 秒，总耗时 150.71 秒，20 项检查），覆盖跨 API 认证/CAS、严格交替与随机路由上传、两类终态竞态、Worker 租约接管、PostgreSQL/Redis/MinIO 原 API 进程恢复、multipart abort 重试收敛、单 API 停止后入口继续服务和跨实例即时撤销。`0600` 原子证据 `.sisyphus/evidence/distributed-flow-summary.json` 的 SHA-256 为 `4665bc999a45433b292c0fb8b1288b5584a21dcd93dd2e380492775637fb1456`，状态为 `passed`，字段审计未发现令牌、密码、密钥或凭据键。
+
+与 15.74 的六项门禁完整 CTest 合并对账后，7 个常规环境门禁均已有当前候选证据，注册库存折算为 1425/1425 通过、0 项未执行、0 失败；该数字不等同于一次启用全部七项门禁的 1425 项完整 CTest。Compose 容器、网络、三个数据卷、测试环境文件、虚拟机磁盘和临时 Docker/QEMU/rootless 工具均已清理。环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行；隔离单机容器拓扑不替代目标 TLS/KMS、高可用端点、独立故障域、备份恢复、负载/长稳、真实迁移数据、兼容路径退役或预发布灰度，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
 ## 16. 最终 Definition of Done
 
