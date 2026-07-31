@@ -144,6 +144,39 @@ namespace disk::file {
             EXPECT_TRUE(Contains(move_body, "if (!count_updated)"));
         }
 
+        TEST(FileMutationServiceMoveContractTest, MoveLocksFolderNamesBeforeFolderConflictChecks) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto move_body = ExtractMoveBody(source);
+
+            ASSERT_FALSE(move_body.empty());
+            const auto folder_plans = move_body.find("FetchBatchFolderDeletePlans(");
+            const auto sort_names = move_body.find(
+                "std::sort(folder_candidate_names.begin(), folder_candidate_names.end())",
+                folder_plans
+            );
+            const auto name_locks = move_body.find(
+                "m_folder_repository.AcquireNameLock(",
+                sort_names
+            );
+            const auto conflict_check = move_body.find(
+                "utils::QueryOccupiedFolderNames(",
+                name_locks
+            );
+            const auto location_update = move_body.find(
+                "m_folder_repository.UpdateFolderLocationForMove(",
+                conflict_check
+            );
+            ASSERT_NE(folder_plans, std::string::npos);
+            ASSERT_NE(sort_names, std::string::npos);
+            ASSERT_NE(name_locks, std::string::npos);
+            ASSERT_NE(conflict_check, std::string::npos);
+            ASSERT_NE(location_update, std::string::npos);
+            EXPECT_LT(folder_plans, sort_names);
+            EXPECT_LT(sort_names, name_locks);
+            EXPECT_LT(name_locks, conflict_check);
+            EXPECT_LT(conflict_check, location_update);
+        }
+
         TEST(FileMutationServiceMoveContractTest, MovePreservesValidationAndInvalidatesSharedCacheGeneration) {
             const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
             const auto move_body = ExtractMoveBody(source);

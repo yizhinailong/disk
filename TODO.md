@@ -1997,6 +1997,14 @@ API、数据库、系统测试、单元测试和 OpenSpec 先行固定同名文�
 
 新增真实场景现为 10/10，完整内容/配额安全网为 288/288：8 个并发请求继续全部返回 HTTP 200/业务码 0，`copied_file_count` 合计恰好为 1，目标名称/内容/路径只有一行，`ref_count` 与 `storage_used` 各增加一次，`storage_reserved` 回到基线且日志不再包含该唯一约束名。Python 语法、clang-format、差异检查、完整构建、相关直接 GoogleTest 11/11 和 OpenSpec 严格校验 24/24 通过。首次复制/配额/缓存/批量/原子性/移动/拓扑聚焦 CTest 仅因 `QuotaService_test.cpp` 仍要求旧 4 个调用而 1 项失败；该显式上下文计数更新为包含锁内释放的 5 个调用后，聚焦 CTest 29 项通过、1 项按 PgBouncer 环境门控跳过、0 失败（8.68 秒）。最终不带命令行额外超时的完整 CTest 共 1431 项：1424 通过、7 项按环境门控跳过、0 失败，总耗时 518.13 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与 PostgreSQL transaction advisory lock 合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.85 文件夹并发移动同名跳过记录（2026-07-31）
+
+API、数据库、系统测试、单元测试和 OpenSpec 先行固定不同源父目录下同名文件夹并发移动到同一目标目录时的批量部分成功与完整子树语义。调用链审计确认旧流程虽然在一个事务内读取删除计划、查询目标占用并更新根及后代路径，却没有获取目标文件夹名称锁；多个请求可同时通过查重。带 0.5 秒 PostgreSQL `BEFORE UPDATE` 延迟 trigger 的手工旧二进制复现得到一个 HTTP 200/业务码 0 和七个 HTTP 500/`10006 Failed to move items`，服务器日志出现 14 次 `uk_folders_user_parent_name`；事务回滚使一个完整子树进入目标、七个输家留在源父目录，目录计数仍匹配实际行。新增源码顺序合同在生产实现前按预期因缺少候选文件夹名称排序而失败；旧二进制运行新增真实场景时完整安全网为 294/296，两个失败精确对应只有一个批量响应成功以及日志暴露唯一约束。
+
+`FileMutationService::Move` 现在确定顶层移动根并收集实际跨目录项后，对候选文件夹名称去重排序，再依次获取 `FolderRepository::AcquireNameLock` 的 `folder-name:<user_id>:<target_folder_id>:<name>` PostgreSQL transaction advisory lock；全部名称锁完成后才用同一 transaction client 重新查询目标占用。已占用名称继续按既有批量合同跳过，输家不更新根位置、后代文件夹/文件路径或源/目标 `item_count`；赢家继续复用原完整子树更新流程，事务提交成功后才失效文件列表缓存。创建、重命名和移动共用同一文件夹名称锁命名空间，唯一约束只保留最终不变量，不再作为并发移动的正常 HTTP 500 分支。
+
+新增真实场景现为 10/10，完整内容/配额安全网为 296/296：8 个并发请求均为 HTTP 200/业务码 0，`moved_folder_count` 合计恰好为 1，目标名称与根路径只有一行，七个输家保留源父目录与根路径，只有赢家的后代路径随子树更新，目标、源父目录、移动根和后代的 `item_count` 均匹配实际直属项，日志不再包含该唯一约束名。Python 语法、clang-format、差异检查、完整构建、相关直接 GoogleTest 14/14 和 OpenSpec 严格校验 24/24 通过；文件/文件夹仓储、缓存、变更、文件夹生命周期、移动路径和拓扑聚焦 CTest 28 项通过、1 项按 PgBouncer 环境门控跳过、0 失败（27.80 秒）。最终不带命令行额外超时的完整 CTest 共 1432 项：1425 通过、7 项按环境门控跳过、0 失败，总耗时 521.72 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与 PostgreSQL transaction advisory lock 合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

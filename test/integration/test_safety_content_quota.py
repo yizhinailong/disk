@@ -662,6 +662,33 @@ def install_folder_rename_delay_trigger(user_id: int, parent_id: int, target_nam
     return lambda: drop_failure_trigger("folders", trigger_name, function_name)
 
 
+def install_folder_move_delay_trigger(user_id: int, parent_id: int, target_name: str):
+    """Delay matching folder moves so concurrent prechecks overlap."""
+    function_name = safe_test_identifier("delay_folder_move_fn")
+    trigger_name = safe_test_identifier("delay_folder_move_trg")
+    escaped_target = target_name.replace("'", "''")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.user_id = {int(user_id)}
+               AND NEW.parent_id = {int(parent_id)}
+               AND NEW.name = '{escaped_target}'
+               AND OLD.parent_id <> NEW.parent_id THEN
+                PERFORM pg_sleep(0.5);
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON folders '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+    return lambda: drop_failure_trigger("folders", trigger_name, function_name)
+
+
 def install_file_rename_delay_trigger(user_id: int, folder_id: int, target_name: str):
     """Delay matching file renames so concurrent prechecks overlap."""
     function_name = safe_test_identifier("delay_file_rename_fn")
@@ -1863,6 +1890,129 @@ def test_concurrent_same_name_file_moves_skip_conflicts() -> None:
     )
 
 
+def test_concurrent_same_name_folder_moves_skip_conflicts() -> None:
+    """Verify concurrent same-name folder moves serialize before subtree writes."""
+    log_section("Concurrent Same-Name Folder Move Single Winner")
+    target_id = create_folder(f"safety_folder_move_target_{unique_name()}")
+    concurrency = 8
+    source_parent_ids = [
+        create_folder(f"safety_folder_move_source_{index}_{unique_name()}")
+        for index in range(concurrency)
+    ]
+    folder_name = f"safety_folder_move_collision_{unique_name()}"
+    source_folder_ids = [
+        create_folder(folder_name, source_parent_id)
+        for source_parent_id in source_parent_ids
+    ]
+    child_name = f"safety_folder_move_child_{unique_name()}"
+    child_folder_ids = [create_folder(child_name, folder_id) for folder_id in source_folder_ids]
+    source_paths = [
+        str(scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (folder_id, USER_ID)) or "")
+        for folder_id in source_folder_ids
+    ]
+    target_path = str(
+        scalar("SELECT path FROM folders WHERE id = %s AND user_id = %s", (target_id, USER_ID)) or ""
+    )
+    target_root_path = f"{target_path}{folder_name}/"
+    barrier = threading.Barrier(concurrency)
+    cleanup_trigger = install_folder_move_delay_trigger(USER_ID, target_id, folder_name)
+
+    def move_to_same_target(index: int):
+        barrier.wait(timeout=10)
+        return fetch(
+            "/api/file/move",
+            method="PUT",
+            headers=auth_headers(request_id=f"safety-folder-move-{index}-{unique_name()}"),
+            json_body={
+                "file_ids": [],
+                "folder_ids": [source_folder_ids[index]],
+                "target_folder_id": target_id,
+            },
+        )
+
+    try:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            responses = list(executor.map(move_to_same_target, range(concurrency)))
+    finally:
+        cleanup_trigger()
+
+    for index, response in enumerate(responses):
+        save_evidence(f"{EVIDENCE_PREFIX}-folder-move-concurrent-{index}.json", response.text)
+
+    successful_responses = [
+        response
+        for response in responses
+        if response.status_code == 200 and json_field(response.text, "code") == "0"
+    ]
+    moved_counts = [int(json_field(response.text, "data.moved_folder_count") or 0) for response in responses]
+    target_rows = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders "
+            "WHERE user_id = %s AND parent_id = %s AND name = %s AND path = %s",
+            (USER_ID, target_id, folder_name, target_root_path),
+        )
+        or 0
+    )
+    source_rows = sum(
+        int(
+            scalar(
+                "SELECT COUNT(*) FROM folders "
+                "WHERE id = %s AND user_id = %s AND parent_id = %s AND path = %s",
+                (source_folder_ids[index], USER_ID, source_parent_ids[index], source_paths[index]),
+            )
+            or 0
+        )
+        for index in range(concurrency)
+    )
+    mismatched_child_paths = 0
+    for index, child_folder_id in enumerate(child_folder_ids):
+        root_parent_id = scalar(
+            "SELECT parent_id FROM folders WHERE id = %s AND user_id = %s",
+            (source_folder_ids[index], USER_ID),
+        )
+        expected_root_path = target_root_path if int(root_parent_id or 0) == target_id else source_paths[index]
+        actual_child_path = str(
+            scalar(
+                "SELECT path FROM folders WHERE id = %s AND user_id = %s",
+                (child_folder_id, USER_ID),
+            )
+            or ""
+        )
+        if actual_child_path != f"{expected_root_path}{child_name}/":
+            mismatched_child_paths += 1
+
+    checked_folder_ids = [target_id, *source_parent_ids, *source_folder_ids, *child_folder_ids]
+    mismatched_counts = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders f "
+            "WHERE f.id = ANY(%s) AND f.user_id = %s "
+            "AND f.item_count <> ("
+            "SELECT COUNT(*) FROM files child_file "
+            "WHERE child_file.user_id = f.user_id AND child_file.folder_id = f.id"
+            ") + ("
+            "SELECT COUNT(*) FROM folders child_folder "
+            "WHERE child_folder.user_id = f.user_id AND child_folder.parent_id = f.id"
+            ")",
+            (checked_folder_ids, USER_ID),
+        )
+        or 0
+    )
+    server_log = SERVER_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+
+    assert_equal("concurrent folder move returns every response", len(responses), concurrency)
+    assert_equal("concurrent folder move keeps every batch response successful", len(successful_responses), concurrency)
+    assert_equal("concurrent folder move counts exactly one winner", sum(moved_counts), 1)
+    assert_equal("concurrent folder move stores one target root and path", target_rows, 1)
+    assert_equal("concurrent folder move preserves seven source roots and paths", source_rows, concurrency - 1)
+    assert_equal("concurrent folder move updates only the winning child path", mismatched_child_paths, 0)
+    assert_equal("concurrent folder move keeps all folder counts exact", mismatched_counts, 0)
+    assert_equal(
+        "concurrent folder move does not expose the uniqueness constraint",
+        "uk_folders_user_parent_name" in server_log,
+        False,
+    )
+
+
 def test_concurrent_same_name_file_copies_skip_before_insert() -> None:
     """Verify concurrent same-name copies serialize before reference and insert writes."""
     log_section("Concurrent Same-Name File Copy Single Winner")
@@ -2686,6 +2836,7 @@ def main() -> None:
     test_concurrent_folder_rename_has_one_winner_and_stable_conflicts()
     test_concurrent_file_rename_has_one_winner_and_stable_conflicts()
     test_concurrent_same_name_file_moves_skip_conflicts()
+    test_concurrent_same_name_folder_moves_skip_conflicts()
     test_concurrent_same_name_file_copies_skip_before_insert()
     test_copy_quota_rejection_no_side_effects()
     test_copy_conflict_releases_quota_and_refs_only_successes()

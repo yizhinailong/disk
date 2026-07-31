@@ -341,6 +341,20 @@ namespace disk::file {
                     }
                 }
 
+                std::sort(folder_candidate_names.begin(), folder_candidate_names.end());
+                folder_candidate_names.erase(
+                    std::unique(folder_candidate_names.begin(), folder_candidate_names.end()),
+                    folder_candidate_names.end()
+                );
+                for (const auto& name : folder_candidate_names) {
+                    co_await m_folder_repository.AcquireNameLock(
+                        transaction,
+                        user_id,
+                        request.target_folder_id,
+                        name
+                    );
+                }
+
                 auto occupied_folder_names = co_await utils::QueryOccupiedFolderNames(
                     transaction,
                     request.target_folder_id,
