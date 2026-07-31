@@ -76,7 +76,6 @@ namespace disk::file {
                 uint64_t
             ) const;
 
-            static_assert(std::is_same_v<decltype(&FileRepository::FindOwnedFile), FindOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::FindOwnedFileForUpdate), FindOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::FetchOwnedFilesByIdsForUpdate), FetchOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::RenameOwnedFile), RenameSignature>);
@@ -93,8 +92,8 @@ namespace disk::file {
             const auto folder_service = ReadSourceFile("src/services/FolderService.cpp");
             const auto file_mutation_service = ReadSourceFile("src/services/FileMutationService.cpp");
 
-            EXPECT_EQ(CountOccurrences(header, "const drogon::orm::DbClientPtr& client,"), 9U);
-            EXPECT_EQ(CountOccurrences(source, "const drogon::orm::DbClientPtr& client,"), 9U);
+            EXPECT_EQ(CountOccurrences(header, "const drogon::orm::DbClientPtr& client,"), 8U);
+            EXPECT_EQ(CountOccurrences(source, "const drogon::orm::DbClientPtr& client,"), 8U);
             EXPECT_FALSE(Contains(header, "m_db_client"));
             EXPECT_FALSE(Contains(header, "FileRepository(drogon::orm::DbClientPtr"));
             EXPECT_FALSE(Contains(source, "FileRepository::FileRepository("));
@@ -106,10 +105,15 @@ namespace disk::file {
         }
 
         TEST(FileRepositorySqlContractTest, OwnershipQueriesStayUserScopedAndBatchSafe) {
+            const auto header = ReadSourceFile("src/services/FileRepository.hpp");
             const auto source = ReadSourceFile("src/services/FileRepository.cpp");
 
-            EXPECT_TRUE(Contains(source, "auto FileRepository::FindOwnedFile("));
-            EXPECT_TRUE(Contains(source, "FROM files WHERE id = $1 AND user_id = $2"));
+            EXPECT_FALSE(Contains(header, "auto FindOwnedFile(\n"));
+            EXPECT_FALSE(Contains(source, "auto FileRepository::FindOwnedFile(\n"));
+            EXPECT_FALSE(Contains(source, "constexpr auto kSelectOwnedFileSql ="));
+            EXPECT_FALSE(Contains(source, "FROM files WHERE id = $1 AND user_id = $2\";"));
+            EXPECT_TRUE(Contains(source, "auto FileRepository::FindOwnedFileForUpdate("));
+            EXPECT_TRUE(Contains(source, "FROM files WHERE id = $1 AND user_id = $2 FOR UPDATE"));
 
             EXPECT_TRUE(Contains(source, "auto FileRepository::FetchOwnedFilesByIdsForUpdate("));
             EXPECT_TRUE(Contains(source, "std::sort(sorted_file_ids.begin(), sorted_file_ids.end())"));

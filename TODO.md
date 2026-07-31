@@ -2181,6 +2181,14 @@ ADR、单元测试文档和后端低风险清理 OpenSpec 先行固定应用组�
 
 clang-format、差异检查、后端与测试目标完整构建、应用组合/存储能力/工厂直接 GoogleTest 5/5、核心领域/上传/变更/文件夹/分享/回收站真实服务装配聚焦 CTest 8/8（17.17 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 526.75 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.108 文件仓储非锁定单项读取死原语清理记录（2026-08-01）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定文件仓储的最小读取边界。全仓精确符号、调用点和已编译对象审计确认，`FileRepository::FindOwnedFile` 只有声明与定义，`kSelectOwnedFileSql` 也只由该方法引用；生产、集成、工具、客户端和迁移均没有调用者，两处测试命中只是正向要求孤立接口和 SQL 存在。写路径已经统一使用同一事务的 `FindOwnedFileForUpdate`，只读详情与下载路径则直接用 `id + user_id` ORM Criteria。新合同在旧实现上按预期为 0/2，共检出活跃显式 client 数量、声明、定义、专属常量和独占 SQL 六个失败点，事务内替代原语合同保持通过。
+
+`FileRepository::FindOwnedFile`、专属 `kSelectOwnedFileSql` 及两个过时正向断言已删除，仓储公开面从 9 个收敛为 8 个活跃显式 client 原语。源码合同同时拒绝声明、定义、常量和无锁 SQL 回归，并正向锁定 `FindOwnedFileForUpdate` 及其用户谓词和 `FOR UPDATE`。文件重命名、移动、复制、文件夹路径更新、回收站子树锁定继续使用原 transaction client；文件详情、下载信息和下载数据继续通过 ORM 的文件 ID 与用户 ID 双 Criteria 查询，公开错误与响应不变。数据库 schema、迁移兼容字段和持久数据均未修改。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 FileRepository GoogleTest 6/6、文件仓储/变更/缓存/文件夹/回收站/配额/路径安全网聚焦 CTest 26/26（39.94 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 542.50 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

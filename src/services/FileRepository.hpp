@@ -31,13 +31,6 @@ namespace disk::file {
     class FileRepository {
     public:
         [[nodiscard]]
-        auto FindOwnedFile(
-            const drogon::orm::DbClientPtr& client,
-            uint64_t file_id,
-            uint64_t user_id
-        ) const -> drogon::Task<std::optional<drogon_model::disk::Files>>;
-
-        [[nodiscard]]
         auto FindOwnedFileForUpdate(
             const drogon::orm::DbClientPtr& client,
             uint64_t file_id,

@@ -18,11 +18,6 @@ namespace disk::file {
     using drogon_model::disk::Files;
 
     namespace {
-        constexpr auto kSelectOwnedFileSql =
-            "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
-            "is_favorite, download_count, last_accessed_at, created_at, updated_at "
-            "FROM files WHERE id = $1 AND user_id = $2";
-
         constexpr auto kSelectOwnedFileForUpdateSql =
             "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
             "is_favorite, download_count, last_accessed_at, created_at, updated_at "
@@ -57,18 +52,6 @@ namespace disk::file {
             "UPDATE files SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4";
 
     } ///< namespace
-
-    auto FileRepository::FindOwnedFile(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t file_id,
-        uint64_t user_id
-    ) const -> drogon::Task<std::optional<Files>> {
-        auto result = co_await client->execSqlCoro(kSelectOwnedFileSql, file_id, user_id);
-        if (result.empty()) {
-            co_return std::nullopt;
-        }
-        co_return Files(result[0], -1);
-    }
 
     auto FileRepository::FindOwnedFileForUpdate(
         const drogon::orm::DbClientPtr& client,
