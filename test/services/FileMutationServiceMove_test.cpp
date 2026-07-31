@@ -204,6 +204,39 @@ namespace disk::file {
             EXPECT_LT(root_lock, folder_plans);
         }
 
+        TEST(FileMutationServiceMoveContractTest, MoveChecksEveryFolderSubtreeWriteResult) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto move_body = ExtractMoveBody(source);
+
+            ASSERT_FALSE(move_body.empty());
+            const auto root_update = move_body.find("m_folder_repository.UpdateFolderLocationForMove(");
+            const auto descendant_update = move_body.find("m_folder_repository.UpdateFolderPathForMove(", root_update);
+            const auto folder_check = move_body.find("if (!folder_updated)", descendant_update);
+            const auto file_update = move_body.find("m_file_repository.UpdateFilePath(", folder_check);
+            const auto file_check = move_body.find("if (!file_updated)", file_update);
+            const auto source_count = move_body.find("auto source_count_updated", file_check);
+            const auto source_count_check = move_body.find("if (!source_count_updated)", source_count);
+            const auto target_count = move_body.find("auto target_count_updated", source_count_check);
+            const auto target_count_check = move_body.find("if (!target_count_updated)", target_count);
+            ASSERT_NE(root_update, std::string::npos);
+            ASSERT_NE(descendant_update, std::string::npos);
+            ASSERT_NE(folder_check, std::string::npos);
+            ASSERT_NE(file_update, std::string::npos);
+            ASSERT_NE(file_check, std::string::npos);
+            ASSERT_NE(source_count, std::string::npos);
+            ASSERT_NE(source_count_check, std::string::npos);
+            ASSERT_NE(target_count, std::string::npos);
+            ASSERT_NE(target_count_check, std::string::npos);
+            EXPECT_LT(root_update, descendant_update);
+            EXPECT_LT(descendant_update, folder_check);
+            EXPECT_LT(folder_check, file_update);
+            EXPECT_LT(file_update, file_check);
+            EXPECT_LT(file_check, source_count);
+            EXPECT_LT(source_count, source_count_check);
+            EXPECT_LT(source_count_check, target_count);
+            EXPECT_LT(target_count, target_count_check);
+        }
+
         TEST(FileMutationServiceMoveContractTest, MovePreservesValidationAndInvalidatesSharedCacheGeneration) {
             const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
             const auto move_body = ExtractMoveBody(source);

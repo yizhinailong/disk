@@ -420,8 +420,9 @@ namespace disk::file {
                     for (const auto& folder : plan.folders) {
                         auto old_path = folder.getValueOfPath();
                         auto new_path = new_prefix + old_path.substr(old_prefix.size());
+                        bool folder_updated = false;
                         if (folder.getValueOfId() == root.getValueOfId()) {
-                            co_await m_folder_repository.UpdateFolderLocationForMove(
+                            folder_updated = co_await m_folder_repository.UpdateFolderLocationForMove(
                                 transaction,
                                 folder.getValueOfId(),
                                 user_id,
@@ -431,7 +432,7 @@ namespace disk::file {
                                 trantor::Date::now()
                             );
                         } else {
-                            co_await m_folder_repository.UpdateFolderPathForMove(
+                            folder_updated = co_await m_folder_repository.UpdateFolderPathForMove(
                                 transaction,
                                 folder.getValueOfId(),
                                 user_id,
@@ -439,6 +440,15 @@ namespace disk::file {
                                 depth_delta,
                                 trantor::Date::now()
                             );
+                        }
+                        if (!folder_updated) {
+                            Logger::Error(log_context)
+                                << "Folder move path update affected no rows: folder_id="
+                                << folder.getValueOfId();
+                            co_return std::unexpected(ErrorInfo(
+                                ErrorCode::InternalError,
+                                "Failed to move items"
+                            ));
                         }
                     }
 
@@ -453,32 +463,59 @@ namespace disk::file {
                         if (path_it == folder_paths.end()) {
                             continue;
                         }
-                        co_await m_file_repository.UpdateFilePath(
+                        auto file_updated = co_await m_file_repository.UpdateFilePath(
                             transaction,
                             file.getValueOfId(),
                             user_id,
                             utils::BuildFilePath(path_it->second, file.getValueOfName()),
                             trantor::Date::now()
                         );
+                        if (!file_updated) {
+                            Logger::Error(log_context)
+                                << "Folder move file-path update affected no rows: file_id="
+                                << file.getValueOfId();
+                            co_return std::unexpected(ErrorInfo(
+                                ErrorCode::InternalError,
+                                "Failed to move items"
+                            ));
+                        }
                     }
 
                     if (old_parent_id > 0) {
-                        co_await m_folder_repository.ApplyItemCountDelta(
+                        auto source_count_updated = co_await m_folder_repository.ApplyItemCountDelta(
                             transaction,
                             old_parent_id,
                             user_id,
                             -1,
                             trantor::Date::now()
                         );
+                        if (!source_count_updated) {
+                            Logger::Error(log_context)
+                                << "Folder move source item-count update affected no rows: folder_id="
+                                << old_parent_id;
+                            co_return std::unexpected(ErrorInfo(
+                                ErrorCode::InternalError,
+                                "Failed to move items"
+                            ));
+                        }
                     }
                     if (request.target_folder_id > 0) {
-                        co_await m_folder_repository.ApplyItemCountDelta(
+                        auto target_count_updated = co_await m_folder_repository.ApplyItemCountDelta(
                             transaction,
                             request.target_folder_id,
                             user_id,
                             1,
                             trantor::Date::now()
                         );
+                        if (!target_count_updated) {
+                            Logger::Error(log_context)
+                                << "Folder move target item-count update affected no rows: folder_id="
+                                << request.target_folder_id;
+                            co_return std::unexpected(ErrorInfo(
+                                ErrorCode::InternalError,
+                                "Failed to move items"
+                            ));
+                        }
                     }
 
                     ++moved_folder_count;

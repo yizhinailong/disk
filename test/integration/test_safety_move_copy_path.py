@@ -21,6 +21,7 @@ from lib_py import (  # noqa: E402
     ensure_server,
     cleanup,
     do_login,
+    execute,
     fetch,
     json_field,
     log_fail,
@@ -42,6 +43,39 @@ EVIDENCE_PREFIX = "safety-namespace"
 
 TOKEN = ""
 USER_ID = 0
+
+
+def safe_test_identifier(prefix: str) -> str:
+    """Return a PostgreSQL-safe identifier for temporary trigger objects."""
+    return "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in unique_name(prefix))[:60]
+
+
+def install_folder_move_path_suppression_trigger(folder_id: int):
+    """Suppress one descendant folder path update without raising an exception."""
+    function_name = safe_test_identifier("suppress_folder_move_path_fn")
+    trigger_name = safe_test_identifier("suppress_folder_move_path_trg")
+    execute(
+        f"""
+        CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS trigger AS $$
+        BEGIN
+            IF OLD.id = {int(folder_id)} AND NEW.path <> OLD.path THEN
+                RETURN NULL;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    execute(
+        f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON folders '
+        f'FOR EACH ROW EXECUTE FUNCTION "{function_name}"()'
+    )
+
+    def cleanup_trigger() -> None:
+        execute(f'DROP TRIGGER IF EXISTS "{trigger_name}" ON folders')
+        execute(f'DROP FUNCTION IF EXISTS "{function_name}"()')
+
+    return cleanup_trigger
 
 
 def auth_headers(content_type: str = "application/json") -> dict[str, str]:
@@ -218,6 +252,64 @@ def test_move_folder_subtree_paths_and_rejections() -> tuple[int, int, int, int]
     return target_folder, root_folder, child_folder, file_id
 
 
+def test_move_folder_rolls_back_when_descendant_path_update_affects_no_row() -> None:
+    """Verify a suppressed descendant update rolls back the complete move."""
+    log_section("Move Folder Rolls Back On Suppressed Descendant Update")
+    source_folder = create_folder(f"safety_move_rollback_source_{unique_name()}")
+    target_folder = create_folder(f"safety_move_rollback_target_{unique_name()}")
+    root_folder = create_folder(f"safety_move_rollback_root_{unique_name()}", source_folder)
+    child_folder = create_folder(f"safety_move_rollback_child_{unique_name()}", root_folder)
+    file_name = f"safety_move_rollback_file_{unique_name()}.bin"
+    file_id = upload_file(file_name, f"move-rollback-{unique_name()}".encode(), child_folder)
+
+    root_before = dict(folder_row(root_folder))
+    child_before = dict(folder_row(child_folder))
+    file_before = dict(file_row(file_id))
+    source_count_before = int(folder_row(source_folder)["item_count"])
+    target_count_before = int(folder_row(target_folder)["item_count"])
+    cleanup_trigger = install_folder_move_path_suppression_trigger(child_folder)
+    try:
+        response = fetch(
+            "/api/file/move",
+            method="PUT",
+            headers=auth_headers(),
+            json_body={
+                "file_ids": [],
+                "folder_ids": [root_folder],
+                "target_folder_id": target_folder,
+            },
+        )
+    finally:
+        cleanup_trigger()
+
+    assert_equal("suppressed descendant move returns HTTP 500", response.status_code, 500)
+    assert_equal("suppressed descendant move returns stable code", json_field(response.text, "code"), "10006")
+    assert_equal(
+        "suppressed descendant move returns stable message",
+        json_field(response.text, "message"),
+        "Failed to move items",
+    )
+    root_after = folder_row(root_folder)
+    child_after = folder_row(child_folder)
+    file_after = file_row(file_id)
+    assert_equal("suppressed descendant move rolls back root parent", root_after["parent_id"], root_before["parent_id"])
+    assert_equal("suppressed descendant move rolls back root path", root_after["path"], root_before["path"])
+    assert_equal("suppressed descendant move rolls back root depth", root_after["depth"], root_before["depth"])
+    assert_equal("suppressed descendant move preserves child path", child_after["path"], child_before["path"])
+    assert_equal("suppressed descendant move preserves child depth", child_after["depth"], child_before["depth"])
+    assert_equal("suppressed descendant move rolls back file path", file_after["path"], file_before["path"])
+    assert_equal(
+        "suppressed descendant move preserves source count",
+        int(folder_row(source_folder)["item_count"]),
+        source_count_before,
+    )
+    assert_equal(
+        "suppressed descendant move preserves target count",
+        int(folder_row(target_folder)["item_count"]),
+        target_count_before,
+    )
+
+
 def test_copy_folder_preserves_tree_and_content_refs() -> None:
     """Verify folder copy preserves shape and increments content refs."""
     log_section("Copy Folder Tree Shape And Content References")
@@ -301,6 +393,7 @@ def main() -> None:
 
     test_move_file_updates_parent_path_and_counts()
     test_move_folder_subtree_paths_and_rejections()
+    test_move_folder_rolls_back_when_descendant_path_update_affects_no_row()
     test_copy_folder_preserves_tree_and_content_refs()
     test_instant_upload_updates_parent_count()
 

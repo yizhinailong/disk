@@ -81,6 +81,10 @@ The system SHALL allow users to move files or folders to an accessible target fo
 - **WHEN** multiple requests concurrently move the same folder subtree into different valid target folders
 - **THEN** the transactions SHALL serialize on the source root, each committed move SHALL use the latest parent, and the final subtree paths and every traversed parent count SHALL match the final inventory
 
+#### Scenario: A folder subtree move write affects no row
+- **WHEN** updating the root, any descendant folder or file path, or either parent count affects no expected row
+- **THEN** the whole move SHALL roll back and return the stable internal move error without committing partial paths or counts
+
 ### Requirement: Copy Items
 The system SHALL allow users to copy files or folders while preserving content-sharing and quota semantics.
 
