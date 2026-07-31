@@ -62,6 +62,37 @@ namespace disk::file {
             );
         }
 
+        auto ExtractRenameBody(const std::string& source) -> std::string {
+            return ExtractRange(
+                source,
+                "auto FileMutationService::Rename(",
+                "    /// ==================== Move ===================="
+            );
+        }
+
+        TEST(FileMutationServiceRenameContractTest, RenameUsesOneTransactionAndStableErrors) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto rename_body = ExtractRenameBody(source);
+
+            ASSERT_FALSE(rename_body.empty());
+            EXPECT_TRUE(Contains(rename_body, "TransactionRunner rename_transaction_runner("));
+            EXPECT_TRUE(Contains(rename_body, "rename_transaction_runner.Run("));
+            EXPECT_TRUE(Contains(rename_body, "ErrorInfo(ErrorCode::FileAlreadyExists)"));
+            EXPECT_TRUE(Contains(rename_body, "ErrorInfo(ErrorCode::FileNotFound)"));
+            EXPECT_TRUE(Contains(rename_body, "if (!transaction_result)"));
+            EXPECT_FALSE(Contains(rename_body, "IsFilenameExists("));
+            EXPECT_FALSE(Contains(rename_body, "catch (const drogon::orm::DrogonDbException"));
+
+            const auto transaction = rename_body.find("rename_transaction_runner.Run(");
+            const auto result_check = rename_body.find("if (!transaction_result)", transaction);
+            const auto cache_invalidation = rename_body.find("FileListCache::Invalidate", result_check);
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(result_check, std::string::npos);
+            ASSERT_NE(cache_invalidation, std::string::npos);
+            EXPECT_LT(transaction, result_check);
+            EXPECT_LT(result_check, cache_invalidation);
+        }
+
         TEST(FileMutationServiceMoveContractTest, MoveUsesTransactionRunnerBoundary) {
             const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
             const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
@@ -134,7 +165,7 @@ namespace disk::file {
             EXPECT_TRUE(Contains(controller_body, "m_mutation_service->Move(*parse_result, user_id, log_context)"));
             EXPECT_TRUE(Contains(controller_body, "m_mutation_service->Copy(*parse_result, user_id, log_context)"));
             EXPECT_TRUE(Contains(controller_body, "m_mutation_service->Delete(*parse_result, user_id, log_context)"));
-            EXPECT_TRUE(Contains(mutation_body, "IsFilenameExists(folder_id, new_name, user_id, log_context)"));
+            EXPECT_FALSE(Contains(mutation_body, "IsFilenameExists("));
             EXPECT_TRUE(Contains(mutation_body, "MoveToTrash(std::move(move_request), user_id, log_context)"));
             EXPECT_TRUE(Contains(trash_body, "Logger::Warn(log_context) << \"File not found or delete failed"));
 

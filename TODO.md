@@ -1973,6 +1973,14 @@ API、数据库、系统测试、单元测试和 OpenSpec 先行固定同父目�
 
 Python 语法、clang-format、差异检查、完整构建、相关直接 GoogleTest 8/8、内容/配额安全网 265/265、文件夹/缓存/变更/拓扑聚焦 CTest 12 通过、1 项按 PgBouncer 环境门控跳过（19.36 秒）和 OpenSpec 严格校验 24/24 通过。首次完整回归仅因 `FileListCache_test.cpp` 仍查找旧手动 `TransactionRunner::Commit` 而 1 项失败；文档与源码合同改为检查重命名 `Run` 成功结果处理后才失效缓存，该用例 1/1 通过。最终不带命令行额外超时的完整 CTest 共 1427 项：1420 通过、7 项按环境门控跳过、0 失败，总耗时 517.46 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与数据库事务合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.82 文件并发重命名单赢家记录（2026-07-31）
+
+API、数据库、系统测试、单元测试和 OpenSpec 先行固定同目录文件并发重命名的单赢家语义。调用链审计确认旧流程先用 standalone client 读取目标文件、查询同名冲突和解析文件夹路径，随后再独立更新名称/扩展名/路径；8 个 barrier 同步请求都能通过预检查。手工复现得到一个 HTTP 200/业务码 0 和七个错误的 `404/50005 FileNotFound`，服务器日志记录七次 `uk_files_user_folder_name` 唯一约束异常。新编译期/源码合同在生产实现前按预期因缺少 `FindOwnedFileForUpdate`、`AcquireNameLock` 和 `NameExistsExcluding` 而编译失败；旧二进制跑新安全网为 270/273，三个失败正好对应冲突数、业务码和日志泄漏合同。
+
+`FileRepository` 现以三个显式 transaction-client 原语锁定当前用户目标行、获取 `file-name:<user_id>:<folder_id>:<name>` 的 PostgreSQL transaction advisory lock，并排除自身查询同名冲突。文件与文件夹的名称锁前缀独立，保留两种类型允许同名的现有合同。`FileMutationService::Rename` 已改为一个 `TransactionRunner`，目标读取、名称锁、冲突检查、文件夹位置读取和最终更新均使用同一 transaction client，更新受影响行数继续检查。冲突在事务内稳定返回 `FileAlreadyExists`，缺失目标才返回 `FileNotFound`；交易成功后才记录成功并失效列表缓存。事务外且在查询失败时吞错返回 `false` 的 `IsFilenameExists` 及两个不再使用的 ORM alias 已删除。
+
+带 0.5 秒 PostgreSQL `BEFORE UPDATE` 延迟 trigger 的真实内容/配额安全网现为 273/273：8 个并发请求中一个 HTTP 200/业务码 0，七个稳定为 `409/50007`，目标名称与路径各只有一行，七个输家保留原名与原路径，父目录计数不变，整份服务器日志不再包含该唯一约束名。Python 语法、clang-format、差异检查、完整构建、相关直接 GoogleTest 9/9、文件仓储/变更/缓存/移动/拓扑聚焦 CTest 16 通过、1 项按 PgBouncer 环境门控跳过（23.68 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1429 项：1422 通过、7 项按环境门控跳过、0 失败，总耗时 519.46 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；单 API 的真实并发证据与数据库事务合同不替代目标多实例门禁，因此 Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

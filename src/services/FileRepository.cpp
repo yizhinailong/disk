@@ -23,6 +23,18 @@ namespace disk::file {
             "is_favorite, download_count, last_accessed_at, created_at, updated_at "
             "FROM files WHERE id = $1 AND user_id = $2";
 
+        constexpr auto kSelectOwnedFileForUpdateSql =
+            "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
+            "is_favorite, download_count, last_accessed_at, created_at, updated_at "
+            "FROM files WHERE id = $1 AND user_id = $2 FOR UPDATE";
+
+        constexpr auto kAcquireNameLockSql =
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))";
+
+        constexpr auto kNameExistsExcludingSql =
+            "SELECT 1 FROM files "
+            "WHERE user_id = $1 AND folder_id = $2 AND name = $3 AND id <> $4 LIMIT 1";
+
         constexpr auto kSelectOwnedFilesPrefixSql =
             "SELECT id, user_id, folder_id, content_id, name, extension, size, mime_type, path, "
             "is_favorite, download_count, last_accessed_at, created_at, updated_at "
@@ -56,6 +68,50 @@ namespace disk::file {
             co_return std::nullopt;
         }
         co_return Files(result[0], -1);
+    }
+
+    auto FileRepository::FindOwnedFileForUpdate(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t file_id,
+        uint64_t user_id
+    ) const -> drogon::Task<std::optional<Files>> {
+        auto result = co_await client->execSqlCoro(
+            kSelectOwnedFileForUpdateSql,
+            file_id,
+            user_id
+        );
+        if (result.empty()) {
+            co_return std::nullopt;
+        }
+        co_return Files(result[0], -1);
+    }
+
+    auto FileRepository::AcquireNameLock(
+        const drogon::orm::DbClientPtr& client,
+        uint64_t user_id,
+        uint64_t folder_id,
+        const std::string& name
+    ) const -> drogon::Task<void> {
+        const auto lock_key = "file-name:" + std::to_string(user_id) + ":" +
+                              std::to_string(folder_id) + ":" + name;
+        co_await client->execSqlCoro(kAcquireNameLockSql, lock_key);
+    }
+
+    auto FileRepository::NameExistsExcluding(
+        const drogon::orm::DbClientPtr& client,
+        const std::string& name,
+        uint64_t folder_id,
+        uint64_t user_id,
+        uint64_t excluded_file_id
+    ) const -> drogon::Task<bool> {
+        auto result = co_await client->execSqlCoro(
+            kNameExistsExcludingSql,
+            user_id,
+            folder_id,
+            name,
+            excluded_file_id
+        );
+        co_return !result.empty();
     }
 
     auto FileRepository::FetchOwnedFilesByIds(

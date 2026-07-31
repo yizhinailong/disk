@@ -164,14 +164,6 @@ namespace disk::file {
         [[nodiscard]]
         static auto ExtractExtension(const std::string& filename) -> std::string;
 
-        [[nodiscard]]
-        auto IsFilenameExists(
-            uint64_t folder_id,
-            const std::string& filename,
-            uint64_t user_id,
-            disk::utils::LogContext log_context
-        ) const -> drogon::Task<bool>;
-
         drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
         FileRepository m_file_repository;                                                                             ///< 文件持久化原语
         disk::folder::FolderRepository m_folder_repository;                                                           ///< 文件夹持久化原语

@@ -62,10 +62,26 @@ namespace disk::file {
                 const std::string&,
                 const trantor::Date&
             ) const;
+            using NameLockSignature = drogon::Task<void> (FileRepository::*)(
+                const drogon::orm::DbClientPtr&,
+                uint64_t,
+                uint64_t,
+                const std::string&
+            ) const;
+            using NameExistsSignature = drogon::Task<bool> (FileRepository::*)(
+                const drogon::orm::DbClientPtr&,
+                const std::string&,
+                uint64_t,
+                uint64_t,
+                uint64_t
+            ) const;
 
             static_assert(std::is_same_v<decltype(&FileRepository::FindOwnedFile), FindOwnedSignature>);
+            static_assert(std::is_same_v<decltype(&FileRepository::FindOwnedFileForUpdate), FindOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::FetchOwnedFilesByIds), FetchOwnedSignature>);
             static_assert(std::is_same_v<decltype(&FileRepository::RenameOwnedFile), RenameSignature>);
+            static_assert(std::is_same_v<decltype(&FileRepository::AcquireNameLock), NameLockSignature>);
+            static_assert(std::is_same_v<decltype(&FileRepository::NameExistsExcluding), NameExistsSignature>);
             static_assert(std::is_default_constructible_v<FileRepository>);
             static_assert(std::is_empty_v<FileRepository>);
         }
@@ -77,8 +93,8 @@ namespace disk::file {
             const auto folder_service = ReadSourceFile("src/services/FolderService.cpp");
             const auto file_mutation_service = ReadSourceFile("src/services/FileMutationService.cpp");
 
-            EXPECT_EQ(CountOccurrences(header, "const drogon::orm::DbClientPtr& client,"), 6U);
-            EXPECT_EQ(CountOccurrences(source, "const drogon::orm::DbClientPtr& client,"), 6U);
+            EXPECT_EQ(CountOccurrences(header, "const drogon::orm::DbClientPtr& client,"), 9U);
+            EXPECT_EQ(CountOccurrences(source, "const drogon::orm::DbClientPtr& client,"), 9U);
             EXPECT_FALSE(Contains(header, "m_db_client"));
             EXPECT_FALSE(Contains(header, "FileRepository(drogon::orm::DbClientPtr"));
             EXPECT_FALSE(Contains(source, "FileRepository::FileRepository("));
@@ -116,6 +132,40 @@ namespace disk::file {
             EXPECT_TRUE(Contains(source, "WHERE id = $3 AND user_id = $4"));
         }
 
+        TEST(FileRepositorySqlContractTest, RenameLocksTargetAndNameBeforeConflictCheck) {
+            const auto source = ReadSourceFile("src/services/FileRepository.cpp");
+            const auto service = ReadSourceFile("src/services/FileMutationService.cpp");
+
+            EXPECT_TRUE(Contains(source, "auto FileRepository::FindOwnedFileForUpdate("));
+            EXPECT_TRUE(Contains(source, "FROM files WHERE id = $1 AND user_id = $2 FOR UPDATE"));
+            EXPECT_TRUE(Contains(source, "auto FileRepository::AcquireNameLock("));
+            EXPECT_TRUE(Contains(source, "file-name:"));
+            EXPECT_TRUE(Contains(source, "pg_advisory_xact_lock(hashtextextended($1, 0))"));
+            EXPECT_TRUE(Contains(source, "auto FileRepository::NameExistsExcluding("));
+            EXPECT_TRUE(Contains(source, "AND id <> $4"));
+
+            const auto rename = service.find("auto FileMutationService::Rename(");
+            const auto transaction = service.find("TransactionRunner rename_transaction_runner(", rename);
+            const auto target_lock = service.find("FindOwnedFileForUpdate(", transaction);
+            const auto name_lock = service.find("AcquireNameLock(", target_lock);
+            const auto conflict_check = service.find("NameExistsExcluding(", name_lock);
+            const auto folder_location = service.find("ResolveOwnedFolderLocation(", conflict_check);
+            const auto update = service.find("RenameOwnedFile(", folder_location);
+            ASSERT_NE(rename, std::string::npos);
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(target_lock, std::string::npos);
+            ASSERT_NE(name_lock, std::string::npos);
+            ASSERT_NE(conflict_check, std::string::npos);
+            ASSERT_NE(folder_location, std::string::npos);
+            ASSERT_NE(update, std::string::npos);
+            EXPECT_LT(transaction, target_lock);
+            EXPECT_LT(target_lock, name_lock);
+            EXPECT_LT(name_lock, conflict_check);
+            EXPECT_LT(conflict_check, folder_location);
+            EXPECT_LT(folder_location, update);
+            EXPECT_FALSE(Contains(service, "auto FileMutationService::IsFilenameExists("));
+        }
+
         TEST(FileRepositorySqlContractTest, UnusedDescendantPathUpdatePrimitiveDoesNotReturn) {
             const auto header = ReadSourceFile("src/services/FileRepository.hpp");
             const auto source = ReadSourceFile("src/services/FileRepository.cpp");
@@ -132,5 +182,5 @@ namespace disk::file {
             EXPECT_TRUE(Contains(file_mutation_service, "utils::BuildFilePath(path_it->second, file.getValueOfName())"));
         }
 
-    } ///< namespace
-} ///< namespace disk::file
+    } // namespace
+} // namespace disk::file

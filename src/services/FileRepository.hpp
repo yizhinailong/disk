@@ -38,6 +38,29 @@ namespace disk::file {
         ) const -> drogon::Task<std::optional<drogon_model::disk::Files>>;
 
         [[nodiscard]]
+        auto FindOwnedFileForUpdate(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t file_id,
+            uint64_t user_id
+        ) const -> drogon::Task<std::optional<drogon_model::disk::Files>>;
+
+        auto AcquireNameLock(
+            const drogon::orm::DbClientPtr& client,
+            uint64_t user_id,
+            uint64_t folder_id,
+            const std::string& name
+        ) const -> drogon::Task<void>;
+
+        [[nodiscard]]
+        auto NameExistsExcluding(
+            const drogon::orm::DbClientPtr& client,
+            const std::string& name,
+            uint64_t folder_id,
+            uint64_t user_id,
+            uint64_t excluded_file_id
+        ) const -> drogon::Task<bool>;
+
+        [[nodiscard]]
         auto FetchOwnedFilesByIds(
             const drogon::orm::DbClientPtr& client,
             const std::vector<uint64_t>& file_ids,

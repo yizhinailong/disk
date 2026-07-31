@@ -136,6 +136,7 @@ namespace disk::file {
 
         TEST(FileListCacheContractTest, TransactionalWritersCommitBeforeBumpingGeneration) {
             const auto folder = ReadSourceFile("src/services/FolderService.cpp");
+            const auto mutation = ReadSourceFile("src/services/FileMutationService.cpp");
             const auto share = ReadSourceFile("src/services/ShareService.cpp");
 
             const auto folder_rename = folder.find("auto FolderService::Rename(");
@@ -157,6 +158,26 @@ namespace disk::file {
             ASSERT_NE(folder_invalidation, std::string::npos);
             EXPECT_LT(folder_transaction, folder_result_check);
             EXPECT_LT(folder_result_check, folder_invalidation);
+
+            const auto file_rename = mutation.find("auto FileMutationService::Rename(");
+            const auto file_transaction = mutation.find(
+                "rename_transaction_runner.Run(",
+                file_rename
+            );
+            const auto file_result_check = mutation.find(
+                "if (!transaction_result)",
+                file_transaction
+            );
+            const auto file_invalidation = mutation.find(
+                "FileListCache::Invalidate(",
+                file_result_check
+            );
+            ASSERT_NE(file_rename, std::string::npos);
+            ASSERT_NE(file_transaction, std::string::npos);
+            ASSERT_NE(file_result_check, std::string::npos);
+            ASSERT_NE(file_invalidation, std::string::npos);
+            EXPECT_LT(file_transaction, file_result_check);
+            EXPECT_LT(file_result_check, file_invalidation);
 
             const auto save_to_drive = share.find("auto ShareService::SaveToDrive(");
             const auto share_commit = share.find("TransactionRunner::Commit(", save_to_drive);

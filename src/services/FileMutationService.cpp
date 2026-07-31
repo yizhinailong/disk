@@ -32,9 +32,7 @@ namespace disk::file {
 
     using disk::utils::BatchUtils;
     using disk::utils::DEFAULT_BATCH_CHUNK_SIZE;
-    using drogon::orm::CompareOperator;
     using drogon::orm::CoroMapper;
-    using drogon::orm::Criteria;
     using drogon_model::disk::FileContents;
     using drogon_model::disk::Files;
     using drogon_model::disk::Folders;
@@ -61,64 +59,90 @@ namespace disk::file {
             << "\""
             << ", user_id=" << user_id;
 
-        try {
-            auto file = co_await m_file_repository.FindOwnedFile(m_db_client, file_id, user_id);
-            if (!file) {
+        RenameResponse response;
+        TransactionRunner rename_transaction_runner(
+            m_db_client,
+            ErrorInfo(ErrorCode::InternalError, "Failed to rename file"),
+            log_context
+        );
+        auto transaction_result = co_await rename_transaction_runner.Run(
+            [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                auto file = co_await m_file_repository.FindOwnedFileForUpdate(
+                    transaction,
+                    file_id,
+                    user_id
+                );
+                if (!file.has_value()) {
+                    co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
+                }
+
+                const auto folder_id = file->getValueOfFolderId();
+                co_await m_file_repository.AcquireNameLock(
+                    transaction,
+                    user_id,
+                    folder_id,
+                    new_name
+                );
+                if (file->getValueOfName() != new_name &&
+                    co_await m_file_repository.NameExistsExcluding(
+                        transaction,
+                        new_name,
+                        folder_id,
+                        user_id,
+                        file_id
+                    )) {
+                    co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
+                }
+
+                auto folder_location_result = co_await m_folder_repository.ResolveOwnedFolderLocation(
+                    transaction,
+                    folder_id,
+                    user_id,
+                    log_context
+                );
+                if (!folder_location_result) {
+                    co_return std::unexpected(folder_location_result.error());
+                }
+
+                const auto updated_at = trantor::Date::now();
+                const auto new_path = utils::BuildFilePath(folder_location_result->path, new_name);
+                auto updated = co_await m_file_repository.RenameOwnedFile(
+                    transaction,
+                    file_id,
+                    user_id,
+                    new_name,
+                    ExtractExtension(new_name),
+                    new_path,
+                    updated_at
+                );
+                if (!updated) {
+                    co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
+                }
+
+                response.id = file->getValueOfId();
+                response.name = new_name;
+                response.updated_at = updated_at.toDbStringLocal();
+                co_return {};
+            }
+        );
+        if (!transaction_result) {
+            if (transaction_result.error().code == ErrorCode::FileNotFound) {
                 Logger::Warn(log_context)
                     << "Rename target file not found or no permission: file_id=" << file_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
-            }
-
-            auto folder_id = file->getValueOfFolderId();
-            if (file->getValueOfName() != new_name &&
-                co_await IsFilenameExists(folder_id, new_name, user_id, log_context)) {
+            } else if (transaction_result.error().code == ErrorCode::FileAlreadyExists) {
                 Logger::Warn(log_context)
                     << "Target folder already has file with same name: " << new_name;
-                co_return std::unexpected(ErrorInfo(ErrorCode::FileAlreadyExists));
+            } else {
+                Logger::Error(log_context) << "Rename file transaction failed";
             }
-
-            auto folder_location_result = co_await m_folder_repository.ResolveOwnedFolderLocation(
-                m_db_client,
-                folder_id,
-                user_id,
-                log_context
-            );
-            if (!folder_location_result) {
-                co_return std::unexpected(folder_location_result.error());
-            }
-
-            auto updated_at = trantor::Date::now();
-            auto new_path = utils::BuildFilePath(folder_location_result->path, new_name);
-            auto updated = co_await m_file_repository.RenameOwnedFile(
-                m_db_client,
-                file_id,
-                user_id,
-                new_name,
-                ExtractExtension(new_name),
-                new_path,
-                updated_at
-            );
-            if (!updated) {
-                co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
-            }
-
-            Logger::Info(log_context)
-                << "File rename successful: file_id=" << file_id << ", new_name=\"" << new_name
-                << "\"";
-
-            RenameResponse response;
-            response.id = file->getValueOfId();
-            response.name = new_name;
-            response.updated_at = updated_at.toDbStringLocal();
-
-            co_await FileListCache::Invalidate(m_redis_service, user_id, log_context);
-            co_return response;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context)
-                << "File not found or no permission: file_id=" << file_id;
-            co_return std::unexpected(ErrorInfo(ErrorCode::FileNotFound));
+            co_return std::unexpected(transaction_result.error());
         }
+
+        Logger::Info(log_context)
+            << "File rename successful: file_id=" << file_id << ", new_name=\"" << new_name
+            << "\"";
+        co_await FileListCache::Invalidate(m_redis_service, user_id, log_context);
+        co_return response;
     }
 
     /// ==================== Move ====================
@@ -1285,29 +1309,6 @@ namespace disk::file {
             return "";
         }
         return filename.substr(pos + 1);
-    }
-
-    auto FileMutationService::IsFilenameExists(
-        uint64_t folder_id,
-        const std::string& filename,
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<bool> {
-
-        try {
-            CoroMapper<Files> mapper(m_db_client);
-            auto count = co_await mapper.count(
-                Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id) &&
-                Criteria(Files::Cols::_folder_id, CompareOperator::EQ, folder_id) &&
-                Criteria(Files::Cols::_name, CompareOperator::EQ, filename)
-            );
-
-            co_return count > 0;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to check filename: " << e.base().what();
-            co_return false;
-        }
     }
 
 } // namespace disk::file
