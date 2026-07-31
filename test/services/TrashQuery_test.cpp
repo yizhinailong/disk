@@ -147,6 +147,60 @@ namespace disk::trash {
             EXPECT_LT(trash_delete, affected_rows);
         }
 
+        TEST(TrashQuerySqlContractTest, FolderRestoreRebuildsAndConsumesTrashAtomically) {
+            const auto query_source = ReadSourceFile("src/services/TrashQuery.cpp");
+            const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
+            const auto restore_begin = service_source.find(
+                "auto TrashService::RestoreFolder(\n        const TrashLifecycleRecord&"
+            );
+            const auto restore_end = service_source.find(
+                "auto TrashService::DeleteFile(",
+                restore_begin
+            );
+
+            ASSERT_NE(restore_begin, std::string::npos);
+            ASSERT_NE(restore_end, std::string::npos);
+            const auto restore_body = service_source.substr(
+                restore_begin,
+                restore_end - restore_begin
+            );
+
+            const auto transaction = restore_body.find("transaction_runner.Run(");
+            const auto trash_lock = restore_body.find("FetchLifecycleRowForUpdate(", transaction);
+            const auto snapshot = restore_body.find("ParseFolderTreeSnapshot(", trash_lock);
+            const auto name_lock = restore_body.find("AcquireNameLock(", snapshot);
+            const auto parent_lock = restore_body.find("FindOwnedFolderForUpdate(", name_lock);
+            const auto conflict_check = restore_body.find("NameExistsExcluding(", parent_lock);
+            const auto root_insert = restore_body.find("folder_mapper.insert(root_folder)", conflict_check);
+            const auto file_insert = restore_body.find("file_mapper.insert(file)", root_insert);
+            const auto parent_count = restore_body.find("ApplyItemCountDelta(", file_insert);
+            const auto trash_delete = restore_body.find("DELETE FROM trash", parent_count);
+            const auto affected_rows = restore_body.find("affectedRows() != 1", trash_delete);
+
+            EXPECT_TRUE(Contains(query_source, "WHERE id = $1 AND user_id = $2 FOR UPDATE"));
+            ASSERT_NE(transaction, std::string::npos);
+            ASSERT_NE(trash_lock, std::string::npos);
+            ASSERT_NE(snapshot, std::string::npos);
+            ASSERT_NE(name_lock, std::string::npos);
+            ASSERT_NE(parent_lock, std::string::npos);
+            ASSERT_NE(conflict_check, std::string::npos);
+            ASSERT_NE(root_insert, std::string::npos);
+            ASSERT_NE(file_insert, std::string::npos);
+            ASSERT_NE(parent_count, std::string::npos);
+            ASSERT_NE(trash_delete, std::string::npos);
+            ASSERT_NE(affected_rows, std::string::npos);
+            EXPECT_LT(transaction, trash_lock);
+            EXPECT_LT(trash_lock, snapshot);
+            EXPECT_LT(snapshot, name_lock);
+            EXPECT_LT(name_lock, parent_lock);
+            EXPECT_LT(parent_lock, conflict_check);
+            EXPECT_LT(conflict_check, root_insert);
+            EXPECT_LT(root_insert, file_insert);
+            EXPECT_LT(file_insert, parent_count);
+            EXPECT_LT(parent_count, trash_delete);
+            EXPECT_LT(trash_delete, affected_rows);
+        }
+
         TEST(TrashQuerySqlContractTest, FileTrashTransitionsUpdateParentCountsAtomically) {
             const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
             const auto move_begin = service_source.find("auto TrashService::MoveToTrash(");

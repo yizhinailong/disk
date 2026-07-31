@@ -1332,193 +1332,261 @@ namespace disk::trash {
         BatchResultItem& result,
         disk::utils::LogContext log_context
     ) -> drogon::Task<void> {
+        uint64_t restored_folder_id = 0;
+        size_t restored_folder_count = 0;
+        size_t restored_file_count = 0;
+        std::string restored_name;
+        std::string restored_path;
+        bool restored_to_root = false;
+        std::optional<ErrorInfo> restore_error;
+        bool restored = false;
 
-        try {
-            auto trash_id = trash_item.id;
-            auto original_folder_id = trash_item.original_folder_id;
-            auto item_name = trash_item.item_name;
+        disk::file::TransactionRunner transaction_runner(
+            m_db_client,
+            ErrorInfo(ErrorCode::InternalError, "Failed to restore folder"),
+            log_context
+        );
+        for (uint16_t candidate_index = 0; candidate_index <= 1000; ++candidate_index) {
+            bool candidate_occupied = false;
+            restored_to_root = false;
 
-            auto target_parent_id = original_folder_id;
-            std::string parent_path = "/";
-            uint32_t parent_depth = 0;
-
-            if (!co_await IsFolderExists(original_folder_id, user_id, log_context)) {
-                Logger::Debug(log_context)
-                    << "Original parent folder not found, restoring to root: original_folder_id="
-                    << original_folder_id;
-                target_parent_id = 0;
-            }
-
-            if (target_parent_id > 0) {
-                CoroMapper<Folders> folder_mapper(m_db_client);
-                try {
-                    auto parent_folder = co_await folder_mapper.findOne(
-                        Criteria(Folders::Cols::_id, CompareOperator::EQ, target_parent_id)
+            auto transaction_result = co_await transaction_runner.Run(
+                [&](const drogon::orm::DbClientPtr& transaction) -> drogon::Task<Result<void>> {
+                    auto locked_trash_item = co_await m_trash_query.FetchLifecycleRowForUpdate(
+                        transaction,
+                        trash_item.id,
+                        user_id
                     );
-                    parent_path = parent_folder.getValueOfPath();
-                    parent_depth = parent_folder.getValueOfDepth();
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    Logger::Warn(log_context)
-                        << "Failed to get parent folder info, using root: folder_id="
-                        << target_parent_id;
-                    target_parent_id = 0;
-                    parent_path = "/";
-                    parent_depth = 0;
-                }
-            }
-
-            auto final_name = item_name;
-            if (co_await IsFolderNameExists(target_parent_id, item_name, user_id, log_context)) {
-                final_name = co_await GenerateUniqueFilename(
-                    target_parent_id,
-                    item_name,
-                    user_id,
-                    false,
-                    log_context
-                );
-                Logger::Debug(log_context)
-                    << "Folder name conflict, auto-renamed: " << item_name << " -> "
-                    << final_name;
-            }
-
-            std::string folder_path = parent_path + final_name + "/";
-            uint32_t folder_depth = parent_depth + 1;
-
-            CoroMapper<Folders> folder_mapper(m_db_client);
-            CoroMapper<Files> file_mapper(m_db_client);
-            CoroMapper<Trash> trash_mapper(m_db_client);
-
-            auto snapshot = ParseFolderTreeSnapshot(trash_item.item_data);
-            if (!snapshot.has_value()) {
-                Folders folder;
-                folder.setUserId(user_id);
-                folder.setParentId(target_parent_id);
-                folder.setName(final_name);
-                folder.setPath(folder_path);
-                folder.setDepth(folder_depth);
-                folder.setItemCount(0);
-                folder.setCreatedAt(trantor::Date::now());
-                folder.setUpdatedAt(trantor::Date::now());
-
-                auto inserted_folder = co_await folder_mapper.insert(folder);
-                co_await trash_mapper.deleteByPrimaryKey(trash_id);
-
-                result.status = "success";
-                result.folder_id = inserted_folder.getValueOfId();
-                result.path = folder_path;
-
-                Logger::Info(log_context)
-                    << "Folder restored successfully: trash_id=" << trash_id
-                    << ", folder_id=" << inserted_folder.getValueOfId()
-                    << ", name=" << final_name << ", path=" << folder_path
-                    << ", depth=" << folder_depth;
-                co_return;
-            }
-
-            std::unordered_map<uint64_t, uint64_t> folder_id_map;
-            std::unordered_map<uint64_t, std::string> folder_path_map;
-            folder_id_map.reserve(snapshot->folders.size() + 1);
-            folder_path_map.reserve(snapshot->folders.size() + 1);
-
-            Folders root_folder;
-            root_folder.setUserId(user_id);
-            root_folder.setParentId(target_parent_id);
-            root_folder.setName(final_name);
-            root_folder.setPath(folder_path);
-            root_folder.setDepth(folder_depth);
-            root_folder.setItemCount(snapshot->root.item_count);
-            root_folder.setCreatedAt(trantor::Date::now());
-            root_folder.setUpdatedAt(trantor::Date::now());
-
-            auto inserted_root = co_await folder_mapper.insert(root_folder);
-            auto root_new_id = inserted_root.getValueOfId();
-            folder_id_map[snapshot->root.id] = root_new_id;
-            folder_path_map[snapshot->root.id] = folder_path;
-
-            auto remaining_folders = snapshot->folders;
-            while (!remaining_folders.empty()) {
-                bool progressed = false;
-                for (auto it = remaining_folders.begin(); it != remaining_folders.end();) {
-                    auto parent_it = folder_id_map.find(it->parent_id);
-                    if (parent_it == folder_id_map.end()) {
-                        ++it;
-                        continue;
+                    if (!locked_trash_item.has_value() || locked_trash_item->item_type != "folder") {
+                        co_return std::unexpected(
+                            ErrorInfo(ErrorCode::ResourceNotFound, "Trash item not found")
+                        );
                     }
 
-                    auto parent_path_it = folder_path_map.find(it->parent_id);
-                    auto restored_path = parent_path_it->second + it->name + "/";
-                    auto depth_delta = it->depth > snapshot->root.depth ? it->depth - snapshot->root.depth : 1;
+                    auto snapshot = ParseFolderTreeSnapshot(locked_trash_item->item_data);
+                    restored_name = locked_trash_item->item_name;
+                    if (candidate_index > 0) {
+                        restored_name += " (" + std::to_string(candidate_index) + ")";
+                    }
 
-                    Folders folder;
-                    folder.setUserId(user_id);
-                    folder.setParentId(parent_it->second);
-                    folder.setName(it->name);
-                    folder.setPath(restored_path);
-                    folder.setDepth(folder_depth + depth_delta);
-                    folder.setItemCount(it->item_count);
-                    folder.setCreatedAt(trantor::Date::now());
-                    folder.setUpdatedAt(trantor::Date::now());
+                    uint64_t target_parent_id = locked_trash_item->original_folder_id;
+                    std::string parent_path = "/";
+                    uint32_t parent_depth = 0;
+                    disk::folder::FolderRepository folder_repository;
+                    if (target_parent_id > 0) {
+                        auto parent_snapshot = co_await folder_repository.FindOwnedFolder(
+                            transaction,
+                            target_parent_id,
+                            user_id
+                        );
+                        if (!parent_snapshot.has_value()) {
+                            restored_to_root = true;
+                            target_parent_id = 0;
+                        }
+                    }
 
-                    auto inserted_folder = co_await folder_mapper.insert(folder);
-                    folder_id_map[it->id] = inserted_folder.getValueOfId();
-                    folder_path_map[it->id] = restored_path;
-                    it = remaining_folders.erase(it);
-                    progressed = true;
+                    co_await folder_repository.AcquireNameLock(
+                        transaction,
+                        user_id,
+                        target_parent_id,
+                        restored_name
+                    );
+
+                    if (target_parent_id > 0) {
+                        auto parent_folder = co_await folder_repository.FindOwnedFolderForUpdate(
+                            transaction,
+                            target_parent_id,
+                            user_id
+                        );
+                        if (parent_folder.has_value()) {
+                            parent_path = parent_folder->getValueOfPath();
+                            parent_depth = parent_folder->getValueOfDepth();
+                        } else {
+                            restored_to_root = true;
+                            target_parent_id = 0;
+                            co_await folder_repository.AcquireNameLock(
+                                transaction,
+                                user_id,
+                                target_parent_id,
+                                restored_name
+                            );
+                        }
+                    }
+
+                    if (co_await folder_repository.NameExistsExcluding(
+                            transaction,
+                            restored_name,
+                            target_parent_id,
+                            user_id,
+                            0
+                        )) {
+                        candidate_occupied = true;
+                        co_return std::unexpected(
+                            ErrorInfo(ErrorCode::ResourceConflict, "Restore folder name occupied")
+                        );
+                    }
+
+                    restored_path = parent_path + restored_name + "/";
+                    const auto folder_depth = parent_depth + 1;
+                    const auto now = trantor::Date::now();
+                    CoroMapper<Folders> folder_mapper(transaction);
+                    CoroMapper<Files> file_mapper(transaction);
+
+                    Folders root_folder;
+                    root_folder.setUserId(user_id);
+                    root_folder.setParentId(target_parent_id);
+                    root_folder.setName(restored_name);
+                    root_folder.setPath(restored_path);
+                    root_folder.setDepth(folder_depth);
+                    root_folder.setItemCount(snapshot.has_value() ? snapshot->root.item_count : 0);
+                    root_folder.setCreatedAt(now);
+                    root_folder.setUpdatedAt(now);
+
+                    auto inserted_root = co_await folder_mapper.insert(root_folder);
+                    restored_folder_id = inserted_root.getValueOfId();
+                    restored_folder_count = 1;
+                    restored_file_count = 0;
+
+                    if (snapshot.has_value()) {
+                        std::unordered_map<uint64_t, uint64_t> folder_id_map;
+                        std::unordered_map<uint64_t, std::string> folder_path_map;
+                        folder_id_map.reserve(snapshot->folders.size() + 1);
+                        folder_path_map.reserve(snapshot->folders.size() + 1);
+                        folder_id_map[snapshot->root.id] = restored_folder_id;
+                        folder_path_map[snapshot->root.id] = restored_path;
+
+                        auto remaining_folders = snapshot->folders;
+                        while (!remaining_folders.empty()) {
+                            bool progressed = false;
+                            for (auto it = remaining_folders.begin(); it != remaining_folders.end();) {
+                                auto parent_it = folder_id_map.find(it->parent_id);
+                                auto parent_path_it = folder_path_map.find(it->parent_id);
+                                if (parent_it == folder_id_map.end() || parent_path_it == folder_path_map.end()) {
+                                    ++it;
+                                    continue;
+                                }
+
+                                const auto child_path = parent_path_it->second + it->name + "/";
+                                const auto depth_delta = it->depth > snapshot->root.depth ? it->depth - snapshot->root.depth : 1;
+
+                                Folders folder;
+                                folder.setUserId(user_id);
+                                folder.setParentId(parent_it->second);
+                                folder.setName(it->name);
+                                folder.setPath(child_path);
+                                folder.setDepth(folder_depth + depth_delta);
+                                folder.setItemCount(it->item_count);
+                                folder.setCreatedAt(now);
+                                folder.setUpdatedAt(now);
+
+                                auto inserted_folder = co_await folder_mapper.insert(folder);
+                                folder_id_map[it->id] = inserted_folder.getValueOfId();
+                                folder_path_map[it->id] = child_path;
+                                it = remaining_folders.erase(it);
+                                ++restored_folder_count;
+                                progressed = true;
+                            }
+
+                            if (!progressed) {
+                                co_return std::unexpected(
+                                    ErrorInfo(ErrorCode::InternalError, "Failed to restore folder")
+                                );
+                            }
+                        }
+
+                        for (const auto& snapshot_file : snapshot->files) {
+                            auto folder_it = folder_id_map.find(snapshot_file.folder_id);
+                            auto path_it = folder_path_map.find(snapshot_file.folder_id);
+                            if (folder_it == folder_id_map.end() || path_it == folder_path_map.end()) {
+                                co_return std::unexpected(
+                                    ErrorInfo(ErrorCode::InternalError, "Failed to restore folder")
+                                );
+                            }
+
+                            Files file;
+                            file.setUserId(user_id);
+                            file.setContentId(snapshot_file.content_id);
+                            file.setFolderId(folder_it->second);
+                            file.setName(snapshot_file.name);
+                            file.setExtension(snapshot_file.extension);
+                            file.setSize(snapshot_file.size);
+                            file.setMimeType(snapshot_file.mime_type);
+                            file.setPath(path_it->second + snapshot_file.name);
+                            file.setIsFavorite(snapshot_file.is_favorite);
+                            file.setDownloadCount(snapshot_file.download_count);
+                            file.setCreatedAt(now);
+                            file.setUpdatedAt(now);
+                            co_await file_mapper.insert(file);
+                            ++restored_file_count;
+                        }
+                    }
+
+                    if (target_parent_id > 0) {
+                        auto parent_updated = co_await folder_repository.ApplyItemCountDelta(
+                            transaction,
+                            target_parent_id,
+                            user_id,
+                            1,
+                            now
+                        );
+                        if (!parent_updated) {
+                            co_return std::unexpected(
+                                ErrorInfo(ErrorCode::InternalError, "Failed to restore folder")
+                            );
+                        }
+                    }
+
+                    auto delete_result = co_await transaction->execSqlCoro(
+                        "DELETE FROM trash " "WHERE id = $1 AND user_id = $2 AND item_type = 'folder'",
+                        locked_trash_item->id,
+                        user_id
+                    );
+                    if (delete_result.affectedRows() != 1) {
+                        co_return std::unexpected(
+                            ErrorInfo(ErrorCode::InternalError, "Failed to restore folder")
+                        );
+                    }
+
+                    co_return {};
                 }
+            );
 
-                if (!progressed) {
-                    throw std::runtime_error("Folder snapshot contains orphaned folder nodes");
-                }
+            if (transaction_result.has_value()) {
+                restored = true;
+                break;
             }
-
-            for (const auto& snapshot_file : snapshot->files) {
-                auto folder_it = folder_id_map.find(snapshot_file.folder_id);
-                auto path_it = folder_path_map.find(snapshot_file.folder_id);
-                if (folder_it == folder_id_map.end() || path_it == folder_path_map.end()) {
-                    throw std::runtime_error("Folder snapshot contains orphaned file nodes");
-                }
-
-                Files file;
-                file.setUserId(user_id);
-                file.setContentId(snapshot_file.content_id);
-                file.setFolderId(folder_it->second);
-                file.setName(snapshot_file.name);
-                file.setExtension(snapshot_file.extension);
-                file.setSize(snapshot_file.size);
-                file.setMimeType(snapshot_file.mime_type);
-                file.setPath(path_it->second + snapshot_file.name);
-                file.setIsFavorite(snapshot_file.is_favorite);
-                file.setDownloadCount(snapshot_file.download_count);
-                file.setCreatedAt(trantor::Date::now());
-                file.setUpdatedAt(trantor::Date::now());
-                co_await file_mapper.insert(file);
+            if (candidate_occupied) {
+                continue;
             }
-
-            co_await trash_mapper.deleteByPrimaryKey(trash_id);
-
-            result.status = "success";
-            result.folder_id = root_new_id;
-            result.path = folder_path;
-
-            Logger::Info(log_context)
-                << "Folder tree restored successfully: trash_id=" << trash_id
-                << ", folder_id=" << root_new_id << ", folder_count="
-                << (snapshot->folders.size() + 1) << ", file_count=" << snapshot->files.size();
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to restore folder: trash_id=" << trash_item.id << " - "
-                << e.base().what();
-            result.status = "failed";
-            result.code = static_cast<uint16_t>(ErrorCode::InternalError);
-            result.message = "Failed to restore folder";
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Failed to restore folder: trash_id=" << trash_item.id << " - " << e.what();
-            result.status = "failed";
-            result.code = static_cast<uint16_t>(ErrorCode::InternalError);
-            result.message = "Failed to restore folder";
+            restore_error = transaction_result.error();
+            break;
         }
+
+        if (!restored) {
+            if (!restore_error.has_value()) {
+                restore_error = ErrorInfo(ErrorCode::InternalError, "Failed to restore folder");
+            }
+            result.status = "failed";
+            result.code = static_cast<uint16_t>(restore_error->code);
+            result.message = restore_error->message;
+            Logger::Error(log_context) << "Failed to restore folder: trash_id=" << trash_item.id;
+            co_return;
+        }
+
+        result.status = "success";
+        result.folder_id = restored_folder_id;
+        result.path = restored_path;
+
+        if (restored_to_root) {
+            Logger::Debug(log_context)
+                << "Original parent folder not found, restored folder to root: trash_id="
+                << trash_item.id;
+        }
+        Logger::Info(log_context)
+            << "Folder tree restored successfully: trash_id=" << trash_item.id
+            << ", folder_id=" << restored_folder_id << ", name=" << restored_name
+            << ", path=" << restored_path << ", folder_count=" << restored_folder_count
+            << ", file_count=" << restored_file_count;
     }
 
     auto TrashService::DeleteFile(
@@ -1814,122 +1882,6 @@ namespace disk::trash {
                 }
             }
             throw;
-        }
-    }
-
-    auto TrashService::GenerateUniqueFilename(
-        uint64_t folder_id,
-        const std::string& name,
-        uint64_t user_id,
-        bool is_file,
-        disk::utils::LogContext log_context
-    ) -> drogon::Task<std::string> {
-
-        auto base_name = ExtractBaseName(name);
-        auto extension = ExtractExtension(name);
-
-        int counter = 1;
-        std::string new_name;
-
-        while (true) {
-            if (is_file) {
-                if (extension.empty()) {
-                    new_name = base_name + " (" + std::to_string(counter) + ")";
-                } else {
-                    new_name = base_name + " (" + std::to_string(counter) + ")." + extension;
-                }
-            } else {
-                new_name = name + " (" + std::to_string(counter) + ")";
-            }
-
-            bool exists = false;
-            if (is_file) {
-                exists = co_await IsFilenameExists(folder_id, new_name, user_id, log_context);
-            } else {
-                exists = co_await IsFolderNameExists(folder_id, new_name, user_id, log_context);
-            }
-
-            if (!exists) {
-                co_return new_name;
-            }
-
-            counter++;
-
-            if (counter > 1000) {
-                Logger::Warn(log_context)
-                    << "Unable to generate unique filename, max attempts reached: " << name;
-                co_return new_name;
-            }
-        }
-    }
-
-    auto TrashService::IsFilenameExists(
-        uint64_t folder_id,
-        const std::string& filename,
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<bool> {
-
-        try {
-            CoroMapper<Files> mapper(m_db_client);
-            auto count = co_await mapper.count(
-                Criteria(Files::Cols::_user_id, CompareOperator::EQ, user_id) &&
-                Criteria(Files::Cols::_folder_id, CompareOperator::EQ, folder_id) &&
-                Criteria(Files::Cols::_name, CompareOperator::EQ, filename)
-            );
-
-            co_return count > 0;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to check filename: " << e.base().what();
-            co_return false;
-        }
-    }
-
-    auto TrashService::IsFolderNameExists(
-        uint64_t folder_id,
-        const std::string& foldername,
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<bool> {
-
-        try {
-            CoroMapper<Folders> mapper(m_db_client);
-            auto count = co_await mapper.count(
-                Criteria(Folders::Cols::_user_id, CompareOperator::EQ, user_id) &&
-                Criteria(Folders::Cols::_parent_id, CompareOperator::EQ, folder_id) &&
-                Criteria(Folders::Cols::_name, CompareOperator::EQ, foldername)
-            );
-
-            co_return count > 0;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to check folder name: " << e.base().what();
-            co_return false;
-        }
-    }
-
-    auto TrashService::IsFolderExists(
-        uint64_t folder_id,
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) const
-        -> drogon::Task<bool> {
-        if (folder_id == 0) {
-            co_return true;
-        }
-
-        try {
-            CoroMapper<Folders> mapper(m_db_client);
-            auto folder = co_await mapper.findOne(
-                Criteria(Folders::Cols::_id, CompareOperator::EQ, folder_id)
-            );
-
-            co_return folder.getValueOfUserId() == user_id;
-
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Debug(log_context) << "Folder not found: folder_id=" << folder_id;
-            co_return false;
         }
     }
 

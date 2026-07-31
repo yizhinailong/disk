@@ -110,16 +110,12 @@ namespace disk::trash {
             EXPECT_EQ(CountOccurrences(dto_source, "disk::utils::LogContext log_context = {}"), 2);
             EXPECT_EQ(
                 CountOccurrences(service_body, "disk::utils::LogContext log_context"),
-                18
+                14
             );
             for (const auto* call_marker : {
                      "co_await RestoreFile(",
                      "co_await RestoreFolder(",
                      "co_await PermanentlyDeleteTrashItems(",
-                     "co_await GenerateUniqueFilename(",
-                     "co_await IsFilenameExists(",
-                     "co_await IsFolderNameExists(",
-                     "co_await IsFolderExists(",
                  }) {
                 EXPECT_TRUE(CallContainsContext(service_body, call_marker));
             }
@@ -127,6 +123,14 @@ namespace disk::trash {
                 service_body,
                 "DecrementRefCountsAndEnqueueGc("
             ));
+            for (const auto* obsolete_helper : {
+                     "auto TrashService::GenerateUniqueFilename(",
+                     "auto TrashService::IsFilenameExists(",
+                     "auto TrashService::IsFolderNameExists(",
+                     "auto TrashService::IsFolderExists(",
+                 }) {
+                EXPECT_FALSE(Contains(service_source, obsolete_helper));
+            }
             EXPECT_FALSE(Contains(service_source, "auto TrashService::UpdateStorageUsed("));
 
             for (const auto* body : { &controller_body, &dto_source, &service_body }) {

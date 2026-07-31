@@ -63,6 +63,14 @@ The system SHALL allow users to restore trash items when possible and SHALL reso
 - **WHEN** a file is restored into an existing original parent folder
 - **THEN** the restore transaction SHALL increment that folder's direct item count exactly once or roll back the active file and trash consumption
 
+#### Scenario: A folder tree snapshot is restored
+- **WHEN** a folder trash item contains a valid folder-tree snapshot
+- **THEN** the system SHALL recreate the root, descendant folders, and files with their original internal hierarchy under the resolved target parent
+
+#### Scenario: Folder restore finalization fails
+- **WHEN** a folder subtree is recreated but its parent count or trash row cannot be finalized in the same restore attempt
+- **THEN** the restore transaction SHALL roll back every recreated node and count change while retaining the trash snapshot for exactly one retry
+
 ### Requirement: Permanent Delete
 The system SHALL permanently delete trash items and release storage only during permanent deletion or equivalent cleanup.
 

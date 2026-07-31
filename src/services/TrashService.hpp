@@ -17,7 +17,7 @@
  * - 仅在彻底删除时释放配额
  * - 恢复时如目标位置存在同名文件，自动重命名为 name (n).ext
  * - 原始文件夹不存在时恢复到根目录
- * - V1 不支持递归恢复文件夹子树
+ * - 带 folder_tree 快照的文件夹项递归恢复完整子树
  */
 
 #pragma once
@@ -174,7 +174,7 @@ namespace disk::trash {
          * - 验证每个回收站项目的归属
          * - 检查原始文件夹是否存在，不存在则恢复到根目录
          * - 检测目标位置文件名冲突，自动重命名为 name (n).ext
-         * - V1 不支持递归恢复文件夹子树，文件夹恢复仅恢复空文件夹
+         * - 带 folder_tree 快照的文件夹项递归恢复完整子树，历史兼容项恢复空根
          * - 返回每项操作的详细结果（成功/失败及原因）
          *
          * @param user_id 用户 ID
@@ -255,81 +255,6 @@ namespace disk::trash {
             bool require_valid_file_content,
             disk::utils::LogContext log_context = {}
         ) -> drogon::Task<PermanentDeleteResult>;
-
-        /**
-         * @brief 生成唯一文件名（用于冲突自动重命名）
-         *
-         * @details
-         * 当目标文件夹存在同名文件时，生成新的唯一文件名：
-         * - 文件：name (n).ext（n 从 1 开始递增）
-         * - 文件夹：name (n)（n 从 1 开始递增）
-         *
-         * @param folder_id 目标文件夹 ID
-         * @param name 原始文件名
-         * @param user_id 用户 ID
-         * @param is_file 是否为文件（true: 文件，false: 文件夹）
-         * @param log_context 请求日志上下文
-         * @return drogon::Task<std::string> 唯一文件名
-         */
-        [[nodiscard]]
-        auto GenerateUniqueFilename(
-            uint64_t folder_id,
-            const std::string& name,
-            uint64_t user_id,
-            bool is_file,
-            disk::utils::LogContext log_context
-        ) -> drogon::Task<std::string>;
-
-        /**
-         * @brief 检查文件名是否已存在
-         *
-         * @param folder_id 文件夹 ID
-         * @param filename 文件名
-         * @param user_id 用户 ID
-         * @param log_context 请求日志上下文
-         * @return drogon::Task<bool> 存在返回 true
-         */
-        [[nodiscard]]
-        auto IsFilenameExists(
-            uint64_t folder_id,
-            const std::string& filename,
-            uint64_t user_id,
-            disk::utils::LogContext log_context
-        ) const
-            -> drogon::Task<bool>;
-
-        /**
-         * @brief 检查文件夹名是否已存在
-         *
-         * @param folder_id 父文件夹 ID
-         * @param foldername 文件夹名
-         * @param user_id 用户 ID
-         * @param log_context 请求日志上下文
-         * @return drogon::Task<bool> 存在返回 true
-         */
-        [[nodiscard]]
-        auto IsFolderNameExists(
-            uint64_t folder_id,
-            const std::string& foldername,
-            uint64_t user_id,
-            disk::utils::LogContext log_context
-        ) const
-            -> drogon::Task<bool>;
-
-        /**
-         * @brief 检查文件夹是否存在且属于用户
-         *
-         * @param folder_id 文件夹 ID
-         * @param user_id 用户 ID
-         * @param log_context 请求日志上下文
-         * @return drogon::Task<bool> 存在且属于用户返回 true
-         */
-        [[nodiscard]]
-        auto IsFolderExists(
-            uint64_t folder_id,
-            uint64_t user_id,
-            disk::utils::LogContext log_context
-        ) const -> drogon::Task<bool>;
 
         /**
          * @brief 恢复单个文件

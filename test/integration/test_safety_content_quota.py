@@ -3582,6 +3582,155 @@ def test_folder_soft_delete_snapshot_preserves_ref_count_and_storage() -> None:
     assert_equal("folder share cancelled", share_status(folder_share_id), 0)
 
 
+def test_folder_restore_trash_delete_failure_rolls_back_and_retries() -> None:
+    """Verify recursive folder restore and trash consumption are one transaction."""
+    log_section("Folder Restore Trash Delete Failure Rolls Back And Retries")
+    redis_delete_pattern(f"rate:folder:{USER_ID}:*")
+    parent_id = create_folder(f"safety_folder_restore_parent_{unique_name()}")
+    root_name = f"safety_folder_restore_root_{unique_name()}"
+    child_name = f"safety_folder_restore_child_{unique_name()}"
+    root_folder_id = create_folder(root_name, parent_id)
+    child_folder_id = create_folder(child_name, root_folder_id)
+    root_filename = f"safety_folder_restore_root_file_{unique_name()}.bin"
+    child_filename = f"safety_folder_restore_child_file_{unique_name()}.bin"
+    root_file_id = upload_file(root_filename, f"folder-restore-root-{unique_name()}".encode(), root_folder_id)
+    child_file_id = upload_file(child_filename, f"folder-restore-child-{unique_name()}".encode(), child_folder_id)
+    root_content_id = int(file_row(root_file_id)["content_id"])
+    child_content_id = int(file_row(child_file_id)["content_id"])
+    refs_before = {
+        root_content_id: int(content_row(root_content_id)["ref_count"]),
+        child_content_id: int(content_row(child_content_id)["ref_count"]),
+    }
+    quota_before = user_quota()
+    trash_id = delete_folder_to_trash(root_folder_id)
+    assert_equal(
+        "folder restore fixture soft delete decrements parent count",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0),
+        0,
+    )
+
+    cleanup_trigger = install_trash_restore_delete_suppression_trigger(trash_id)
+    try:
+        restore_response = restore_trash_response(trash_id)
+    finally:
+        cleanup_trigger()
+
+    restored_root_after_failure = query_one(
+        "SELECT id, path FROM folders WHERE user_id = %s AND parent_id = %s AND name = %s",
+        (USER_ID, parent_id, root_name),
+    )
+    active_folder_rows_after_failure = int(
+        scalar(
+            "SELECT COUNT(*) FROM folders WHERE user_id = %s AND "
+            "(id = %s OR path LIKE %s)",
+            (
+                USER_ID,
+                int(restored_root_after_failure["id"]) if restored_root_after_failure else 0,
+                f"{restored_root_after_failure['path']}%" if restored_root_after_failure else "",
+            ),
+        )
+        or 0
+    )
+    active_file_rows_after_failure = int(
+        scalar(
+            "SELECT COUNT(*) FROM files WHERE user_id = %s AND path LIKE %s",
+            (
+                USER_ID,
+                f"{restored_root_after_failure['path']}%" if restored_root_after_failure else "",
+            ),
+        )
+        or 0
+    )
+    assert_equal("folder restore delete miss keeps HTTP 200 batch envelope", restore_response.status_code, 200)
+    assert_equal(
+        "folder restore delete miss reports one failed item",
+        json_field(restore_response.text, "data.summary.failure_count"),
+        "1",
+    )
+    assert_equal(
+        "folder restore delete miss reports failed status",
+        json_field(restore_response.text, "data.results.0.status"),
+        "failed",
+    )
+    assert_equal(
+        "folder restore delete miss reports InternalError",
+        json_field(restore_response.text, "data.results.0.error.code"),
+        "10006",
+    )
+    assert_equal("folder restore delete miss creates no active root", restored_root_after_failure is None, True)
+    assert_equal("folder restore delete miss creates no active folders", active_folder_rows_after_failure, 0)
+    assert_equal("folder restore delete miss creates no active files", active_file_rows_after_failure, 0)
+    assert_equal(
+        "folder restore delete miss keeps trash snapshot",
+        int(scalar("SELECT COUNT(*) FROM trash WHERE id = %s", (trash_id,)) or 0),
+        1,
+    )
+    assert_equal(
+        "folder restore delete miss keeps parent count",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0),
+        0,
+    )
+
+    if restored_root_after_failure is not None:
+        failed_root_path = str(restored_root_after_failure["path"])
+        execute(
+            "DELETE FROM files WHERE user_id = %s AND path LIKE %s",
+            (USER_ID, f"{failed_root_path}%"),
+        )
+        execute(
+            "DELETE FROM folders WHERE user_id = %s AND path LIKE %s",
+            (USER_ID, f"{failed_root_path}%"),
+        )
+
+    retry_response = restore_trash_response(trash_id)
+    restored_root_id_value = json_field(retry_response.text, "data.results.0.folder_id")
+    restored_root_id = int(restored_root_id_value or 0)
+    restored_root = query_one(
+        "SELECT parent_id, name, path FROM folders WHERE id = %s AND user_id = %s",
+        (restored_root_id, USER_ID),
+    )
+    restored_child = query_one(
+        "SELECT id, path FROM folders WHERE parent_id = %s AND user_id = %s AND name = %s",
+        (restored_root_id, USER_ID, child_name),
+    )
+    restored_root_file = query_one(
+        "SELECT id, content_id, path FROM files WHERE folder_id = %s AND user_id = %s AND name = %s",
+        (restored_root_id, USER_ID, root_filename),
+    )
+    restored_child_file = query_one(
+        "SELECT id, content_id, path FROM files WHERE folder_id = %s AND user_id = %s AND name = %s",
+        (int(restored_child["id"]) if restored_child else 0, USER_ID, child_filename),
+    )
+    assert_equal("folder restore retry returns HTTP 200", retry_response.status_code, 200)
+    assert_equal("folder restore retry reports success", json_field(retry_response.text, "data.results.0.status"), "success")
+    assert_equal("folder restore retry recreates root", restored_root is not None, True)
+    assert_equal("folder restore retry keeps original parent", int(restored_root["parent_id"]) if restored_root else 0, parent_id)
+    assert_equal("folder restore retry keeps root name", str(restored_root["name"]) if restored_root else "", root_name)
+    assert_equal("folder restore retry recreates child", restored_child is not None, True)
+    assert_equal("folder restore retry recreates root file", restored_root_file is not None, True)
+    assert_equal("folder restore retry recreates child file", restored_child_file is not None, True)
+    assert_equal(
+        "folder restore retry consumes trash snapshot",
+        int(scalar("SELECT COUNT(*) FROM trash WHERE id = %s", (trash_id,)) or 0),
+        0,
+    )
+    assert_equal(
+        "folder restore retry increments parent count once",
+        int(scalar("SELECT item_count FROM folders WHERE id = %s", (parent_id,)) or 0),
+        1,
+    )
+    assert_equal("folder restore keeps root content ref", int(content_row(root_content_id)["ref_count"]), refs_before[root_content_id])
+    assert_equal("folder restore keeps child content ref", int(content_row(child_content_id)["ref_count"]), refs_before[child_content_id])
+    assert_equal("folder restore keeps quota", user_quota(), quota_before)
+    execute(
+        "UPDATE folders SET item_count = "
+        "(SELECT COUNT(*) FROM files WHERE folder_id = %s AND user_id = %s) + "
+        "(SELECT COUNT(*) FROM folders WHERE parent_id = %s AND user_id = %s) "
+        "WHERE id = %s AND user_id = %s",
+        (parent_id, USER_ID, parent_id, USER_ID, parent_id, USER_ID),
+    )
+
+
 def test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_share_cleanup() -> None:
     """Verify folder row delete failure rolls back the folder snapshot, subtree delete, and share cleanup."""
     log_section("Move-To-Trash Active Folder Delete Failure Rolls Back")
@@ -3890,6 +4039,7 @@ def main() -> None:
     test_file_trash_parent_count_failures_roll_back_and_retry()
     test_share_cleanup_on_soft_delete()
     test_folder_soft_delete_snapshot_preserves_ref_count_and_storage()
+    test_folder_restore_trash_delete_failure_rolls_back_and_retries()
     test_move_to_trash_active_folder_delete_failure_rolls_back_snapshot_and_share_cleanup()
     test_delete_all_ref_count_quota_and_blob_cleanup()
     test_permanent_delete_quota_failure_rolls_back_and_retries()
