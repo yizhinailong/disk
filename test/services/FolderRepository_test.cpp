@@ -337,7 +337,10 @@ namespace disk::folder {
                 "--parent_deltas[plan.root.getValueOfParentId()]",
                 snapshot
             );
-            const auto trash_insert = source.find("co_await CreateTrashRecords(", snapshot);
+            const auto trash_insert = source.find(
+                "co_await disk::file::utils::InsertTrashRecords(",
+                snapshot
+            );
             const auto parent_count_update = source.find("ApplyItemCountDelta(", trash_insert);
             const auto file_delete = source.find("DeleteFilesByIds(", parent_count_update);
             const auto folder_delete = source.find("DeleteFoldersByIds(", file_delete);
@@ -447,11 +450,9 @@ namespace disk::folder {
                 "disk::file::utils::InsertTrashRecords(",
                 1U
             ));
-            EXPECT_TRUE(EveryCallContainsContext(
-                trash_source,
-                "co_await CreateTrashRecords(",
-                1U
-            ));
+            EXPECT_FALSE(Contains(trash_header, "auto CreateTrashRecords("));
+            EXPECT_FALSE(Contains(trash_source, "auto TrashService::CreateTrashRecords("));
+            EXPECT_FALSE(Contains(trash_source, "co_await CreateTrashRecords("));
             EXPECT_TRUE(EveryCallContainsContext(
                 trash_source,
                 "disk::file::utils::DeleteFilesByIds(",

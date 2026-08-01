@@ -2205,6 +2205,14 @@ utility 声明、实现和 `FileServiceUtils.cpp` 不再需要的仓储 include 
 
 clang-format、差异检查、后端与测试目标完整构建、直接 FolderRepository GoogleTest 8/8、上传生命周期/上传仓储/目录仓储/文件变更/上传与配额路径安全网聚焦 CTest 51/51（159.96 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 527.87 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.111 回收站批量插入重复服务转发清理记录（2026-08-01）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定回收站批量插入的唯一持久化边界。全仓调用点、源码与已编译对象审计确认，公开 `TrashService::CreateTrashRecords()` 只把同一 client、批量项目、用户 ID 和 `LogContext` 原样转发给 `disk::file::utils::InsertTrashRecords()`；除 `MoveToTrash()` 的单一内部调用外没有生产、集成、工具、客户端或迁移消费者。新增源码合同在旧实现上按预期为 0/3，共检出两个事务顺序合同缺少直接调用，以及服务声明、定义和旧内部调用五个失败点。
+
+服务声明与实现已删除，`MoveToTrash()` 在原事务位置直接调用保留的持久化 helper。插入仍位于快照构造之后、父计数更新与活跃行删除之前，继续使用同一 transaction、`trash_items`、`user_id` 和 `log_context`；`InsertTrashRecords` 的参数化批量 SQL、固定 warning、bool 结果、失败映射、事务回滚、父计数、分享清理、ref_count、配额、缓存、REST 响应、schema 和迁移兼容合同均未改变。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 FolderRepository/TrashQuery GoogleTest 16/16、回收站/文件变更/删除回归/内容与配额/路径安全网聚焦 CTest 36/36（44.47 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 日志覆盖 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，逐项耗时合计 523.13 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

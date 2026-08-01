@@ -226,7 +226,9 @@ namespace disk::trash {
                 restore_end - restore_begin
             );
 
-            const auto trash_insert = move_body.find("co_await CreateTrashRecords(");
+            const auto trash_insert = move_body.find(
+                "co_await disk::file::utils::InsertTrashRecords("
+            );
             const auto parent_deltas = move_body.find(
                 "parent_deltas",
                 trash_insert

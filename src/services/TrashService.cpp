@@ -166,20 +166,6 @@ namespace disk::trash {
         Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=trash";
     }
 
-    auto TrashService::CreateTrashRecords(
-        const drogon::orm::DbClientPtr& client,
-        const std::vector<disk::file::utils::TrashInsertItem>& trash_items,
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<bool> {
-        co_return co_await disk::file::utils::InsertTrashRecords(
-            client,
-            trash_items,
-            user_id,
-            log_context
-        );
-    }
-
     auto TrashService::MoveToTrash(
         MoveToTrashRequest request,
         uint64_t user_id,
@@ -396,7 +382,7 @@ namespace disk::trash {
                     ));
                 }
 
-                auto insert_ok = co_await CreateTrashRecords(
+                auto insert_ok = co_await disk::file::utils::InsertTrashRecords(
                     transaction,
                     trash_items,
                     user_id,

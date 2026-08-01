@@ -155,6 +155,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** whole-repository call-site and built-object audits confirm that `file::utils::ResolveFolderLocation` only forwards the same client, folder ID, user ID, and log context to `FolderRepository::ResolveOwnedFolderLocation`
 - **THEN** the utility declaration and implementation SHALL be removed, all UploadLifecycle and FileMutation callers SHALL use their existing repository object directly, and folder lookup SQL, user scope, transaction ownership, logging, errors, paths, and public behavior SHALL remain unchanged
 
+#### Scenario: Trash insertion uses its persistence helper directly
+
+- **WHEN** whole-repository call-site and built-object audits confirm that public `TrashService::CreateTrashRecords` only forwards the same client, items, user ID, and log context to `file::utils::InsertTrashRecords` and is otherwise called only by `MoveToTrash`
+- **THEN** the service declaration and implementation SHALL be removed, `MoveToTrash` SHALL call the persistence helper directly inside the same transaction, and insert SQL, logging, rollback, errors, counts, and public behavior SHALL remain unchanged
+
 #### Scenario: File repository retains no unused default client
 
 - **WHEN** every `FileRepository` operation already receives the standalone client or active transaction explicitly and the constructor-injected client is never read

@@ -95,14 +95,6 @@ namespace disk::trash {
         TrashService(TrashService&&) = default;
         auto operator=(TrashService&&) -> TrashService& = default;
 
-        [[nodiscard]]
-        auto CreateTrashRecords(
-            const drogon::orm::DbClientPtr& client,
-            const std::vector<disk::file::utils::TrashInsertItem>& trash_items,
-            uint64_t user_id,
-            disk::utils::LogContext log_context = {}
-        ) const -> drogon::Task<bool>;
-
         /**
          * @brief 将文件和文件夹移入回收站
          * @param request 待删除项目
