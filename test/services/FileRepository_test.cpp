@@ -15,6 +15,8 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <json/reader.h>
+#include <trantor/utils/Date.h>
 
 #include "services/FileRepository.hpp"
 #include "services/FileServiceUtils.hpp"
@@ -73,6 +75,77 @@ namespace disk::file {
             EXPECT_EQ(utils::ExtractFileExtension("archive.tar.gz"), "gz");
             EXPECT_EQ(utils::ExtractFileExtension("PHOTO.JPEG"), "JPEG");
             EXPECT_EQ(utils::ExtractFileExtension(".profile"), "profile");
+        }
+
+        TEST(FileServiceUtilsVisibilityContractTest, SnapshotDateConversionStaysInternal) {
+            const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
+            const auto utils_source = ReadSourceFile("src/services/FileServiceUtils.cpp");
+
+            EXPECT_FALSE(Contains(utils_header, "#include <trantor/utils/Date.h>"));
+            EXPECT_FALSE(Contains(utils_header, "auto DateToJson("));
+            EXPECT_TRUE(Contains(utils_source, "namespace {"));
+            EXPECT_EQ(CountOccurrences(utils_source, "auto DateToJson("), 1U);
+            EXPECT_EQ(CountOccurrences(utils_source, "DateToJson("), 7U);
+            EXPECT_EQ(CountOccurrences(utils_source, "toDbStringLocal()"), 1U);
+
+            const trantor::Date root_created(1'700'000'000'000'000LL);
+            const trantor::Date root_updated(1'700'000'001'000'000LL);
+            const trantor::Date child_created(1'700'000'002'000'000LL);
+            const trantor::Date child_updated(1'700'000'003'000'000LL);
+            const trantor::Date file_created(1'700'000'004'000'000LL);
+            const trantor::Date file_updated(1'700'000'005'000'000LL);
+
+            drogon_model::disk::Folders root;
+            root.setId(1);
+            root.setParentId(0);
+            root.setName("root");
+            root.setPath("/root/");
+            root.setDepth(1);
+            root.setItemCount(2);
+            root.setCreatedAt(root_created);
+            root.setUpdatedAt(root_updated);
+
+            drogon_model::disk::Folders child;
+            child.setId(2);
+            child.setParentId(1);
+            child.setName("child");
+            child.setPath("/root/child/");
+            child.setDepth(2);
+            child.setItemCount(0);
+            child.setCreatedAt(child_created);
+            child.setUpdatedAt(child_updated);
+
+            drogon_model::disk::Files file;
+            file.setId(3);
+            file.setFolderId(1);
+            file.setName("file.txt");
+            file.setExtension("txt");
+            file.setSize(42);
+            file.setMimeType("text/plain");
+            file.setPath("/root/file.txt");
+            file.setIsFavorite(0);
+            file.setDownloadCount(0);
+            file.setCreatedAt(file_created);
+            file.setUpdatedAt(file_updated);
+
+            utils::FolderDeletePlan plan{
+                .root = root,
+                .folders = { root, child },
+                .files = { file },
+                .item_size = 42
+            };
+            Json::Value snapshot;
+            Json::CharReaderBuilder reader;
+            std::istringstream input(utils::BuildFolderSnapshot(plan));
+            ASSERT_TRUE(Json::parseFromStream(reader, input, &snapshot, nullptr));
+            ASSERT_EQ(snapshot["folders"].size(), 1U);
+            ASSERT_EQ(snapshot["files"].size(), 1U);
+            EXPECT_EQ(snapshot["root"]["created_at"].asString(), root_created.toDbStringLocal());
+            EXPECT_EQ(snapshot["root"]["updated_at"].asString(), root_updated.toDbStringLocal());
+            EXPECT_EQ(snapshot["folders"][0]["created_at"].asString(), child_created.toDbStringLocal());
+            EXPECT_EQ(snapshot["folders"][0]["updated_at"].asString(), child_updated.toDbStringLocal());
+            EXPECT_EQ(snapshot["files"][0]["created_at"].asString(), file_created.toDbStringLocal());
+            EXPECT_EQ(snapshot["files"][0]["updated_at"].asString(), file_updated.toDbStringLocal());
         }
 
         TEST(FileRepositorySignatureContractTest, ExposesTransactionAwarePersistencePrimitives) {

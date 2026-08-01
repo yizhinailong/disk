@@ -19,7 +19,6 @@
 
 #include <drogon/orm/DbClient.h>
 #include <json/writer.h>
-#include <trantor/utils/Date.h>
 
 #include "models/Files.hpp"
 #include "models/Folders.hpp"
@@ -93,8 +92,6 @@ namespace disk::file::utils {
         uint64_t user_id,
         disk::utils::LogContext log_context = {}
     ) -> drogon::Task<bool>;
-
-    [[nodiscard]] auto DateToJson(const trantor::Date& date) -> std::string;
 
     [[nodiscard]] auto BuildFolderSnapshot(const FolderDeletePlan& plan) -> std::string;
 

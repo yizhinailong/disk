@@ -13,11 +13,21 @@
 #include <cctype>
 #include <string_view>
 
+#include <trantor/utils/Date.h>
+
 #include "utils/BatchUtils.hpp"
 
 namespace disk::file::utils {
 
     using disk::utils::BatchUtils;
+
+    namespace {
+
+        [[nodiscard]] auto DateToJson(const trantor::Date& date) -> std::string {
+            return date.toDbStringLocal();
+        }
+
+    } // namespace
 
     [[nodiscard]] auto ExtractFileExtension(const std::string& filename) -> std::string {
         const auto pos = filename.rfind('.');
@@ -151,10 +161,6 @@ namespace disk::file::utils {
             Logger::Warn(log_context) << "Trash record batch insert failed";
             co_return false;
         }
-    }
-
-    [[nodiscard]] auto DateToJson(const trantor::Date& date) -> std::string {
-        return date.toDbStringLocal();
     }
 
     [[nodiscard]] auto BuildFolderSnapshot(const FolderDeletePlan& plan) -> std::string {

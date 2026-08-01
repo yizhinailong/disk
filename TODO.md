@@ -2253,6 +2253,14 @@ clang-format、差异检查、后端与测试目标完整构建、直接上传�
 
 Shell 语法、差异检查、拓扑合同直接执行及注册 CTest 1/1、完整构建和 OpenSpec 严格校验 24/24 通过。标准完整 CTest 共 1451 项：1444 项通过、7 项按环境门控跳过、0 失败，总耗时 526.15 秒；PgBouncer 定向门禁已由上述固定产物另行通过。本机固定源码构建不声明跨发行版二进制摘要一致，也不替代生产认证/TLS、稳定写端点 HA、独立故障域、连接/内存容量和版本升级回归；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.117 文件夹快照日期 helper 公开面收敛记录（2026-08-01）
+
+系统测试、单元测试和后端低风险清理 OpenSpec 先行固定文件夹快照日期转换的内部链接合同。全仓调用点、Git 历史和已编译对象审计确认，`DateToJson` 只在 `FileServiceUtils.cpp` 内被 `BuildFolderSnapshot` 调用 6 次，没有其他生产、测试、工具、客户端或迁移消费者。该 helper 在服务拆分前位于原 `FileService.cpp` 匿名命名空间，拆分后才被暴露到共享头文件，并在后端与测试二进制中各导出一个全局符号。
+
+`DateToJson` 已移回 `FileServiceUtils.cpp` 匿名命名空间，共享头文件删除该声明和仅为它存在的直接 `trantor::Date` 依赖。新增源码/行为合同拒绝公开声明、外部链接定义和日期序列化回退；`BuildFolderSnapshot` 的 root/folders/files 结构及 created_at/updated_at 字段与 `toDbStringLocal()` 值保持不变，业务事务和回收站恢复语义未改动。
+
+旧实现上新合同按预期为 0/1，精确检出 3 个公开面失败断言，6 个日期值断言仍通过。实现后直接 GoogleTest 3/3、相关回收站/文件夹/配额安全网聚焦 CTest 20/20、完整构建、拓扑合同、差异检查和 OpenSpec 24/24 通过；对象符号审计确认两个二进制均只保留匿名命名空间的局部符号。标准完整 CTest 共 1452 项：1445 项通过、7 项按环境门控跳过、0 失败，总耗时 546.38 秒。该批只收敛一个无外部消费者的公开符号；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
