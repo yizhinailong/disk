@@ -45,6 +45,10 @@ The backend test suite SHALL provide serial, environment-gated CTest entries for
 - **WHEN** a Linux amd64 developer explicitly asks the repository helper to prepare the reviewed `promtool` in a chosen output directory
 - **THEN** the helper SHALL fetch only the pinned official Prometheus HTTPS release archive, verify the hard-coded archive SHA-256 before extraction and the hard-coded `promtool` SHA-256 before atomic executable publication, reuse only an existing file with the exact reviewed binary digest, and reject an existing mismatch without overwriting it
 
+#### Scenario: Fixed PgBouncer transaction-pool dependency is prepared
+- **WHEN** a Linux developer explicitly asks the repository helper to prepare the reviewed PgBouncer in a chosen output directory
+- **THEN** the helper SHALL fetch only the pinned official PgBouncer `1.25.2` HTTPS source archive, verify its hard-coded SHA-256 before bounded extraction, require the reviewed compiler and library dependencies, verify the built executable reports exactly `PgBouncer 1.25.2` on its first version-output line before non-overwriting publication, reuse only a regular non-symlink executable with that exact first line, and reject an existing mismatch without overwriting it
+
 #### Scenario: Distributed flow gate is not selected
 - **WHEN** either distributed entry is invoked without its required environment gate
 - **THEN** it SHALL report an environment-gated skip that SHALL NOT count as distributed acceptance evidence

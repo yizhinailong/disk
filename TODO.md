@@ -2245,6 +2245,14 @@ clang-format、差异检查、后端与测试目标完整构建、直接上传�
 
 修复后 Python AST 语法、差异检查、拓扑合同直接执行、`S3AppFlowIntegration` 定向 1/1（11.45 秒）和 OpenSpec 严格校验 24/24 通过。同序完整复验共 1451 项：1450 项通过、仅缺少 Docker 的 `DistributedFlowIntegration` 1 项按环境门控跳过、0 失败，总耗时 683.59 秒；其中 PgBouncer、promtool、S3 adapter、S3 应用流、provisioning 和本地双 API/双 Worker 拓扑分别为 3.53、0.12、0.39、11.20、2.84 和 140.26 秒。四份 `0600` 原子证据摘要分别为 `2aca3c415def54406ef4c841ecc4a5e21b6d61495858a5a740af38dc2f7ce2d5`、`bac4eb1e62d233f6e4a78c42041003d43787e93ff2f204647d038258408868c1`、`a2b40ff98172805f8bf5ba379df40bacacec9c96c4a5fde1f2dde2b6bfd3dc9f` 和 `1433b80f6ad5a21b258c05573c38c8175ff1002678642e900091d5c61cd34ca8`，字段审计未发现实际凭据、端口、路径或可重放令牌；受管进程、`18080/19000/19001` 监听与本批临时目录已清理。本机进程拓扑不替代当前候选 Dockerfile/Compose 或目标 TLS/KMS、HA、故障域、备份恢复、长稳/压力、真实迁移和预发布验收，Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.116 固定 PgBouncer 测试二进制引导记录（2026-08-01）
+
+系统测试、部署、单元测试文档与验证 OpenSpec 先行固定 PgBouncer 门禁依赖合同。新增 `scripts/fetch-pgbouncer-test-binary.sh` 只从 pgbouncer.org 版本化 HTTPS URL 下载 `1.25.2` release tarball，并在解包前核对官方 SHA-256 `924ad35113fd0a71c8e2dbe85b5d03445532e2b7b37a9f8a48983beea238b332` 和单一顶层目录。脚本先拒绝已有符号链接、非普通文件、不可执行或版本不符输出，再检查 C 编译器、libevent、c-ares 与 OpenSSL；构建结果首行精确返回 `PgBouncer 1.25.2` 后才以硬链接非覆盖发布 `0755` 普通文件，下载与私有构建目录在所有退出路径回收。拓扑合同锁定固定 URL/摘要、依赖、路径边界、版本探针、非覆盖发布和不匹配文件原字节不变。
+
+全新临时目录的真实首次下载/构建和二次复用均通过，目录只保留 `pgbouncer`；本机产物 SHA-256 为 `333e81fd2a6bd35bf5815be21d40830858beace30e06c3c08a3421013c25f34c`，版本为 `1.25.2`，链接 libevent `2.1.13`、c-ares `1.34.8` 和 OpenSSL `3.6.3`。该产物驱动 `PgBouncerTransactionPoolIntegration` 1/1 通过（3.52 秒）；`0600` 证据 `.sisyphus/evidence/pgbouncer-transaction-pool-summary.json` 的 SHA-256 为 `879f914c29015cfadb00020b0a46e415abf2ba6b8e98788b719e498cd8d239f1`，字段审计未发现端点、路径、凭据或业务标识。
+
+Shell 语法、差异检查、拓扑合同直接执行及注册 CTest 1/1、完整构建和 OpenSpec 严格校验 24/24 通过。标准完整 CTest 共 1451 项：1444 项通过、7 项按环境门控跳过、0 失败，总耗时 526.15 秒；PgBouncer 定向门禁已由上述固定产物另行通过。本机固定源码构建不声明跨发行版二进制摘要一致，也不替代生产认证/TLS、稳定写端点 HA、独立故障域、连接/内存容量和版本升级回归；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

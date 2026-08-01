@@ -199,6 +199,61 @@ def main() -> int:
             "promtool bootstrap changed output after rejecting a mismatched file",
         )
 
+    pgbouncer_bootstrap = root / "scripts/fetch-pgbouncer-test-binary.sh"
+    pgbouncer_bootstrap_source = pgbouncer_bootstrap.read_text(encoding="utf-8")
+    require(
+        pgbouncer_bootstrap.stat().st_mode & 0o111 != 0,
+        "PgBouncer test bootstrap is not executable",
+    )
+    for marker in (
+        'PGBOUNCER_VERSION="1.25.2"',
+        "https://www.pgbouncer.org/downloads/files/${PGBOUNCER_VERSION}",
+        "924ad35113fd0a71c8e2dbe85b5d03445532e2b7b37a9f8a48983beea238b332",
+        "--proto '=https'",
+        'for required_package in libevent libcares openssl',
+        'pkg-config --exists "$required_package"',
+        'tar --list --gzip --file "$ARCHIVE_TEMP_PATH"',
+        'expected="$PGBOUNCER_SOURCE_DIRECTORY"',
+        './configure --prefix="$BUILD_ROOT/install" --with-cares',
+        'make -C "$SOURCE_DIRECTORY" pgbouncer',
+        '[ "$verify_first_line" = "PgBouncer ${PGBOUNCER_VERSION}" ]',
+        "refusing to overwrite it",
+        'if ! ln "$built_binary" "$destination"',
+        "DISK_PGBOUNCER_BIN=%s",
+    ):
+        require(marker in pgbouncer_bootstrap_source, f"PgBouncer bootstrap is missing {marker}")
+    require(
+        "releases/latest" not in pgbouncer_bootstrap_source
+        and "/download/latest/" not in pgbouncer_bootstrap_source,
+        "PgBouncer bootstrap uses an unversioned latest release URL",
+    )
+    syntax_check = subprocess.run(
+        ["sh", "-n", str(pgbouncer_bootstrap)],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require(syntax_check.returncode == 0, "PgBouncer bootstrap shell syntax is invalid")
+    with tempfile.TemporaryDirectory(prefix="disk-pgbouncer-bootstrap-contract-") as temporary:
+        output_directory = Path(temporary)
+        mismatched_pgbouncer = output_directory / "pgbouncer"
+        original_bytes = b"not-the-reviewed-pgbouncer-binary"
+        mismatched_pgbouncer.write_bytes(original_bytes)
+        rejected = subprocess.run(
+            [str(pgbouncer_bootstrap), str(output_directory)],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        require(rejected.returncode != 0, "PgBouncer bootstrap accepted a mismatched existing file")
+        require(
+            mismatched_pgbouncer.read_bytes() == original_bytes
+            and list(output_directory.iterdir()) == [mismatched_pgbouncer],
+            "PgBouncer bootstrap changed output after rejecting a mismatched file",
+        )
+
     decision_record = (root / "docs/backend-refactor-decisions.md").read_text(
         encoding="utf-8"
     )
@@ -291,6 +346,8 @@ def main() -> int:
         "API 继续使用 `deploy/config.distributed.json` 的 HTTP `8080`",
         "PgBouncer 事务池准入合同",
         "max_prepared_statements = 200",
+        "scripts/fetch-pgbouncer-test-binary.sh",
+        "924ad35113fd0a71c8e2dbe85b5d03445532e2b7b37a9f8a48983beea238b332",
         "DISK_PGBOUNCER_BIN=/usr/sbin/pgbouncer",
     ):
         require(marker in operations_guide, f"operations guide is missing {marker}")
