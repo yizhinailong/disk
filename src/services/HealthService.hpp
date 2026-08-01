@@ -101,8 +101,6 @@ namespace disk::health {
             disk::utils::LogContext log_context
         ) const -> drogon::Task<ComponentStatus>;
 
-        static auto GetTimestamp() -> std::string;
-
         std::shared_ptr<disk::runtime::ProcessRuntimeState> m_runtime_state;
         HealthCheckCallbacks m_checks;
         std::chrono::steady_clock::time_point m_start_time;

@@ -438,3 +438,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site and history audit confirms that `ResolveListSortColumn` is consumed only by `FileListQuery.cpp` and was implementation-local before the service split
 - **THEN** the helper SHALL return to the list-query implementation while `BuildDeterministicOrderByClause` remains shared by list and search queries and list sorting, pagination, SQL, and response behavior remain unchanged
+
+#### Scenario: Health timestamp formatting stays implementation-local
+
+- **WHEN** a whole-repository call-site and object-symbol audit confirms that `HealthService::GetTimestamp` is consumed only by `BuildBaseResult` in the same implementation unit
+- **THEN** timestamp formatting SHALL have internal linkage and SHALL NOT be declared by `HealthService.hpp`, while liveness and readiness continue to emit a UTC `YYYY-MM-DDTHH:MM:SSZ` timestamp with unchanged health fields and behavior

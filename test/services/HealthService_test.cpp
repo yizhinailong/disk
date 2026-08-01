@@ -1,6 +1,11 @@
 #include "services/HealthService.hpp"
 
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -8,6 +13,28 @@
 
 namespace disk::health {
     namespace {
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto IsUtcIsoSeconds(const std::string& value) -> bool {
+            if (value.size() != 20 || value.back() != 'Z') {
+                return false;
+            }
+
+            std::tm parsed{};
+            std::istringstream stream(value);
+            stream >> std::get_time(&parsed, "%Y-%m-%dT%H:%M:%SZ");
+            return !stream.fail() && stream.peek() == std::char_traits<char>::eof();
+        }
+
         struct CheckCounts {
             size_t database{ 0 };
             size_t redis{ 0 };
@@ -31,6 +58,41 @@ namespace disk::health {
                 .final_storage = HealthyCheck(counts.final_storage),
                 .storage_jobs = HealthyCheck(counts.storage_jobs),
             };
+        }
+
+        TEST(HealthServiceTimestampContractTest, FormatterHasInternalLinkage) {
+            const auto header = ReadSourceFile("src/services/HealthService.hpp");
+            const auto source = ReadSourceFile("src/services/HealthService.cpp");
+
+            EXPECT_EQ(header.find("GetTimestamp"), std::string::npos);
+            EXPECT_EQ(source.find("HealthService::GetTimestamp"), std::string::npos);
+            EXPECT_NE(
+                source.find("[[nodiscard]] auto GetTimestamp() -> std::string"),
+                std::string::npos
+            );
+            EXPECT_NE(source.find(".timestamp = GetTimestamp(),"), std::string::npos);
+            EXPECT_NE(source.find("std::chrono::system_clock::now()"), std::string::npos);
+            EXPECT_NE(source.find("gmtime_s(&utc, &timestamp)"), std::string::npos);
+            EXPECT_NE(source.find("gmtime_r(&timestamp, &utc)"), std::string::npos);
+            EXPECT_NE(source.find("%Y-%m-%dT%H:%M:%SZ"), std::string::npos);
+        }
+
+        TEST(HealthServiceTimestampContractTest, BothProbesUseUtcIsoSeconds) {
+            CheckCounts counts;
+            auto runtime = std::make_shared<disk::runtime::ProcessRuntimeState>(
+                disk::utils::ProcessRole::Api,
+                "api-timestamp"
+            );
+            runtime->MarkInitialized();
+            HealthService service(runtime, HealthyChecks(counts));
+
+            const auto liveness = service.CheckLiveness();
+            const auto readiness = drogon::sync_wait(service.CheckReadiness());
+
+            EXPECT_TRUE(IsUtcIsoSeconds(liveness.timestamp));
+            EXPECT_TRUE(IsUtcIsoSeconds(readiness.timestamp));
+            EXPECT_EQ(liveness.ToJson()["timestamp"].asString(), liveness.timestamp);
+            EXPECT_EQ(readiness.ToJson()["timestamp"].asString(), readiness.timestamp);
         }
 
         TEST(HealthServiceTest, LivenessNeverCallsExternalDependencies) {

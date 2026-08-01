@@ -141,6 +141,21 @@ namespace disk::health {
             }
             return "Worker is not accepting storage jobs";
         }
+
+        [[nodiscard]] auto GetTimestamp() -> std::string {
+            const auto now = std::chrono::system_clock::now();
+            const auto timestamp = std::chrono::system_clock::to_time_t(now);
+            std::tm utc{};
+#ifdef _WIN32
+            gmtime_s(&utc, &timestamp);
+#else
+            gmtime_r(&timestamp, &utc);
+#endif
+
+            std::ostringstream stream;
+            stream << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");
+            return stream.str();
+        }
     } // namespace
 
     auto ComponentStatus::ToJson() const -> Json::Value {
@@ -321,21 +336,6 @@ namespace disk::health {
             status.message.clear();
         }
         co_return status;
-    }
-
-    auto HealthService::GetTimestamp() -> std::string {
-        const auto now = std::chrono::system_clock::now();
-        const auto timestamp = std::chrono::system_clock::to_time_t(now);
-        std::tm utc{};
-#ifdef _WIN32
-        gmtime_s(&utc, &timestamp);
-#else
-        gmtime_r(&timestamp, &utc);
-#endif
-
-        std::ostringstream stream;
-        stream << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");
-        return stream.str();
     }
 
 } // namespace disk::health
