@@ -11,6 +11,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -28,6 +30,108 @@ class TestFailure(RuntimeError):
 MULTIPART_COPY_PART_BYTES = 5 * 1024 * 1024
 LARGE_PROMOTION_BYTES = MULTIPART_COPY_PART_BYTES + 17
 MAX_PROMOTION_RSS_GROWTH_BYTES = 48 * 1024 * 1024
+
+
+def reserve_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
+def resolve_redis_server() -> Path:
+    configured = os.environ.get("DISK_REDIS_SERVER_BIN")
+    if configured:
+        executable = Path(configured).resolve()
+        if executable.is_file() and os.access(executable, os.X_OK):
+            return executable
+        raise TestFailure("DISK_REDIS_SERVER_BIN is not an executable file")
+
+    for candidate in ("valkey-server", "redis-server"):
+        executable = shutil.which(candidate)
+        if executable:
+            return Path(executable).resolve()
+    raise TestFailure("valkey-server or redis-server is required")
+
+
+class IsolatedRedis:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.port = reserve_port()
+        self.binary = resolve_redis_server()
+        self.log_path = root / "redis.log"
+        self.process: subprocess.Popen[bytes] | None = None
+        self.log_handle: Any = None
+
+    def start(self) -> None:
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.log_handle = self.log_path.open("wb")
+        try:
+            self.process = subprocess.Popen(
+                [
+                    str(self.binary),
+                    "--bind",
+                    "127.0.0.1",
+                    "--port",
+                    str(self.port),
+                    "--protected-mode",
+                    "yes",
+                    "--daemonize",
+                    "no",
+                    "--dir",
+                    str(self.root),
+                    "--save",
+                    "",
+                    "--appendonly",
+                    "no",
+                    "--logfile",
+                    "",
+                ],
+                cwd=self.root,
+                stdout=self.log_handle,
+                stderr=subprocess.STDOUT,
+            )
+
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                if self.process.poll() is not None:
+                    raise TestFailure(
+                        f"isolated Redis exited during startup with code {self.process.returncode}: "
+                        f"{self.log_tail()}"
+                    )
+                try:
+                    with socket.create_connection(("127.0.0.1", self.port), timeout=0.2) as client:
+                        client.sendall(b"*1\r\n$4\r\nPING\r\n")
+                        if client.recv(64).startswith(b"+PONG\r\n"):
+                            return
+                except OSError:
+                    pass
+                time.sleep(0.05)
+            raise TestFailure(f"isolated Redis did not become ready: {self.log_tail()}")
+        except BaseException:
+            self.stop()
+            raise
+
+    def stop(self) -> None:
+        if self.process is not None and self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=5)
+        self.process = None
+        if self.log_handle is not None:
+            self.log_handle.close()
+            self.log_handle = None
+
+    def log_tail(self) -> str:
+        if self.log_handle is not None:
+            self.log_handle.flush()
+        if not self.log_path.is_file():
+            return ""
+        return "\n".join(
+            self.log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-40:]
+        )
 
 
 def require(condition: bool, message: str) -> None:
@@ -368,6 +472,7 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="disk-s3-app-") as temp_dir_raw:
         temp_dir = Path(temp_dir_raw)
+        redis = IsolatedRedis(temp_dir / "redis")
         framework_log_path = temp_dir / "framework-log"
         framework_log_path.mkdir()
         config = json.loads(json.dumps(base_config))
@@ -395,14 +500,38 @@ def main() -> int:
             "connect_timeout_ms": 3000,
             "request_timeout_ms": 300000,
         }
-        (temp_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+        config["redis_clients"][0].update(
+            {
+                "host": "127.0.0.1",
+                "port": redis.port,
+                "db": 0,
+                "passwd": "",
+                "timeout": 1.0,
+            }
+        )
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_handle = log_path.open("wb")
         server_env = os.environ.copy()
-        server_env.setdefault("JWT_SECRET", "dev-only-jwt-secret-key-change-in-production-2024")
+        server_env.update(
+            {
+                "DISK_CONFIG_FILE": str(config_path),
+                "JWT_SECRET": server_env.get(
+                    "JWT_SECRET",
+                    "dev-only-jwt-secret-key-change-in-production-2024",
+                ),
+                "REDIS_HOST": "127.0.0.1",
+                "REDIS_PORT": str(redis.port),
+                "REDIS_DB": "0",
+            }
+        )
+        server_env.pop("REDIS_PASSWORD", None)
 
         try:
+            redis.start()
+            require(True, "S3 application flow uses a test-owned Redis instance")
             server = subprocess.Popen(
                 [str(server_bin)],
                 cwd=temp_dir,
@@ -992,6 +1121,7 @@ def main() -> int:
                 except subprocess.TimeoutExpired:
                     server.kill()
                     server.wait(timeout=5)
+            redis.stop()
             if log_handle is not None:
                 log_handle.close()
 
@@ -999,6 +1129,10 @@ def main() -> int:
                 log_text = log_path.read_text(encoding="utf-8", errors="replace")
                 print(f"--- server log tail: {log_path} ---")
                 print("\n".join(log_text.splitlines()[-120:]))
+                redis_log = redis.log_tail()
+                if redis_log:
+                    print("--- isolated Redis log tail ---")
+                    print(redis_log)
 
         return return_code
 

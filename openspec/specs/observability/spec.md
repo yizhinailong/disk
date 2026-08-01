@@ -835,8 +835,12 @@ The system SHALL propagate caller-owned correlation explicitly by value through 
 The system SHALL provide an environment-gated application-flow acceptance that correlates upload initialization, chunk persistence, completion, download, and asynchronous staging cleanup across the HTTP API, PostgreSQL, the durable Worker, and an S3-compatible endpoint without changing production log volume.
 
 #### Scenario: Isolated S3 application flow is traced
-- **WHEN** the acceptance starts one explicitly identified API/Worker process at `DEBUG`, sends caller-owned request IDs for init, chunk, complete, and download, and completes one S3-native upload
+- **WHEN** the acceptance starts one explicitly identified API/Worker process at `DEBUG` against a test-owned Redis/Valkey instance on a reserved local port, sends caller-owned request IDs for init, chunk, complete, and download, and completes one S3-native upload
 - **THEN** every response SHALL echo its request ID and actual instance, API and S3 SDK events SHALL retain the corresponding bounded operation, the authoritative upload ID SHALL join PostgreSQL task/chunk rows to the S3 staging prefix, and the completed database content row SHALL retain the observed final object key
+
+#### Scenario: S3 application flow does not inherit shared Redis state
+- **WHEN** other integration tests have populated shared authentication, cache, or rate-limit keys before the S3 application acceptance runs
+- **THEN** both the generated Redis client configuration and runtime environment SHALL target the test-owned instance, the acceptance SHALL NOT flush or delete shared Redis keys, and cleanup SHALL stop its API/Worker before stopping the owned Redis process on every exit path
 
 #### Scenario: Durable cleanup continues the upload trace
 - **WHEN** the completed upload enqueues and a Worker claims its `staging_cleanup` job

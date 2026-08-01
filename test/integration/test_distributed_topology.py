@@ -1182,8 +1182,17 @@ def main() -> int:
         "sdk_operation=upload_part_copy, outcome=success",
         "s3-large-promotion-summary.json",
         "os.fchmod(handle.fileno(), 0o600)",
+        "class IsolatedRedis:",
+        'config["redis_clients"][0].update(',
+        '"REDIS_PORT": str(redis.port)',
+        "redis.stop()",
     ):
         require(marker in s3_app_flow_source, f"S3 application flow is missing {marker}")
+    for forbidden in ("FLUSHDB", "redis_delete_pattern"):
+        require(
+            forbidden not in s3_app_flow_source,
+            f"S3 application flow must not clean shared Redis with {forbidden}",
+        )
 
     transaction_pool_sources = []
     for source_root in (root / "src", root / "scripts", root / "sql"):
@@ -1235,25 +1244,24 @@ def main() -> int:
 
     todo = (root / "TODO.md").read_text(encoding="utf-8")
     latest_verification = re.search(
-        r"^> 最近验证（[^\n]*?）：[^\n]*合并对账后的带门禁 CTest 注册库存共 (\d+) 项，(\d+) 通过、(\d+) 项跳过、0 失败[^\n]*$",
+        r"^> 最近验证（[^\n]*?）：[^\n]*带六项门禁完整 CTest 共 (\d+) 项，(\d+) 通过、仅 `DistributedFlowIntegration` (\d+) 项[^\n]*跳过、0 失败[^\n]*$",
         todo,
         re.MULTILINE,
     )
     require(latest_verification is not None, "TODO latest verification summary is missing or malformed")
     total, passed_count, skipped_count = map(int, latest_verification.groups())
     require(
-        (total, passed_count, skipped_count) == (1425, 1425, 0),
+        (total, passed_count, skipped_count) == (1451, 1450, 1),
         "TODO latest CTest inventory drifted without an explicit contract update",
     )
     require(total == passed_count + skipped_count, "TODO latest CTest totals do not reconcile")
     require(
-        "`DistributedFlowIntegration` 1/1" in latest_verification.group(0),
-        "TODO latest verification must name the passing container gate",
+        "当前机器没有 Docker/Podman/nerdctl" in latest_verification.group(0),
+        "TODO latest verification must explain the skipped container gate",
     )
     require(
-        "不等同于单次启用全部七项门禁的 1425 项完整 CTest"
-        in latest_verification.group(0),
-        "TODO latest verification must distinguish combined inventory from one full run",
+        "不替代当前候选的 Dockerfile/Compose 构建" in latest_verification.group(0),
+        "TODO latest verification must not reuse historical container evidence",
     )
     require(
         "环境门控用例仍须在目标 MinIO/云 S3 和多实例拓扑中执行" in latest_verification.group(0),
