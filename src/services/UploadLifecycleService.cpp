@@ -123,14 +123,6 @@ namespace disk::upload {
             bool m_active{ true };
         };
 
-        [[nodiscard]] auto ExtractExtension(const std::string& filename) -> std::string {
-            auto pos = filename.rfind('.');
-            if (pos == std::string::npos || pos == filename.length() - 1) {
-                return "";
-            }
-            return filename.substr(pos + 1);
-        }
-
         [[nodiscard]] auto ToLifecycleFileItem(
             const drogon_model::disk::Files& file,
             const std::string& hash
@@ -566,7 +558,7 @@ namespace disk::upload {
                         content_id,
                         command.parent_id,
                         command.filename,
-                        ExtractExtension(command.filename),
+                        disk::file::utils::ExtractFileExtension(command.filename),
                         command.file_size,
                         content_mime_type,
                         disk::file::utils::BuildFilePath(parent_location_result->path, command.filename)
@@ -1348,7 +1340,7 @@ namespace disk::upload {
                     content_id,
                     upload_task.getValueOfFolderId(),
                     upload_task.getValueOfFilename(),
-                    ExtractExtension(upload_task.getValueOfFilename()),
+                    disk::file::utils::ExtractFileExtension(upload_task.getValueOfFilename()),
                     upload_task.getValueOfFileSize(),
                     "",
                     disk::file::utils::BuildFilePath(parent_location_result->path, upload_task.getValueOfFilename())

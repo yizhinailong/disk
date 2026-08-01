@@ -111,7 +111,7 @@ namespace disk::file {
                     file_id,
                     user_id,
                     new_name,
-                    ExtractExtension(new_name),
+                    utils::ExtractFileExtension(new_name),
                     new_path,
                     updated_at
                 );
@@ -1542,14 +1542,6 @@ namespace disk::file {
         }
 
         co_return id_mappings;
-    }
-
-    auto FileMutationService::ExtractExtension(const std::string& filename) -> std::string {
-        auto pos = filename.rfind('.');
-        if (pos == std::string::npos || pos == filename.length() - 1) {
-            return "";
-        }
-        return filename.substr(pos + 1);
     }
 
 } // namespace disk::file

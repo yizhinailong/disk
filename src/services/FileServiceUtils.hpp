@@ -65,6 +65,8 @@ namespace disk::file::utils {
         uint32_t depth{ 0 };
     };
 
+    [[nodiscard]] auto ExtractFileExtension(const std::string& filename) -> std::string;
+
     [[nodiscard]] auto BuildFilePath(const std::string& folder_path, const std::string& filename)
         -> std::string;
 

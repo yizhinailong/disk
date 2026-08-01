@@ -19,6 +19,14 @@ namespace disk::file::utils {
 
     using disk::utils::BatchUtils;
 
+    [[nodiscard]] auto ExtractFileExtension(const std::string& filename) -> std::string {
+        const auto pos = filename.rfind('.');
+        if (pos == std::string::npos || pos == filename.length() - 1) {
+            return "";
+        }
+        return filename.substr(pos + 1);
+    }
+
     [[nodiscard]] auto BuildFilePath(const std::string& folder_path, const std::string& filename)
         -> std::string {
         return folder_path == "/" ? "/" + filename : folder_path + filename;

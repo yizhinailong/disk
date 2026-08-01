@@ -161,9 +161,6 @@ namespace disk::file {
             disk::utils::LogContext log_context
         ) -> drogon::Task<Result<std::vector<std::pair<uint64_t, uint64_t>>>>;
 
-        [[nodiscard]]
-        static auto ExtractExtension(const std::string& filename) -> std::string;
-
         drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
         FileRepository m_file_repository;                                                                             ///< 文件持久化原语
         disk::folder::FolderRepository m_folder_repository;                                                           ///< 文件夹持久化原语

@@ -224,6 +224,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** file upload, file rename, folder creation, and folder rename duplicate the same forbidden-character loop while `NameValidation` already provides the identical cross-platform predicate
 - **THEN** all four DTO validators SHALL reuse that shared predicate and source contracts SHALL lock the production call sites while validation order, public errors, reserved-name rules, hidden-name rules, and UTF-8 handling remain unchanged
 
+#### Scenario: File extension extraction is shared by active-file writers
+
+- **WHEN** upload finalization and file rename use identical last-dot extension extraction while both implementations already depend on `FileServiceUtils`
+- **THEN** their three active metadata write sites SHALL use one shared `ExtractFileExtension` helper without changing suffix bytes, empty-extension cases, validation order, names, paths, transactions, responses, or the restore-specific trash conflict-name parser
+
 #### Scenario: Unused DTO serialization overloads are removed
 
 - **WHEN** a whole-repository call-site and built-object audit confirms that the `DtoBase::SetField` overloads for `std::string_view` and `const char*` plus the `DtoBase::SetArray` overloads for `std::vector<uint64_t>` and `std::vector<std::string>` have no production consumer or object-code instantiation

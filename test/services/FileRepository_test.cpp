@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "services/FileRepository.hpp"
+#include "services/FileServiceUtils.hpp"
 
 namespace disk::file {
     namespace {
@@ -44,6 +45,34 @@ namespace disk::file {
                 offset += expected.size();
             }
             return count;
+        }
+
+        TEST(FileExtensionContractTest, ActiveFileWritersUseSharedExtraction) {
+            const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
+            const auto utils_source = ReadSourceFile("src/services/FileServiceUtils.cpp");
+            const auto upload_source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
+            const auto mutation_header = ReadSourceFile("src/services/FileMutationService.hpp");
+            const auto mutation_source = ReadSourceFile("src/services/FileMutationService.cpp");
+            const auto trash_source = ReadSourceFile("src/services/TrashService.cpp");
+
+            EXPECT_TRUE(Contains(utils_header, "auto ExtractFileExtension("));
+            EXPECT_TRUE(Contains(utils_source, "auto ExtractFileExtension("));
+            EXPECT_EQ(CountOccurrences(upload_source, "utils::ExtractFileExtension("), 2U);
+            EXPECT_EQ(CountOccurrences(mutation_source, "utils::ExtractFileExtension("), 1U);
+            EXPECT_FALSE(Contains(upload_source, "auto ExtractExtension("));
+            EXPECT_FALSE(Contains(mutation_header, "static auto ExtractExtension("));
+            EXPECT_FALSE(Contains(mutation_source, "FileMutationService::ExtractExtension("));
+            EXPECT_TRUE(Contains(trash_source, "TrashService::ExtractExtension("));
+            EXPECT_TRUE(Contains(trash_source, "paren_pos"));
+        }
+
+        TEST(FileExtensionContractTest, PreservesExistingSuffixRules) {
+            EXPECT_EQ(utils::ExtractFileExtension("README"), "");
+            EXPECT_EQ(utils::ExtractFileExtension("archive."), "");
+            EXPECT_EQ(utils::ExtractFileExtension("report.pdf"), "pdf");
+            EXPECT_EQ(utils::ExtractFileExtension("archive.tar.gz"), "gz");
+            EXPECT_EQ(utils::ExtractFileExtension("PHOTO.JPEG"), "JPEG");
+            EXPECT_EQ(utils::ExtractFileExtension(".profile"), "profile");
         }
 
         TEST(FileRepositorySignatureContractTest, ExposesTransactionAwarePersistencePrimitives) {
