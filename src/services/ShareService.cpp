@@ -61,16 +61,6 @@ namespace disk::share {
             return "(EXISTS (" "SELECT 1 FROM share_files sff " "WHERE sff.share_id = $" + std::to_string(start_index) + " AND sff.item_type = 'file' AND sff.item_id = " + file_alias + ".id" ") OR EXISTS (" "SELECT 1 FROM share_files sff " "JOIN folders shared_root ON sff.item_id = shared_root.id " "JOIN folders parent_folder ON parent_folder.id = " + file_alias + ".folder_id " "WHERE sff.share_id = $" + std::to_string(start_index + 1) + " AND sff.item_type = 'folder' " "AND parent_folder.user_id = shared_root.user_id " "AND parent_folder.path LIKE CONCAT(shared_root.path, '%')" "))";
         }
 
-        template <typename BindParameters>
-        auto ExecSqlWithBindings(
-            const drogon::orm::DbClientPtr& client,
-            const std::string& sql,
-            BindParameters bind_parameters
-        ) -> drogon::Task<drogon::orm::Result> {
-            auto binder = *client << sql;
-            bind_parameters(binder);
-            co_return co_await drogon::orm::internal::SqlAwaiter(std::move(binder));
-        }
     } // namespace
 
     /// ==================== 构造函数 ====================
@@ -187,7 +177,7 @@ namespace disk::share {
                         insert_sql += "($" + std::to_string(i * 4 + 1) + ", $" + std::to_string(i * 4 + 2) + ", $" + std::to_string(i * 4 + 3) + ", $" + std::to_string(i * 4 + 4) + ")";
                     }
 
-                    co_await ExecSqlWithBindings(
+                    co_await disk::file::utils::ExecSqlWithBindings(
                         transaction,
                         insert_sql,
                         [&](auto& binder) {
@@ -212,7 +202,7 @@ namespace disk::share {
                         insert_sql += "($" + std::to_string(i * 4 + 1) + ", $" + std::to_string(i * 4 + 2) + ", $" + std::to_string(i * 4 + 3) + ", $" + std::to_string(i * 4 + 4) + ")";
                     }
 
-                    co_await ExecSqlWithBindings(
+                    co_await disk::file::utils::ExecSqlWithBindings(
                         transaction,
                         insert_sql,
                         [&](auto& binder) {

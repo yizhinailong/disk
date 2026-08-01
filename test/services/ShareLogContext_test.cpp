@@ -196,5 +196,30 @@ namespace disk::share {
             }
         }
 
+        TEST(ShareSqlBindingContractTest, CreateUsesSharedBatchBinder) {
+            const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
+            const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
+
+            EXPECT_EQ(CountOccurrences(utils_header, "auto ExecSqlWithBindings("), 1U);
+            EXPECT_TRUE(Contains(utils_header, "auto binder = *client << sql;"));
+            EXPECT_TRUE(Contains(utils_header, "bind_parameters(binder);"));
+            EXPECT_TRUE(Contains(
+                utils_header,
+                "co_return co_await drogon::orm::internal::SqlAwaiter(std::move(binder));"
+            ));
+            EXPECT_EQ(
+                CountOccurrences(service_source, "template <typename BindParameters>"),
+                0U
+            );
+            EXPECT_EQ(CountOccurrences(service_source, "auto ExecSqlWithBindings("), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    service_source,
+                    "disk::file::utils::ExecSqlWithBindings("
+                ),
+                2U
+            );
+        }
+
     } // namespace
 } // namespace disk::share

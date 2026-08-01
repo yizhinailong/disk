@@ -2277,6 +2277,14 @@ ShareService 已直接引入 `FileServiceUtils.hpp`，SaveToDrive 的 4 个调�
 
 旧实现上新 ShareService 源码合同按预期为 0/1，精确检出 5 个失败断言，同时 FolderService 共享合同与共享路径行为 2/2 通过。实现后直接路径合同 3/3、分享/内容引用/列表缓存与六组真实分享流程聚焦 CTest 151/151（46.10 秒）、内容配额安全网 1/1（24.64 秒）、完整构建、拓扑合同、差异检查和 OpenSpec 24/24 通过；对象符号审计确认 FolderService/ShareService 四个局部符号均消失，仅保留两个共享符号。标准完整 CTest 共 1455 项：1448 项通过、7 项按环境门控跳过、0 失败，总耗时 529.15 秒。该批只清理 ShareService 的重复路径构造；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.120 分享创建 SQL 绑定模板重复实现清理记录（2026-08-01）
+
+系统测试、单元测试和后端低风险清理 OpenSpec 先行固定 ShareService 创建关联的共享 SQL 绑定合同。全仓调用点、Git 历史、源码和已编译对象审计确认，`ShareService.cpp` 匿名命名空间的 `ExecSqlWithBindings` 模板早于 `FileServiceUtils.hpp` 共享模板出现，但当前的 client/sql/binder 签名、binder 构造、调用方绑定和 `SqlAwaiter` 协程返回逐行相同。本地模板只被分享创建事务中 file/folder 两条批量 `share_files` 插入调用。
+
+ShareService 的本地模板已删除，两个调用点改用 `disk::file::utils::ExecSqlWithBindings()`。共享模板的 binder 构造、调用方绑定和 awaiter 顺序以源码合同正向锁定；批次切分、SQL 占位符、file/folder 顺序与绑定值、事务归属/回滚、错误、审计和响应未改动。
+
+旧实现上新合同按预期为 0/1，共享模板 4 个正向断言通过，精确检出本地模板/定义与两处未迁移调用对应的 3 个失败断言。实现后分享创建/原子性/密码/过期/所有权与真实管理/审计聚焦 CTest 19/19（8.96 秒）、完整构建、拓扑合同、差异检查和 OpenSpec 24/24 通过；对象符号审计确认 Share Create 的两个 lambda 实例均归属共享模板，不再存在 Share 匿名模板实例。标准完整 CTest 共 1456 项：1449 项通过、7 项按环境门控跳过、0 失败，总耗时 541.78 秒。该批只清理 ShareService 的重复 SQL 绑定模板；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
