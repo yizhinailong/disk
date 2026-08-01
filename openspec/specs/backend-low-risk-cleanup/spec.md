@@ -150,6 +150,11 @@ Backend repository classes SHALL expose only persistence primitives used by prod
 - **WHEN** whole-repository call-site and source audits confirm that `file::utils::FetchBatchFolderDeletePlans` only default-constructs `FolderRepository` and forwards the same client, folder IDs, and user ID while the services already own or create that repository
 - **THEN** the utility declaration and implementation SHALL be removed, and the two FileMutation flows plus the transaction-bound Trash flow SHALL call `FolderRepository::FetchBatchFolderDeletePlans` directly without changing connection scope, ownership predicates, plan stabilization, snapshots, or public behavior
 
+#### Scenario: Folder location uses the repository directly
+
+- **WHEN** whole-repository call-site and built-object audits confirm that `file::utils::ResolveFolderLocation` only forwards the same client, folder ID, user ID, and log context to `FolderRepository::ResolveOwnedFolderLocation`
+- **THEN** the utility declaration and implementation SHALL be removed, all UploadLifecycle and FileMutation callers SHALL use their existing repository object directly, and folder lookup SQL, user scope, transaction ownership, logging, errors, paths, and public behavior SHALL remain unchanged
+
 #### Scenario: File repository retains no unused default client
 
 - **WHEN** every `FileRepository` operation already receives the standalone client or active transaction explicitly and the constructor-injected client is never read

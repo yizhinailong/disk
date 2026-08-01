@@ -566,7 +566,7 @@ namespace disk::file {
         auto requested_file_ids = normalize_ids(std::move(request.file_ids));
         auto requested_folder_ids = normalize_ids(std::move(request.folder_ids));
 
-        auto target_location_result = co_await utils::ResolveFolderLocation(
+        auto target_location_result = co_await m_folder_repository.ResolveOwnedFolderLocation(
             m_db_client,
             request.target_folder_id,
             user_id,
@@ -1471,7 +1471,7 @@ namespace disk::file {
             co_return id_mappings;
         }
 
-        auto target_location_result = co_await utils::ResolveFolderLocation(
+        auto target_location_result = co_await m_folder_repository.ResolveOwnedFolderLocation(
             client,
             target_folder_id,
             user_id,

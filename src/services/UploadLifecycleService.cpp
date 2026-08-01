@@ -549,7 +549,8 @@ namespace disk::upload {
                         co_return std::unexpected(increment_result.error());
                     }
 
-                    auto parent_location_result = co_await disk::file::utils::ResolveFolderLocation(
+                    disk::folder::FolderRepository folder_repository;
+                    auto parent_location_result = co_await folder_repository.ResolveOwnedFolderLocation(
                         transaction,
                         command.parent_id,
                         command.user_id,
@@ -576,7 +577,6 @@ namespace disk::upload {
                     file = std::move(file_result.value());
 
                     if (command.parent_id > 0) {
-                        disk::folder::FolderRepository folder_repository;
                         co_await folder_repository.ApplyItemCountDelta(
                             transaction,
                             command.parent_id,
@@ -1331,7 +1331,8 @@ namespace disk::upload {
                 }
                 const auto content_id = content_result->id;
 
-                auto parent_location_result = co_await disk::file::utils::ResolveFolderLocation(
+                disk::folder::FolderRepository folder_repository;
+                auto parent_location_result = co_await folder_repository.ResolveOwnedFolderLocation(
                     transaction,
                     upload_task.getValueOfFolderId(),
                     command.user_id,
@@ -1358,7 +1359,6 @@ namespace disk::upload {
                 file = std::move(file_result.value());
 
                 if (upload_task.getValueOfFolderId() > 0) {
-                    disk::folder::FolderRepository folder_repository;
                     co_await folder_repository.ApplyItemCountDelta(
                         transaction,
                         upload_task.getValueOfFolderId(),

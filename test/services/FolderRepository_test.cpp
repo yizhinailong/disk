@@ -159,7 +159,9 @@ namespace disk::folder {
             EXPECT_FALSE(Contains(utils, "auto FetchFolderDeletePlan("));
             EXPECT_FALSE(Contains(utils_header, "FetchBatchFolderDeletePlans("));
             EXPECT_FALSE(Contains(utils, "auto FetchBatchFolderDeletePlans("));
-            EXPECT_EQ(CountOccurrences(utils, "FolderRepository repository;"), 1U);
+            EXPECT_FALSE(Contains(utils_header, "ResolveFolderLocation("));
+            EXPECT_FALSE(Contains(utils, "auto ResolveFolderLocation("));
+            EXPECT_EQ(CountOccurrences(utils, "FolderRepository repository;"), 0U);
             EXPECT_EQ(
                 CountOccurrences(
                     upload_lifecycle,
@@ -398,7 +400,7 @@ namespace disk::folder {
             );
             EXPECT_EQ(
                 CountOccurrences(utils_header, "disk::utils::LogContext log_context = {}"),
-                4U
+                3U
             );
             EXPECT_TRUE(Contains(
                 trash_header,
@@ -427,25 +429,19 @@ namespace disk::folder {
             ));
 
             EXPECT_TRUE(EveryCallContainsContext(
-                utils_source,
-                "co_return co_await repository.ResolveOwnedFolderLocation(",
-                1U
-            ));
-            EXPECT_TRUE(EveryCallContainsContext(
                 upload_lifecycle,
-                "disk::file::utils::ResolveFolderLocation(",
+                "folder_repository.ResolveOwnedFolderLocation(",
                 2U
             ));
             EXPECT_TRUE(EveryCallContainsContext(
                 file_mutation,
                 "m_folder_repository.ResolveOwnedFolderLocation(",
-                2U
+                4U
             ));
-            EXPECT_TRUE(EveryCallContainsContext(
-                file_mutation,
-                "utils::ResolveFolderLocation(",
-                2U
-            ));
+            EXPECT_FALSE(Contains(utils_header, "ResolveFolderLocation("));
+            EXPECT_FALSE(Contains(utils_source, "auto ResolveFolderLocation("));
+            EXPECT_FALSE(Contains(upload_lifecycle, "utils::ResolveFolderLocation("));
+            EXPECT_FALSE(Contains(file_mutation, "utils::ResolveFolderLocation("));
             EXPECT_TRUE(EveryCallContainsContext(
                 trash_source,
                 "disk::file::utils::InsertTrashRecords(",

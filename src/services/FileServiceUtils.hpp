@@ -71,13 +71,6 @@ namespace disk::file::utils {
     [[nodiscard]] auto BuildFolderPath(const std::string& parent_path, const std::string& name)
         -> std::string;
 
-    auto ResolveFolderLocation(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t folder_id,
-        uint64_t user_id,
-        disk::utils::LogContext log_context = {}
-    ) -> drogon::Task<Result<FolderLocation>>;
-
     auto QueryOccupiedFolderNames(
         const drogon::orm::DbClientPtr& client,
         uint64_t parent_id,

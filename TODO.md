@@ -2197,6 +2197,14 @@ utility 声明与实现已删除；文件复制改用既有 `m_folder_repository
 
 clang-format、差异检查、后端与测试目标完整构建、直接 FolderRepository GoogleTest 8/8、目录仓储/文件变更/复制删除/目录与回收站生命周期/配额/路径安全网聚焦 CTest 26/26（39.98 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 548.70 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.110 文件夹定位重复转发清理记录（2026-08-01）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定文件夹定位的唯一持久化边界。全仓调用点、源码与已编译对象审计确认，`disk::file::utils::ResolveFolderLocation()` 只把同一 client、目录 ID、用户 ID 和 `LogContext` 原样转发给 `FolderRepository::ResolveOwnedFolderLocation()`；两个 FileMutation 调用点已有 `m_folder_repository`，两个 UploadLifecycle 调用点所在事务也已有用于父计数的局部仓储，没有独立 utility 日志、错误映射、工具、客户端、迁移或兼容消费者。新增源码合同在旧实现上按预期为 0/2，共检出接口、实现、utility 仓储构造、日志上下文入口计数、四处未直接调用和四处旧调用残留 10 个失败点。
+
+utility 声明、实现和 `FileServiceUtils.cpp` 不再需要的仓储 include 已删除；FileMutation 的两处调用改用既有成员，UploadLifecycle 的两处局部仓储声明前移并复用于目录定位与条件父计数更新。生产目录定位现统一为 FileMutation 四处、UploadLifecycle 两处共六个直接仓储调用，全部继续传入原 standalone client 或当前 transaction 与原 `LogContext`；FileServiceUtils 的可选日志上下文入口从 4 个收敛为三个真正拥有写失败日志的批量写入入口。目录查询 SQL、用户谓词、固定 warning、错误传播、文件路径、父计数、上传状态、配额、ref_count、REST 响应、schema 与迁移兼容合同均未改变。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 FolderRepository GoogleTest 8/8、上传生命周期/上传仓储/目录仓储/文件变更/上传与配额路径安全网聚焦 CTest 51/51（159.96 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 527.87 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

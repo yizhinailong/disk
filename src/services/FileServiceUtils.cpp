@@ -9,8 +9,6 @@
 
 #include "FileServiceUtils.hpp"
 
-#include "FolderRepository.hpp"
-
 #include <algorithm>
 #include <cctype>
 #include <string_view>
@@ -29,21 +27,6 @@ namespace disk::file::utils {
     [[nodiscard]] auto BuildFolderPath(const std::string& parent_path, const std::string& name)
         -> std::string {
         return parent_path == "/" ? "/" + name + "/" : parent_path + name + "/";
-    }
-
-    auto ResolveFolderLocation(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t folder_id,
-        uint64_t user_id,
-        disk::utils::LogContext log_context
-    ) -> drogon::Task<Result<FolderLocation>> {
-        disk::folder::FolderRepository repository;
-        co_return co_await repository.ResolveOwnedFolderLocation(
-            client,
-            folder_id,
-            user_id,
-            log_context
-        );
     }
 
     auto QueryOccupiedFolderNames(
