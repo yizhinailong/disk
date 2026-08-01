@@ -108,7 +108,7 @@ namespace disk::file {
 
             const auto lock = lifecycle_source.find("AcquireUploadInitLock(");
             const auto active_recheck = lifecycle_source.find("FindActiveByUserAndHash(\n                    transaction", lock);
-            const auto quota_reserve = lifecycle_source.find("ReserveUploadStorage(", active_recheck);
+            const auto quota_reserve = lifecycle_source.find("ReserveStorage(", active_recheck);
             const auto task_create = lifecycle_source.find("upload_task_repository.Create(", quota_reserve);
             ASSERT_NE(lock, std::string::npos);
             ASSERT_NE(active_recheck, std::string::npos);

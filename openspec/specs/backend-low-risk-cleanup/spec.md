@@ -339,6 +339,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site and object-relocation audit confirms that the standalone `QuotaService::ReserveStorage` and `ReserveUploadStorage` overloads have no caller while every active mutation supplies a standalone or transaction client
 - **THEN** the two default-client overloads and stored client SHALL be removed, `QuotaService` SHALL be empty and default-constructible, and all active quota SQL, checked results, logging context, and construction event behavior SHALL remain unchanged
 
+#### Scenario: Upload quota reservation uses the generic mutation directly
+
+- **WHEN** whole-repository call-site and object-relocation audits confirm that the explicit-client `QuotaService::ReserveUploadStorage` only forwards the same client, user ID, byte count, and log context to `ReserveStorage` and is otherwise called only by upload initialization
+- **THEN** the forwarding declaration and implementation SHALL be removed, upload initialization SHALL call `ReserveStorage` directly inside the same transaction, and quota SQL, zero-byte behavior, logging, checked errors, rollback, upload state, and public responses SHALL remain unchanged
+
 #### Scenario: Content operations require an explicit database client
 
 - **WHEN** the only standalone `ContentService` operation is an MD5 lookup whose active callers already own a database client while every content mutation receives a standalone or transaction client explicitly

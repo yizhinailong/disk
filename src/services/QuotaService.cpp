@@ -48,15 +48,6 @@ namespace disk::quota {
         }
     }
 
-    auto QuotaService::ReserveUploadStorage(
-        const drogon::orm::DbClientPtr& client,
-        uint64_t user_id,
-        uint64_t bytes,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<Result<void>> {
-        co_return co_await ReserveStorage(client, user_id, bytes, log_context);
-    }
-
     auto QuotaService::ReleaseReservedStorageChecked(
         const drogon::orm::DbClientPtr& client,
         uint64_t user_id,

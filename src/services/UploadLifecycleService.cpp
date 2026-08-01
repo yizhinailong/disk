@@ -714,7 +714,7 @@ namespace disk::upload {
                     co_return {};
                 }
 
-                auto quota_result = co_await quota_service.ReserveUploadStorage(
+                auto quota_result = co_await quota_service.ReserveStorage(
                     transaction,
                     command.user_id,
                     command.file_size,

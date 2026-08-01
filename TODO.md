@@ -2213,6 +2213,14 @@ clang-format、差异检查、后端与测试目标完整构建、直接 FolderR
 
 clang-format、差异检查、后端与测试目标完整构建、直接 FolderRepository/TrashQuery GoogleTest 16/16、回收站/文件变更/删除回归/内容与配额/路径安全网聚焦 CTest 36/36（44.47 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 日志覆盖 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，逐项耗时合计 523.13 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.112 上传配额预留重复服务转发清理记录（2026-08-01）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定配额预留的唯一写入原语。全仓调用点、源码、已编译对象与 Git 历史审计确认，显式 client 版 `QuotaService::ReserveUploadStorage()` 只把同一 client、用户 ID、字节数和 `LogContext` 原样转发给 `ReserveStorage()`；除非秒传上传初始化的单一生产调用外，没有集成、工具、客户端或迁移消费者，对象重定位也只来自同一生产调用的应用与测试编译产物。新增源码合同在旧实现上按预期为 0/3，共检出公开形状、上下文入口数量、声明、定义、转发和上传事务直接调用/顺序共 7 个失败断言。
+
+该服务声明与实现已删除，上传初始化在原 `TransactionRunner` 事务位置直接调用 `ReserveStorage()`。调用仍位于获取 transaction advisory lock 和锁内 `InProgress/Finalizing` 复查之后、上传任务创建之前，继续传入同一 transaction、`command.user_id`、`command.file_size` 和 `log_context`。通用原语的零字节短路、PostgreSQL 条件 UPDATE、`affectedRows()` 判定、固定日志、checked `Result`、配额不足错误、事务回滚、上传状态、缓存、REST 响应、schema 和迁移兼容合同均未改变。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 QuotaService/UploadTaskRepository GoogleTest 18/18、配额/上传生命周期/上传仓储/文件变更/复制删除/回收站/安全网聚焦 CTest 46/46（153.22 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 532.20 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
