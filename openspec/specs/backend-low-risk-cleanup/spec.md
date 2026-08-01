@@ -229,6 +229,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** upload finalization and file rename use identical last-dot extension extraction while both implementations already depend on `FileServiceUtils`
 - **THEN** their three active metadata write sites SHALL use one shared `ExtractFileExtension` helper without changing suffix bytes, empty-extension cases, validation order, names, paths, transactions, responses, or the restore-specific trash conflict-name parser
 
+#### Scenario: Folder service path construction reuses shared helpers
+
+- **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `FolderService.cpp` duplicates the existing `FileServiceUtils` file and folder path builders byte-for-byte for three active call sites
+- **THEN** those call sites SHALL use the shared helpers and the two folder-service-local definitions SHALL be removed, while root and nested file/folder paths, validation, locking, transactions, descendant rewrites, counts, errors, and responses remain unchanged
+
 #### Scenario: Folder snapshot timestamp conversion stays implementation-local
 
 - **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `DateToJson` is used only by `BuildFolderSnapshot` in `FileServiceUtils.cpp` and was implementation-local before the service split

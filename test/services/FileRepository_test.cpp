@@ -77,6 +77,29 @@ namespace disk::file {
             EXPECT_EQ(utils::ExtractFileExtension(".profile"), "profile");
         }
 
+        TEST(FilePathContractTest, FolderServiceUsesSharedBuilders) {
+            const auto folder_service = ReadSourceFile("src/services/FolderService.cpp");
+
+            EXPECT_TRUE(Contains(folder_service, "#include \"FileServiceUtils.hpp\""));
+            EXPECT_EQ(CountOccurrences(folder_service, "auto BuildFolderPath("), 0U);
+            EXPECT_EQ(CountOccurrences(folder_service, "auto BuildFilePath("), 0U);
+            EXPECT_EQ(
+                CountOccurrences(folder_service, "disk::file::utils::BuildFolderPath("),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(folder_service, "disk::file::utils::BuildFilePath("),
+                1U
+            );
+        }
+
+        TEST(FilePathContractTest, PreservesRootAndNestedPathRules) {
+            EXPECT_EQ(utils::BuildFolderPath("/", "docs"), "/docs/");
+            EXPECT_EQ(utils::BuildFolderPath("/parent/", "child"), "/parent/child/");
+            EXPECT_EQ(utils::BuildFilePath("/", "report.pdf"), "/report.pdf");
+            EXPECT_EQ(utils::BuildFilePath("/parent/", "report.pdf"), "/parent/report.pdf");
+        }
+
         TEST(FileServiceUtilsVisibilityContractTest, SnapshotDateConversionStaysInternal) {
             const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
             const auto utils_source = ReadSourceFile("src/services/FileServiceUtils.cpp");

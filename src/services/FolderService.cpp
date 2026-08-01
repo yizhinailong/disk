@@ -15,6 +15,7 @@
 
 #include "FileListCache.hpp"
 #include "FileRepository.hpp"
+#include "FileServiceUtils.hpp"
 #include "TransactionRunner.hpp"
 #include "utils/BatchUtils.hpp"
 
@@ -26,18 +27,6 @@ namespace disk::folder {
         : m_db_client(std::move(db_client)) {
         Logger::Debug(disk::utils::ServiceRuntimeLogContext()) << "Service initialized: service=folder";
     }
-
-    namespace {
-        [[nodiscard]] auto BuildFolderPath(const std::string& parent_path, const std::string& name)
-            -> std::string {
-            return parent_path == "/" ? "/" + name + "/" : parent_path + name + "/";
-        }
-
-        [[nodiscard]] auto BuildFilePath(const std::string& folder_path, const std::string& filename)
-            -> std::string {
-            return folder_path == "/" ? "/" + filename : folder_path + filename;
-        }
-    } // namespace
 
     auto FolderService::CreateFolder(
         CreateFolderRequest request,
@@ -96,7 +85,7 @@ namespace disk::folder {
                 folder.setUserId(user_id);
                 folder.setParentId(request.parent_id);
                 folder.setName(request.name);
-                folder.setPath(BuildFolderPath(parent_path, request.name));
+                folder.setPath(disk::file::utils::BuildFolderPath(parent_path, request.name));
                 folder.setDepth(parent_depth + 1);
                 folder.setItemCount(0);
                 folder.setCreatedAt(now);
@@ -209,7 +198,7 @@ namespace disk::folder {
                 }
 
                 const auto old_prefix = folder->getValueOfPath();
-                const auto new_prefix = BuildFolderPath(parent_path, new_name);
+                const auto new_prefix = disk::file::utils::BuildFolderPath(parent_path, new_name);
                 auto subtree = co_await m_folder_repository.FetchFolderSubtree(
                     transaction,
                     folder_id,
@@ -283,7 +272,7 @@ namespace disk::folder {
                             transaction,
                             file.getValueOfId(),
                             user_id,
-                            BuildFilePath(path_it->second, file.getValueOfName()),
+                            disk::file::utils::BuildFilePath(path_it->second, file.getValueOfName()),
                             updated_at
                         );
                         if (!file_updated) {
