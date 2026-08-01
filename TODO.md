@@ -2293,6 +2293,14 @@ ShareService 的本地模板已删除，两个调用点改用 `disk::file::utils
 
 旧实现上新合同按预期为 0/1，精确检出 4 个失败断言。实现后合同与搜索单测直接执行 7/7、搜索 DTO/SQL/helper 聚焦 CTest 22/22（0.34 秒）、真实文件元数据搜索集成 1/1（2.24 秒）、完整构建、分布式拓扑合同、差异检查和 OpenSpec 24/24 通过；测试二进制不存在测试匿名 helper 符号。标准完整 CTest 共 1457 项：1450 项通过、7 项按环境门控跳过、0 失败，总耗时 550.68 秒。该批只清理测试平行实现；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.122 文件列表排序列 helper 内部化记录（2026-08-01）
+
+系统测试、单元测试和后端低风险清理 OpenSpec 先行固定文件列表排序列解析的内部链接合同。全仓调用点、Git 历史、源码和已编译对象审计确认，`disk::file::utils::ResolveListSortColumn()` 只有 `FileListQuery.cpp` 的 all/file/folder 三个生产调用点，没有其他消费者；该函数最初位于单体 `FileService.cpp` 匿名命名空间，服务拆分后才被共享头文件导出，并在后端与测试二进制各形成一个全局符号。
+
+`ResolveListSortColumn()` 已移回 `FileListQuery.cpp` 匿名命名空间，三个调用点直接使用局部 helper，共享头文件和 `FileServiceUtils.cpp` 删除其声明与实现。size 在文件/混合列表映射为 `size`、在纯文件夹列表映射为 `sort_size`，两个时间字段原样映射，其他值回退 `name`；同时服务列表与搜索的 `BuildDeterministicOrderByClause()` 继续共享。DTO 白名单、升降序、稳定 tie-break、窄行分页、SQL、缓存键、错误和响应未改动。
+
+旧实现上新合同按预期为 0/1，共享排序 builder 的 2 个正向断言通过，并精确检出 8 个失败断言。实现后列表合同/DTO 直接执行 9/9、列表合同/DTO/响应聚焦 CTest 14/14（0.24 秒）、真实文件元数据列表集成 1/1（2.28 秒）、完整构建、OpenSpec 24/24、分布式拓扑合同和差异检查通过；后端只保留一个局部排序列符号，测试二进制为零，共享排序 builder 保留。标准完整 CTest 共 1458 项：1451 项通过、7 项按环境门控跳过、0 失败，总耗时 531.31 秒。该批只收敛一个列表专用公开符号；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

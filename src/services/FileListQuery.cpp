@@ -10,10 +10,30 @@
 #include "FileListQuery.hpp"
 
 #include <string>
+#include <string_view>
 
 #include "FileServiceUtils.hpp"
 
 namespace disk::file {
+    namespace {
+
+        [[nodiscard]] auto ResolveListSortColumn(
+            std::string_view sort_by,
+            bool folder_only
+        ) -> std::string_view {
+            if (sort_by == "size") {
+                return folder_only ? "sort_size" : "size";
+            }
+            if (sort_by == "created_at") {
+                return "created_at";
+            }
+            if (sort_by == "updated_at") {
+                return "updated_at";
+            }
+            return "name";
+        }
+
+    } ///< namespace
 
     FileListQuery::FileListQuery(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -76,7 +96,7 @@ namespace disk::file {
             total += static_cast<int>(folder_count_result[0]["cnt"].as<int64_t>());
         }
 
-        const auto order_column = utils::ResolveListSortColumn(request.sort_by, false);
+        const auto order_column = ResolveListSortColumn(request.sort_by, false);
         const std::string order_dir = (request.sort_order == "desc") ? "DESC" : "ASC";
         const std::string inner_order_by =
             utils::BuildDeterministicOrderByClause(order_column, order_dir, true);
@@ -153,7 +173,7 @@ namespace disk::file {
             total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
         }
 
-        const auto order_column = utils::ResolveListSortColumn(request.sort_by, false);
+        const auto order_column = ResolveListSortColumn(request.sort_by, false);
         const std::string order_dir = (request.sort_order == "desc") ? "DESC" : "ASC";
         const std::string inner_order_by =
             utils::BuildDeterministicOrderByClause(order_column, order_dir, false);
@@ -216,7 +236,7 @@ namespace disk::file {
             total = static_cast<int>(count_result[0]["cnt"].as<int64_t>());
         }
 
-        const auto order_column = utils::ResolveListSortColumn(request.sort_by, true);
+        const auto order_column = ResolveListSortColumn(request.sort_by, true);
         const std::string order_dir = (request.sort_order == "desc") ? "DESC" : "ASC";
         const std::string inner_order_by =
             utils::BuildDeterministicOrderByClause(order_column, order_dir, false);

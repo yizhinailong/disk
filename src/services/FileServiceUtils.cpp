@@ -363,22 +363,6 @@ namespace disk::file::utils {
         return normalized.find_first_not_of(' ') != std::string::npos;
     }
 
-    [[nodiscard]] auto ResolveListSortColumn(
-        std::string_view sort_by,
-        bool folder_only
-    ) -> std::string_view {
-        if (sort_by == "size") {
-            return folder_only ? "sort_size" : "size";
-        }
-        if (sort_by == "created_at") {
-            return "created_at";
-        }
-        if (sort_by == "updated_at") {
-            return "updated_at";
-        }
-        return "name";
-    }
-
     [[nodiscard]] auto BuildDeterministicOrderByClause(
         std::string_view primary_column,
         std::string_view direction,

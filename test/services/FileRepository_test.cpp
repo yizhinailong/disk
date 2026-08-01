@@ -125,6 +125,30 @@ namespace disk::file {
             EXPECT_EQ(CountOccurrences(search_test, "utils::IsFulltextEligible("), 11U);
         }
 
+        TEST(FileListSortColumnVisibilityContractTest, ListOnlyResolutionStaysInternal) {
+            const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
+            const auto utils_source = ReadSourceFile("src/services/FileServiceUtils.cpp");
+            const auto list_source = ReadSourceFile("src/services/FileListQuery.cpp");
+            const auto search_source = ReadSourceFile("src/services/SearchQuery.cpp");
+
+            EXPECT_EQ(CountOccurrences(utils_header, "auto ResolveListSortColumn("), 0U);
+            EXPECT_EQ(CountOccurrences(utils_source, "auto ResolveListSortColumn("), 0U);
+            EXPECT_EQ(CountOccurrences(list_source, "auto ResolveListSortColumn("), 1U);
+            EXPECT_EQ(CountOccurrences(list_source, "ResolveListSortColumn("), 4U);
+            EXPECT_EQ(CountOccurrences(list_source, "utils::ResolveListSortColumn("), 0U);
+            EXPECT_TRUE(Contains(list_source, "folder_only ? \"sort_size\" : \"size\""));
+            EXPECT_TRUE(Contains(list_source, "if (sort_by == \"created_at\")"));
+            EXPECT_TRUE(Contains(list_source, "if (sort_by == \"updated_at\")"));
+            EXPECT_EQ(
+                CountOccurrences(list_source, "utils::BuildDeterministicOrderByClause("),
+                6U
+            );
+            EXPECT_EQ(
+                CountOccurrences(search_source, "utils::BuildDeterministicOrderByClause("),
+                2U
+            );
+        }
+
         TEST(FileServiceUtilsVisibilityContractTest, SnapshotDateConversionStaysInternal) {
             const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
             const auto utils_source = ReadSourceFile("src/services/FileServiceUtils.cpp");

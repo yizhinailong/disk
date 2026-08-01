@@ -433,3 +433,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** full-text keyword normalization and eligibility behavior is covered by `FileServiceSearch_test.cpp`
 - **THEN** the tests SHALL call the production `FileServiceUtils` helpers instead of retaining test-local copies while accepted and rejected keyword cases and search SQL branch expectations remain unchanged
+
+#### Scenario: List-only sort-column resolution stays internal
+
+- **WHEN** a whole-repository call-site and history audit confirms that `ResolveListSortColumn` is consumed only by `FileListQuery.cpp` and was implementation-local before the service split
+- **THEN** the helper SHALL return to the list-query implementation while `BuildDeterministicOrderByClause` remains shared by list and search queries and list sorting, pagination, SQL, and response behavior remain unchanged

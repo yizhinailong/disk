@@ -121,11 +121,6 @@ namespace disk::file::utils {
 
     [[nodiscard]] auto IsFulltextEligible(std::string_view keyword) -> bool;
 
-    [[nodiscard]] auto ResolveListSortColumn(
-        std::string_view sort_by,
-        bool folder_only
-    ) -> std::string_view;
-
     [[nodiscard]] auto BuildDeterministicOrderByClause(
         std::string_view primary_column,
         std::string_view direction,
