@@ -93,6 +93,22 @@ namespace disk::file {
             );
         }
 
+        TEST(FilePathContractTest, ShareServiceUsesSharedBuilders) {
+            const auto share_service = ReadSourceFile("src/services/ShareService.cpp");
+
+            EXPECT_TRUE(Contains(share_service, "#include \"services/FileServiceUtils.hpp\""));
+            EXPECT_EQ(CountOccurrences(share_service, "auto BuildFolderPath("), 0U);
+            EXPECT_EQ(CountOccurrences(share_service, "auto BuildFilePath("), 0U);
+            EXPECT_EQ(
+                CountOccurrences(share_service, "disk::file::utils::BuildFolderPath("),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(share_service, "disk::file::utils::BuildFilePath("),
+                2U
+            );
+        }
+
         TEST(FilePathContractTest, PreservesRootAndNestedPathRules) {
             EXPECT_EQ(utils::BuildFolderPath("/", "docs"), "/docs/");
             EXPECT_EQ(utils::BuildFolderPath("/parent/", "child"), "/parent/child/");

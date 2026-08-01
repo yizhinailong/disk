@@ -2269,6 +2269,14 @@ FolderService 已直接引入 `FileServiceUtils.hpp`，3 个调用点改用 `dis
 
 旧实现上新源码合同按预期为 0/1，精确检出 5 个失败断言，同时共享 helper 路径行为 1/1 通过。实现后直接路径/后代更新合同 3/3、相关文件夹仓储/文件变更/生命周期/配额/路径安全网聚焦 CTest 20/20（31.59 秒）、完整构建、拓扑合同、差异检查和 OpenSpec 24/24 通过；对象符号审计确认 FolderService 两个局部符号消失。标准完整 CTest 共 1454 项：1447 项通过、7 项按环境门控跳过、0 失败，总耗时 549.01 秒。该批只清理 FolderService 的重复路径构造；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.119 分享保存路径 helper 重复实现清理记录（2026-08-01）
+
+系统测试、单元测试和后端低风险清理 OpenSpec 先行固定 ShareService 保存路径的共享调用合同。全仓调用点、Git 历史、源码和已编译对象审计确认，`ShareService.cpp` 匿名命名空间的 `BuildFolderPath()`/`BuildFilePath()` 早于 `FileServiceUtils` 共享 helper 出现，但当前两组实现逐字节相同。两个本地副本只服务 SaveToDrive 显式文件、副本根文件夹、后代文件夹和后代文件的 4 个路径赋值点；旧后端二进制因此同时保留两个 ShareService 局部副本与两个全局共享符号。
+
+ShareService 已直接引入 `FileServiceUtils.hpp`，SaveToDrive 的 4 个调用点改用 `disk::file::utils::BuildFolderPath()`/`BuildFilePath()`，两个本地副本删除。共享 helper 已锁定的根目录和嵌套目录文件/文件夹路径结果不变；分享权限/状态/限流、目标归属、配额与内容引用结算、事务、项目计数、列表缓存失效、错误和响应未改动。
+
+旧实现上新 ShareService 源码合同按预期为 0/1，精确检出 5 个失败断言，同时 FolderService 共享合同与共享路径行为 2/2 通过。实现后直接路径合同 3/3、分享/内容引用/列表缓存与六组真实分享流程聚焦 CTest 151/151（46.10 秒）、内容配额安全网 1/1（24.64 秒）、完整构建、拓扑合同、差异检查和 OpenSpec 24/24 通过；对象符号审计确认 FolderService/ShareService 四个局部符号均消失，仅保留两个共享符号。标准完整 CTest 共 1455 项：1448 项通过、7 项按环境门控跳过、0 失败，总耗时 529.15 秒。该批只清理 ShareService 的重复路径构造；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

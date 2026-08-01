@@ -234,6 +234,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `FolderService.cpp` duplicates the existing `FileServiceUtils` file and folder path builders byte-for-byte for three active call sites
 - **THEN** those call sites SHALL use the shared helpers and the two folder-service-local definitions SHALL be removed, while root and nested file/folder paths, validation, locking, transactions, descendant rewrites, counts, errors, and responses remain unchanged
 
+#### Scenario: Share save path construction reuses shared helpers
+
+- **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `ShareService.cpp` duplicates the existing `FileServiceUtils` file and folder path builders byte-for-byte for four save-to-drive call sites
+- **THEN** those call sites SHALL use the shared helpers and the two share-service-local definitions SHALL be removed, while root and nested copy paths, share authorization, quota and reference accounting, transactions, item counts, cache invalidation, errors, and responses remain unchanged
+
 #### Scenario: Folder snapshot timestamp conversion stays implementation-local
 
 - **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `DateToJson` is used only by `BuildFolderSnapshot` in `FileServiceUtils.cpp` and was implementation-local before the service split

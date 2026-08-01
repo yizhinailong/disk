@@ -26,6 +26,7 @@
 #include "models/Shares.hpp"
 #include "services/ContentService.hpp"
 #include "services/FileListCache.hpp"
+#include "services/FileServiceUtils.hpp"
 #include "services/TransactionRunner.hpp"
 #include "utils/BatchUtils.hpp"
 #include "utils/HashUtil.hpp"
@@ -58,16 +59,6 @@ namespace disk::share {
         [[nodiscard]] auto BuildSharedFileAccessPredicate(const std::string& file_alias, size_t start_index = 1)
             -> std::string {
             return "(EXISTS (" "SELECT 1 FROM share_files sff " "WHERE sff.share_id = $" + std::to_string(start_index) + " AND sff.item_type = 'file' AND sff.item_id = " + file_alias + ".id" ") OR EXISTS (" "SELECT 1 FROM share_files sff " "JOIN folders shared_root ON sff.item_id = shared_root.id " "JOIN folders parent_folder ON parent_folder.id = " + file_alias + ".folder_id " "WHERE sff.share_id = $" + std::to_string(start_index + 1) + " AND sff.item_type = 'folder' " "AND parent_folder.user_id = shared_root.user_id " "AND parent_folder.path LIKE CONCAT(shared_root.path, '%')" "))";
-        }
-
-        [[nodiscard]] auto BuildFilePath(const std::string& folder_path, const std::string& filename)
-            -> std::string {
-            return folder_path == "/" ? "/" + filename : folder_path + filename;
-        }
-
-        [[nodiscard]] auto BuildFolderPath(const std::string& parent_path, const std::string& name)
-            -> std::string {
-            return parent_path == "/" ? "/" + name + "/" : parent_path + name + "/";
         }
 
         template <typename BindParameters>
@@ -1256,7 +1247,7 @@ namespace disk::share {
                     copied_file.setExtension(source_file.getValueOfExtension());
                     copied_file.setSize(source_file.getValueOfSize());
                     copied_file.setMimeType(source_file.getValueOfMimeType());
-                    copied_file.setPath(BuildFilePath(target_path, source_file.getValueOfName()));
+                    copied_file.setPath(disk::file::utils::BuildFilePath(target_path, source_file.getValueOfName()));
                     copied_file.setIsFavorite(0);
                     copied_file.setDownloadCount(0);
                     copied_file.setCreatedAt(trantor::Date::now());
@@ -1280,7 +1271,7 @@ namespace disk::share {
 
                     std::unordered_map<uint64_t, uint64_t> folder_id_map;
                     std::unordered_map<uint64_t, std::string> folder_path_map;
-                    auto root_path = BuildFolderPath(target_path, plan.root.getValueOfName());
+                    auto root_path = disk::file::utils::BuildFolderPath(target_path, plan.root.getValueOfName());
                     auto root_depth = target_depth + 1;
 
                     Folders root_folder;
@@ -1308,7 +1299,7 @@ namespace disk::share {
                             continue;
                         }
 
-                        auto folder_path = BuildFolderPath(parent_path_it->second, folder.getValueOfName());
+                        auto folder_path = disk::file::utils::BuildFolderPath(parent_path_it->second, folder.getValueOfName());
                         auto depth_delta = folder.getValueOfDepth() > plan.root.getValueOfDepth() ? folder.getValueOfDepth() - plan.root.getValueOfDepth() : 1;
 
                         Folders copied_folder;
@@ -1355,7 +1346,7 @@ namespace disk::share {
                         copied_file.setExtension(source_file.getValueOfExtension());
                         copied_file.setSize(source_file.getValueOfSize());
                         copied_file.setMimeType(source_file.getValueOfMimeType());
-                        copied_file.setPath(BuildFilePath(path_it->second, source_file.getValueOfName()));
+                        copied_file.setPath(disk::file::utils::BuildFilePath(path_it->second, source_file.getValueOfName()));
                         copied_file.setIsFavorite(0);
                         copied_file.setDownloadCount(0);
                         copied_file.setCreatedAt(trantor::Date::now());
