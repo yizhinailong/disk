@@ -2189,6 +2189,14 @@ clang-format、差异检查、后端与测试目标完整构建、应用组合/�
 
 clang-format、差异检查、后端与测试目标完整构建、直接 FileRepository GoogleTest 6/6、文件仓储/变更/缓存/文件夹/回收站/配额/路径安全网聚焦 CTest 26/26（39.94 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 542.50 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.109 批量文件夹删除计划重复转发清理记录（2026-08-01）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定批量文件夹删除计划的唯一持久化边界。全仓调用点和源码审计确认，`disk::file::utils::FetchBatchFolderDeletePlans()` 只默认构造 `FolderRepository`，再原样转发 client、目录 ID 集合和用户 ID；`FileMutationService` 已持有仓储成员，`TrashService` 也已在删除事务体内创建仓储实例，没有独立 utility 行为、日志、错误映射或兼容消费者。新增源码合同在旧实现上按预期为 0/1，精确检出 utility 声明、实现、第二个 utility 仓储构造以及 FileMutation/Trash 未直接调用仓储五个失败点。
+
+utility 声明与实现已删除；文件复制改用既有 `m_folder_repository` 和 standalone `m_db_client`，文件夹移动继续使用该成员与当前 transaction，移入回收站则使用事务体内既有 `folder_repository` 与同一 transaction。`FolderRepository` 继续保留 16 个活跃显式 client 原语，utility 内仓储构造从 2 个收敛为只服务目录定位的 1 个。批量 SQL、用户谓词、目录覆盖消重、循环内计划稳定化、锁顺序、快照、配额、ref_count、日志上下文、REST 响应、schema 与迁移兼容合同均未改变。
+
+clang-format、差异检查、后端与测试目标完整构建、直接 FolderRepository GoogleTest 8/8、目录仓储/文件变更/复制删除/目录与回收站生命周期/配额/路径安全网聚焦 CTest 26/26（39.98 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 548.70 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

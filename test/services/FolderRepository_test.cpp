@@ -157,7 +157,9 @@ namespace disk::folder {
             EXPECT_FALSE(Contains(source, "FolderRepository::IncrementItemCount("));
             EXPECT_FALSE(Contains(utils_header, "FetchFolderDeletePlan("));
             EXPECT_FALSE(Contains(utils, "auto FetchFolderDeletePlan("));
-            EXPECT_EQ(CountOccurrences(utils, "FolderRepository repository;"), 2U);
+            EXPECT_FALSE(Contains(utils_header, "FetchBatchFolderDeletePlans("));
+            EXPECT_FALSE(Contains(utils, "auto FetchBatchFolderDeletePlans("));
+            EXPECT_EQ(CountOccurrences(utils, "FolderRepository repository;"), 1U);
             EXPECT_EQ(
                 CountOccurrences(
                     upload_lifecycle,
@@ -171,8 +173,20 @@ namespace disk::folder {
                 folder_service,
                 "m_folder_repository.FetchFolderSubtree("
             ));
-            EXPECT_EQ(CountOccurrences(file_mutation, "FetchBatchFolderDeletePlans("), 2U);
-            EXPECT_EQ(CountOccurrences(trash_service, "FetchBatchFolderDeletePlans("), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    file_mutation,
+                    "m_folder_repository.FetchBatchFolderDeletePlans("
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    trash_service,
+                    "folder_repository.FetchBatchFolderDeletePlans("
+                ),
+                1U
+            );
         }
 
         TEST(FolderRepositorySqlContractTest, OwnershipAndLocationQueriesStayUserScoped) {

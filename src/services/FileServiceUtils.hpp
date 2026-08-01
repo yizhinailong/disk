@@ -103,12 +103,6 @@ namespace disk::file::utils {
 
     [[nodiscard]] auto BuildFolderSnapshot(const FolderDeletePlan& plan) -> std::string;
 
-    auto FetchBatchFolderDeletePlans(
-        const drogon::orm::DbClientPtr& client,
-        const std::vector<uint64_t>& folder_ids,
-        uint64_t user_id
-    ) -> drogon::Task<std::unordered_map<uint64_t, FolderDeletePlan>>;
-
     [[nodiscard]] auto FilterCoveredFolderIds(
         const std::vector<uint64_t>& requested_folder_ids,
         const std::unordered_map<uint64_t, FolderDeletePlan>& plans

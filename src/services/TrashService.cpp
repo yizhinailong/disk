@@ -209,7 +209,7 @@ namespace disk::trash {
                 std::vector<uint64_t> top_level_folder_ids;
 
                 while (true) {
-                    folder_plans = co_await disk::file::utils::FetchBatchFolderDeletePlans(
+                    folder_plans = co_await folder_repository.FetchBatchFolderDeletePlans(
                         transaction,
                         requested_folder_ids,
                         user_id

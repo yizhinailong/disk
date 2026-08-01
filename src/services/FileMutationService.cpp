@@ -580,7 +580,11 @@ namespace disk::file {
         }
 
         std::unordered_map<uint64_t, utils::FolderDeletePlan> folder_plans =
-            co_await utils::FetchBatchFolderDeletePlans(m_db_client, requested_folder_ids, user_id);
+            co_await m_folder_repository.FetchBatchFolderDeletePlans(
+                m_db_client,
+                requested_folder_ids,
+                user_id
+            );
 
         auto top_level_folder_ids = utils::FilterCoveredFolderIds(requested_folder_ids, folder_plans);
         auto covered_file_ids = utils::CollectCoveredFileIds(top_level_folder_ids, folder_plans);
