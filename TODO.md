@@ -2221,6 +2221,14 @@ clang-format、差异检查、后端与测试目标完整构建、直接 FolderR
 
 clang-format、差异检查、后端与测试目标完整构建、直接 QuotaService/UploadTaskRepository GoogleTest 18/18、配额/上传生命周期/上传仓储/文件变更/复制删除/回收站/安全网聚焦 CTest 46/46（153.22 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1448 项：1441 项通过、7 项按环境门控跳过、0 失败，总耗时 532.20 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.113 用户限流器重复固定窗口 helper 清理记录（2026-08-01）
+
+系统测试、部署运维、单元测试和后端低风险清理 OpenSpec 先行固定用户限流固定窗口计算的唯一共享边界。全仓调用点、源码与已编译对象审计确认，API、上传、下载、文件夹、管理员和注册六个限流器头文件中的私有 `GetCurrentWindow()`/`GetResetTime()` 共 12 个成员只有定义，没有调用点或编译符号；六个实现已经各自唯一调用 `RateLimitHelper` 的 `GetFixedWindowStart()`/`GetFixedWindowReset()`，而六个 `<chrono>` include 只服务死成员。新增集中源码合同在旧实现上按预期为 0/1，共精确检出 18 个失败断言：六个冗余 include、六个起点 helper 和六个重置 helper。
+
+六个头文件的 12 个私有死成员及六个冗余 `<chrono>` include 已删除；`DEFAULT_LIMIT`、`WINDOW_SECONDS`、可注入计数器和所有 `.cpp` 调用均未修改。共享 helper 继续接收每个实现的配置或默认窗口秒数，Redis key 窗口起点、首次递增 TTL、限额、`X-RateLimit-*`、`Retry-After`、日志上下文、fail-open、认证顺序、路由归属、响应和副作用合同均未改变；`ShareRateLimitFilter` 原本只使用共享 helper，不增加兼容分支。
+
+clang-format、差异检查、后端与测试目标完整构建、直接全限流 GoogleTest 98/98、限流/下载/文件夹/存储任务/回收站/上传安全网聚焦 CTest 106/106（155.57 秒）和 OpenSpec 严格校验 24/24 通过。最终不带命令行额外超时的完整 CTest 共 1449 项：1442 项通过、7 项按环境门控跳过、0 失败，总耗时 527.03 秒。本批没有重跑 15.74/15.75 的带门禁双 API 环境复验；Phase 3/6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

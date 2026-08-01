@@ -9,7 +9,6 @@
 
 #pragma once
 
-#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -58,19 +57,6 @@ namespace disk::filters {
 
     private:
         FolderRateLimitCounter m_counter;
-
-        [[nodiscard]]
-        static auto GetCurrentWindow() -> int64_t {
-            auto now = std::chrono::system_clock::now();
-            auto timestamp =
-                std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-            return (timestamp / WINDOW_SECONDS) * WINDOW_SECONDS;
-        }
-
-        [[nodiscard]]
-        static auto GetResetTime(int64_t window) -> int64_t {
-            return window + WINDOW_SECONDS;
-        }
     };
 
 } // namespace disk::filters

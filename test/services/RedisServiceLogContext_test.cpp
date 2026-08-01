@@ -131,6 +131,37 @@ namespace disk::services {
             return Json::writeString(builder, value);
         }
 
+        TEST(RateLimitWindowHelperContractTest, UserFiltersUseOnlySharedHelpers) {
+            const auto shared_helper = ReadSourceFile("src/filters/RateLimitHelper.hpp");
+
+            ASSERT_FALSE(shared_helper.empty());
+            EXPECT_TRUE(Contains(shared_helper, "auto GetFixedWindowStart("));
+            EXPECT_TRUE(Contains(shared_helper, "auto GetFixedWindowReset("));
+
+            for (const auto* filter_name : {
+                     "RateLimitFilter",
+                     "UploadRateLimitFilter",
+                     "DownloadRateLimitFilter",
+                     "FolderRateLimitFilter",
+                     "AdminRateLimitFilter",
+                     "RegisterRateLimitFilter",
+                 }) {
+                const auto base_path = std::string("src/filters/") + filter_name;
+                const auto header = ReadSourceFile(base_path + ".hpp");
+                const auto source = ReadSourceFile(base_path + ".cpp");
+
+                ASSERT_FALSE(header.empty()) << filter_name;
+                ASSERT_FALSE(source.empty()) << filter_name;
+                EXPECT_FALSE(Contains(header, "#include <chrono>")) << filter_name;
+                EXPECT_FALSE(Contains(header, "auto GetCurrentWindow(")) << filter_name;
+                EXPECT_FALSE(Contains(header, "auto GetResetTime(")) << filter_name;
+                EXPECT_EQ(CountOccurrences(source, "GetFixedWindowStart("), 1U)
+                    << filter_name;
+                EXPECT_EQ(CountOccurrences(source, "GetFixedWindowReset("), 1U)
+                    << filter_name;
+            }
+        }
+
         TEST(RedisServiceLogContextContractTest, CommandsAndProductionCallersUseExplicitContext) {
             const auto header = ReadSourceFile("src/services/RedisService.hpp");
             const auto source = ReadSourceFile("src/services/RedisService.cpp");

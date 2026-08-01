@@ -58,6 +58,11 @@ The backend SHALL extract shared fixed-window Redis rate-limit mechanics and rat
 - **WHEN** an upload, download, folder, register, or share-public rate-limit filter performs a fixed-window counter check
 - **THEN** the filter SHALL use shared mechanics for Redis increment-with-expiry handling where practical
 
+#### Scenario: User rate-limit filters retain no duplicate window helpers
+
+- **WHEN** whole-repository source and compiled-object audits confirm that the private `GetCurrentWindow` and `GetResetTime` members in the API, upload, download, folder, admin, and register filters have no caller because every implementation uses `GetFixedWindowStart` and `GetFixedWindowReset`
+- **THEN** all twelve dead members and their header-only `<chrono>` dependencies SHALL be removed while shared window calculations, configured or default durations, keys, Redis TTL, headers, retry timing, logging, fail-open behavior, and route policy SHALL remain unchanged
+
 #### Scenario: Rate-limit headers are shared
 
 - **WHEN** a request exceeds a fixed-window rate limit
