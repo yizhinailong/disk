@@ -428,3 +428,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site audit confirms that the record-based private `TrashService::DeleteFile` and `TrashService::DeleteFolder` wrappers have no caller because `Delete` validates each prefetched item and invokes `PermanentlyDeleteTrashItems` directly
 - **THEN** those two unreachable wrappers SHALL be removed while the active batch path retains per-item validation and results, atomic content-reference and quota updates, Blob GC enqueueing, error messages, and logging context
+
+#### Scenario: Search tests exercise production full-text helpers
+
+- **WHEN** full-text keyword normalization and eligibility behavior is covered by `FileServiceSearch_test.cpp`
+- **THEN** the tests SHALL call the production `FileServiceUtils` helpers instead of retaining test-local copies while accepted and rejected keyword cases and search SQL branch expectations remain unchanged

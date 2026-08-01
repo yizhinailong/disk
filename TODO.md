@@ -2285,6 +2285,14 @@ ShareService 的本地模板已删除，两个调用点改用 `disk::file::utils
 
 旧实现上新合同按预期为 0/1，共享模板 4 个正向断言通过，精确检出本地模板/定义与两处未迁移调用对应的 3 个失败断言。实现后分享创建/原子性/密码/过期/所有权与真实管理/审计聚焦 CTest 19/19（8.96 秒）、完整构建、拓扑合同、差异检查和 OpenSpec 24/24 通过；对象符号审计确认 Share Create 的两个 lambda 实例均归属共享模板，不再存在 Share 匿名模板实例。标准完整 CTest 共 1456 项：1449 项通过、7 项按环境门控跳过、0 失败，总耗时 541.78 秒。该批只清理 ShareService 的重复 SQL 绑定模板；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.121 搜索单测全文 helper 重复实现清理记录（2026-08-01）
+
+系统测试、单元测试和后端低风险清理 OpenSpec 先行固定搜索单测直接覆盖生产全文 helper 的合同。全仓调用点、Git 历史和源码审计确认，`FileServiceSearch_test.cpp` 的匿名 `NormalizeFulltextKeyword()`/`IsFulltextEligible()` 与 `FileServiceUtils.cpp` 生产实现逐行相同；两组函数在同一个全文检索功能提交中同时加入，服务拆分只迁移了生产实现。测试目标已经链接 `FileServiceUtils.cpp`，本地副本仅被本文件 11 个 eligibility 断言调用。
+
+搜索测试已引入 `FileServiceUtils.hpp`，删除两个本地副本和无用的 `<cctype>`/`<string_view>`，原 11 个接受/拒绝断言直接调用 `disk::file::utils::IsFulltextEligible()`。源码合同拒绝平行实现回归并锁定生产 helper 调用；关键词空格归一化、最小长度、ASCII 字母数字、非 ASCII/标点回退、全文/LIKE SQL 分支及生产搜索行为未改动。
+
+旧实现上新合同按预期为 0/1，精确检出 4 个失败断言。实现后合同与搜索单测直接执行 7/7、搜索 DTO/SQL/helper 聚焦 CTest 22/22（0.34 秒）、真实文件元数据搜索集成 1/1（2.24 秒）、完整构建、分布式拓扑合同、差异检查和 OpenSpec 24/24 通过；测试二进制不存在测试匿名 helper 符号。标准完整 CTest 共 1457 项：1450 项通过、7 项按环境门控跳过、0 失败，总耗时 550.68 秒。该批只清理测试平行实现；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

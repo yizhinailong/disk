@@ -1,8 +1,8 @@
-#include <cctype>
 #include <string>
-#include <string_view>
 
 #include <gtest/gtest.h>
+
+#include "services/FileServiceUtils.hpp"
 
 namespace disk::file {
     namespace {
@@ -17,47 +17,6 @@ namespace disk::file {
             File,
             Folder,
         };
-
-        [[nodiscard]] auto NormalizeFulltextKeyword(std::string_view keyword) -> std::string {
-            std::string normalized;
-            normalized.reserve(keyword.size());
-
-            bool previous_is_space = true;
-            for (const auto ch : keyword) {
-                if (ch == ' ') {
-                    if (!previous_is_space) {
-                        normalized.push_back(' ');
-                    }
-                    previous_is_space = true;
-                    continue;
-                }
-
-                normalized.push_back(ch);
-                previous_is_space = false;
-            }
-
-            if (!normalized.empty() && normalized.back() == ' ') {
-                normalized.pop_back();
-            }
-
-            return normalized;
-        }
-
-        [[nodiscard]] auto IsFulltextEligible(std::string_view keyword) -> bool {
-            const auto normalized = NormalizeFulltextKeyword(keyword);
-            if (normalized.size() < 3) {
-                return false;
-            }
-
-            for (const auto ch : normalized) {
-                const auto uch = static_cast<unsigned char>(ch);
-                if (uch > 0x7F || (!std::isalnum(uch) && ch != ' ')) {
-                    return false;
-                }
-            }
-
-            return normalized.find_first_not_of(' ') != std::string::npos;
-        }
 
         [[nodiscard]] auto BuildSearchSql(SearchBranch branch, bool use_fulltext) -> SearchSqlPair {
             switch (branch) {
@@ -94,26 +53,26 @@ namespace disk::file {
         }
 
         TEST(FileServiceSearchTest, IsFulltextEligibleAcceptsAsciiTokens) {
-            EXPECT_TRUE(IsFulltextEligible("hello"));
-            EXPECT_TRUE(IsFulltextEligible("test123"));
-            EXPECT_TRUE(IsFulltextEligible("my file"));
-            EXPECT_TRUE(IsFulltextEligible("  my   file  "));
+            EXPECT_TRUE(utils::IsFulltextEligible("hello"));
+            EXPECT_TRUE(utils::IsFulltextEligible("test123"));
+            EXPECT_TRUE(utils::IsFulltextEligible("my file"));
+            EXPECT_TRUE(utils::IsFulltextEligible("  my   file  "));
         }
 
         TEST(FileServiceSearchTest, IsFulltextEligibleRejectsShortKeywords) {
-            EXPECT_FALSE(IsFulltextEligible("ab"));
-            EXPECT_FALSE(IsFulltextEligible("a"));
-            EXPECT_FALSE(IsFulltextEligible(""));
+            EXPECT_FALSE(utils::IsFulltextEligible("ab"));
+            EXPECT_FALSE(utils::IsFulltextEligible("a"));
+            EXPECT_FALSE(utils::IsFulltextEligible(""));
         }
 
         TEST(FileServiceSearchTest, NonAsciiKeywordFallsBackToLike) {
-            EXPECT_FALSE(IsFulltextEligible("测试"));
-            EXPECT_FALSE(IsFulltextEligible("файл"));
-            EXPECT_FALSE(IsFulltextEligible("hello-world"));
+            EXPECT_FALSE(utils::IsFulltextEligible("测试"));
+            EXPECT_FALSE(utils::IsFulltextEligible("файл"));
+            EXPECT_FALSE(utils::IsFulltextEligible("hello-world"));
         }
 
         TEST(FileServiceSearchTest, ShortKeywordFallsBackToLike) {
-            EXPECT_FALSE(IsFulltextEligible("ab"));
+            EXPECT_FALSE(utils::IsFulltextEligible("ab"));
         }
 
         TEST(FileServiceSearchTest, FulltextSqlUsesMatchAgainst) {

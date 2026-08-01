@@ -116,6 +116,15 @@ namespace disk::file {
             EXPECT_EQ(utils::BuildFilePath("/parent/", "report.pdf"), "/parent/report.pdf");
         }
 
+        TEST(FileSearchHelperContractTest, BehaviorTestsUseProductionHelpers) {
+            const auto search_test = ReadSourceFile("test/services/FileServiceSearch_test.cpp");
+
+            EXPECT_TRUE(Contains(search_test, "#include \"services/FileServiceUtils.hpp\""));
+            EXPECT_EQ(CountOccurrences(search_test, "auto NormalizeFulltextKeyword("), 0U);
+            EXPECT_EQ(CountOccurrences(search_test, "auto IsFulltextEligible("), 0U);
+            EXPECT_EQ(CountOccurrences(search_test, "utils::IsFulltextEligible("), 11U);
+        }
+
         TEST(FileServiceUtilsVisibilityContractTest, SnapshotDateConversionStaysInternal) {
             const auto utils_header = ReadSourceFile("src/services/FileServiceUtils.hpp");
             const auto utils_source = ReadSourceFile("src/services/FileServiceUtils.cpp");
