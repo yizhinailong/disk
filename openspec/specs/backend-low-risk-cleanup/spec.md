@@ -458,3 +458,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `TrashService::ExtractBaseName` and `TrashService::ExtractExtension` are consumed only by file restore in the same implementation unit
 - **THEN** both restore-specific helpers SHALL have internal linkage and SHALL NOT be declared by `TrashService.hpp`, while filename conflict retries retain the existing hidden-file, trailing-dot, suffix, and prior ` (n)` parsing rules without being replaced by the shared active-file extension helper or changing restore transactions, locks, metadata, quota, logging, errors, or responses
+
+#### Scenario: Health response mapping stays implementation-local
+
+- **WHEN** a whole-repository call-site and object-symbol audit confirms that `HealthController::ToResponse` is consumed only by the liveness and readiness handlers in the same implementation unit
+- **THEN** the response mapper SHALL have internal linkage and SHALL NOT be declared by `HealthController.hpp`, while both probes continue to wrap `HealthResult::ToJson()` in the standard success envelope and return HTTP 503 whenever the overall status is not healthy without changing routes, checks, logging, or response fields

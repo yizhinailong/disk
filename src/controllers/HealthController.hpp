@@ -29,9 +29,6 @@ namespace disk::health {
         auto Ready(drogon::HttpRequestPtr request) -> drogon::Task<drogon::HttpResponsePtr>;
 
     private:
-        [[nodiscard]]
-        static auto ToResponse(const HealthResult& result) -> drogon::HttpResponsePtr;
-
         std::unique_ptr<HealthService> m_health_service;
     };
 

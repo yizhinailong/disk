@@ -8,6 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include <gtest/gtest.h>
 
@@ -22,6 +23,16 @@ namespace disk::health {
             std::ostringstream buffer;
             buffer << input.rdbuf();
             return buffer.str();
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
         }
 
         auto IsUtcIsoSeconds(const std::string& value) -> bool {
@@ -93,6 +104,35 @@ namespace disk::health {
             EXPECT_TRUE(IsUtcIsoSeconds(readiness.timestamp));
             EXPECT_EQ(liveness.ToJson()["timestamp"].asString(), liveness.timestamp);
             EXPECT_EQ(readiness.ToJson()["timestamp"].asString(), readiness.timestamp);
+        }
+
+        TEST(HealthControllerResponseContractTest, MapperHasInternalLinkage) {
+            const auto header = ReadSourceFile("src/controllers/HealthController.hpp");
+            const auto source = ReadSourceFile("src/controllers/HealthController.cpp");
+
+            EXPECT_EQ(header.find("ToResponse("), std::string::npos);
+            EXPECT_EQ(source.find("HealthController::ToResponse("), std::string::npos);
+            EXPECT_NE(
+                source.find("namespace {\n        [[nodiscard]] auto ToResponse("),
+                std::string::npos
+            );
+            EXPECT_NE(
+                source.find("[[nodiscard]] auto ToResponse(const HealthResult& result)"),
+                std::string::npos
+            );
+            EXPECT_EQ(CountOccurrences(source, "ToResponse("), 3U);
+            EXPECT_NE(
+                source.find("Response::Success(result.ToJson())"),
+                std::string::npos
+            );
+            EXPECT_NE(
+                source.find("result.overall_status != \"healthy\""),
+                std::string::npos
+            );
+            EXPECT_NE(
+                source.find("response->setStatusCode(drogon::k503ServiceUnavailable)"),
+                std::string::npos
+            );
         }
 
         TEST(HealthServiceTest, LivenessNeverCallsExternalDependencies) {

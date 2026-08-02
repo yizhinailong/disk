@@ -16,6 +16,15 @@
 #include "utils/Response.hpp"
 
 namespace disk::health {
+    namespace {
+        [[nodiscard]] auto ToResponse(const HealthResult& result) -> drogon::HttpResponsePtr {
+            auto response = Response::Success(result.ToJson());
+            if (result.overall_status != "healthy") {
+                response->setStatusCode(drogon::k503ServiceUnavailable);
+            }
+            return response;
+        }
+    } // namespace
 
     HealthController::HealthController() {
         const auto runtime_state = disk::runtime::ProcessRuntimeMgr::GetInstance();
@@ -53,14 +62,6 @@ namespace disk::health {
         Logger::Debug(log_context)
             << "Received readiness request: " << request->getPeerAddr().toIpPort();
         co_return ToResponse(co_await m_health_service->CheckReadiness(log_context));
-    }
-
-    auto HealthController::ToResponse(const HealthResult& result) -> drogon::HttpResponsePtr {
-        auto response = Response::Success(result.ToJson());
-        if (result.overall_status != "healthy") {
-            response->setStatusCode(drogon::k503ServiceUnavailable);
-        }
-        return response;
     }
 
 } // namespace disk::health
