@@ -115,7 +115,7 @@ The current refresh-token hash and unexpired access/share-token revocations SHAL
 - **AND** all previously issued access, refresh, and share tokens SHALL require reauthentication or reissuance before traffic reopens
 
 ### Requirement: Account Protection
-The system SHALL enforce account status and rate-limit protections for authentication-sensitive flows.
+The system SHALL enforce account status and rate-limit protections for authentication-sensitive flows. Consecutive password failures and temporary account lock deadlines SHALL be owned by PostgreSQL so independently clocked API instances cannot lose increments, extend an existing lock, or disagree about expiry. Administrator-disabled and administrator-locked states SHALL remain distinct from temporary password-failure locks.
 
 #### Scenario: Account is disabled or locked
 - **WHEN** a disabled or locked account attempts to authenticate
@@ -124,3 +124,19 @@ The system SHALL enforce account status and rate-limit protections for authentic
 #### Scenario: Login attempts exceed allowed rate
 - **WHEN** login attempts exceed the configured protection threshold
 - **THEN** the system SHALL temporarily reject further attempts
+
+#### Scenario: Password failures race across API instances
+- **WHEN** invalid-password requests for one active account execute concurrently across two API instances
+- **THEN** PostgreSQL SHALL atomically accumulate at most the first five consecutive failures, the fifth SHALL set one 15-minute deadline from database `NOW()` without changing the administrator-owned status, and requests observing the live deadline SHALL return `AccountLocked` without extending it
+
+#### Scenario: Temporary account lock expires
+- **WHEN** PostgreSQL time reaches the temporary lock deadline and the next request supplies the correct password
+- **THEN** the successful-login conditional update SHALL clear the failure count and deadline before tokens are issued, and every API instance SHALL observe the account as active
+
+#### Scenario: Legacy temporary lock expires
+- **WHEN** a compatibility row has administrator-lock status together with a non-null expired deadline from the former automatic-lock implementation
+- **THEN** correct authentication SHALL normalize it once to active status while clearing the failure state, but an administrator lock with no deadline SHALL remain locked
+
+#### Scenario: Refresh observes account protection
+- **WHEN** a refresh token belongs to a disabled, administrator-locked, or currently temporary-locked account
+- **THEN** refresh SHALL use PostgreSQL time and reject the request without rotating the token

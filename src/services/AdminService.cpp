@@ -214,6 +214,8 @@ namespace disk::services {
             );
 
             user.setStatus(static_cast<int8_t>(status));
+            user.setLoginAttempts(0);
+            user.setLockedUntilToNull();
             co_await mapper.update(user);
 
             Json::Value details;

@@ -31,6 +31,7 @@ from test_expand_mixed_version import (  # noqa: E402
     INIT_SQL,
     ManagedServer,
     allocate_ports,
+    connect,
     create_database,
     drop_database,
     redis_config,
@@ -445,6 +446,208 @@ def register_and_login(base_url: str, username: str, password: str) -> dict[str,
     return {"access_token": access_token, "refresh_token": refresh_token}
 
 
+def login_from_source(
+    base_url: str,
+    username: str,
+    password: str,
+    source_ip: str,
+) -> tuple[httpx.Response, dict[str, Any]]:
+    transport = httpx.HTTPTransport(local_address=source_ip)
+    with httpx.Client(transport=transport, timeout=20) as client:
+        response = client.post(
+            base_url + "/api/auth/login",
+            json={"account": username, "password": password},
+        )
+    return response, response_envelope(response, f"login from {source_ip}")
+
+
+def require_account_lock_consistency(
+    base_urls: tuple[str, str],
+    database_name: str,
+    username: str,
+    password: str,
+) -> dict[str, Any]:
+    register = httpx.post(
+        base_urls[0] + "/api/auth/register",
+        json={
+            "username": username,
+            "email": f"{username}@example.test",
+            "password": password,
+        },
+        timeout=20,
+    )
+    success_data(register, "register account-lock user")
+
+    request_count = 12
+    attempts = [
+        (
+            base_urls[index % len(base_urls)],
+            username,
+            "WrongPass456",
+            f"127.10.0.{index + 1}",
+        )
+        for index in range(request_count)
+    ]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=request_count) as pool:
+        results = list(pool.map(lambda arguments: login_from_source(*arguments), attempts))
+
+    for response, payload in results:
+        require(response.status_code == 401, f"wrong-password login returned {response.status_code}")
+        require(
+            str(payload["code"]) in {"40101", "40102"},
+            f"wrong-password login returned unexpected code: {payload}",
+        )
+
+    with connect(database_name) as connection:
+        locked_row = connection.execute(
+            "SELECT id, status, login_attempts, locked_until, "
+            "locked_until > NOW() AS lock_active "
+            "FROM users WHERE username = %s",
+            (username,),
+        ).fetchone()
+    require(locked_row is not None, "account-lock user is missing")
+    require(locked_row["status"] == 1, f"automatic lock changed status: {locked_row}")
+    require(locked_row["login_attempts"] == 5, f"failure count is not atomic: {locked_row}")
+    require(locked_row["lock_active"] is True, f"temporary lock is not active: {locked_row}")
+    original_deadline = locked_row["locked_until"]
+
+    for index in range(4):
+        response, _payload = login_from_source(
+            base_urls[index % len(base_urls)],
+            username,
+            "WrongPass456",
+            f"127.10.1.{index + 1}",
+        )
+        require_error_code(
+            response,
+            "40102",
+            "locked wrong-password login",
+            expected_status=401,
+        )
+    with connect(database_name) as connection:
+        stable_row = connection.execute(
+            "SELECT login_attempts, locked_until FROM users WHERE username = %s",
+            (username,),
+        ).fetchone()
+    require(
+        stable_row is not None
+        and stable_row["login_attempts"] == 5
+        and stable_row["locked_until"] == original_deadline,
+        f"live lock was extended or incremented: {stable_row}",
+    )
+
+    for index, base_url in enumerate(base_urls):
+        response, _payload = login_from_source(
+            base_url,
+            username,
+            password,
+            f"127.10.2.{index + 1}",
+        )
+        require_error_code(
+            response,
+            "40102",
+            f"live lock at {base_url}",
+            expected_status=401,
+        )
+
+    with connect(database_name) as connection:
+        connection.execute(
+            "UPDATE users SET status = 2, login_attempts = 5, "
+            "locked_until = NOW() - INTERVAL '1 second' WHERE username = %s",
+            (username,),
+        )
+    recovered_response, _payload = login_from_source(
+        base_urls[1],
+        username,
+        password,
+        "127.10.3.1",
+    )
+    recovered = success_data(recovered_response, "expired legacy lock recovery")
+    refresh_token = recovered.get("refresh_token")
+    require(isinstance(refresh_token, str) and refresh_token, "recovery returned no refresh token")
+    with connect(database_name) as connection:
+        recovered_row = connection.execute(
+            "SELECT status, login_attempts, locked_until FROM users WHERE username = %s",
+            (username,),
+        ).fetchone()
+    require(
+        recovered_row is not None
+        and recovered_row["status"] == 1
+        and recovered_row["login_attempts"] == 0
+        and recovered_row["locked_until"] is None,
+        f"expired legacy lock was not normalized: {recovered_row}",
+    )
+
+    with connect(database_name) as connection:
+        connection.execute(
+            "UPDATE users SET status = 1, login_attempts = 5, "
+            "locked_until = NOW() + INTERVAL '15 minutes' WHERE username = %s",
+            (username,),
+        )
+    locked_refresh, _payload = refresh_once(base_urls[0], refresh_token)
+    require_error_code(
+        locked_refresh,
+        "40102",
+        "temporary lock refresh",
+        expected_status=401,
+    )
+
+    with connect(database_name) as connection:
+        connection.execute(
+            "UPDATE users SET locked_until = NOW() - INTERVAL '1 second' WHERE username = %s",
+            (username,),
+        )
+    resumed_refresh, _payload = refresh_once(base_urls[1], refresh_token)
+    resumed = success_data(resumed_refresh, "expired temporary lock refresh")
+    resumed_refresh_token = resumed.get("refresh_token")
+    require(
+        isinstance(resumed_refresh_token, str) and resumed_refresh_token,
+        "expired temporary lock refresh returned no token",
+    )
+
+    with connect(database_name) as connection:
+        connection.execute(
+            "UPDATE users SET status = 2, login_attempts = 0, locked_until = NULL "
+            "WHERE username = %s",
+            (username,),
+        )
+    admin_locked_login, _payload = login_from_source(
+        base_urls[0],
+        username,
+        password,
+        "127.10.4.1",
+    )
+    require_error_code(
+        admin_locked_login,
+        "40102",
+        "administrator lock login",
+        expected_status=401,
+    )
+    admin_locked_refresh, _payload = refresh_once(base_urls[1], resumed_refresh_token)
+    require_error_code(
+        admin_locked_refresh,
+        "40102",
+        "administrator lock refresh",
+        expected_status=401,
+    )
+    with connect(database_name) as connection:
+        connection.execute(
+            "UPDATE users SET status = 1, login_attempts = 0, locked_until = NULL "
+            "WHERE username = %s",
+            (username,),
+        )
+
+    return {
+        "account_lock_concurrent_requests": request_count,
+        "account_lock_attempts": 5,
+        "account_lock_deadline_stable": True,
+        "account_lock_cross_instance": True,
+        "account_lock_refresh_rejected": True,
+        "account_lock_legacy_recovered": True,
+        "account_lock_admin_preserved": True,
+    }
+
+
 def require_profile(base_url: str, access_token: str, username: str) -> None:
     response = httpx.get(
         base_url + "/api/user/profile",
@@ -681,6 +884,12 @@ def main() -> int:
 
             initial = register_and_login(api_a.base_url, username, password)
             require_profile(api_b.base_url, initial["access_token"], username)
+            account_lock_evidence = require_account_lock_consistency(
+                base_urls,
+                database_name,
+                f"locked_{suffix}",
+                password,
+            )
             first_rotation = require_single_rotation(
                 base_urls,
                 initial["refresh_token"],
@@ -893,6 +1102,7 @@ def main() -> int:
                     "auth_runtime_messages_bounded": True,
                     "auth_runtime_periodic_metrics": True,
                     "shared_redis_service_stopped": False,
+                    **account_lock_evidence,
                     "passed": True,
                 }
             )
@@ -902,8 +1112,8 @@ def main() -> int:
             api_a.stop()
             api_a = None
             print(
-                "PASS: cross-instance refresh, revocation, restart, and Redis recovery "
-                "remained consistent"
+                "PASS: cross-instance account locks, refresh, revocation, restart, and "
+                "Redis recovery remained consistent"
             )
         return 0
     except BaseException:

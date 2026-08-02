@@ -132,36 +132,42 @@ namespace disk::auth {
         ) const -> drogon::Task<Result<drogon_model::disk::Users>>;
 
         /**
-         * @brief 检查账户是否被锁定
-         * @param user 用户模型
-         * @return bool 账户是否被锁定
+         * @brief 使用 PostgreSQL 时间校验账户是否允许认证
+         * @param user_id 用户ID
+         * @param log_context 请求日志上下文
+         * @return 允许认证时成功，否则返回禁用、锁定或数据库错误
          */
         [[nodiscard]]
-        auto CheckAccountLocked(const drogon_model::disk::Users& user) const -> bool;
+        auto ValidateAccountAccess(
+            uint64_t user_id,
+            disk::utils::LogContext log_context
+        ) const -> drogon::Task<Result<void>>;
 
         /**
          * @brief 更新登录信息
          * @param user_id 用户ID
          * @param ip_address IP地址
          * @param log_context 请求日志上下文
-         * @return drogon::Task<void>
+         * @return 登录状态原子写入成功时返回 void
          */
+        [[nodiscard]]
         auto UpdateLoginInfo(
             uint64_t user_id,
             std::string ip_address,
             disk::utils::LogContext log_context
-        ) -> drogon::Task<void>;
+        ) -> drogon::Task<Result<void>>;
 
         /**
          * @brief 增加登录失败次数
          * @param user_id 用户ID
          * @param log_context 请求日志上下文
-         * @return drogon::Task<void>
+         * @return 失败计数原子写入成功或账户已转为不可用时返回 void
          */
+        [[nodiscard]]
         auto IncrementLoginAttempts(
             uint64_t user_id,
             disk::utils::LogContext log_context
-        ) -> drogon::Task<void>;
+        ) -> drogon::Task<Result<void>>;
 
         drogon::orm::DbClientPtr m_db_client;                            ///< 数据库客户端
         std::shared_ptr<disk::services::RedisService> m_redis_service{}; ///< Redis服务

@@ -33,6 +33,11 @@ namespace disk::auth {
     using drogon_model::disk::Users;
 
     namespace {
+        constexpr int16_t ACCOUNT_STATUS_DISABLED = 0;
+        constexpr int16_t ACCOUNT_STATUS_ACTIVE = 1;
+        constexpr int16_t ACCOUNT_STATUS_LOCKED = 2;
+        constexpr int LOGIN_FAILURE_LIMIT = 5;
+
         [[nodiscard]] auto UserToResponse(const Users& user) -> RegisterResponse {
             RegisterResponse response;
             response.id = user.getValueOfId();
@@ -186,16 +191,11 @@ namespace disk::auth {
 
         const auto& user = *user_result;
 
-        /// 2. 检查账户状态
-        const auto status = user.getValueOfStatus();
-        if (status == 0) {
-            Logger::Warn(log_context) << "Account disabled: " << request.account;
-            co_return std::unexpected(ErrorInfo(ErrorCode::AccountDisabled));
-        }
-
-        if (CheckAccountLocked(user)) {
-            Logger::Warn(log_context) << "Account locked: " << request.account;
-            co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
+        /// 2. 使用数据库时间检查账户状态
+        auto access_result =
+            co_await ValidateAccountAccess(user.getValueOfId(), log_context);
+        if (!access_result) {
+            co_return std::unexpected(access_result.error());
         }
 
         /// 3. 验证密码
@@ -207,20 +207,31 @@ namespace disk::auth {
         );
         if (!password_matches) {
             Logger::Warn(log_context) << "Invalid password: " << request.account;
-            co_await IncrementLoginAttempts(user.getValueOfId(), log_context);
+            auto increment_result =
+                co_await IncrementLoginAttempts(user.getValueOfId(), log_context);
+            if (!increment_result) {
+                co_return std::unexpected(increment_result.error());
+            }
             co_return std::unexpected(ErrorInfo(ErrorCode::InvalidCredentials));
         }
 
-        /// 4. 生成令牌
+        /// 4. 在签发令牌前原子更新登录状态
+        auto update_result =
+            co_await UpdateLoginInfo(user.getValueOfId(), ip_address, log_context);
+        if (!update_result) {
+            co_return std::unexpected(update_result.error());
+        }
+
+        /// 5. 生成令牌
         auto [access_token, refresh_token] = TokenService::GetInstance()->GenerateTokens(
             user.getValueOfId(),
             user.getValueOfUsername(),
             user.getValueOfRole(),
-            user.getValueOfStatus(),
+            ACCOUNT_STATUS_ACTIVE,
             log_context
         );
 
-        /// 5. 存储 refresh_token 到 Redis
+        /// 6. 存储 refresh_token 到 Redis
         auto store_result = co_await TokenService::GetInstance()->StoreRefreshToken(
             user.getValueOfId(),
             refresh_token,
@@ -230,9 +241,6 @@ namespace disk::auth {
             Logger::Warn(log_context)
                 << "Failed to store refresh_token in Redis: " << user.getValueOfId();
         }
-
-        /// 6. 更新登录信息
-        co_await UpdateLoginInfo(user.getValueOfId(), ip_address, log_context);
 
         /// 7. 构造响应
         LoginResponse response;
@@ -277,18 +285,10 @@ namespace disk::auth {
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
             Logger::Debug(log_context) << "Found user: " << user.getValueOfUsername();
 
-            /// 3. 检查账户状态
-            const auto status = user.getValueOfStatus();
-            if (status == 0) {
-                Logger::Warn(log_context)
-                    << "Account disabled: " << user.getValueOfUsername();
-                co_return std::unexpected(ErrorInfo(ErrorCode::AccountDisabled));
-            }
-
-            if (CheckAccountLocked(user)) {
-                Logger::Warn(log_context)
-                    << "Account locked: " << user.getValueOfUsername();
-                co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
+            /// 3. 使用数据库时间检查账户状态
+            auto access_result = co_await ValidateAccountAccess(user_id, log_context);
+            if (!access_result) {
+                co_return std::unexpected(access_result.error());
             }
 
             /// 4. 生成新的令牌对
@@ -296,7 +296,7 @@ namespace disk::auth {
                 user.getValueOfId(),
                 user.getValueOfUsername(),
                 user.getValueOfRole(),
-                user.getValueOfStatus(),
+                ACCOUNT_STATUS_ACTIVE,
                 log_context
             );
 
@@ -422,22 +422,39 @@ namespace disk::auth {
         }
     }
 
-    auto AuthService::CheckAccountLocked(const Users& user) const -> bool {
-        /// 检查 status 字段（2 = 锁定）
-        if (user.getValueOfStatus() == 2) {
-            return true;
-        }
+    auto AuthService::ValidateAccountAccess(
+        uint64_t user_id,
+        disk::utils::LogContext log_context
+    ) const -> drogon::Task<Result<void>> {
+        try {
+            auto result = co_await m_db_client->execSqlCoro(
+                "SELECT status, ((status = 2 AND locked_until IS NULL) " "OR COALESCE(locked_until > NOW(), FALSE)) AS account_locked " "FROM users WHERE id = $1",
+                user_id
+            );
 
-        /// 检查 locked_until 字段
-        if (user.getLockedUntil()) {
-            const auto& locked_until = user.getValueOfLockedUntil();
-            const auto now = trantor::Date::now();
-            if (locked_until > now) {
-                return true;
+            if (result.empty()) {
+                co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
             }
-        }
 
-        return false;
+            if (result[0]["status"].as<int>() == ACCOUNT_STATUS_DISABLED) {
+                Logger::Warn(log_context) << "Account disabled: user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::AccountDisabled));
+            }
+
+            if (result[0]["account_locked"].as<bool>()) {
+                Logger::Warn(log_context) << "Account locked: user_id=" << user_id;
+                co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
+            }
+
+            co_return {};
+        } catch (const drogon::orm::DrogonDbException& e) {
+            Logger::Error(log_context)
+                << "Failed to validate account access: " << user_id << " - "
+                << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to validate account status")
+            );
+        }
     }
 
     auto AuthService::UpdateLoginInfo(
@@ -445,18 +462,30 @@ namespace disk::auth {
         std::string ip_address,
         disk::utils::LogContext log_context
     )
-        -> drogon::Task<void> {
+        -> drogon::Task<Result<void>> {
 
         try {
-            CoroMapper<Users> mapper(m_db_client);
+            auto result = co_await m_db_client->execSqlCoro(
+                "UPDATE users SET status = $1, login_attempts = 0, locked_until = NULL, " "last_login_at = NOW(), last_login_ip = $2, updated_at = NOW() " "WHERE id = $3 AND ((status = $1 AND " "(locked_until IS NULL OR locked_until <= NOW())) OR " "(status = $4 AND locked_until IS NOT NULL AND locked_until <= NOW())) " "RETURNING id",
+                ACCOUNT_STATUS_ACTIVE,
+                ip_address,
+                user_id,
+                ACCOUNT_STATUS_LOCKED
+            );
 
-            Users user;
-            user.setId(user_id);
-            user.setLastLoginAt(trantor::Date::now());
-            user.setLastLoginIp(ip_address);
-            user.setLoginAttempts(0);
+            if (result.empty()) {
+                auto access_result = co_await ValidateAccountAccess(user_id, log_context);
+                if (!access_result) {
+                    co_return std::unexpected(access_result.error());
+                }
 
-            co_await mapper.update(user);
+                Logger::Error(log_context)
+                    << "Login state changed before update: user_id=" << user_id;
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to update login state")
+                );
+            }
+
             Logger::Debug(log_context) << "Login info updated successfully: " << user_id;
 
             /// 清除 IP 频率限制计数器
@@ -476,43 +505,51 @@ namespace disk::auth {
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error(log_context)
                 << "Failed to update login info: " << user_id << " - " << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to update login state")
+            );
         }
+
+        co_return {};
     }
 
     auto AuthService::IncrementLoginAttempts(
         uint64_t user_id,
         disk::utils::LogContext log_context
-    ) -> drogon::Task<void> {
+    ) -> drogon::Task<Result<void>> {
 
         try {
-            CoroMapper<Users> mapper(m_db_client);
+            auto result = co_await m_db_client->execSqlCoro(
+                "UPDATE users SET status = $1, " "login_attempts = CASE " "WHEN locked_until IS NOT NULL AND locked_until <= NOW() THEN 1 " "ELSE login_attempts + 1 END, " "locked_until = CASE WHEN (CASE " "WHEN locked_until IS NOT NULL AND locked_until <= NOW() THEN 1 " "ELSE login_attempts + 1 END) >= $2 " "THEN NOW() + INTERVAL '15 minutes' ELSE NULL END, updated_at = NOW() " "WHERE id = $3 AND ((status = $1 AND " "(locked_until IS NULL OR locked_until <= NOW())) OR " "(status = $4 AND locked_until IS NOT NULL AND locked_until <= NOW())) " "RETURNING login_attempts, locked_until > NOW() AS account_locked",
+                ACCOUNT_STATUS_ACTIVE,
+                LOGIN_FAILURE_LIMIT,
+                user_id,
+                ACCOUNT_STATUS_LOCKED
+            );
 
-            /// 查询当前失败次数
-            auto user =
-                co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
+            if (result.empty()) {
+                Logger::Debug(log_context)
+                    << "Login attempt not counted for unavailable account: user_id=" << user_id;
+                co_return {};
+            }
 
-            auto attempts = user.getValueOfLoginAttempts() + 1;
-
-            /// 检查是否需要锁定
-            if (attempts >= 5) {
-                /// 锁定账户 15 分钟
-                auto locked_until = trantor::Date::now().after(15 * 60);
-                user.setLockedUntil(locked_until);
-                user.setStatus(2);
+            const auto attempts = result[0]["login_attempts"].as<int>();
+            if (result[0]["account_locked"].as<bool>()) {
                 Logger::Warn(log_context)
                     << "Account locked: " << user_id << " (unlocks in 15 minutes)";
             } else {
-                user.setLoginAttempts(attempts);
                 Logger::Warn(log_context)
                     << "Failed login attempts: " << user_id << " = " << attempts;
             }
-
-            co_await mapper.update(user);
-
         } catch (const drogon::orm::DrogonDbException& e) {
             Logger::Error(log_context)
                 << "Failed to increment login attempts: " << user_id << " - "
                 << e.base().what();
+            co_return std::unexpected(
+                ErrorInfo(ErrorCode::InternalError, "Failed to record login attempt")
+            );
         }
+
+        co_return {};
     }
 } // namespace disk::auth

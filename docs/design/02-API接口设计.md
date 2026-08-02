@@ -253,6 +253,14 @@ auto GetUser(int id) -> Result<User> {
 
 ---
 
+#### 账户保护语义
+
+- 同一账户的连续密码失败次数以 PostgreSQL 原子更新累计；第 5 次失败把 `locked_until` 设为数据库 `NOW() + 15 minutes`，不修改管理员控制的 `status`。并发请求命中不同 API 实例时仍只能按数据库行顺序累计，不能因 ORM 先读后写丢失增量或延长已有锁定。
+- `status=0` 表示管理员禁用，`status=2 + locked_until=NULL` 表示管理员锁定；两者只有管理员状态变更可以解除。`status=1 + locked_until>NOW()` 表示密码失败触发的临时锁定，登录和 refresh 均返回 `401 + 40102 AccountLocked`。
+- 临时锁定是否到期只使用 PostgreSQL `NOW()`。到期后的下一次正确登录在签发令牌前原子清零 `login_attempts/locked_until`；兼容旧实现产生的 `status=2 + 已过期 locked_until` 行时，同时恢复为 `status=1`。管理员修改状态会清空密码失败计数和临时截止时间，使人工状态与自动锁定保持可区分。
+
+---
+
 ### 2.3 刷新令牌
 
 **POST** `/api/auth/refresh`
@@ -4742,6 +4750,7 @@ Authorization: Bearer <access_token>
 1. **禁止修改自己**：管理员不能修改自己的状态
 2. **状态值范围**：仅允许 0、1、2 三个值
 3. **最后管理员保护**：不能将最后一个管理员的状态改为非正常状态
+4. **锁定状态边界**：管理员修改任一状态时清零 `login_attempts/locked_until`；`status=2` 因而表示无自动截止时间的管理员锁定，只有后续管理员状态变更可以解除
 
 #### 错误响应矩阵
 

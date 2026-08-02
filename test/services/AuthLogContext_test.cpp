@@ -65,10 +65,15 @@ namespace disk::auth {
 
             EXPECT_FALSE(Contains(service_header, "UserToResponse("));
             EXPECT_FALSE(Contains(service_source, "AuthService::UserToResponse("));
-            EXPECT_TRUE(Contains(
-                service_source,
-                "namespace {\n        [[nodiscard]] auto UserToResponse("
-            ));
+            const auto anonymous_namespace = service_source.find("namespace {");
+            const auto helper = service_source.find("[[nodiscard]] auto UserToResponse(");
+            const auto anonymous_namespace_end =
+                service_source.find("} // namespace", anonymous_namespace);
+            ASSERT_NE(anonymous_namespace, std::string::npos);
+            ASSERT_NE(helper, std::string::npos);
+            ASSERT_NE(anonymous_namespace_end, std::string::npos);
+            EXPECT_LT(anonymous_namespace, helper);
+            EXPECT_LT(helper, anonymous_namespace_end);
             EXPECT_TRUE(Contains(
                 service_source,
                 "[[nodiscard]] auto UserToResponse(const Users& user) -> RegisterResponse"
@@ -137,14 +142,15 @@ namespace disk::auth {
             );
             EXPECT_EQ(
                 CountOccurrences(service_header, "disk::utils::LogContext log_context"),
-                7
+                8
             );
             EXPECT_EQ(
                 CountOccurrences(service_request_body, "disk::utils::LogContext log_context"),
-                7
+                8
             );
             for (const auto* call_marker : {
                      "co_await FindUser(",
+                     "co_await ValidateAccountAccess(",
                      "co_await IncrementLoginAttempts(",
                      "co_await UpdateLoginInfo(",
                      "TokenService::GetInstance()->GenerateTokens(",
