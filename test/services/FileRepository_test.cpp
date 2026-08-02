@@ -64,7 +64,7 @@ namespace disk::file {
             EXPECT_FALSE(Contains(upload_source, "auto ExtractExtension("));
             EXPECT_FALSE(Contains(mutation_header, "static auto ExtractExtension("));
             EXPECT_FALSE(Contains(mutation_source, "FileMutationService::ExtractExtension("));
-            EXPECT_TRUE(Contains(trash_source, "TrashService::ExtractExtension("));
+            EXPECT_TRUE(Contains(trash_source, "[[nodiscard]] auto ExtractExtension("));
             EXPECT_TRUE(Contains(trash_source, "paren_pos"));
         }
 

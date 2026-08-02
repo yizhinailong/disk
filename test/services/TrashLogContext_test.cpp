@@ -64,6 +64,36 @@ namespace disk::trash {
                    source.substr(begin, end - begin).find("log_context") != std::string::npos;
         }
 
+        TEST(TrashImplementationHelperContractTest, RestoreNameParsingHasInternalLinkage) {
+            const auto service_header = ReadSourceFile("src/services/TrashService.hpp");
+            const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
+
+            EXPECT_FALSE(Contains(service_header, "ExtractExtension("));
+            EXPECT_FALSE(Contains(service_header, "ExtractBaseName("));
+            EXPECT_FALSE(Contains(service_source, "TrashService::ExtractExtension("));
+            EXPECT_FALSE(Contains(service_source, "TrashService::ExtractBaseName("));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "namespace {\n        [[nodiscard]] auto ExtractExtension("
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "[[nodiscard]] auto ExtractBaseName(const std::string& filename)"
+            ));
+            EXPECT_EQ(CountOccurrences(service_source, "ExtractExtension("), 3U);
+            EXPECT_EQ(CountOccurrences(service_source, "ExtractBaseName("), 2U);
+            EXPECT_TRUE(Contains(service_source, "filename.rfind('.')"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "pos == std::string::npos || pos == 0 || pos == filename.length() - 1"
+            ));
+            EXPECT_TRUE(Contains(service_source, "filename.rfind(\" (\")"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "paren_pos != std::string::npos && paren_pos < pos"
+            ));
+        }
+
         TEST(TrashLogContextContractTest, ControllerDtoAndServiceUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/TrashController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/TrashDto.hpp");
@@ -73,7 +103,7 @@ namespace disk::trash {
             const auto service_body = ExtractRange(
                 service_source,
                 "auto TrashService::List(",
-                "    auto TrashService::ExtractExtension("
+                "\n} // namespace disk::trash"
             );
 
             ASSERT_FALSE(controller_body.empty());

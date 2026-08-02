@@ -453,3 +453,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `ShareService::GenerateShareCode` is consumed only by `Create` and `ShareService::GetStatusFilter` is consumed only by `List` in the same implementation unit
 - **THEN** both pure helpers SHALL have internal linkage and SHALL NOT be declared by `ShareService.hpp`, while creation continues to produce eight-character alphanumeric share codes and listing retains the existing all, active, expired, cancelled, and unknown status-filter behavior without changing share transactions, permissions, audit, logging, or responses
+
+#### Scenario: Trash restore name parsing stays implementation-local
+
+- **WHEN** a whole-repository call-site and object-symbol audit confirms that `TrashService::ExtractBaseName` and `TrashService::ExtractExtension` are consumed only by file restore in the same implementation unit
+- **THEN** both restore-specific helpers SHALL have internal linkage and SHALL NOT be declared by `TrashService.hpp`, while filename conflict retries retain the existing hidden-file, trailing-dot, suffix, and prior ` (n)` parsing rules without being replaced by the shared active-file extension helper or changing restore transactions, locks, metadata, quota, logging, errors, or responses

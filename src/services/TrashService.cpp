@@ -45,6 +45,36 @@ namespace disk::trash {
     using drogon_model::disk::Trash;
     using drogon_model::disk::Users;
 
+    namespace {
+        [[nodiscard]] auto ExtractExtension(const std::string& filename) -> std::string {
+            auto pos = filename.rfind('.');
+            if (pos == std::string::npos || pos == 0 || pos == filename.length() - 1) {
+                return "";
+            }
+
+            auto paren_pos = filename.rfind(" (");
+            if (paren_pos != std::string::npos && paren_pos < pos) {
+                return "";
+            }
+
+            return filename.substr(pos + 1);
+        }
+
+        [[nodiscard]] auto ExtractBaseName(const std::string& filename) -> std::string {
+            auto pos = filename.rfind('.');
+            if (pos == std::string::npos || pos == 0) {
+                return filename;
+            }
+
+            auto paren_pos = filename.rfind(" (");
+            if (paren_pos != std::string::npos && paren_pos < pos) {
+                return filename;
+            }
+
+            return filename.substr(0, pos);
+        }
+    } // namespace
+
     struct SnapshotFolder {
         uint64_t id{ 0 };
         uint64_t parent_id{ 0 };
@@ -1612,34 +1642,6 @@ namespace disk::trash {
             }
             throw;
         }
-    }
-
-    auto TrashService::ExtractExtension(const std::string& filename) -> std::string {
-        auto pos = filename.rfind('.');
-        if (pos == std::string::npos || pos == 0 || pos == filename.length() - 1) {
-            return "";
-        }
-
-        auto paren_pos = filename.rfind(" (");
-        if (paren_pos != std::string::npos && paren_pos < pos) {
-            return "";
-        }
-
-        return filename.substr(pos + 1);
-    }
-
-    auto TrashService::ExtractBaseName(const std::string& filename) -> std::string {
-        auto pos = filename.rfind('.');
-        if (pos == std::string::npos || pos == 0) {
-            return filename;
-        }
-
-        auto paren_pos = filename.rfind(" (");
-        if (paren_pos != std::string::npos && paren_pos < pos) {
-            return filename;
-        }
-
-        return filename.substr(0, pos);
     }
 
 } // namespace disk::trash

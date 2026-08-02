@@ -281,24 +281,6 @@ namespace disk::trash {
             disk::utils::LogContext log_context
         ) -> drogon::Task<void>;
 
-        /**
-         * @brief 从文件名提取扩展名
-         *
-         * @param filename 文件名
-         * @return std::string 扩展名（不含点）
-         */
-        [[nodiscard]]
-        static auto ExtractExtension(const std::string& filename) -> std::string;
-
-        /**
-         * @brief 从文件名提取基础名称（不含扩展名）
-         *
-         * @param filename 文件名
-         * @return std::string 基础名称
-         */
-        [[nodiscard]]
-        static auto ExtractBaseName(const std::string& filename) -> std::string;
-
         drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
         TrashQuery m_trash_query;                                                                                     ///< 回收站查询边界
         std::shared_ptr<disk::services::RedisService> m_redis_service{ disk::services::RedisService::GetInstance() }; ///< Redis 服务
