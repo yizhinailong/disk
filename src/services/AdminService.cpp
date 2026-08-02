@@ -24,6 +24,7 @@
 #include "services/ObservedDbClient.hpp"
 #include "services/RedisService.hpp"
 #include "utils/ConfigMgr.hpp"
+#include "utils/LogHelper.hpp"
 
 namespace disk::services {
 
@@ -39,19 +40,6 @@ namespace disk::services {
             return Json::writeString(builder, details);
         }
 
-        auto SetLogContext(
-            Json::Value& details,
-            const disk::utils::LogContext& log_context
-        ) -> void {
-            details["request_id"] =
-                log_context.request_id.has_value() && !log_context.request_id->empty() ?
-                    Json::Value(*log_context.request_id) :
-                    Json::Value(Json::nullValue);
-            details["operation"] =
-                log_context.operation.has_value() && !log_context.operation->empty() ?
-                    Json::Value(*log_context.operation) :
-                    Json::Value(Json::nullValue);
-        }
     } // namespace
 
     AdminService::AdminService()
@@ -1011,7 +999,7 @@ namespace disk::services {
         Json::Value details,
         disk::utils::LogContext log_context
     ) -> drogon::Task<void> {
-        SetLogContext(details, log_context);
+        disk::utils::SetRequestCorrelationFields(details, log_context);
         try {
             co_await m_db_client->execSqlCoro(
                 "INSERT INTO operation_logs (user_id, action, target_type, target_id, target_name, details, ip_address) " "VALUES ($1, $2, $3, $4, $5, $6, 'system')",

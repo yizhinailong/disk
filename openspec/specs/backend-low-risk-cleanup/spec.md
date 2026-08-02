@@ -248,6 +248,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** upload diagnostics, storage-job administration, and storage-recovery administration duplicate the same database NULL-to-optional conversion across sixteen production field reads
 - **THEN** all three services SHALL use one `DbRowUtils` template and remove their local helpers, while NULL values avoid conversion, non-NULL values retain the same `as<T>()` types and exception behavior, and SQL, projections, transactions, audit, logs, errors, and responses remain unchanged
 
+#### Scenario: Domain details share request correlation fields
+
+- **WHEN** administration, sharing, storage recovery, storage-job administration, and download integrity duplicate the same JSON mapping for request ID and operation across twelve production details writes
+- **THEN** all five services SHALL use one `LogHelper` function and remove their local helpers, while non-empty request fields, missing and empty null semantics, existing detail fields, and the exclusion of upload, job, lease, and state fields remain unchanged
+
 #### Scenario: File extension extraction is shared by active-file writers
 
 - **WHEN** upload finalization and file rename use identical last-dot extension extraction while both implementations already depend on `FileServiceUtils`

@@ -73,6 +73,71 @@ namespace disk::admin {
             return count > 0;
         }
 
+        TEST(AdminLogContextContractTest, DomainDetailsShareRequestCorrelationFields) {
+            const auto log_header = ReadSourceFile("src/utils/LogHelper.hpp");
+            const auto log_source = ReadSourceFile("src/utils/LogHelper.cpp");
+            const auto admin_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto share_source = ReadSourceFile("src/services/ShareAuditService.cpp");
+            const auto job_source =
+                ReadSourceFile("src/services/StorageJobAdminService.cpp");
+            const auto recovery_source =
+                ReadSourceFile("src/services/StorageRecoveryAdminService.cpp");
+            const auto download_source =
+                ReadSourceFile("src/services/DownloadIntegrityService.cpp");
+
+            EXPECT_EQ(
+                CountOccurrences(log_header, "auto SetRequestCorrelationFields("),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(log_source, "auto SetRequestCorrelationFields("),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(log_source, "SetNullableString(details, \"request_id\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(log_source, "SetNullableString(details, \"operation\""),
+                1U
+            );
+
+            for (const auto* source : {
+                     &admin_source,
+                     &share_source,
+                     &job_source,
+                     &recovery_source,
+                     &download_source,
+                 }) {
+                EXPECT_EQ(CountOccurrences(*source, "#include \"utils/LogHelper.hpp\""), 1U);
+            }
+            EXPECT_EQ(
+                CountOccurrences(admin_source, "disk::utils::SetRequestCorrelationFields("),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(share_source, "disk::utils::SetRequestCorrelationFields("),
+                5U
+            );
+            EXPECT_EQ(
+                CountOccurrences(job_source, "disk::utils::SetRequestCorrelationFields("),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(recovery_source, "disk::utils::SetRequestCorrelationFields("),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(download_source, "disk::utils::SetRequestCorrelationFields("),
+                4U
+            );
+            EXPECT_FALSE(Contains(admin_source, "auto SetLogContext("));
+            EXPECT_FALSE(Contains(share_source, "auto SetLogContext("));
+            EXPECT_FALSE(Contains(job_source, "auto SetLogContext("));
+            EXPECT_FALSE(Contains(recovery_source, "auto SetLogContext("));
+            EXPECT_FALSE(Contains(download_source, "auto AddCorrelationDetails("));
+        }
+
         TEST(AdminLogContextContractTest, CoreBoundariesUseExplicitTypedContext) {
             const auto controller_source =
                 ReadSourceFile("src/controllers/AdminController.cpp");
@@ -154,10 +219,11 @@ namespace disk::admin {
             );
             EXPECT_TRUE(AllCallsContainContext(request_service_body, "co_await LogOperation("));
 
-            EXPECT_TRUE(Contains(service_source, "SetLogContext(details, log_context);"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "disk::utils::SetRequestCorrelationFields(details, log_context);"
+            ));
             EXPECT_TRUE(Contains(service_source, "SerializeDetails(details)"));
-            EXPECT_TRUE(Contains(service_source, "details[\"request_id\"]"));
-            EXPECT_TRUE(Contains(service_source, "details[\"operation\"]"));
             EXPECT_FALSE(Contains(service_source, "std::format("));
             EXPECT_FALSE(Contains(request_service_body, "LogOperation(0"));
             EXPECT_TRUE(Contains(request_service_body, "admin.user.available_space_set"));

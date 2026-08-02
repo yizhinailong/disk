@@ -18,6 +18,10 @@ namespace spdlog {
     class logger;
 }
 
+namespace Json {
+    class Value;
+}
+
 namespace disk::utils {
 
     struct LogContext final {
@@ -32,6 +36,9 @@ namespace disk::utils {
     [[nodiscard]] inline auto ServiceRuntimeLogContext() -> LogContext {
         return { .operation = "service_runtime" };
     }
+
+    auto SetRequestCorrelationFields(Json::Value& details, const LogContext& context)
+        -> void;
 
     class LogStream final {
     public:

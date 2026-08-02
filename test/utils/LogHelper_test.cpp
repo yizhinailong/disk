@@ -103,6 +103,43 @@ namespace disk::utils::test {
         std::shared_ptr<spdlog::logger> m_logger;
     };
 
+    TEST_F(LogHelperTest, RequestCorrelationFieldsPreserveValuesAndNullSemantics) {
+        Json::Value details(Json::objectValue);
+        details["domain_field"] = "preserved";
+        SetRequestCorrelationFields(
+            details,
+            LogContext{
+                .request_id = "request-123",
+                .operation = "admin",
+                .upload_id = "upload-ignored",
+                .job_id = 42,
+                .lease_owner = "owner-ignored",
+                .state_version = 7,
+            }
+        );
+
+        EXPECT_EQ(details["request_id"].asString(), "request-123");
+        EXPECT_EQ(details["operation"].asString(), "admin");
+        EXPECT_EQ(details["domain_field"].asString(), "preserved");
+        EXPECT_FALSE(details.isMember("upload_id"));
+        EXPECT_FALSE(details.isMember("job_id"));
+        EXPECT_FALSE(details.isMember("lease_owner"));
+        EXPECT_FALSE(details.isMember("state_version"));
+
+        Json::Value empty_details(Json::objectValue);
+        SetRequestCorrelationFields(
+            empty_details,
+            LogContext{ .request_id = "", .operation = "" }
+        );
+        EXPECT_TRUE(empty_details["request_id"].isNull());
+        EXPECT_TRUE(empty_details["operation"].isNull());
+
+        Json::Value missing_details(Json::objectValue);
+        SetRequestCorrelationFields(missing_details, LogContext{});
+        EXPECT_TRUE(missing_details["request_id"].isNull());
+        EXPECT_TRUE(missing_details["operation"].isNull());
+    }
+
     TEST_F(LogHelperTest, InfoLevelDropsHighVolumeSuccessAndKeepsFailures) {
         m_logger->set_level(spdlog::level::info);
 

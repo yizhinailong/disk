@@ -130,9 +130,10 @@ namespace disk::recovery {
             EXPECT_TRUE(AllCallsContainContext(service_source, "co_await RecordAudit("));
             EXPECT_TRUE(AllLoggerCallsUseContext(service_source));
 
-            EXPECT_TRUE(Contains(service_source, "SetLogContext(details, log_context);"));
-            EXPECT_TRUE(Contains(service_source, "details[\"request_id\"]"));
-            EXPECT_TRUE(Contains(service_source, "details[\"operation\"]"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "disk::utils::SetRequestCorrelationFields(details, log_context);"
+            ));
             EXPECT_TRUE(Contains(service_source, "disk::upload::IsTerminalStatus(status)"));
             EXPECT_TRUE(Contains(service_source, "log_context.state_version = response.state_version;"));
             EXPECT_TRUE(Contains(service_source, "log_context.lease_owner = response.lease_owner;"));

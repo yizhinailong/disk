@@ -53,20 +53,6 @@ namespace disk::download {
             }
         }
 
-        auto AddCorrelationDetails(
-            Json::Value& details,
-            const disk::utils::LogContext& log_context
-        ) -> void {
-            details["request_id"] =
-                log_context.request_id.has_value() && !log_context.request_id->empty() ?
-                    Json::Value(*log_context.request_id) :
-                    Json::Value(Json::nullValue);
-            details["operation"] =
-                log_context.operation.has_value() && !log_context.operation->empty() ?
-                    Json::Value(*log_context.operation) :
-                    Json::Value(Json::nullValue);
-        }
-
         [[nodiscard]] auto FileReadFailure() -> Result<void> {
             return std::unexpected(ErrorInfo(ErrorCode::FileReadError));
         }
@@ -102,7 +88,7 @@ namespace disk::download {
                     Json::Value details(Json::objectValue);
                     details["source"] = "download_preflight";
                     details["expected_size"] = Json::UInt64(expected_size);
-                    AddCorrelationDetails(details, log_context);
+                    disk::utils::SetRequestCorrelationFields(details, log_context);
                     co_await RecordFindingBestEffort(
                         m_reconciliation_service,
                         MakeFinding(
@@ -121,7 +107,7 @@ namespace disk::download {
                 details["source"] = "download_preflight";
                 details["expected_size"] = Json::UInt64(expected_size);
                 details["observed_size"] = Json::UInt64(*observed_size);
-                AddCorrelationDetails(details, log_context);
+                disk::utils::SetRequestCorrelationFields(details, log_context);
                 co_await RecordFindingBestEffort(
                     m_reconciliation_service,
                     MakeFinding(
@@ -153,7 +139,7 @@ namespace disk::download {
         details["source"] = "download_open";
         details["range_start"] = Json::UInt64(range_start);
         details["expected_bytes"] = Json::UInt64(expected_bytes);
-        AddCorrelationDetails(details, log_context);
+        disk::utils::SetRequestCorrelationFields(details, log_context);
 
         const auto finding_type = error_code == ErrorCode::FileNotFound ?
                                       disk::reconciliation::kMissingFinalBlobFindingType :
@@ -178,7 +164,7 @@ namespace disk::download {
             details["range_start"] = Json::UInt64(range_start);
             details["expected_bytes"] = Json::UInt64(expected_bytes);
             details["delivered_bytes"] = Json::UInt64(delivered_bytes);
-            AddCorrelationDetails(details, log_context);
+            disk::utils::SetRequestCorrelationFields(details, log_context);
 
             auto finding = MakeFinding(
                 disk::reconciliation::kFinalBlobReadInterruptedFindingType,

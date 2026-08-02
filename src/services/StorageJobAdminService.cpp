@@ -66,20 +66,6 @@ namespace disk::jobs {
             return Json::writeString(builder, value);
         }
 
-        auto SetLogContext(
-            Json::Value& details,
-            const disk::utils::LogContext& log_context
-        ) -> void {
-            details["request_id"] =
-                log_context.request_id.has_value() && !log_context.request_id->empty() ?
-                    Json::Value(*log_context.request_id) :
-                    Json::Value(Json::nullValue);
-            details["operation"] =
-                log_context.operation.has_value() && !log_context.operation->empty() ?
-                    Json::Value(*log_context.operation) :
-                    Json::Value(Json::nullValue);
-        }
-
         [[nodiscard]] auto Bounded(std::string value, size_t maximum) -> std::string {
             if (value.size() > maximum) {
                 value.resize(maximum);
@@ -138,7 +124,7 @@ namespace disk::jobs {
             details["previous_status"] = std::string(StorageJobStatusName(current.status));
             details["previous_attempts"] = current.attempts;
             details["reason"] = request.reason;
-            SetLogContext(details, log_context);
+            disk::utils::SetRequestCorrelationFields(details, log_context);
             auto inserted = co_await client->execSqlCoro(
                 "INSERT INTO operation_logs " "(user_id, action, target_type, target_id, target_name, details, ip_address, user_agent) " "VALUES ($1, 'admin.storage_job.replay', 'storage_job', $2, $3, $4::jsonb, $5, NULLIF($6, ''))",
                 static_cast<int64_t>(audit.operator_id),

@@ -196,9 +196,10 @@ namespace disk::jobs {
             EXPECT_TRUE(AllCallsContainContext(replay_source, "co_await Get("));
             EXPECT_TRUE(AllCallsContainContext(replay_source, "co_await ReplayInTransaction("));
 
-            EXPECT_TRUE(Contains(service_source, "SetLogContext(details, log_context);"));
-            EXPECT_TRUE(Contains(service_source, "details[\"request_id\"]"));
-            EXPECT_TRUE(Contains(service_source, "details[\"operation\"]"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "disk::utils::SetRequestCorrelationFields(details, log_context);"
+            ));
             EXPECT_TRUE(Contains(audit_source, "details[\"job_id\"]"));
             EXPECT_FALSE(Contains(audit_source, "details[\"payload\"]"));
             EXPECT_FALSE(Contains(service_source, "std::format("));

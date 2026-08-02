@@ -347,7 +347,10 @@ namespace disk::share {
                 5
             );
             EXPECT_EQ(CountOccurrences(audit_source, "event.log_context"), 5);
-            EXPECT_TRUE(Contains(audit_source, "SetLogContext(details, log_context);"));
+            EXPECT_TRUE(Contains(
+                audit_source,
+                "disk::utils::SetRequestCorrelationFields(details, log_context);"
+            ));
 
             for (const auto* body : {
                      &controller_source,

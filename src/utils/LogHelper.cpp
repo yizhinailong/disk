@@ -231,6 +231,12 @@ namespace disk::utils {
         };
     } // namespace
 
+    auto SetRequestCorrelationFields(Json::Value& details, const LogContext& context)
+        -> void {
+        SetNullableString(details, "request_id", context.request_id);
+        SetNullableString(details, "operation", context.operation);
+    }
+
     LogStream::LogStream(spdlog::level::level_enum level, LogContext context)
         : m_level(level), m_context(std::move(context)) {
     }
