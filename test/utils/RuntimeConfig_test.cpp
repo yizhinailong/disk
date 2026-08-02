@@ -260,7 +260,7 @@ namespace {
         EnvironmentScope::Set("DISK_UPLOAD_TASK_CREATION_ENABLED", "false");
         EnvironmentScope::Set(
             "DISK_TRUSTED_PROXY_CIDRS",
-            R"(["10.20.0.10","10.20.1.0/24"])"
+            R"(["10.20.0.10","10.20.1.0/24","128.0.0.0/1","203.0.113.41/32"])"
         );
         EnvironmentScope::Set("DISK_S3_BUCKET", "disk-test");
         EnvironmentScope::Set("DISK_S3_REGION", "us-west-2");
@@ -303,9 +303,11 @@ namespace {
         EXPECT_FALSE(disk["upload_task_creation_enabled"].asBool());
         const auto& trust_ips = config["plugins"][0]["config"]["trust_ips"];
         ASSERT_TRUE(trust_ips.isArray());
-        ASSERT_EQ(trust_ips.size(), 2U);
+        ASSERT_EQ(trust_ips.size(), 4U);
         EXPECT_EQ(trust_ips[0].asString(), "10.20.0.10");
         EXPECT_EQ(trust_ips[1].asString(), "10.20.1.0/24");
+        EXPECT_EQ(trust_ips[2].asString(), "128.0.0.0/1");
+        EXPECT_EQ(trust_ips[3].asString(), "203.0.113.41/32");
         EXPECT_EQ(disk["s3"]["bucket"].asString(), "disk-test");
         EXPECT_EQ(disk["s3"]["region"].asString(), "us-west-2");
         EXPECT_EQ(disk["s3"]["endpoint"].asString(), "https://minio:9000");
@@ -407,6 +409,20 @@ namespace {
                  "{}",
                  "[]",
                  R"([""])",
+                 R"([42])",
+                 R"(["not-an-ip-secret"])",
+                 R"(["2001:db8::1"])",
+                 R"(["10.20.0.1:8080"])",
+                 R"([" 10.20.0.1"])",
+                 R"(["010.20.0.1"])",
+                 R"(["10.20.0"])",
+                 R"(["10.20.0.256"])",
+                 R"(["10.20.0.0/0"])",
+                 R"(["10.20.0.0/"])",
+                 R"(["10.20.0.0/+24"])",
+                 R"(["10.20.0.0/33"])",
+                 R"(["10.20.0.0/24/1"])",
+                 R"(["10.20.0.1/24"])",
              }) {
             EnvironmentScope::Set("DISK_TRUSTED_PROXY_CIDRS", invalid);
             try {

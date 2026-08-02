@@ -117,18 +117,87 @@ namespace disk::utils {
         }
 
         [[nodiscard]]
-        auto ParseStringArray(const std::string& value, const char* name) -> Json::Value {
+        auto ParseIpv4Address(std::string_view value) -> std::optional<uint32_t> {
+            uint32_t address = 0;
+            size_t offset = 0;
+            for (size_t index = 0; index < 4; ++index) {
+                const auto separator = value.find('.', offset);
+                if ((index < 3 && separator == std::string_view::npos) ||
+                    (index == 3 && separator != std::string_view::npos)) {
+                    return std::nullopt;
+                }
+
+                const auto end = separator == std::string_view::npos ? value.size() : separator;
+                const auto octet_text = value.substr(offset, end - offset);
+                if (octet_text.empty() ||
+                    (octet_text.size() > 1 && octet_text.front() == '0')) {
+                    return std::nullopt;
+                }
+
+                uint32_t octet = 0;
+                const auto [parsed_end, error] = std::from_chars(
+                    octet_text.data(),
+                    octet_text.data() + octet_text.size(),
+                    octet
+                );
+                if (error != std::errc{} ||
+                    parsed_end != octet_text.data() + octet_text.size() || octet > 255) {
+                    return std::nullopt;
+                }
+
+                address = (address << 8U) | octet;
+                offset = end + 1;
+            }
+            return address;
+        }
+
+        [[nodiscard]]
+        auto IsCanonicalTrustedProxyCidr(std::string_view value) -> bool {
+            const auto separator = value.find('/');
+            if (separator != std::string_view::npos &&
+                value.find('/', separator + 1) != std::string_view::npos) {
+                return false;
+            }
+
+            const auto address_text = value.substr(0, separator);
+            const auto address = ParseIpv4Address(address_text);
+            if (!address.has_value() || *address == 0) {
+                return false;
+            }
+
+            uint32_t prefix_length = 32;
+            if (separator != std::string_view::npos) {
+                const auto prefix_text = value.substr(separator + 1);
+                const auto [parsed_end, error] = std::from_chars(
+                    prefix_text.data(),
+                    prefix_text.data() + prefix_text.size(),
+                    prefix_length
+                );
+                if (prefix_text.empty() || error != std::errc{} ||
+                    parsed_end != prefix_text.data() + prefix_text.size() ||
+                    prefix_length == 0 || prefix_length > 32) {
+                    return false;
+                }
+            }
+
+            const auto host_mask =
+                prefix_length == 32 ? uint32_t{ 0 } : (uint32_t{ 1 } << (32U - prefix_length)) - 1U;
+            return (*address & host_mask) == 0;
+        }
+
+        [[nodiscard]]
+        auto ParseTrustedProxyCidrs(const std::string& value, const char* name) -> Json::Value {
             Json::Value parsed;
             Json::CharReaderBuilder builder;
             std::string errors;
             std::istringstream input(value);
             if (!Json::parseFromStream(builder, input, &parsed, &errors) || !parsed.isArray() ||
                 parsed.empty() || parsed.size() > 32) {
-                throw std::runtime_error(std::string("Invalid JSON string array: ") + name);
+                throw std::runtime_error(std::string("Invalid trusted proxy CIDR variable: ") + name);
             }
             for (const auto& item : parsed) {
-                if (!item.isString() || item.asString().empty()) {
-                    throw std::runtime_error(std::string("Invalid JSON string array: ") + name);
+                if (!item.isString() || !IsCanonicalTrustedProxyCidr(item.asString())) {
+                    throw std::runtime_error(std::string("Invalid trusted proxy CIDR variable: ") + name);
                 }
             }
             return parsed;
@@ -262,7 +331,7 @@ namespace disk::utils {
             });
             if (auto value = ReadEnvironment("DISK_TRUSTED_PROXY_CIDRS"); value.has_value()) {
                 PluginConfig(config, "drogon::plugin::RealIpResolver")["trust_ips"] =
-                    ParseStringArray(*value, "DISK_TRUSTED_PROXY_CIDRS");
+                    ParseTrustedProxyCidrs(*value, "DISK_TRUSTED_PROXY_CIDRS");
             }
 
             ApplyString("DISK_S3_BUCKET", [&config](std::string value) {

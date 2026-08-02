@@ -20,6 +20,11 @@ The system SHALL validate security-sensitive configuration before accepting runt
 - **WHEN** security-sensitive configuration is missing or invalid during startup
 - **THEN** the system SHALL fail startup instead of running with unsafe settings
 
+#### Scenario: Trusted reverse-proxy allowlist is configured
+- **WHEN** `DISK_TRUSTED_PROXY_CIDRS` overrides the trusted peer allowlist
+- **THEN** every entry SHALL be a strict dotted-decimal IPv4 address or a canonical IPv4 network with a prefix length from 1 through 32
+- **AND** IPv6, ports, whitespace, leading-zero octets, a zero prefix, out-of-range prefixes, and CIDRs with host bits set SHALL fail before plugin initialization without echoing the configured value
+
 ### Requirement: Database Connectivity Configuration
 The system SHALL use configured PostgreSQL connection settings for persistent metadata storage.
 
