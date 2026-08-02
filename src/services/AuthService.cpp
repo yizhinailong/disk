@@ -156,10 +156,12 @@ namespace disk::auth {
         -> drogon::Task<Result<LoginResponse>> {
 
         Logger::Debug(log_context) << "User login attempt: " << request.account;
+        const std::string client_ip =
+            disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
 
         /// 0. 检查 IP 登录频率限制
         const std::string rate_key =
-            disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(ip_address);
+            disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(client_ip);
 
         /// 使用 Lua 脚本原子递增计数并设置过期时间（单次 Redis 交互）
         auto incr_result = co_await m_redis_service->IncrWithExpire(rate_key, 300, log_context);
@@ -168,9 +170,8 @@ namespace disk::auth {
 
             /// 检查是否超过阈值（5 次）
             if (count > 5) {
-                const std::string ip_only = disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
                 Logger::Warn(log_context)
-                    << "Login rate limit triggered: ip=" << ip_only << ", attempts=" << count;
+                    << "Login rate limit triggered: ip=" << client_ip << ", attempts=" << count;
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::TooManyRequests,
                     "Too many login attempts, please try again in 5 minutes"
@@ -217,7 +218,7 @@ namespace disk::auth {
 
         /// 4. 在签发令牌前原子更新登录状态
         auto update_result =
-            co_await UpdateLoginInfo(user.getValueOfId(), ip_address, log_context);
+            co_await UpdateLoginInfo(user.getValueOfId(), client_ip, log_context);
         if (!update_result) {
             co_return std::unexpected(update_result.error());
         }
@@ -344,7 +345,9 @@ namespace disk::auth {
     )
         -> drogon::Task<Result<void>> {
 
-        Logger::Info(log_context) << "User logout: user_id=" << user_id << ", ip=" << ip_address;
+        const std::string client_ip =
+            disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
+        Logger::Info(log_context) << "User logout: user_id=" << user_id << ", ip=" << client_ip;
 
         /// 步骤 1: 使访问令牌失效
         auto invalidate_result = co_await TokenService::GetInstance()->InvalidateAccessToken(
@@ -382,7 +385,7 @@ namespace disk::auth {
             Json::StreamWriterBuilder builder;
             builder["indentation"] = "";
             log.setDetails(Json::writeString(builder, details_json));
-            log.setIpAddress(std::string(ip_address));
+            log.setIpAddress(client_ip);
             log.setCreatedAt(trantor::Date::now());
 
             co_await mapper.insert(log);
@@ -459,7 +462,7 @@ namespace disk::auth {
 
     auto AuthService::UpdateLoginInfo(
         uint64_t user_id,
-        std::string ip_address,
+        std::string client_ip,
         disk::utils::LogContext log_context
     )
         -> drogon::Task<Result<void>> {
@@ -468,7 +471,7 @@ namespace disk::auth {
             auto result = co_await m_db_client->execSqlCoro(
                 "UPDATE users SET status = $1, login_attempts = 0, locked_until = NULL, " "last_login_at = NOW(), last_login_ip = $2, updated_at = NOW() " "WHERE id = $3 AND ((status = $1 AND " "(locked_until IS NULL OR locked_until <= NOW())) OR " "(status = $4 AND locked_until IS NOT NULL AND locked_until <= NOW())) " "RETURNING id",
                 ACCOUNT_STATUS_ACTIVE,
-                ip_address,
+                client_ip,
                 user_id,
                 ACCOUNT_STATUS_LOCKED
             );
@@ -490,13 +493,12 @@ namespace disk::auth {
 
             /// 清除 IP 频率限制计数器
             const std::string rate_key =
-                disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(ip_address);
+                disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(client_ip);
 
             auto delete_result = co_await m_redis_service->Delete(rate_key, log_context);
             if (delete_result.has_value()) {
-                const std::string ip_only = disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
                 Logger::Debug(log_context)
-                    << "Login rate limit counter cleared: ip=" << ip_only;
+                    << "Login rate limit counter cleared: ip=" << client_ip;
             } else {
                 Logger::Warn(log_context)
                     << "Failed to clear login rate limit counter: "

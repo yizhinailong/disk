@@ -65,7 +65,7 @@ namespace disk::auth {
          * - 登录成功后更新登录信息
          *
          * @param request 登录请求
-         * @param ip_address 客户端IP地址
+         * @param ip_address 连接 peer 端点（可包含 TCP 源端口）
          * @param log_context 请求日志上下文
          * @return drogon::Task<Result<LoginResponse>> 成功返回令牌和用户信息，失败返回错误
          */
@@ -105,7 +105,7 @@ namespace disk::auth {
          *
          * @param user_id 用户 ID
          * @param access_token 访问令牌
-         * @param ip_address IP 地址
+         * @param ip_address 连接 peer 端点（可包含 TCP 源端口）
          * @param log_context 请求日志上下文
          * @return drogon::Task<Result<void>> 成功返回 void，失败返回错误
          */
@@ -146,14 +146,14 @@ namespace disk::auth {
         /**
          * @brief 更新登录信息
          * @param user_id 用户ID
-         * @param ip_address IP地址
+         * @param client_ip 已归一化且不含端口的客户端 IP 地址
          * @param log_context 请求日志上下文
          * @return 登录状态原子写入成功时返回 void
          */
         [[nodiscard]]
         auto UpdateLoginInfo(
             uint64_t user_id,
-            std::string ip_address,
+            std::string client_ip,
             disk::utils::LogContext log_context
         ) -> drogon::Task<Result<void>>;
 

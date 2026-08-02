@@ -2415,6 +2415,14 @@ API、系统测试和可观测性 OpenSpec 先行固定服务端回退 UUID 的�
 
 旧实现上的源码合同按预期为 0/1；双 API 真实用例也按预期为 0/1，并直接观察到 `status=2/login_attempts=4`，证明永久状态耦合与并发丢增量。实现后同一双 API 用例通过 12 个并发错误登录、精确 5 次锁定、截止稳定、两实例拒绝、refresh 拒绝、到期恢复、旧行规范化和管理员锁保持；认证源码/日志聚焦 22/22、相邻合同定向 3/3、认证集成 6/6、完整构建、Python 编译、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1473 项：1466 项通过、7 项按环境门控跳过、0 失败，总耗时 562.04 秒。Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.137 认证连接 peer IP 归一化记录（2026-08-02）
+
+认证 API、数据库设计、系统测试和身份 OpenSpec 先行固定地址边界。审计确认 `AuthController` 向服务传入 `peerAddr().toIpPort()`；登录限流会在 Redis key builder 内去端口，但成功登录把原端点直接写入 `users.last_login_ip VARCHAR(45)`，logout 也把原端点直接写入 `operation_logs.ip_address VARCHAR(45)`。这会把每次连接的临时源端口当成审计数据，并使最长 39 字节 IPv6 加方括号、冒号和 5 位端口超过字段上限；登录状态写现已 fail closed，因此该输入会阻止令牌签发。
+
+`AuthService` 的 Login/Logout 入口现使用既有 `RedisKeyPrefix::ExtractIPOnly()` 各归一化一次，并让限流、`last_login_ip`、登录成功清理和 logout 审计复用同一无端口值；内部 `UpdateLoginInfo()` 只接收已归一化地址。当前可信来源继续是 transport peer；仓库没有启用并配置 Drogon `RealIpResolver`，所以本批明确不采信可伪造的 `X-Real-IP`/`X-Forwarded-For`。
+
+旧实现上的新增源码合同按预期为 0/1，精确检出登录/登出未统一归一化的 5 个断言；真实双 API 用例也按预期为 0/1，并直接读到 `last_login_ip='127.0.0.1:35952'`。实现后源码合同 1/1，最长 `[IPv6]:65535` 归一化为 39 字节纯 IPv6；同一真实用例通过并确认登录与登出持久字段都为 `127.0.0.1`，既有跨实例锁定、refresh、撤销、重启和 Redis 故障恢复流程同时保持通过。认证聚焦 CTest 26/26、完整构建、Python 编译、OpenSpec 24/24 和差异检查通过；标准完整 CTest 共 1474 项：1467 项通过、7 项按环境门控跳过、0 失败，总耗时 540.22 秒。Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

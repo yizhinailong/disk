@@ -648,6 +648,41 @@ def require_account_lock_consistency(
     }
 
 
+def require_normalized_auth_peer_persistence(
+    database_name: str,
+    login_username: str,
+    logout_username: str,
+) -> dict[str, Any]:
+    with connect(database_name) as connection:
+        login_row = connection.execute(
+            "SELECT last_login_ip FROM users WHERE username = %s",
+            (login_username,),
+        ).fetchone()
+        logout_row = connection.execute(
+            "SELECT operation_logs.ip_address "
+            "FROM operation_logs JOIN users ON users.id = operation_logs.user_id "
+            "WHERE users.username = %s AND operation_logs.action = 'logout' "
+            "ORDER BY operation_logs.id DESC LIMIT 1",
+            (logout_username,),
+        ).fetchone()
+
+    require(login_row is not None, "login peer persistence user is missing")
+    require(
+        login_row["last_login_ip"] == "127.0.0.1",
+        f"last_login_ip retained a source port: {login_row}",
+    )
+    require(logout_row is not None, "logout peer audit row is missing")
+    require(
+        logout_row["ip_address"] == "127.0.0.1",
+        f"logout audit IP retained a source port: {logout_row}",
+    )
+    return {
+        "auth_peer_login_ip_normalized": True,
+        "auth_peer_logout_ip_normalized": True,
+        "auth_peer_forwarded_headers_trusted": False,
+    }
+
+
 def require_profile(base_url: str, access_token: str, username: str) -> None:
     response = httpx.get(
         base_url + "/api/user/profile",
@@ -906,6 +941,11 @@ def main() -> int:
                 timeout=15,
             )
             require_success(pre_fault_logout, "pre-fault logout on API A")
+            auth_peer_evidence = require_normalized_auth_peer_persistence(
+                database_name,
+                username,
+                f"revoked_{suffix}",
+            )
 
             cancelled_folder = create_folder(
                 api_a.base_url,
@@ -1103,6 +1143,7 @@ def main() -> int:
                     "auth_runtime_periodic_metrics": True,
                     "shared_redis_service_stopped": False,
                     **account_lock_evidence,
+                    **auth_peer_evidence,
                     "passed": True,
                 }
             )

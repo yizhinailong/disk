@@ -140,3 +140,7 @@ The system SHALL enforce account status and rate-limit protections for authentic
 #### Scenario: Refresh observes account protection
 - **WHEN** a refresh token belongs to a disabled, administrator-locked, or currently temporary-locked account
 - **THEN** refresh SHALL use PostgreSQL time and reject the request without rotating the token
+
+#### Scenario: Authentication persists a normalized peer address
+- **WHEN** login or logout receives a transport peer endpoint containing an IPv4 or bracketed IPv6 address and a TCP source port
+- **THEN** login rate limiting, `users.last_login_ip`, and logout audit persistence SHALL reuse one normalized address without the source port, and the service SHALL NOT trust forwarded client-IP headers unless an explicit trusted-proxy resolver owns that boundary

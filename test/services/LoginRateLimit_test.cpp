@@ -38,6 +38,16 @@ namespace {
         return source.find(expected) != std::string::npos;
     }
 
+    auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+        size_t count = 0;
+        size_t position = 0;
+        while ((position = source.find(expected, position)) != std::string::npos) {
+            ++count;
+            position += expected.size();
+        }
+        return count;
+    }
+
     auto SourceSection(
         const std::string& source,
         std::string_view begin_marker,
@@ -205,6 +215,47 @@ namespace {
 
         EXPECT_TRUE(Contains(admin_source, "user.setLoginAttempts(0)"));
         EXPECT_TRUE(Contains(admin_source, "user.setLockedUntilToNull()"));
+    }
+
+    TEST(LoginRateLimit, AuthenticationPeerAddressIsNormalizedOnce) {
+        const auto source = ReadSourceFile("src/services/AuthService.cpp");
+        const auto controller = ReadSourceFile("src/controllers/AuthController.cpp");
+        const auto login = SourceSection(
+            source,
+            "auto AuthService::Login(",
+            "auto AuthService::RefreshTokens("
+        );
+        const auto logout = SourceSection(
+            source,
+            "AuthService::Logout(",
+            "auto AuthService::FindUser("
+        );
+        const auto successful_login = SourceSection(
+            source,
+            "auto AuthService::UpdateLoginInfo(",
+            "auto AuthService::IncrementLoginAttempts("
+        );
+
+        ASSERT_FALSE(login.empty());
+        ASSERT_FALSE(logout.empty());
+        ASSERT_FALSE(successful_login.empty());
+
+        EXPECT_EQ(
+            RedisKeyPrefix::ExtractIPOnly("[ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]:65535"),
+            "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
+        );
+        EXPECT_EQ(CountOccurrences(login, "ExtractIPOnly(ip_address)"), 1U);
+        EXPECT_TRUE(Contains(login, "BuildLoginRateLimitKey(client_ip)"));
+        EXPECT_TRUE(Contains(login, "UpdateLoginInfo(user.getValueOfId(), client_ip"));
+        EXPECT_TRUE(Contains(successful_login, "last_login_ip = $2"));
+        EXPECT_TRUE(Contains(successful_login, "client_ip,"));
+
+        EXPECT_EQ(CountOccurrences(logout, "ExtractIPOnly(ip_address)"), 1U);
+        EXPECT_TRUE(Contains(logout, "log.setIpAddress(client_ip)"));
+        EXPECT_FALSE(Contains(logout, "log.setIpAddress(ip_address)"));
+
+        EXPECT_FALSE(Contains(controller, "X-Real-IP"));
+        EXPECT_FALSE(Contains(controller, "X-Forwarded-For"));
     }
 
 } // namespace
