@@ -516,11 +516,15 @@ The exact operation-log list route SHALL use the bounded `operation_log` HTTP op
 - **THEN** request and ownership correlation SHALL remain JSON null, the service SHALL NOT consult thread-local state or infer correlation from entry/query values, and constructor initialization SHALL remain a context-free process event
 
 ### Requirement: Request Trace Visibility
-The system SHALL associate requests with trace identifiers for log correlation and response visibility.
+The system SHALL associate requests with trace identifiers for log correlation and response visibility. When a safe caller-provided identifier is unavailable, the server SHALL generate a lowercase UUID v4 from the process-initialized cryptographic system random source without a process-local pseudorandom generator.
 
 #### Scenario: Request is handled
 - **WHEN** the system handles an HTTP request
 - **THEN** it SHALL make the request trace identifier available for logging and response propagation
+
+#### Scenario: Server generates request identifiers concurrently
+- **WHEN** requests without safe caller-provided trace identifiers are resolved concurrently across event-loop threads or independent instances
+- **THEN** every generated identifier SHALL retain the lowercase UUID v4 version and variant layout, SHALL draw its random bytes from the cryptographic system random source, and SHALL NOT depend on `std::random_device`, `std::mt19937`, or another process-local pseudorandom engine
 
 ### Requirement: Typed Metrics Snapshot Failure Correlation
 The exact `/metrics` scrape endpoint SHALL establish the bounded `metrics` operation before querying PostgreSQL and SHALL pass that request correlation explicitly by value to the database-snapshot failure boundary without changing the Prometheus response contract.

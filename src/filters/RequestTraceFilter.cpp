@@ -10,12 +10,12 @@
 #include "RequestTraceFilter.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
-#include <cstdint>
-#include <random>
 #include <string_view>
 
 #include <drogon/utils/coroutine.h>
+#include <sodium/randombytes.h>
 
 namespace disk::filters {
 
@@ -32,37 +32,24 @@ namespace disk::filters {
 
         [[nodiscard]]
         auto GenerateRequestId() -> std::string {
-            /// UUID v4: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-            thread_local std::random_device rd;
-            thread_local std::mt19937 gen(rd());
-            std::uniform_int_distribution<uint32_t> dist(0, 15);
-            std::uniform_int_distribution<uint32_t> dist_y(8, 11);
+            std::array<unsigned char, 16> random_bytes{};
+            randombytes_buf(random_bytes.data(), random_bytes.size());
+            random_bytes[6] = static_cast<unsigned char>((random_bytes[6] & 0x0FU) | 0x40U);
+            random_bytes[8] = static_cast<unsigned char>((random_bytes[8] & 0x3FU) | 0x80U);
 
-            constexpr const char* hex = "0123456789abcdef";
-            char buf[36];
-            for (int i = 0; i < 8; ++i) {
-                buf[i] = hex[dist(gen)];
-            }
-            buf[8] = '-';
-            for (int i = 9; i < 13; ++i) {
-                buf[i] = hex[dist(gen)];
-            }
-            buf[13] = '-';
-            buf[14] = '4'; ///< version 4
-            for (int i = 15; i < 18; ++i) {
-                buf[i] = hex[dist(gen)];
-            }
-            buf[18] = '-';
-            buf[19] = hex[dist_y(gen)]; ///< variant: 8/9/a/b
-            for (int i = 20; i < 23; ++i) {
-                buf[i] = hex[dist(gen)];
-            }
-            buf[23] = '-';
-            for (int i = 24; i < 36; ++i) {
-                buf[i] = hex[dist(gen)];
+            constexpr std::string_view HEX = "0123456789abcdef";
+            std::array<char, 36> buffer{};
+            std::size_t output_index = 0;
+            for (std::size_t byte_index = 0; byte_index < random_bytes.size(); ++byte_index) {
+                if (byte_index == 4 || byte_index == 6 || byte_index == 8 || byte_index == 10) {
+                    buffer[output_index++] = '-';
+                }
+                const auto byte = random_bytes[byte_index];
+                buffer[output_index++] = HEX[byte >> 4U];
+                buffer[output_index++] = HEX[byte & 0x0FU];
             }
 
-            return { buf, 36 };
+            return { buffer.data(), buffer.size() };
         }
 
         [[nodiscard]]

@@ -6,8 +6,14 @@
 #include "filters/RequestTraceFilter.hpp"
 
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <unordered_set>
+#include <vector>
 
 #include <drogon/HttpFilter.h>
 #include <drogon/HttpRequest.h>
@@ -17,6 +23,21 @@
 
 namespace disk::filters {
     namespace {
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto Contains(const std::string& source, std::string_view expected) -> bool {
+            return source.find(expected) != std::string::npos;
+        }
+
         template <typename Filter>
         concept HasRequestIdGenerator = requires {
             Filter::GenerateRequestId();
@@ -109,6 +130,51 @@ namespace disk::filters {
             EXPECT_TRUE(IsUuidV4(unsafe));
             EXPECT_NE(missing, unsafe);
             EXPECT_NE(unsafe, "trace id");
+        }
+
+        TEST(RequestTraceFilterTest, UsesCryptographicSystemRandomBytesForUuidV4) {
+            const auto source = ReadSourceFile("src/filters/RequestTraceFilter.cpp");
+
+            EXPECT_FALSE(Contains(source, "#include <random>"));
+            EXPECT_FALSE(Contains(source, "std::random_device"));
+            EXPECT_FALSE(Contains(source, "std::mt19937"));
+            EXPECT_FALSE(Contains(source, "std::uniform_int_distribution"));
+            EXPECT_TRUE(Contains(source, "randombytes_buf(random_bytes.data(), random_bytes.size())"));
+            EXPECT_TRUE(Contains(source, "random_bytes[6] ="));
+            EXPECT_TRUE(Contains(source, "random_bytes[8] ="));
+        }
+
+        TEST(RequestTraceFilterTest, ConcurrentFallbackIdsAreValidAndUnique) {
+            constexpr std::size_t THREAD_COUNT = 8;
+            constexpr std::size_t IDS_PER_THREAD = 512;
+            constexpr std::size_t TOTAL_IDS = THREAD_COUNT * IDS_PER_THREAD;
+
+            std::vector<std::vector<std::string>> generated_ids(THREAD_COUNT);
+            std::vector<std::thread> threads;
+            threads.reserve(THREAD_COUNT);
+            for (std::size_t thread_index = 0; thread_index < THREAD_COUNT; ++thread_index) {
+                generated_ids[thread_index].reserve(IDS_PER_THREAD);
+                threads.emplace_back([&, thread_index] {
+                    for (std::size_t index = 0; index < IDS_PER_THREAD; ++index) {
+                        generated_ids[thread_index].push_back(
+                            RequestTraceFilter::ResolveRequestId(RequestWithId(""))
+                        );
+                    }
+                });
+            }
+            for (auto& thread : threads) {
+                thread.join();
+            }
+
+            std::unordered_set<std::string> unique_ids;
+            unique_ids.reserve(TOTAL_IDS);
+            for (const auto& thread_ids : generated_ids) {
+                for (const auto& request_id : thread_ids) {
+                    EXPECT_TRUE(IsUuidV4(request_id)) << request_id;
+                    EXPECT_TRUE(unique_ids.insert(request_id).second) << request_id;
+                }
+            }
+            EXPECT_EQ(unique_ids.size(), TOTAL_IDS);
         }
 
         TEST(RequestTraceFilterTest, FilterPreservesExistingRequestAttribute) {
