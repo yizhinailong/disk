@@ -32,6 +32,10 @@ The system SHALL expose stable business error codes for common, authentication, 
 - **WHEN** a Redis command, result conversion, or key lookup returns `RedisOperationFailed` or `RedisKeyNotFound`
 - **THEN** the error SHALL use the documented fixed default message and SHALL NOT expose the Redis exception text, endpoint, connection details, key, value, command parameters, or credentials
 
+#### Scenario: S3 dependency errors expose no provider diagnostics
+- **WHEN** an S3 SDK failure is converted to an API or durable-job domain error
+- **THEN** the error SHALL contain only its business code and bounded fixed operation message and SHALL NOT expose provider error codes or messages, endpoints, buckets, object keys, multipart identifiers, signatures, or credentials
+
 ### Requirement: Pagination Envelope
 The system SHALL return paginated collection results with item data and pagination metadata.
 

@@ -2521,6 +2521,14 @@ API、部署、系统测试、单元测试与 OpenSpec 先行固定 Redis 领域
 
 旧实现上的三个定向合同按预期全部失败，精确检出缺失 key 回显、9 条依赖/解析异常正文拼接和 wrong-type 领域消息不稳定。实现后定向红绿测试 3/3、Redis/认证撤销/限流/健康/故障切换聚焦 CTest 167/167（63.15 秒）、完整构建、OpenSpec 24/24 和源码审计通过；9 条 `RedisOperationFailed` 与 1 条 `RedisKeyNotFound` 均只使用默认构造，生产实现不再包含 `ex.what()` 或带 key 的缺失消息。标准完整 CTest 共 1493 项：1486 项通过、7 项按环境门控跳过、0 失败，总耗时 537.53 秒。该批不改变 Redis 协议、错误码、HTTP 状态、指标或上层故障策略，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.150 S3 provider 领域错误脱敏记录（2026-08-03）
+
+API、分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行固定 S3 错误边界。`S3Client` 的 13 条 SDK 失败映射必须只返回固定 `S3 <Operation> failed`，批量删除部分失败只返回固定 `S3 DeleteObjects partially failed`；provider code/message、endpoint、bucket、对象 key、multipart ID、签名和凭据不得进入 `ErrorInfo`、HTTP JSON 或 Worker 持久错误。
+
+实现与测试必须保留现有业务错误码、HTTP 状态、SDK 调用、重试分类与预算、operation/outcome 日志、依赖指标、multipart abort、Worker 重试/死信和 readiness 行为。源码合同应证明 `GetMessage()` 不再参与领域错误构造，`GetCode()` 只保留批量错误的低基数分类用途，并锁定 13 条固定 SDK 操作消息与一个固定部分失败摘要。
+
+旧实现上的新增源码合同按预期为 0/1，精确检出 helper 旧签名、3 处 `GetMessage()`、2 处 `GetCode()`、动态 provider 文本拼接和缺失固定返回共 6 个失败断言。实现后直接源码合同 1/1、S3 客户端/对象存储/工厂/Worker/下载响应/分布式拓扑与故障注入聚焦 CTest 80/80（4.56 秒）、完整构建、OpenSpec 24/24 和差异检查通过；源码审计确认 13 条调用统一经过固定 mapper，生产实现中 `GetMessage()` 为 0，`GetCode()` 只剩 1 处低基数结果分类，批量部分失败只返回固定摘要。标准完整 CTest 共 1494 项：1487 项通过、7 项按环境门控跳过、0 失败，总耗时 554.42 秒。该批不改变 S3 协议、错误码、HTTP 状态、重试、指标或 Worker 状态机，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

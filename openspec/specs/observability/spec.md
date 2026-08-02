@@ -839,6 +839,10 @@ The system SHALL propagate caller-owned correlation explicitly by value through 
 - **WHEN** the adapter records an SDK result event
 - **THEN** it SHALL NOT include bucket, endpoint, object key or prefix, remote multipart upload ID, continuation token, credentials, signatures, object content, or SDK exception text
 
+#### Scenario: S3 result becomes a domain error
+- **WHEN** a final SDK failure or partial batch-delete failure is converted to `ErrorInfo`
+- **THEN** provider response fields SHALL be used only for bounded classification, while the domain message SHALL retain only the fixed SDK operation summary and SHALL NOT contain provider code or message, endpoint, bucket, object key, multipart identifier, signature, or credential
+
 ### Requirement: End-to-End Storage Trace Acceptance
 The system SHALL provide an environment-gated application-flow acceptance that correlates upload initialization, chunk persistence, completion, download, and asynchronous staging cleanup across the HTTP API, PostgreSQL, the durable Worker, and an S3-compatible endpoint without changing production log volume.
 

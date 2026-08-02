@@ -1,6 +1,8 @@
 #include "storage/S3Client.hpp"
 
 #include <array>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -14,6 +16,27 @@
 
 namespace disk::storage {
     namespace {
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
+        }
+
         class S3ClientLogTest : public ::testing::Test {
         protected:
             auto SetUp() -> void override {
@@ -131,6 +154,29 @@ namespace disk::storage {
         for (const auto& [outcome, name] : outcome_names) {
             EXPECT_EQ(S3SdkOutcomeName(outcome), name);
         }
+    }
+
+    TEST(S3ClientErrorContractTest, ProviderDiagnosticsDoNotEnterDomainErrors) {
+        const auto source = ReadSourceFile("src/storage/S3Client.cpp");
+
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(
+            source.find("auto ToErrorInfo(ErrorCode code, std::string_view operation)"),
+            std::string::npos
+        );
+        EXPECT_EQ(CountOccurrences(source, "ToErrorInfo("), 14U);
+        EXPECT_EQ(CountOccurrences(source, "error.GetMessage()"), 0U);
+        EXPECT_EQ(CountOccurrences(source, "error.GetCode()"), 1U);
+        EXPECT_EQ(source.find("std::string(error.GetMessage())"), std::string::npos);
+        EXPECT_EQ(source.find("std::string(error.GetCode())"), std::string::npos);
+        EXPECT_NE(
+            source.find("return ErrorInfo(code, std::string(operation) + \" failed\")"),
+            std::string::npos
+        );
+        EXPECT_EQ(
+            CountOccurrences(source, "S3 DeleteObjects partially failed"),
+            1U
+        );
     }
 
     TEST_F(S3ClientLogTest, InfoLevelDropsExpectedResultsAndCorrelatesFailures) {

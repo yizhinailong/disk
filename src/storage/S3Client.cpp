@@ -292,14 +292,8 @@ namespace disk::storage {
             );
         }
 
-        auto ToErrorInfo(const Aws::S3::S3Error& error, ErrorCode code, const std::string& operation)
-            -> ErrorInfo {
-            std::string message = operation + " failed";
-            if (!error.GetMessage().empty()) {
-                message += ": ";
-                message += error.GetMessage();
-            }
-            return ErrorInfo(code, message);
+        auto ToErrorInfo(ErrorCode code, std::string_view operation) -> ErrorInfo {
+            return ErrorInfo(code, std::string(operation) + " failed");
         }
 
         auto ValidatePartNumber(int part_number) -> Result<void> {
@@ -437,7 +431,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 GetBucketLocation"
             ));
@@ -479,7 +472,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::FileReadError,
                 "S3 HeadObject"
             ));
@@ -534,7 +526,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 PutObject"
             ));
@@ -602,7 +593,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 PutObject"
             ));
@@ -646,9 +636,7 @@ namespace disk::storage {
                 S3SdkOperation::DeleteObject,
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
-            return std::unexpected(
-                ToErrorInfo(outcome.GetError(), ErrorCode::InternalError, "S3 DeleteObject")
-            );
+            return std::unexpected(ToErrorInfo(ErrorCode::InternalError, "S3 DeleteObject"));
         }
 
         FinishS3Call(
@@ -699,7 +687,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::FileReadError,
                 "S3 GetObject"
             ));
@@ -746,7 +733,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::FileReadError,
                 "S3 ListObjectsV2"
             ));
@@ -803,7 +789,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 DeleteObjects"
             ));
@@ -823,8 +808,7 @@ namespace disk::storage {
             );
             return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
-                "S3 DeleteObjects partially failed: " + std::string(error.GetCode()) +
-                    ": " + std::string(error.GetMessage())
+                "S3 DeleteObjects partially failed"
             ));
         }
         FinishS3Call(
@@ -854,7 +838,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 CreateMultipartUpload"
             ));
@@ -918,7 +901,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 UploadPart"
             ));
@@ -980,7 +962,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 UploadPartCopy"
             ));
@@ -1062,7 +1043,6 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(ToErrorInfo(
-                outcome.GetError(),
                 ErrorCode::InternalError,
                 "S3 CompleteMultipartUpload"
             ));
@@ -1112,7 +1092,7 @@ namespace disk::storage {
                 ClassifyS3MetricOutcome(outcome.GetError())
             );
             return std::unexpected(
-                ToErrorInfo(outcome.GetError(), ErrorCode::InternalError, "S3 AbortMultipartUpload")
+                ToErrorInfo(ErrorCode::InternalError, "S3 AbortMultipartUpload")
             );
         }
         FinishS3Call(

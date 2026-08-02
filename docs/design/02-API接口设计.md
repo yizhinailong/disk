@@ -116,6 +116,8 @@
 | 50012 | `UploadTaskCreationDisabled` | 503 | 新上传任务创建已临时关闭 |
 | 50013 | `UploadLifecycleFrozen` | 503 | 上传生命周期已为回滚临时冻结 |
 
+S3/MinIO SDK 失败映射为既有 `InternalError`、`FileReadError` 等业务码时，消息最多保留固定的 `S3 <Operation> failed`；批量删除部分失败使用固定 `S3 DeleteObjects partially failed`。provider error code/message、endpoint、bucket、对象 key、multipart ID、签名和凭据不得进入 `ErrorInfo`、HTTP JSON 或持久任务错误。具体 SDK 操作与最终结果只通过低基数结构化日志和依赖指标诊断。
+
 #### 分享错误码
 
 | 错误码 | 枚举名称 | HTTP状态码 | 说明 |
