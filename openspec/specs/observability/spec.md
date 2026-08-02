@@ -711,6 +711,11 @@ The system SHALL propagate upload-completion correlation explicitly across contr
 - **THEN** the directly owned event SHALL use only its operation-specific fixed complete summary and existing typed correlation, and SHALL NOT append upload, lease, or version values, exception or domain-error text, SQL, connection details, object locators, paths, credentials, or tokens to the message
 - **AND** existing renewal error mapping, best-effort recording and persistence, construction early return, finding details, job payload and dedupe, compare-and-set, response, and retry behavior SHALL remain unchanged
 
+#### Scenario: Completion read dependency throws
+- **WHEN** file-name precheck, finalize-lease claim, completed-result replay, staging-session load, assembly-chunk descriptor load, or finalize-metadata lookup catches an exception
+- **THEN** the directly owned event SHALL use only its operation-specific fixed complete summary and existing typed correlation, and SHALL NOT append upload, user, file, or folder identifiers, lease or version values, exception text, SQL, connection details, object locators, paths, credentials, or tokens to the message
+- **AND** existing precheck and metadata fallback values, claim and replay error mapping, finalize-error recording, timing, compare-and-set, assembly, deduplication, conflict, response, and retry behavior SHALL remain unchanged
+
 #### Scenario: Local storage assembles staged chunks
 - **WHEN** local storage admits and completes or fails an upload assembly across its blocking filesystem queue
 - **THEN** every assembly lifecycle event SHALL retain the caller-supplied request, operation, upload, job, owner, and state-version values exactly, including null values, without reconstructing them from the session, paths, or message text

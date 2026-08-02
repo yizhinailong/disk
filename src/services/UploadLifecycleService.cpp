@@ -315,8 +315,8 @@ namespace disk::upload {
                     co_return result[0]["cnt"].as<uint64_t>() > 0;
                 }
                 co_return false;
-            } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Error(log_context) << "Failed to check filename: " << e.base().what();
+            } catch (const drogon::orm::DrogonDbException&) {
+                Logger::Error(log_context) << "Failed to check filename";
                 co_return false;
             }
         }
@@ -803,11 +803,9 @@ namespace disk::upload {
                 command.lease_owner,
                 command.lease_duration_seconds
             );
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
             claim_timer.Stop();
-            Logger::Error(log_context)
-                << "Failed to claim upload finalize lease: upload_id="
-                << command.upload_id << ", error=" << e.what();
+            Logger::Error(log_context) << "Failed to claim upload finalize lease";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to claim upload finalize lease")
             );
@@ -871,11 +869,9 @@ namespace disk::upload {
                     outcome.invalidation.upload_task_ids.push_back(command.upload_id);
                     outcome.invalidation.file_list_folder_ids.push_back(outcome.file->parent_id);
                     co_return outcome;
-                } catch (const std::exception& e) {
+                } catch (const std::exception&) {
                     load_timer.Stop();
-                    Logger::Error(log_context)
-                        << "Failed to load completed upload result: upload_id="
-                        << command.upload_id << ", error=" << e.what();
+                    Logger::Error(log_context) << "Failed to load completed upload result";
                     co_return std::unexpected(
                         ErrorInfo(ErrorCode::InternalError, "Failed to load completed upload result")
                     );
@@ -914,10 +910,8 @@ namespace disk::upload {
                 command.upload_id,
                 command.user_id
             );
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Failed to load staging session: upload_id=" << command.upload_id
-                << ", error=" << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Failed to load staging session";
         }
         if (!staging_session.has_value()) {
             load_timer.Stop();
@@ -937,10 +931,8 @@ namespace disk::upload {
         bool chunk_descriptor_load_failed = false;
         try {
             chunks = co_await upload_task_repository.ListChunksForAssembly(command.upload_id);
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Failed to load chunk descriptors for assembly: upload_id="
-                << command.upload_id << ", error=" << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Failed to load chunk descriptors for assembly";
             chunk_descriptor_load_failed = true;
         }
         load_timer.Stop();
@@ -1124,9 +1116,8 @@ namespace disk::upload {
                 }
 
                 co_return lookup;
-            } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Error(log_context)
-                    << "Failed to query finalize upload metadata: " << e.base().what();
+            } catch (const drogon::orm::DrogonDbException&) {
+                Logger::Error(log_context) << "Failed to query finalize upload metadata";
                 co_return lookup;
             }
         }();

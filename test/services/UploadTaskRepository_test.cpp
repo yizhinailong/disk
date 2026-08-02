@@ -451,6 +451,31 @@ namespace disk::file {
             );
         }
 
+        TEST(UploadLifecycleReadFailureLogContractTest, ExceptionsUseFixedSummaries) {
+            const auto source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
+
+            ASSERT_FALSE(source.empty());
+            EXPECT_EQ(CountOccurrences(source, ".what()"), 0U);
+            for (const auto* statement : {
+                     "Logger::Error(log_context) << \"Failed to check filename\";",
+                     "Logger::Error(log_context) << \"Failed to claim upload finalize lease\";",
+                     "Logger::Error(log_context) << \"Failed to load completed upload result\";",
+                     "Logger::Error(log_context) << \"Failed to load staging session\";",
+                     "Logger::Error(log_context) << \"Failed to load chunk descriptors for assembly\";",
+                     "Logger::Error(log_context) << \"Failed to query finalize upload metadata\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(source, statement), 1U) << statement;
+            }
+            for (const auto* error : {
+                     "ErrorInfo(ErrorCode::InternalError, \"Failed to claim upload finalize lease\")",
+                     "ErrorInfo(ErrorCode::InternalError, \"Failed to load completed upload result\")",
+                     "ErrorInfo(ErrorCode::InternalError, \"Failed to load upload staging session\")",
+                     "ErrorInfo(ErrorCode::InternalError, \"Failed to load upload chunk descriptors\")",
+                 }) {
+                EXPECT_EQ(CountOccurrences(source, error), 1U) << error;
+            }
+        }
+
         TEST(UploadTaskRepositoryChunkPrimitiveContractTest, ChunkPersistencePrimitivesKeepIdempotencySortingAndTransactionalCleanup) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
 

@@ -2687,6 +2687,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1500 项：1493 项通过、7 项按环境门控跳过、0 失败，总耗时 542.14 秒。源码审计确认目标 helper 区间 `.what()` 与 `reconciliation_job.error()` 均为 0，五条固定日志语句各精确出现 1 次；全文件仍有 6 处位于该区间之外的异常正文转发，留给后续独立批次。该批不改变类型化关联、续租错误、best-effort、早退、finding、任务、CAS、响应或重试语义，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.170 UploadLifecycle 读取异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧上传完成读取边界。文件名预检、完成租约认领、完成结果重放、staging 会话读取、组装分片描述读取和 finalize 元数据查询的六条异常事件只允许对应固定完整摘要；不得在 message 中重复 upload/user/file/folder、lease/version、异常正文、SQL、连接信息、对象定位符、凭据或 token。
+
+文件名预检与 finalize 元数据查询异常继续按既有 `false`/当前 lookup 降级；租约认领与完成结果读取异常继续返回既有同名 `InternalError`；staging 会话与分片描述读取异常继续记录 finalize error 并返回既有固定错误。类型化关联、计时、CAS、组装、去重、冲突、响应与重试语义不得改变。
+
+旧实现上的定向源码合同按预期为 0/1，共 7 个失败断言：全文件精确检出剩余 6 处 `.what()`，六条固定完整日志语句均缺失；认领、完成重放、staging 会话和分片描述四条既有公开错误断言通过。实现后读取异常/finalize/CAS 定向测试 7/7、上传 Lifecycle/仓储/状态机/流程/授权/安全网/分布式拓扑聚焦 CTest 35/35（131.70 秒，其中上传安全网 121.69 秒）通过。
+
+完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1501 项：1494 项通过、7 项按环境门控跳过、0 失败，总耗时 547.15 秒。源码审计确认 `UploadLifecycleService.cpp` 中 `.what()` 为 0，六条固定日志语句各精确出现 1 次。该批不改变类型化关联、降级值、错误映射、finalize error 记录、计时、CAS、组装、去重、冲突、响应或重试语义，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
