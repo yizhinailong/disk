@@ -69,10 +69,28 @@ namespace disk::folder {
                 "auto FolderService::CreateFolder(",
                 "\n} // namespace disk::folder"
             );
+            const auto tree_body = ExtractRange(
+                service_source,
+                "auto FolderService::GetFolderTree(",
+                "\n    auto FolderService::ValidateParentOwnership("
+            );
+            const auto parent_ownership_body = ExtractRange(
+                service_source,
+                "auto FolderService::ValidateParentOwnership(",
+                "\n    auto FolderService::GetBreadcrumb("
+            );
+            const auto breadcrumb_body = ExtractRange(
+                service_source,
+                "auto FolderService::GetBreadcrumb(",
+                "\n} // namespace disk::folder"
+            );
 
             ASSERT_FALSE(controller_body.empty());
             ASSERT_FALSE(dto_source.empty());
             ASSERT_FALSE(service_body.empty());
+            ASSERT_FALSE(tree_body.empty());
+            ASSERT_FALSE(parent_ownership_body.empty());
+            ASSERT_FALSE(breadcrumb_body.empty());
             EXPECT_EQ(
                 CountOccurrences(
                     controller_body,
@@ -135,6 +153,32 @@ namespace disk::folder {
             EXPECT_TRUE(Contains(
                 service_body,
                 "Breadcrumb folder not found or no permission"
+            ));
+            EXPECT_EQ(CountOccurrences(service_body, ".what()"), 0U);
+            for (const auto* message : {
+                     "Folder tree query failed",
+                     "Parent folder ownership lookup failed",
+                     "Breadcrumb query failed",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(
+                        service_body,
+                        std::string("\"") + message + "\""
+                    ),
+                    1U
+                ) << message;
+            }
+            EXPECT_TRUE(Contains(
+                tree_body,
+                "Failed to get folder tree, please try again later"
+            ));
+            EXPECT_TRUE(Contains(
+                parent_ownership_body,
+                "std::unexpected(ErrorInfo(ErrorCode::FolderNotFound))"
+            ));
+            EXPECT_TRUE(Contains(
+                breadcrumb_body,
+                "ErrorCode::InternalError, \"Failed to retrieve breadcrumb\""
             ));
 
             for (const auto* body : { &controller_body, &dto_source, &service_body }) {

@@ -404,8 +404,8 @@ namespace disk::folder {
 
             Logger::Debug(log_context) << "Found " << nodes.size() << " folder nodes";
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to query folder tree: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Folder tree query failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get folder tree, please try again later"
@@ -436,10 +436,8 @@ namespace disk::folder {
 
             co_return {};
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context)
-                << "Parent folder does not exist: parent_id=" << parent_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "Parent folder ownership lookup failed";
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
         }
     }
@@ -481,10 +479,8 @@ namespace disk::folder {
 
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context)
-                << "Breadcrumb query failed: folder_id=" << folder_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "Breadcrumb query failed";
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to retrieve breadcrumb"));
         }
     }

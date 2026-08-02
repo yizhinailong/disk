@@ -648,6 +648,11 @@ The system SHALL classify exact folder-tree and numeric breadcrumb requests as t
 - **WHEN** a folder request records folder, parent, user, path, transaction, or cache identifiers
 - **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those folder values SHALL NOT be overloaded into typed correlation fields
 
+#### Scenario: Folder query database access throws
+- **WHEN** folder-tree, parent-ownership, or breadcrumb lookup catches a database exception
+- **THEN** the service SHALL log only the fixed complete `Folder tree query failed`, `Parent folder ownership lookup failed`, or `Breadcrumb query failed` event and SHALL NOT append folder, parent, or user ID, exception text, SQL, connection details, paths, credentials, or tokens to the message
+- **AND** caller correlation, the existing folder-tree and breadcrumb `InternalError` public messages, parent-ownership `FolderNotFound` mapping, queries, tree construction, cache behavior, and responses SHALL remain unchanged
+
 #### Scenario: Folder classification remains bounded
 - **WHEN** a folder path has a nonnumeric ID, an extra suffix, or is not one of the four recognized routes
 - **THEN** the folder classifiers SHALL NOT absorb it, and the route SHALL retain the `other` operation classification

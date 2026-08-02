@@ -2641,6 +2641,14 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 旧实现上的定向合同按预期为 0/1，共 4 个失败断言：源码精确检出 3 处 `.what()`，三个固定完整消息均缺失；三个既有公开错误消息断言通过。实现后定向合同 1/1、恢复管理源码合同/DTO/真实操作流/任务失败持久化/分布式拓扑聚焦 CTest 11/11（13.61 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 542.69 秒。源码审计确认 `StorageRecoveryAdminService.cpp` 中 `.what()`、`failed:` 与 `error=` 均为 0，三个固定服务消息与三个公开错误消息均各精确出现 1 次。该批不改变类型化关联、错误映射、实际变更事务、CAS、去重、审计或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.165 FolderService 查询数据库异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统一文件夹查询数据库异常合同。目录树查询、父目录所有权查询与面包屑查询的 `DrogonDbException` catch 分别只允许固定完整消息 `Folder tree query failed`、`Parent folder ownership lookup failed` 和 `Breadcrumb query failed`；不得拼接 folder/parent/user ID、异常正文、SQL、连接信息、路径、凭据或 token。
+
+请求关联继续只使用调用方现有的类型化上下文。目录树和面包屑的既有 `InternalError` 公开消息、父目录数据库异常的 `FolderNotFound` 映射、查询、树构造、响应和缓存行为保持不变。
+
+旧实现上的定向合同按预期为 0/1，共 4 个失败断言：源码精确检出 3 处 `.what()`，三个固定完整消息均缺失；三条既有公开错误映射断言通过。实现后定向合同 1/1、文件夹源码/仓储合同/真实生命周期/浏览突发/上传安全不变量/分布式拓扑聚焦 CTest 14/14（143.25 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 546.03 秒。源码审计确认 `FolderService.cpp` 中 `.what()` 为 0，三个固定服务消息与目录树/面包屑两个公开错误消息均各精确出现 1 次，父目录目标 catch 仍映射 `FolderNotFound`。该批不改变类型化关联、查询、树构造、缓存、错误映射或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
