@@ -443,3 +443,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `HealthService::GetTimestamp` is consumed only by `BuildBaseResult` in the same implementation unit
 - **THEN** timestamp formatting SHALL have internal linkage and SHALL NOT be declared by `HealthService.hpp`, while liveness and readiness continue to emit a UTC `YYYY-MM-DDTHH:MM:SSZ` timestamp with unchanged health fields and behavior
+
+#### Scenario: System build-time formatting stays implementation-local
+
+- **WHEN** a whole-repository call-site and object-symbol audit confirms that `SystemService::GetBuildTime` is consumed only by `GetInfo` in the same implementation unit
+- **THEN** build-time formatting SHALL have internal linkage and SHALL NOT be declared by `SystemService.hpp`, while system information continues to serialize the `build_time` field from `__DATE__`, one space, and `__TIME__` with unchanged authentication, statistics, logging, and response behavior

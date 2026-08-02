@@ -22,6 +22,12 @@ namespace disk::system {
     using disk::utils::ConfigMgr;
     using disk::utils::StageTimer;
 
+    namespace {
+        [[nodiscard]] auto GetBuildTime() -> std::string {
+            return std::string(__DATE__) + " " + std::string(__TIME__);
+        }
+    } // namespace
+
     SystemService::SystemService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)),
           m_start_time(std::chrono::steady_clock::now()) {
@@ -102,10 +108,6 @@ namespace disk::system {
         }
 
         co_return stats;
-    }
-
-    auto SystemService::GetBuildTime() -> std::string {
-        return std::string(__DATE__) + " " + std::string(__TIME__);
     }
 
 } // namespace disk::system

@@ -94,9 +94,12 @@ namespace disk::system {
             info.storage.total_files = 5000;
             info.storage.total_folders = 800;
             info.storage.total_size = 1073741824;
+            const auto json = info.ToJson();
 
             EXPECT_EQ(info.version, "1.0.0");
             EXPECT_EQ(info.drogon_version, "1.9.11");
+            EXPECT_EQ(info.build_time, "Apr 11 2026 10:00:00");
+            EXPECT_EQ(json["build_time"].asString(), info.build_time);
             EXPECT_EQ(info.uptime, 3600);
             EXPECT_EQ(info.connections.current, 5);
             EXPECT_EQ(info.storage.total_users, 100);

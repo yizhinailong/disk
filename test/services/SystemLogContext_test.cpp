@@ -77,6 +77,23 @@ namespace disk::system {
             EXPECT_FALSE(HasUserScopedGetInfo<SystemService>);
         }
 
+        TEST(SystemBuildTimeContractTest, FormatterHasInternalLinkage) {
+            const auto service_header = ReadSourceFile("src/services/SystemService.hpp");
+            const auto service_source = ReadSourceFile("src/services/SystemService.cpp");
+
+            EXPECT_FALSE(Contains(service_header, "GetBuildTime"));
+            EXPECT_FALSE(Contains(service_source, "SystemService::GetBuildTime"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "[[nodiscard]] auto GetBuildTime() -> std::string"
+            ));
+            EXPECT_TRUE(Contains(service_source, "info.build_time = GetBuildTime()"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "std::string(__DATE__) + \" \" + std::string(__TIME__)"
+            ));
+        }
+
         TEST(SystemLogContextContractTest, ControllerServiceAndStageTimerKeepExplicitContext) {
             const auto controller_source = ReadSourceFile("src/controllers/SystemController.cpp");
             const auto service_header = ReadSourceFile("src/services/SystemService.hpp");
@@ -85,7 +102,7 @@ namespace disk::system {
             const auto service_request_body = ExtractRange(
                 service_source,
                 "auto SystemService::GetInfo(",
-                "    auto SystemService::GetBuildTime("
+                "\n} // namespace disk::system"
             );
 
             ASSERT_FALSE(controller_source.empty());

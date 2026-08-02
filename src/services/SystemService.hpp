@@ -91,8 +91,6 @@ namespace disk::system {
         [[nodiscard]]
         auto GetStorageStats(disk::utils::LogContext log_context) -> drogon::Task<StorageStats>;
 
-        static auto GetBuildTime() -> std::string;
-
         drogon::orm::DbClientPtr m_db_client;
         std::chrono::steady_clock::time_point m_start_time;
     };
