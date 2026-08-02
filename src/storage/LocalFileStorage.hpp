@@ -144,20 +144,6 @@ namespace disk::storage {
         [[nodiscard]]
         auto GetTempDirPath(const std::string& upload_id) const -> std::filesystem::path;
 
-        /**
-         * @brief 获取分片文件的完整路径
-         * @param upload_id 上传会话 ID
-         * @param chunk_index 分片索引
-         * @param md5_hash 分片 MD5
-         * @return 分片对象 key
-         */
-        [[nodiscard]]
-        static auto GetChunkObjectKey(
-            const std::string& upload_id,
-            uint32_t chunk_index,
-            const std::string& md5_hash
-        ) -> std::string;
-
         [[nodiscard]]
         auto ResolveChunkFilePath(
             const std::string& upload_id,

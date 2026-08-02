@@ -2349,6 +2349,14 @@ ShareService 的本地模板已删除，两个调用点改用 `disk::file::utils
 
 旧实现上 2 个定向合同按预期为 1/2，精确检出 4 个内部链接失败断言，调用数量、七个字段来源和昵称回退正向断言均通过。实现后 2 个直接合同、认证 DTO/日志/令牌/真实注册登录 refresh/分布式拓扑聚焦 CTest 10/10（12.15 秒）、完整构建、OpenSpec 24/24 和差异检查通过；后端只保留一个匿名命名空间局部 mapper 符号，测试二进制仍无该符号。标准完整 CTest 共 1465 项：1458 项通过、7 项按环境门控跳过、0 失败，总耗时 531.91 秒。该批只收敛认证响应实现边界；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.129 本地分片对象键 helper 内部化记录（2026-08-02）
+
+系统测试、单元测试和后端低风险清理 OpenSpec 先行固定本地分片对象键生成的内部链接合同。全仓调用点、Git 历史、源码和已编译对象审计确认，私有静态 `LocalFileStorage::GetChunkObjectKey()` 自不可变分片描述符引入起只有同一实现文件内 `WriteChunk()` 与 `ResolveChunkFilePath()` 两个调用点；没有外部消费者，旧后端与测试二进制各导出一个类成员符号。
+
+函数体已原样移入 `LocalFileStorage.cpp` 既有匿名命名空间，头文件删除成员声明，两个调用点保持原位。不可变分片仍生成 `<upload_id>/chunks/<chunk_index>-<md5>.part` generic key，解析仍要求权威描述符完全相等，空 `object_key` 的旧 local 行仍回退 `<upload_id>/<chunk_index>.chunk`；输入校验、不可变写入与幂等重试、HEAD、组装、清理、inventory、日志和错误均未改变，也未移除 local staging 或任何迁移兼容路径。
+
+旧实现上新增合同按预期为 0/1，精确检出 6 个内部链接与局部实现失败断言，两个调用点、描述符等值校验和 legacy 回退正向断言均通过。实现后直接合同 1/1、本地分片写入/HEAD/组装/不可变重试/篡改拒绝/legacy 行/清理/inventory/分布式拓扑聚焦 CTest 38/38（1.35 秒）、完整构建、OpenSpec 24/24 和差异检查通过；两个制品均只保留一个匿名命名空间局部 key-builder 符号。标准完整 CTest 共 1466 项：1459 项通过、7 项按环境门控跳过、0 失败，总耗时 550.59 秒。该批只收敛本地存储实现边界；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

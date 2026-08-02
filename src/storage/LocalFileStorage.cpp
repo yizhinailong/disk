@@ -52,6 +52,16 @@ namespace disk::storage {
                    });
         }
 
+        [[nodiscard]] auto GetChunkObjectKey(
+            const std::string& upload_id,
+            uint32_t chunk_index,
+            const std::string& md5_hash
+        ) -> std::string {
+            return (std::filesystem::path(upload_id) / "chunks" /
+                    (std::to_string(chunk_index) + "-" + md5_hash + ".part"))
+                .generic_string();
+        }
+
         [[nodiscard]] auto ValidateLocalSession(const UploadStagingSession& session)
             -> Result<void> {
             if (session.backend != UploadStagingBackend::Local ||
@@ -669,16 +679,6 @@ namespace disk::storage {
 
     auto LocalFileStorage::GetTempDirPath(const std::string& upload_id) const -> std::filesystem::path {
         return std::filesystem::path(m_config_mgr->GetTempUploadPath()) / upload_id;
-    }
-
-    auto LocalFileStorage::GetChunkObjectKey(
-        const std::string& upload_id,
-        uint32_t chunk_index,
-        const std::string& md5_hash
-    ) -> std::string {
-        return (std::filesystem::path(upload_id) / "chunks" /
-                (std::to_string(chunk_index) + "-" + md5_hash + ".part"))
-            .generic_string();
     }
 
     auto LocalFileStorage::ResolveChunkFilePath(

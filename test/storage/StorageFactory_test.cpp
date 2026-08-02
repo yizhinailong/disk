@@ -251,6 +251,44 @@ TEST(StorageRuntimeLogContextContractTest, UsesTypedContextAndBoundedDeploymentD
     EXPECT_FALSE(Contains(s3_constructor, "e.what()"));
 }
 
+TEST(LocalStorageImplementationHelperContractTest, ChunkObjectKeyBuilderHasInternalLinkage) {
+    const auto local_header = ReadSourceFile("src/storage/LocalFileStorage.hpp");
+    const auto local_source = ReadSourceFile("src/storage/LocalFileStorage.cpp");
+    const auto anonymous_helpers = SourceSection(
+        local_source,
+        "    namespace {",
+        "    } // namespace"
+    );
+
+    EXPECT_FALSE(Contains(local_header, "GetChunkObjectKey("));
+    EXPECT_FALSE(Contains(local_source, "LocalFileStorage::GetChunkObjectKey("));
+    ASSERT_FALSE(anonymous_helpers.empty());
+    EXPECT_TRUE(Contains(anonymous_helpers, "[[nodiscard]] auto GetChunkObjectKey("));
+    EXPECT_EQ(CountOccurrences(local_source, "GetChunkObjectKey("), 3U);
+    EXPECT_TRUE(Contains(
+        anonymous_helpers,
+        "std::filesystem::path(upload_id) / \"chunks\""
+    ));
+    EXPECT_TRUE(Contains(
+        anonymous_helpers,
+        "std::to_string(chunk_index) + \"-\" + md5_hash + \".part\""
+    ));
+    EXPECT_TRUE(Contains(anonymous_helpers, ".generic_string()"));
+    EXPECT_TRUE(Contains(
+        local_source,
+        "const auto object_key = GetChunkObjectKey(upload_id, chunk_index, md5_hash)"
+    ));
+    EXPECT_TRUE(Contains(
+        local_source,
+        "const auto expected_key = GetChunkObjectKey(upload_id, chunk.chunk_index, chunk.md5_hash)"
+    ));
+    EXPECT_TRUE(Contains(local_source, "if (chunk.object_key != expected_key)"));
+    EXPECT_TRUE(Contains(
+        local_source,
+        "return GetTempDirPath(upload_id) / (std::to_string(chunk.chunk_index) + \".chunk\")"
+    ));
+}
+
 TEST(StorageCapabilityBoundaryContractTest, UsesOnlyExplicitStorageCapabilities) {
     const auto factory_header = ReadSourceFile("src/storage/StorageFactory.hpp");
     const auto manager_header = ReadSourceFile("src/storage/StorageMgr.hpp");

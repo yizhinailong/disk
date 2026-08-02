@@ -468,3 +468,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `AuthService::UserToResponse` is consumed only by registration and login in the same implementation unit
 - **THEN** the user-response mapper SHALL have internal linkage and SHALL NOT be declared by `AuthService.hpp`, while both flows continue to emit the existing ID, username, email, nickname fallback, storage quota, storage usage, and creation-time fields without changing authentication, tokens, persistence, logging, errors, or public JSON
+
+#### Scenario: Local chunk-object key construction stays implementation-local
+
+- **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `LocalFileStorage::GetChunkObjectKey` is consumed only by local chunk writes and descriptor validation in the same implementation unit
+- **THEN** the key builder SHALL have internal linkage and SHALL NOT be declared by `LocalFileStorage.hpp`, while immutable local chunks continue to use `<upload_id>/chunks/<chunk_index>-<md5>.part` and legacy descriptors without an object key continue to resolve as `<upload_id>/<chunk_index>.chunk` without changing upload, retry, validation, assembly, cleanup, or inventory behavior
