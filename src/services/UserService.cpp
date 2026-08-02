@@ -81,17 +81,14 @@ namespace disk::user {
             Logger::Info(log_context) << "Get user profile successful: user_id=" << user_id;
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Get user profile database error: user_id=" << user_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Get user profile database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get user profile, please try again later"
             ));
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Get user profile unknown error: user_id=" << user_id << " - " << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Get user profile processing failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get user profile, please try again later"
@@ -158,24 +155,17 @@ namespace disk::user {
             Logger::Info(log_context) << "Password changed successfully: user_id=" << user_id;
             co_return {};
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            const auto error_msg = std::string(e.base().what());
-            if (error_msg.find("condition") != std::string::npos ||
-                error_msg.find("empty") != std::string::npos) {
-                Logger::Warn(log_context) << "User not found: user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
-            }
-
-            Logger::Error(log_context)
-                << "Change password database error: user_id=" << user_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::UnexpectedRows&) {
+            Logger::Warn(log_context) << "User not found: user_id=" << user_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Change password database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to change password, please try again later"
             ));
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Change password unknown error: user_id=" << user_id << " - " << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Change password processing failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to change password, please try again later"
@@ -231,24 +221,17 @@ namespace disk::user {
 
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            const auto error_msg = std::string(e.base().what());
-            if (error_msg.find("condition") != std::string::npos ||
-                error_msg.find("empty") != std::string::npos) {
-                Logger::Warn(log_context) << "User not found: user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
-            }
-
-            Logger::Error(log_context)
-                << "Update user profile database error: user_id=" << user_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::UnexpectedRows&) {
+            Logger::Warn(log_context) << "User not found: user_id=" << user_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Update user profile database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to update user profile, please try again later"
             ));
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Update user profile unknown error: user_id=" << user_id << " - " << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Update user profile processing failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to update user profile, please try again later"
@@ -303,8 +286,8 @@ namespace disk::user {
                 << ", files=" << file_count << ", folders=" << folder_count;
 
             co_return response;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to get storage stats: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to get storage stats";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get storage stats")
             );

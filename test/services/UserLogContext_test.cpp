@@ -49,6 +49,22 @@ namespace disk::user {
             return source.substr(begin);
         }
 
+        auto ExtractBetween(
+            const std::string& source,
+            std::string_view begin_marker,
+            std::string_view end_marker
+        ) -> std::string {
+            const auto begin = source.find(begin_marker);
+            if (begin == std::string::npos) {
+                return {};
+            }
+            const auto end = source.find(end_marker, begin + begin_marker.size());
+            if (end == std::string::npos) {
+                return {};
+            }
+            return source.substr(begin, end - begin);
+        }
+
         auto CallContainsContext(const std::string& source, std::string_view call_marker) -> bool {
             const auto begin = source.find(call_marker);
             if (begin == std::string::npos) {
@@ -66,11 +82,23 @@ namespace disk::user {
             const auto service_source = ReadSourceFile("src/services/UserService.cpp");
             const auto service_request_body =
                 ExtractFrom(service_source, "auto UserService::GetProfile(");
+            const auto change_password_body = ExtractBetween(
+                service_source,
+                "auto UserService::ChangePassword(",
+                "auto UserService::UpdateProfile("
+            );
+            const auto update_profile_body = ExtractBetween(
+                service_source,
+                "auto UserService::UpdateProfile(",
+                "auto UserService::GetStorage("
+            );
 
             ASSERT_FALSE(controller_source.empty());
             ASSERT_FALSE(dto_source.empty());
             ASSERT_FALSE(service_header.empty());
             ASSERT_FALSE(service_request_body.empty());
+            ASSERT_FALSE(change_password_body.empty());
+            ASSERT_FALSE(update_profile_body.empty());
 
             EXPECT_EQ(
                 CountOccurrences(
@@ -102,6 +130,35 @@ namespace disk::user {
                 ),
                 4
             );
+
+            EXPECT_EQ(CountOccurrences(service_request_body, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(service_request_body, ".find(\"condition\")"), 0U);
+            EXPECT_EQ(CountOccurrences(service_request_body, ".find(\"empty\")"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    service_request_body,
+                    "catch (const drogon::orm::UnexpectedRows&)"
+                ),
+                2U
+            );
+            for (const auto* body : { &change_password_body, &update_profile_body }) {
+                const auto unexpected_rows =
+                    body->find("catch (const drogon::orm::UnexpectedRows&)");
+                const auto database_error =
+                    body->find("catch (const drogon::orm::DrogonDbException&)");
+                EXPECT_LT(unexpected_rows, database_error);
+            }
+            for (const auto* fixed_failure : {
+                     "Logger::Error(log_context) << \"Get user profile database error\";",
+                     "Logger::Error(log_context) << \"Get user profile processing failed\";",
+                     "Logger::Error(log_context) << \"Change password database error\";",
+                     "Logger::Error(log_context) << \"Change password processing failed\";",
+                     "Logger::Error(log_context) << \"Update user profile database error\";",
+                     "Logger::Error(log_context) << \"Update user profile processing failed\";",
+                     "Logger::Error(log_context) << \"Failed to get storage stats\";",
+                 }) {
+                EXPECT_TRUE(Contains(service_request_body, fixed_failure)) << fixed_failure;
+            }
 
             for (const auto* body : {
                      &controller_source,

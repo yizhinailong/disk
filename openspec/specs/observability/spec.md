@@ -58,6 +58,11 @@ The system SHALL classify only the exact authenticated user-profile, password, a
 - **WHEN** a user request records account, profile, password-change, quota, or aggregate storage values
 - **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those user-domain values SHALL NOT be overloaded into typed correlation fields
 
+#### Scenario: User-profile service dependency work fails
+- **WHEN** profile read or update, password change, or storage-statistics database or standard processing fails
+- **THEN** the directly owned event SHALL use its fixed complete failure summary and SHALL NOT append exception text, SQL, connection details, credentials, or tokens
+- **AND** password change and profile update SHALL map Drogon `UnexpectedRows` structurally to the existing user-not-found error without searching exception text, while all other domain errors and public responses SHALL remain unchanged
+
 #### Scenario: User classification remains bounded
 - **WHEN** a user path is not exactly `/api/user/profile`, `/api/user/password`, or `/api/user/storage`, including an extra suffix
 - **THEN** the user classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification
