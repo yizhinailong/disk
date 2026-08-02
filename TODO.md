@@ -2529,6 +2529,14 @@ API、分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行固
 
 旧实现上的新增源码合同按预期为 0/1，精确检出 helper 旧签名、3 处 `GetMessage()`、2 处 `GetCode()`、动态 provider 文本拼接和缺失固定返回共 6 个失败断言。实现后直接源码合同 1/1、S3 客户端/对象存储/工厂/Worker/下载响应/分布式拓扑与故障注入聚焦 CTest 80/80（4.56 秒）、完整构建、OpenSpec 24/24 和差异检查通过；源码审计确认 13 条调用统一经过固定 mapper，生产实现中 `GetMessage()` 为 0，`GetCode()` 只剩 1 处低基数结果分类，批量部分失败只返回固定摘要。标准完整 CTest 共 1494 项：1487 项通过、7 项按环境门控跳过、0 失败，总耗时 554.42 秒。该批不改变 S3 协议、错误码、HTTP 状态、重试、指标或 Worker 状态机，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.151 Worker 持久错误脱敏记录（2026-08-03）
+
+API、数据库、分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行固定持久任务错误边界。新 Worker 写入 `storage_jobs.last_error` 时，只允许任务合同解析/构建产生的固定校验文本、固定配置/状态摘要或固定的 `staging_cleanup`、`multipart_abort`、`blob_gc`、`expire_uploads`、`expire_trash`、`storage_reconcile` 操作失败摘要；未知任务类型不得回显实际类型。下游 `ErrorInfo.message`、数据库/标准异常正文、SQL、连接信息、endpoint、对象定位符、payload 值和凭据不得进入新持久错误。
+
+同一 Worker 的事务回滚、认领预检、心跳、handler、结果回写和批次认领异常日志也必须使用固定事件摘要，不记录 `what()`；既有类型化 request/upload/job/lease/version 关联、低基数 operation、错误码驱动的临时/永久分类、退避预算、owner 条件回写、死信、管理员字段、payload 校验和 readiness 行为保持不变。本批不改写历史 `last_error` 行，也不执行 schema/data migration。
+
+旧实现上的四个定向测试按预期全部失败，共 10 个失败断言：五个行为断言直接检出连接串、bucket/key、provider 文本和未知任务类型回显，源码合同检出 12 次 `error.message` 文本出现、1 次错误码拼接、8 次 `what()` 和缺失固定 handler 摘要。实现后定向测试 4/4、Worker 仓储/合同/运行时/S3/Blob GC/multipart/接管/任务运维聚焦 CTest 106/106（78.06 秒）、完整构建、OpenSpec 24/24 和差异检查通过；生产实现中 `error.message`、`error.CodeInt()` 和 `.what()` 均为 0，六类依赖操作、未知类型、Blob GC 异常及顶层 handler 都只生成固定摘要。标准完整 CTest 共 1495 项：1488 项通过、7 项按环境门控跳过、0 失败，总耗时 534.47 秒。该批不改变 SQL、schema、重试分类/预算、租约、死信或管理员字段，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

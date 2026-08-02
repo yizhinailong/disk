@@ -665,6 +665,11 @@ The system SHALL derive durable Worker correlation only from claimed PostgreSQL 
 - **WHEN** a Worker starts, renews, or persists the outcome of a job returned by the database claim operation
 - **THEN** its owned events SHALL use the positive persistent job ID, claimed owner, actual Worker instance, and a fixed operation derived from a known job type, while request ID and state version remain null when the job record does not carry them
 
+#### Scenario: Worker observes a dependency or handler failure
+- **WHEN** a claimed job receives a downstream domain failure or the Worker catches a rollback, lease, handler, result-persistence, or claim exception
+- **THEN** the newly persisted error SHALL use a fixed task or operation summary, SHALL preserve error-code-based retry classification, and SHALL NOT contain the downstream message, unknown job type, exception text, SQL, connection detail, endpoint, object locator, payload value, or credential
+- **AND** each exception catch-path event SHALL use its fixed failure summary and existing typed correlation and SHALL NOT contain the downstream message or exception text
+
 #### Scenario: Worker correlates staging cleanup to an upload
 - **WHEN** a claimed `staging_cleanup` job has a valid cleanup payload whose non-empty upload ID exactly matches its aggregate ID
 - **THEN** job-level Worker events SHALL carry that value as the upload ID, while malformed staging jobs and every other job type SHALL keep the job-level upload ID null; an expiration lifecycle event MAY add an upload ID and state version only from the actual successful upload-task transition

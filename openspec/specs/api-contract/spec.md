@@ -36,6 +36,10 @@ The system SHALL expose stable business error codes for common, authentication, 
 - **WHEN** an S3 SDK failure is converted to an API or durable-job domain error
 - **THEN** the error SHALL contain only its business code and bounded fixed operation message and SHALL NOT expose provider error codes or messages, endpoints, buckets, object keys, multipart identifiers, signatures, or credentials
 
+#### Scenario: Durable Worker errors are bounded summaries
+- **WHEN** the current Worker persists a new retry or dead-letter error that originated from task validation, a dependency result, or an exception
+- **THEN** `last_error` SHALL contain only a fixed task-contract, configuration, state, or operation summary and SHALL NOT copy a downstream domain message, unknown job type, exception text, SQL, connection detail, endpoint, object locator, payload value, or credential
+
 ### Requirement: Pagination Envelope
 The system SHALL return paginated collection results with item data and pagination metadata.
 

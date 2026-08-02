@@ -318,9 +318,8 @@ namespace disk::jobs {
             }
             try {
                 transaction->rollback();
-            } catch (const std::exception& error) {
-                Logger::Warn(log_context)
-                    << "Blob GC transaction rollback failed: " << error.what();
+            } catch (const std::exception&) {
+                Logger::Warn(log_context) << "Blob GC transaction rollback failed";
             }
         }
 
@@ -429,7 +428,7 @@ namespace disk::jobs {
         -> drogon::Task<JobExecutionResult> {
         const auto handler = m_handlers.find(job.job_type);
         if (handler == m_handlers.end()) {
-            co_return PermanentFailure("Unsupported storage job type: " + job.job_type);
+            co_return PermanentFailure("Unsupported storage job type");
         }
         co_return co_await (this->*(handler->second))(job);
     }
@@ -458,7 +457,7 @@ namespace disk::jobs {
         co_return JobExecutionResult{
             .succeeded = false,
             .retryable = retryable,
-            .error = error.message.empty() ? "staging_cleanup failed with code " + std::to_string(error.CodeInt()) : error.message,
+            .error = "staging_cleanup failed",
         };
     }
 
@@ -487,7 +486,7 @@ namespace disk::jobs {
         co_return JobExecutionResult{
             .succeeded = false,
             .retryable = retryable,
-            .error = error.message.empty() ? "multipart_abort failed" : error.message,
+            .error = "multipart_abort failed",
         };
     }
 
@@ -571,7 +570,7 @@ namespace disk::jobs {
                 co_return JobExecutionResult{
                     .succeeded = false,
                     .retryable = retryable,
-                    .error = error.message.empty() ? "blob_gc storage deletion failed" : error.message,
+                    .error = "blob_gc storage deletion failed",
                 };
             }
 
@@ -591,12 +590,12 @@ namespace disk::jobs {
             }
 
             co_return co_await complete_transaction();
-        } catch (const drogon::orm::DrogonDbException& error) {
+        } catch (const drogon::orm::DrogonDbException&) {
             RollbackQuietly(transaction, log_context);
-            co_return RetryableFailure(std::string("blob_gc database failure: ") + error.base().what());
-        } catch (const std::exception& error) {
+            co_return RetryableFailure("blob_gc database failure");
+        } catch (const std::exception&) {
             RollbackQuietly(transaction, log_context);
-            co_return RetryableFailure(std::string("blob_gc handler failure: ") + error.what());
+            co_return RetryableFailure("blob_gc handler failure");
         }
     }
 
@@ -637,7 +636,7 @@ namespace disk::jobs {
             co_return JobExecutionResult{
                 .succeeded = false,
                 .retryable = retryable,
-                .error = error.message.empty() ? "expire_uploads failed" : error.message,
+                .error = "expire_uploads failed",
             };
         }
 
@@ -700,7 +699,7 @@ namespace disk::jobs {
             co_return JobExecutionResult{
                 .succeeded = false,
                 .retryable = retryable,
-                .error = error.message.empty() ? "expire_trash failed" : error.message,
+                .error = "expire_trash failed",
             };
         }
 
@@ -766,7 +765,7 @@ namespace disk::jobs {
             co_return JobExecutionResult{
                 .succeeded = false,
                 .retryable = retryable,
-                .error = error.message.empty() ? "storage_reconcile failed" : error.message,
+                .error = "storage_reconcile failed",
             };
         }
 
@@ -817,10 +816,10 @@ namespace disk::jobs {
                     << ", instance_id=" << m_instance_id;
                 co_return PersistDisposition::OwnershipLost;
             }
-        } catch (const std::exception& error) {
+        } catch (const std::exception&) {
             Logger::Warn(log_context)
                 << "Storage job lease preflight failed: job_id=" << job.id
-                << ", instance_id=" << m_instance_id << ", error=" << error.what();
+                << ", instance_id=" << m_instance_id;
             co_return PersistDisposition::OwnershipLost;
         }
 
@@ -859,11 +858,10 @@ namespace disk::jobs {
                                     heartbeat_state->ownership_lost.store(true);
                                     heartbeat_state->active.store(false);
                                 }
-                            } catch (const std::exception& error) {
+                            } catch (const std::exception&) {
                                 Logger::Warn(heartbeat_log_context)
                                     << "Storage job lease heartbeat failed: job_id="
-                                    << job_id << ", instance_id=" << instance_id
-                                    << ", error=" << error.what();
+                                    << job_id << ", instance_id=" << instance_id;
                             }
                             heartbeat_state->renewal_inflight.store(false);
                         }
@@ -875,8 +873,8 @@ namespace disk::jobs {
         JobExecutionResult execution;
         try {
             execution = co_await ExecuteJob(job);
-        } catch (const std::exception& error) {
-            execution = RetryableFailure(std::string("Storage job handler threw: ") + error.what());
+        } catch (const std::exception&) {
+            execution = RetryableFailure("Storage job handler failed");
         }
 
         heartbeat_state->active.store(false);
@@ -913,10 +911,10 @@ namespace disk::jobs {
                 co_return PersistDisposition::OwnershipLost;
             }
             co_return persisted.value() == StorageJobStatus::Retry ? PersistDisposition::Retried : PersistDisposition::DeadLettered;
-        } catch (const std::exception& error) {
+        } catch (const std::exception&) {
             Logger::Warn(log_context)
                 << "Storage job result persistence failed: job_id=" << job.id
-                << ", instance_id=" << m_instance_id << ", error=" << error.what();
+                << ", instance_id=" << m_instance_id;
             co_return PersistDisposition::OwnershipLost;
         }
     }
@@ -930,12 +928,11 @@ namespace disk::jobs {
                 m_options.batch_size,
                 m_options.lease_duration_seconds
             );
-        } catch (const std::exception& error) {
+        } catch (const std::exception&) {
             disk::utils::LogContext log_context;
             log_context.operation = "storage_job_claim";
             Logger::Error(log_context)
-                << "Storage job claim failed: instance_id=" << m_instance_id
-                << ", error=" << error.what();
+                << "Storage job claim failed: instance_id=" << m_instance_id;
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to claim storage jobs")
             );

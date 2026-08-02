@@ -1,9 +1,12 @@
 #include "services/StorageJobWorker.hpp"
 
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -18,6 +21,27 @@
 
 namespace disk::jobs {
     namespace {
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
+        }
+
         class ScopedLogCapture {
         public:
             ScopedLogCapture()
@@ -312,16 +336,24 @@ namespace disk::jobs {
         TEST(StorageJobWorkerHandlerTest, ClassifiesStorageErrors) {
             RecordingStagingStorage storage;
             StorageJobWorker worker(nullptr, &storage, nullptr, "worker-1");
-            storage.cleanup_error = ErrorInfo(ErrorCode::InternalError, "temporary outage");
+            storage.cleanup_error = ErrorInfo(
+                ErrorCode::InternalError,
+                "postgresql://worker:secret@internal:5432/disk"
+            );
 
             auto retryable = drogon::sync_wait(worker.ExecuteJob(MakeCleanupJob()));
             EXPECT_FALSE(retryable.succeeded);
             EXPECT_TRUE(retryable.retryable);
+            EXPECT_EQ(retryable.error, "staging_cleanup failed");
 
-            storage.cleanup_error = ErrorInfo(ErrorCode::ValidationFailed, "unsafe prefix");
+            storage.cleanup_error = ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "s3://private-bucket/staging/upload-123"
+            );
             auto permanent = drogon::sync_wait(worker.ExecuteJob(MakeCleanupJob()));
             EXPECT_FALSE(permanent.succeeded);
             EXPECT_FALSE(permanent.retryable);
+            EXPECT_EQ(permanent.error, "staging_cleanup failed");
         }
 
         TEST(StorageJobWorkerHandlerTest, UnknownTypesArePermanentFailures) {
@@ -335,6 +367,7 @@ namespace disk::jobs {
             EXPECT_FALSE(result.succeeded);
             EXPECT_FALSE(result.retryable);
             EXPECT_TRUE(storage.cleaned_sessions.empty());
+            EXPECT_EQ(result.error, "Unsupported storage job type");
         }
 
         TEST(StorageJobWorkerHandlerTest, RejectsMalformedBlobGcBeforeStorageAccess) {
@@ -393,15 +426,53 @@ namespace disk::jobs {
             RecordingMultipartUploadCleaner cleaner;
             StorageJobWorker worker(nullptr, nullptr, nullptr, "worker-1", {}, &cleaner);
 
-            cleaner.error = ErrorInfo(ErrorCode::InternalError, "temporary outage");
+            cleaner.error = ErrorInfo(
+                ErrorCode::InternalError,
+                "AccessDenied: secret-key at https://s3.internal"
+            );
             auto retryable = drogon::sync_wait(worker.ExecuteJob(MakeMultipartAbortJob()));
             EXPECT_FALSE(retryable.succeeded);
             EXPECT_TRUE(retryable.retryable);
+            EXPECT_EQ(retryable.error, "multipart_abort failed");
 
-            cleaner.error = ErrorInfo(ErrorCode::ValidationFailed, "unsafe key");
+            cleaner.error = ErrorInfo(
+                ErrorCode::ValidationFailed,
+                "staging/upload-123/assembled/private.bin"
+            );
             auto permanent = drogon::sync_wait(worker.ExecuteJob(MakeMultipartAbortJob()));
             EXPECT_FALSE(permanent.succeeded);
             EXPECT_FALSE(permanent.retryable);
+            EXPECT_EQ(permanent.error, "multipart_abort failed");
+        }
+
+        TEST(StorageJobWorkerErrorContractTest, DependencyDiagnosticsDoNotReachPersistedErrors) {
+            const auto source = ReadSourceFile("src/services/StorageJobWorker.cpp");
+
+            ASSERT_FALSE(source.empty());
+            EXPECT_EQ(CountOccurrences(source, "error.message"), 0U);
+            EXPECT_EQ(CountOccurrences(source, "error.CodeInt()"), 0U);
+            EXPECT_EQ(CountOccurrences(source, ".what()"), 0U);
+            EXPECT_EQ(
+                source.find(
+                    "PermanentFailure(\"Unsupported storage job type: \" + job.job_type)"
+                ),
+                std::string::npos
+            );
+            for (const auto summary : {
+                     "Unsupported storage job type",
+                     "staging_cleanup failed",
+                     "multipart_abort failed",
+                     "blob_gc storage deletion failed",
+                     "blob_gc database failure",
+                     "blob_gc handler failure",
+                     "expire_uploads failed",
+                     "expire_trash failed",
+                     "storage_reconcile failed",
+                     "Storage job handler failed",
+                 }) {
+                EXPECT_NE(source.find(summary), std::string::npos) << summary;
+            }
+            EXPECT_NE(source.find("execution.error,"), std::string::npos);
         }
 
         TEST(StorageJobWorkerHandlerTest, DispatchesExpireUploadsThroughRegistry) {

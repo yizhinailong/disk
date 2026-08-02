@@ -4292,6 +4292,8 @@ created_at  TIMESTAMP        -- 操作时间
 
 响应 `data.items[]` 包含 `id/job_type/aggregate_id/dedupe_key/status/attempts/max_attempts/available_at/locked_by/locked_until/last_error/created_at/updated_at/completed_at`，并返回标准 `pagination`。列表不返回 `payload`。
 
+当前 Worker 新写入的 `last_error` 只允许任务合同的固定校验文本、固定配置/状态摘要或固定任务操作失败摘要，不复制下游领域消息、数据库/标准异常正文，也不回显未知任务类型、SQL、连接信息、endpoint、对象定位符、payload 值或凭据。该字段仍用于区分失败阶段，临时/永久分类由内部错误码决定而不编码进自由文本；本合同不追溯改写升级前已存在的历史行。
+
 **GET** `/api/admin/storage-jobs/{id}`
 
 返回上述字段及 `payload`。ID 必须是正整数；任务不存在返回 HTTP 404 / `10003 ResourceNotFound`。
