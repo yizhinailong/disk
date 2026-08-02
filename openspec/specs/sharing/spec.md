@@ -24,6 +24,11 @@ The system SHALL use an external share identifier for API paths and responses in
 - **WHEN** the system returns share information through public or owner APIs
 - **THEN** the response SHALL identify the share using the external share identifier
 
+#### Scenario: Share identifier is generated
+- **WHEN** the system creates an external share identifier
+- **THEN** it SHALL use libsodium's cryptographically secure uniform random source to select exactly eight characters from the existing ASCII alphanumeric alphabet
+- **AND** the identifier format, database uniqueness constraint, API fields, links, and client handling SHALL remain unchanged
+
 ### Requirement: Owner Share Management
 The system SHALL allow share owners to list, inspect, update, and cancel their own shares, and clients SHALL authenticate owner share management requests with the owner's bearer access token.
 

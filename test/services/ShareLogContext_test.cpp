@@ -96,6 +96,15 @@ namespace disk::share {
                 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
             ));
             EXPECT_TRUE(Contains(service_source, "constexpr int code_length = 8"));
+            EXPECT_FALSE(Contains(service_source, "#include <random>"));
+            EXPECT_FALSE(Contains(service_source, "std::random_device"));
+            EXPECT_FALSE(Contains(service_source, "std::mt19937"));
+            EXPECT_FALSE(Contains(service_source, "std::uniform_int_distribution"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "randombytes_uniform(static_cast<uint32_t>(chars.size()))"
+            ));
+            EXPECT_EQ(CountOccurrences(service_source, "randombytes_uniform("), 1U);
             EXPECT_TRUE(Contains(service_source, "if (status == \"all\")"));
             EXPECT_TRUE(Contains(service_source, "if (status == \"active\")"));
             EXPECT_TRUE(Contains(service_source, "if (status == \"expired\")"));

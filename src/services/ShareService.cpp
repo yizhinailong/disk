@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <random>
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
@@ -52,19 +51,16 @@ namespace disk::share {
             "Too many password verification attempts, please try again later";
 
         [[nodiscard]] auto GenerateShareCode() -> std::string {
-            constexpr const char* chars =
+            constexpr std::string_view chars =
                 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             constexpr int code_length = 8;
-
-            std::random_device rd;
-            std::mt19937 gen(rd());
-            std::uniform_int_distribution<> dis(0, static_cast<int>(strlen(chars)) - 1);
 
             std::string code;
             code.reserve(code_length);
 
             for (int i = 0; i < code_length; ++i) {
-                code += chars[dis(gen)];
+                const auto index = randombytes_uniform(static_cast<uint32_t>(chars.size()));
+                code += chars[index];
             }
 
             return code;
