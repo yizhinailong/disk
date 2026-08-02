@@ -909,6 +909,8 @@ Content-Type: application/octet-stream
 - `uploaded_chunks` 和完成覆盖判断只以 PostgreSQL `upload_task_chunks` 为准，不以对象列表或进程内缓存为准。
 - `expires_at` 在创建任务时由 PostgreSQL `NOW() + TTL` 生成；分片、取消、断点续传和过期转换均以数据库 `NOW()` 判断，不得用 API 进程本地时区解析 `TIMESTAMP` 后授予或拒绝写权限。
 
+`UploadService` 记录分片元数据的数据库异常只允许日志摘要 `Failed to record chunk upload`，读取持久 staging 会话的标准异常只允许日志摘要 `Failed to load upload staging session`。两者均只保留调用方既有类型化上下文，不拼接 upload ID、用户 ID、异常正文、SQL、连接信息、对象定位符或凭据；继续返回既有 `InternalError` 与同名公开消息，不改变 staging 对象写入、PostgreSQL 条件记录、重试复用、孤儿清理或响应状态。
+
 #### 响应示例
 
 ```json

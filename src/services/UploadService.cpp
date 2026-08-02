@@ -379,8 +379,8 @@ namespace disk::file {
 
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to record chunk upload: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to record chunk upload";
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =
@@ -531,10 +531,8 @@ namespace disk::file {
                 co_return std::unexpected(ErrorInfo(ErrorCode::UploadTaskNotFound));
             }
             co_return std::move(session.value());
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Failed to load upload staging session: upload_id=" << upload_id
-                << ", error=" << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Failed to load upload staging session";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to load upload staging session")
             );

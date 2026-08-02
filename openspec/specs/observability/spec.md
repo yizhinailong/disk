@@ -853,6 +853,11 @@ The system SHALL apply an outcome-based logging policy to upload-chunk traffic s
 - **WHEN** an upload-chunk request fails validation, storage, or persistence while the application logger is running at `INFO`
 - **THEN** the failure SHALL be emitted at `INFO` or a higher severity without probabilistic sampling
 
+#### Scenario: Upload service dependency handling fails
+- **WHEN** `UploadService` catches a database exception while recording chunk metadata or a standard exception while loading the persisted staging session
+- **THEN** its directly owned event SHALL use only the corresponding fixed complete `Failed to record chunk upload` or `Failed to load upload staging session` summary with the caller's existing typed correlation and SHALL NOT append upload or user identifiers, exception text, SQL, connection details, object locators, credentials, or tokens
+- **AND** the path SHALL retain its existing `InternalError`, public message, staging-write, conditional-record, cache, metric, retry, and cleanup semantics
+
 #### Scenario: Temporary chunk debugging is enabled
 - **WHEN** an operator temporarily lowers an isolated API instance to `DEBUG`
 - **THEN** successful chunk details MAY be emitted only for the bounded diagnostic window and SHALL continue to exclude credentials and file content

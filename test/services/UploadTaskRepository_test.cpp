@@ -229,6 +229,34 @@ namespace disk::file {
             ));
         }
 
+        TEST(UploadServiceDependencyErrorContractTest, FixedMessagesExcludeExceptionDetails) {
+            const auto service_source = ReadSourceFile("src/services/UploadService.cpp");
+
+            EXPECT_EQ(CountOccurrences(service_source, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    service_source,
+                    "Logger::Error(log_context) << \"Failed to record chunk upload\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    service_source,
+                    "Logger::Error(log_context) << \"Failed to load upload staging session\";"
+                ),
+                1U
+            );
+            EXPECT_TRUE(Contains(
+                service_source,
+                "ErrorInfo(ErrorCode::InternalError, \"Failed to record chunk upload\")"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "ErrorInfo(ErrorCode::InternalError, \"Failed to load upload staging session\")"
+            ));
+        }
+
         TEST(UploadTaskRepositoryStagingContractTest, BackendStorageValuesRoundTrip) {
             EXPECT_EQ(
                 disk::storage::ToStorageValue(disk::storage::UploadStagingBackend::Local),
