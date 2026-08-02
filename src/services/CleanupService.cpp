@@ -110,15 +110,13 @@ namespace disk::services {
                 << "Upload task cleanup completed: cleaned_count=" << cleaned_count;
             co_return cleaned_count;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Database error cleaning expired upload tasks: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Database error cleaning expired upload tasks";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to clean expired upload tasks")
             );
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Unknown error cleaning expired upload tasks: " << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Unexpected error cleaning expired upload tasks";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to clean expired upload tasks")
             );

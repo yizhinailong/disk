@@ -2,6 +2,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -11,6 +16,31 @@
 
 namespace disk::services {
     namespace {
+
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto Contains(const std::string& source, std::string_view expected) -> bool {
+            return source.find(expected) != std::string::npos;
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
+        }
 
         template <typename Utility>
         concept HasBatchInputValidator = requires(const std::vector<uint64_t>& items) {
@@ -40,6 +70,22 @@ namespace disk::services {
         TEST(CleanupServiceCompileTest, CanConstructWithNullDbClient) {
             CleanupService service(nullptr);
             SUCCEED();
+        }
+
+        TEST(CleanupServiceLogContractTest, DependencyFailuresUseFixedSummaries) {
+            const auto source = ReadSourceFile("src/services/CleanupService.cpp");
+
+            ASSERT_FALSE(source.empty());
+            EXPECT_EQ(CountOccurrences(source, ".what()"), 0U);
+            EXPECT_TRUE(Contains(
+                source,
+                "Logger::Error(log_context) << \"Database error cleaning expired upload tasks\";"
+            ));
+            EXPECT_TRUE(Contains(
+                source,
+                "Logger::Error(log_context) << \"Unexpected error cleaning expired upload tasks\";"
+            ));
+            EXPECT_EQ(CountOccurrences(source, "Failed to clean expired upload tasks"), 2U);
         }
 
         TEST(CleanupServiceBuildSafeNumericInClauseTest, EmptyVectorReturnsEmptyString) {

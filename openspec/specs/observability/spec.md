@@ -897,6 +897,11 @@ The system SHALL expose Worker claiming configuration and current acceptance sta
 - **WHEN** scheduled maintenance executes
 - **THEN** the system SHALL process expired upload or trash state according to the relevant lifecycle rules
 
+#### Scenario: Manual expired-upload cleanup fails
+- **WHEN** manual expired-upload cleanup encounters a database or standard processing exception
+- **THEN** its directly owned event SHALL use the matching fixed complete failure summary and SHALL NOT append exception text, SQL, connection details, object locators, credentials, or tokens
+- **AND** the operation SHALL return the existing internal-error contract without changing trash-first composition, the bounded upload batch, lifecycle work, counters, or correlation
+
 #### Scenario: Worker observes without claiming
 - **WHEN** a Worker starts with job claiming disabled and its required dependencies are healthy
 - **THEN** readiness SHALL succeed, health SHALL report claiming disabled and accepting false, queue snapshot collection SHALL continue, and claiming/acceptance gauges SHALL both be zero
