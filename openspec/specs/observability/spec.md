@@ -708,6 +708,11 @@ The system SHALL derive durable Worker correlation only from claimed PostgreSQL 
 - **THEN** the newly persisted error SHALL use a fixed task or operation summary, SHALL preserve error-code-based retry classification, and SHALL NOT contain the downstream message, unknown job type, exception text, SQL, connection detail, endpoint, object locator, payload value, or credential
 - **AND** each exception catch-path event SHALL use its fixed failure summary and existing typed correlation and SHALL NOT contain the downstream message or exception text
 
+#### Scenario: Reconciliation page processing fails
+- **WHEN** `StorageReconciliationService` catches a database or standard exception while processing a validated reconciliation page
+- **THEN** it SHALL log only the fixed complete `Storage reconciliation database failure` or `Storage reconciliation failed` event and SHALL NOT append scope, scan ID, exception text, SQL, connection details, object locators, credentials, or tokens to the message
+- **AND** the caller-owned durable-job context, existing `InternalError` mapping, pagination, finding persistence, repair enqueueing, and retry behavior SHALL remain unchanged
+
 #### Scenario: Worker correlates staging cleanup to an upload
 - **WHEN** a claimed `staging_cleanup` job has a valid cleanup payload whose non-empty upload ID exactly matches its aggregate ID
 - **THEN** job-level Worker events SHALL carry that value as the upload ID, while malformed staging jobs and every other job type SHALL keep the job-level upload ID null; an expiration lifecycle event MAY add an upload ID and state version only from the actual successful upload-task transition

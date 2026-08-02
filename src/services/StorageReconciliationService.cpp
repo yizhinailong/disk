@@ -144,18 +144,13 @@ namespace disk::reconciliation {
                 case ReconciliationScope::Final:
                     co_return co_await RunObjectPage(request, log_context);
             }
-        } catch (const drogon::orm::DrogonDbException& error) {
-            Logger::Warn(log_context)
-                << "Storage reconciliation database failure: scope="
-                << ToStorageValue(request.scope) << ", scan_id=" << request.scan_id
-                << ", error=" << error.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "Storage reconciliation database failure";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Storage reconciliation database failure")
             );
-        } catch (const std::exception& error) {
-            Logger::Warn(log_context)
-                << "Storage reconciliation failure: scope=" << ToStorageValue(request.scope)
-                << ", scan_id=" << request.scan_id << ", error=" << error.what();
+        } catch (const std::exception&) {
+            Logger::Warn(log_context) << "Storage reconciliation failed";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Storage reconciliation failed")
             );

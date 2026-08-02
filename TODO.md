@@ -2617,6 +2617,14 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 旧实现上的定向合同按预期为 0/1，共 3 个失败断言：服务源码精确检出 2 处 `.what()`，两个固定完整消息均缺失；两个既有公开错误消息断言通过。实现后定向合同 1/1、存储任务管理源码合同/DTO/真实操作流/分布式拓扑聚焦 CTest 13/13（4.18 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1497 项：1490 项通过、7 项按环境门控跳过、0 失败，总耗时 545.33 秒。源码审计确认 `StorageJobAdminService.cpp` 中 `.what()` 为 0，两个固定服务消息与两个公开错误消息均各精确出现 1 次。该批不改变查询、分页、类型化关联、错误映射、重放事务或审计，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.162 StorageReconciliationService 分页异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统一存储对账分页异常合同。数据库异常与其他标准异常 catch 分别只允许固定完整消息 `Storage reconciliation database failure` 和 `Storage reconciliation failed`；scope、scan ID、异常正文、SQL、连接信息、对象定位符、凭据和 token 不得进入日志消息。
+
+已认领任务的 `job_id`、`lease_owner` 与固定 operation 继续仅由调用方类型化上下文承载。既有 `InternalError` 公开消息、四类 scope、游标分页、finding 持久化/消解、Blob GC 修复入队和 Worker 重试行为保持不变。
+
+旧实现上的定向合同按预期为 0/1，共 3 个失败断言：服务源码精确检出 2 处 `.what()`，两个固定完整消息均缺失；两个既有公开错误映射断言通过。实现后定向合同 1/1、对账/Worker/真实任务失败持久化/配额安全/分布式拓扑聚焦 CTest 30/30（33.98 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 555.27 秒。源码审计确认 `StorageReconciliationService.cpp` 中 `.what()` 为 0，两个固定服务消息与两个公开错误消息均各精确出现 1 次。该批不改变类型化关联、错误映射、分页、finding、修复入队或 Worker 重试，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

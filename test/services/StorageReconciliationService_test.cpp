@@ -1,11 +1,36 @@
 #include "services/StorageReconciliationService.hpp"
 
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
+#include <string_view>
 
 #include <gtest/gtest.h>
 
 namespace disk::reconciliation {
     namespace {
+        auto RepositoryRoot() -> std::filesystem::path {
+            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        }
+
+        auto ReadSourceFile(const std::filesystem::path& relative_path) -> std::string {
+            std::ifstream input(RepositoryRoot() / relative_path);
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            return buffer.str();
+        }
+
+        auto CountOccurrences(const std::string& source, std::string_view expected) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
+        }
+
         TEST(StorageReconciliationContractTest, ParsesAllStableScopes) {
             EXPECT_EQ(ParseReconciliationScope("contents"), ReconciliationScope::Contents);
             EXPECT_EQ(ParseReconciliationScope("users"), ReconciliationScope::Users);
@@ -56,6 +81,42 @@ namespace disk::reconciliation {
             EXPECT_FALSE(ShouldEnqueueBlobGc(1, 0));
             EXPECT_FALSE(ShouldEnqueueBlobGc(0, 1));
             EXPECT_FALSE(ShouldEnqueueBlobGc(-1, 0));
+        }
+
+        TEST(StorageReconciliationContractTest, FailureLogsAreFixedAndRedacted) {
+            const auto source =
+                ReadSourceFile("src/services/StorageReconciliationService.cpp");
+
+            ASSERT_FALSE(source.empty());
+            EXPECT_EQ(CountOccurrences(source, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "Logger::Warn(log_context) << \"Storage reconciliation database failure\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "Logger::Warn(log_context) << \"Storage reconciliation failed\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "ErrorInfo(ErrorCode::InternalError, \"Storage reconciliation database failure\")"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "ErrorInfo(ErrorCode::InternalError, \"Storage reconciliation failed\")"
+                ),
+                1U
+            );
         }
     } // namespace
 } // namespace disk::reconciliation
