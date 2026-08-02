@@ -111,6 +111,18 @@ namespace disk::folder {
             );
             EXPECT_FALSE(Contains(dto_source, "static const char forbidden_chars[]"));
             EXPECT_EQ(
+                CountOccurrences(
+                    dto_source,
+                    "folder_dto_detail::TrimAsciiSpaces("
+                ),
+                2U
+            );
+            EXPECT_EQ(CountOccurrences(dto_source, "inline auto TrimAsciiSpaces("), 1U);
+            EXPECT_EQ(CountOccurrences(dto_source, "find_first_not_of(' ')"), 1U);
+            EXPECT_EQ(CountOccurrences(dto_source, "find_last_not_of(' ')"), 1U);
+            EXPECT_FALSE(Contains(dto_source, "auto TrimName() -> void"));
+            EXPECT_FALSE(Contains(dto_source, "#include <algorithm>"));
+            EXPECT_EQ(
                 CountOccurrences(service_body, "disk::utils::LogContext log_context"),
                 5
             );

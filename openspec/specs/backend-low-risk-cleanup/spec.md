@@ -238,6 +238,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** file upload, file rename, folder creation, and folder rename duplicate the same forbidden-character loop while `NameValidation` already provides the identical cross-platform predicate
 - **THEN** all four DTO validators SHALL reuse that shared predicate and source contracts SHALL lock the production call sites while validation order, public errors, reserved-name rules, hidden-name rules, and UTF-8 handling remain unchanged
 
+#### Scenario: Folder requests share ASCII-space trimming
+
+- **WHEN** folder creation and folder rename maintain equivalent private methods that trim only leading and trailing ASCII spaces
+- **THEN** both request parsers SHALL use one `FolderDto` detail helper and the duplicate methods SHALL be removed, while U+0020 trimming and all-space handling remain unchanged and tabs, newlines, and other control characters continue through forbidden-character validation instead of being trimmed as general whitespace
+
 #### Scenario: File extension extraction is shared by active-file writers
 
 - **WHEN** upload finalization and file rename use identical last-dot extension extraction while both implementations already depend on `FileServiceUtils`

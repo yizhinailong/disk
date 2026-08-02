@@ -304,6 +304,14 @@ TEST(CreateFolderRequest, CreateFolderRequestWhitespaceOnly) {
     }
 }
 
+TEST(CreateFolderRequest, CreateFolderRequestDoesNotTrimTabs) {
+    auto req = CreateCreateFolderRequest(" \ttest\t ");
+    auto result = CreateFolderRequest::FromRequest(req);
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
+}
+
 /// 其他边界情况
 
 TEST(CreateFolderRequest, CreateFolderRequestMissingName) {
@@ -622,6 +630,30 @@ TEST(RenameFolderRequest, ValidRequest) {
     ASSERT_TRUE(result.has_value()) << "Valid rename folder request should pass";
     EXPECT_EQ(result->folder_id, 123);
     EXPECT_EQ(result->new_name, "Renamed");
+}
+
+TEST(RenameFolderRequest, TrimsSurroundingSpaces) {
+    auto req = CreateRenameFolderRequest("  Renamed  ");
+    auto result = RenameFolderRequest::FromPathAndRequest("123", req);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->new_name, "Renamed");
+}
+
+TEST(RenameFolderRequest, RejectsAllSpacesAfterTrim) {
+    auto req = CreateRenameFolderRequest("   ");
+    auto result = RenameFolderRequest::FromPathAndRequest("123", req);
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::ValidationFailed);
+}
+
+TEST(RenameFolderRequest, DoesNotTrimTabs) {
+    auto req = CreateRenameFolderRequest(" \tRenamed\t ");
+    auto result = RenameFolderRequest::FromPathAndRequest("123", req);
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ErrorCode::InvalidFilename);
 }
 
 TEST(RenameFolderRequest, InvalidFolderId) {

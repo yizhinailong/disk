@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <drogon/HttpRequest.h>
@@ -34,6 +34,17 @@
 #include "utils/NameValidation.hpp"
 
 namespace disk::folder {
+
+    namespace folder_dto_detail {
+        [[nodiscard]] inline auto TrimAsciiSpaces(std::string value) -> std::string {
+            const auto start = value.find_first_not_of(' ');
+            if (start == std::string::npos) {
+                return {};
+            }
+            const auto end = value.find_last_not_of(' ');
+            return value.substr(start, end - start + 1);
+        }
+    } // namespace folder_dto_detail
 
     /// ==================== Request DTOs ====================
 
@@ -84,7 +95,7 @@ namespace disk::folder {
             }
 
             /// 规则 6：去除首尾空格
-            request.TrimName();
+            request.name = folder_dto_detail::TrimAsciiSpaces(std::move(request.name));
 
             Logger::Debug(log_context) << "Parsed create folder request: name=\"" << request.name
                                        << "\", parent_id=" << request.parent_id;
@@ -139,18 +150,6 @@ namespace disk::folder {
         }
 
     private:
-        /// 去除首尾空格
-        auto TrimName() -> void {
-            /// 去除首尾空格
-            auto start = name.find_first_not_of(' ');
-            if (start == std::string::npos) {
-                name.clear();
-                return;
-            }
-            auto end = name.find_last_not_of(' ');
-            name = name.substr(start, end - start + 1);
-        }
-
         /// 验证长度 (1-255 字符)
         [[nodiscard]]
         auto ValidateLength() const -> bool {
@@ -238,7 +237,7 @@ namespace disk::folder {
             RenameFolderRequest request;
             request.folder_id = folder_id;
             request.new_name = std::move(*new_name_result);
-            request.TrimName();
+            request.new_name = folder_dto_detail::TrimAsciiSpaces(std::move(request.new_name));
 
             if (!request.ValidateLength()) {
                 return std::unexpected(ErrorInfo(
@@ -274,16 +273,6 @@ namespace disk::folder {
         }
 
     private:
-        auto TrimName() -> void {
-            auto start = new_name.find_first_not_of(' ');
-            if (start == std::string::npos) {
-                new_name.clear();
-                return;
-            }
-            auto end = new_name.find_last_not_of(' ');
-            new_name = new_name.substr(start, end - start + 1);
-        }
-
         [[nodiscard]] auto ValidateLength() const -> bool {
             return new_name.length() >= 1 && new_name.length() <= 255;
         }
