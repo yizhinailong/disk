@@ -2625,6 +2625,14 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 旧实现上的定向合同按预期为 0/1，共 3 个失败断言：服务源码精确检出 2 处 `.what()`，两个固定完整消息均缺失；两个既有公开错误映射断言通过。实现后定向合同 1/1、对账/Worker/真实任务失败持久化/配额安全/分布式拓扑聚焦 CTest 30/30（33.98 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 555.27 秒。源码审计确认 `StorageReconciliationService.cpp` 中 `.what()` 为 0，两个固定服务消息与两个公开错误消息均各精确出现 1 次。该批不改变类型化关联、错误映射、分页、finding、修复入队或 Worker 重试，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.163 ScheduledTasks 计划构建错误脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统一周期计划构建错误合同。`BuildPeriodicSeedPlan` 捕获标准异常后只允许返回固定完整错误 `Failed to build periodic storage job plan`，不得把 `std::exception::what()` 或运行库诊断放入 `expected` 错误值。
+
+`SeedOnce` 继续把计划失败映射为既有 `InternalError` 与 `Failed to build periodic storage jobs`，外层周期失败日志保持固定。UTC 小时/日 scan ID、六个首页任务、payload、去重键、首次立即播种、60 秒周期、Worker 角色归属和排空语义保持不变。
+
+旧实现上的定向合同按预期为 0/1，共 2 个失败断言：源码精确检出 1 处 `.what()`，固定计划错误返回缺失；既有 `SeedOnce` 错误映射断言通过。实现后定向合同 1/1、周期计划/真实角色切换/任务队列/Worker drain/分布式拓扑聚焦 CTest 9/9（35.74 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 559.27 秒。源码审计确认 `ScheduledTasks.cpp` 中 `.what()` 为 0，固定计划错误与既有 `SeedOnce` 错误映射各精确出现 1 次。该批不改变 UTC 窗口、计划内容、错误映射、播种、去重、角色归属或排空行为，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

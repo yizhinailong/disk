@@ -736,6 +736,7 @@ The system SHALL derive durable Worker correlation only from claimed PostgreSQL 
 #### Scenario: Periodic job seeding fails
 - **WHEN** periodic plan construction, repository enqueueing, or the seed cycle returns a failure or throws an exception
 - **THEN** the scheduler SHALL emit a fixed failure event with `storage_job_seed` correlation and SHALL NOT record the domain error message, exception text, database details, endpoint, credentials, or identifiers inferred from message text
+- **AND** the plan builder SHALL normalize caught standard exceptions to the fixed complete `Failed to build periodic storage job plan` error value, while `SeedOnce` SHALL preserve its existing `Failed to build periodic storage jobs` mapping
 
 ### Requirement: Typed Process Drain Correlation
 The system SHALL correlate process drain lifecycle events without assigning them to an HTTP request or an individual durable job.

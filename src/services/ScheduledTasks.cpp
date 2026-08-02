@@ -132,8 +132,8 @@ namespace disk::services {
                 }
             }
             return plan;
-        } catch (const std::exception& error) {
-            return std::unexpected(error.what());
+        } catch (const std::exception&) {
+            return std::unexpected("Failed to build periodic storage job plan");
         }
     }
 

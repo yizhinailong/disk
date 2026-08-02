@@ -87,6 +87,18 @@ namespace disk::services {
             ASSERT_NE(runtime_begin, std::string::npos);
             const auto runtime_source = source.substr(runtime_begin);
 
+            EXPECT_EQ(CountOccurrences(source, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "return std::unexpected(\"Failed to build periodic storage job plan\");"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(source, "\"Failed to build periodic storage jobs\""),
+                1U
+            );
             EXPECT_EQ(
                 CountOccurrences(runtime_source, "Logger::Info(utils::LogContext"),
                 3U
