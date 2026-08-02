@@ -6,7 +6,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
@@ -141,7 +140,7 @@ namespace disk::admin {
                     return std::unexpected(reason.error());
                 }
                 if (reason->has_value()) {
-                    result.reason = Trim(reason->value());
+                    result.reason = TrimWhitespace(reason->value());
                     if (result.reason.size() > 256) {
                         return std::unexpected(ErrorInfo(
                             ErrorCode::ValidationFailed,
@@ -182,18 +181,6 @@ namespace disk::admin {
             static auto RequiredText(const Json::Value& json, const char* field)
                 -> Result<std::string> {
                 return RequireString(json, field);
-            }
-
-        private:
-            [[nodiscard]]
-            static auto Trim(std::string value) -> std::string {
-                const auto is_space = [](unsigned char character) {
-                    return std::isspace(character) != 0;
-                };
-                const auto first = std::ranges::find_if_not(value, is_space);
-                const auto last =
-                    std::ranges::find_if_not(value.rbegin(), value.rend(), is_space).base();
-                return first >= last ? std::string{} : std::string(first, last);
             }
         };
     } // namespace recovery_dto_detail

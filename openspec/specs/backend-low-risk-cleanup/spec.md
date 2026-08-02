@@ -228,6 +228,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site audit confirms that `DtoBase::RequireBool` and `DtoBase::OptionalInt` are called only by `DtoBase_test.cpp` while every production request DTO uses the remaining typed helpers
 - **THEN** the two unused helpers and their dedicated assertions SHALL be removed while source contracts reject their reintroduction and all active JSON, path, query, and ID-array parsers retain their existing `Result<T>` errors without logging
 
+#### Scenario: Request DTOs share whitespace trimming
+
+- **WHEN** a whole-repository and history audit confirms that `StorageJobReplayRequest`, storage recovery command parsing, and `UpdateProfileRequest` independently implement equivalent leading/trailing `std::isspace` trimming while all three already derive from `DtoBase`
+- **THEN** one protected `DtoBase::TrimWhitespace` helper SHALL serve those production parsers and the three DTO-local implementations SHALL be removed, while empty, all-whitespace, ASCII-whitespace, non-ASCII content, length validation, confirmation rules, errors, logging, and request behavior remain unchanged
+
 #### Scenario: Shared drive-item name validation is reused
 
 - **WHEN** file upload, file rename, folder creation, and folder rename duplicate the same forbidden-character loop while `NameValidation` already provides the identical cross-platform predicate

@@ -83,7 +83,7 @@ namespace disk::admin {
             Json::Value body(Json::objectValue);
             body["dry_run"] = false;
             body["confirm_job_id"] = Json::UInt64(42);
-            body["reason"] = "  dependency recovered  ";
+            body["reason"] = "\t dependency recovered \n";
 
             auto parsed = StorageJobReplayRequest::FromRequest(JsonRequest(body), 42);
 
@@ -98,6 +98,16 @@ namespace disk::admin {
             missing_reason["dry_run"] = false;
             missing_reason["confirm_job_id"] = Json::UInt64(42);
             EXPECT_FALSE(StorageJobReplayRequest::FromRequest(JsonRequest(missing_reason), 42).has_value());
+
+            auto whitespace_reason = missing_reason;
+            whitespace_reason["reason"] = "\t \n";
+            EXPECT_FALSE(
+                StorageJobReplayRequest::FromRequest(
+                    JsonRequest(whitespace_reason),
+                    42
+                )
+                    .has_value()
+            );
 
             Json::Value mismatched(Json::objectValue);
             mismatched["dry_run"] = false;

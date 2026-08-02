@@ -15,8 +15,6 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <optional>
 #include <regex>
@@ -211,23 +209,6 @@ namespace disk::user {
         }
 
     private:
-        [[nodiscard]]
-        static auto TrimWhitespace(std::string str) -> std::string {
-            str.erase(
-                str.begin(),
-                std::ranges::find_if(str, [](unsigned char ch) { return !std::isspace(ch); })
-            );
-            str.erase(
-                std::ranges::find_if(
-                    str.rbegin(),
-                    str.rend(),
-                    [](unsigned char ch) { return !std::isspace(ch); }
-                ).base(),
-                str.end()
-            );
-            return str;
-        }
-
         /// 验证昵称
         [[nodiscard]]
         auto ValidateNickname() const -> bool {

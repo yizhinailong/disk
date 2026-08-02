@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cctype>
 #include <climits>
 #include <concepts>
 #include <cstdint>
@@ -165,6 +167,17 @@ protected:
             ));
         }
         return json[key].asBool();
+    }
+
+    [[nodiscard]]
+    static auto TrimWhitespace(std::string value) -> std::string {
+        const auto is_space = [](unsigned char character) {
+            return std::isspace(character) != 0;
+        };
+        const auto first = std::ranges::find_if_not(value, is_space);
+        const auto last =
+            std::ranges::find_if_not(value.rbegin(), value.rend(), is_space).base();
+        return first >= last ? std::string{} : std::string(first, last);
     }
 
     /// 解析正整数 uint64（用于路径参数）

@@ -313,7 +313,7 @@ TEST(UpdateProfileRequest, AvatarTooLong) {
 }
 
 TEST(UpdateProfileRequest, EmptyStringIgnored) {
-    auto req = CreateUpdateProfileRequest("", "https://example.com/avatar.png");
+    auto req = CreateUpdateProfileRequest("\t \n", "https://example.com/avatar.png");
     auto result = UpdateProfileRequest::FromRequest(req);
 
     ASSERT_TRUE(result.has_value()) << "Empty nickname should be ignored";
@@ -322,7 +322,10 @@ TEST(UpdateProfileRequest, EmptyStringIgnored) {
 }
 
 TEST(UpdateProfileRequest, WhitespaceTrimmed) {
-    auto req = CreateUpdateProfileRequest("  新昵称  ", "  https://example.com/avatar.png  ");
+    auto req = CreateUpdateProfileRequest(
+        "\t 新昵称 \n",
+        "\n https://example.com/avatar.png \t"
+    );
     auto result = UpdateProfileRequest::FromRequest(req);
 
     ASSERT_TRUE(result.has_value()) << "Whitespace should be trimmed";

@@ -40,7 +40,7 @@ namespace disk::admin {
             body["confirm_upload_id"] = "upload-123";
             body["expected_state_version"] = Json::UInt64(7);
             body["expected_lease_owner"] = "api-a:complete:123";
-            body["reason"] = "  owner terminated  ";
+            body["reason"] = "\t owner terminated \n";
 
             auto parsed = UploadLeaseReleaseRequest::FromRequest(
                 JsonRequest(body),
@@ -104,6 +104,20 @@ namespace disk::admin {
                 UploadLeaseReleaseRequest::FromRequest(
                     JsonRequest(Json::Value(Json::objectValue)),
                     "../upload"
+                )
+                    .has_value()
+            );
+
+            Json::Value whitespace_reason(Json::objectValue);
+            whitespace_reason["dry_run"] = false;
+            whitespace_reason["confirm_upload_id"] = "upload-123";
+            whitespace_reason["expected_state_version"] = Json::UInt64(7);
+            whitespace_reason["expected_lease_owner"] = "api-a";
+            whitespace_reason["reason"] = "\t \n";
+            EXPECT_FALSE(
+                UploadLeaseReleaseRequest::FromRequest(
+                    JsonRequest(whitespace_reason),
+                    "upload-123"
                 )
                     .has_value()
             );

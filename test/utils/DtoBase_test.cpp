@@ -6,7 +6,6 @@
  */
 
 #include "utils/DtoBase.hpp"
-#include "utils/LogHelper.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -20,6 +19,8 @@
 #include <spdlog/logger.h>
 #include <spdlog/sinks/ostream_sink.h>
 #include <spdlog/spdlog.h>
+
+#include "utils/LogHelper.hpp"
 
 namespace disk::test {
     namespace {
@@ -90,20 +91,33 @@ namespace disk::test {
             return request;
         }
 
-        [[nodiscard]] auto DtoBaseSource() -> std::string {
-            const auto path = std::filesystem::path(__FILE__)
+        [[nodiscard]] auto ReadSourceFile(const std::filesystem::path& relative_path)
+            -> std::string {
+            const auto root = std::filesystem::path(__FILE__)
                                   .parent_path()
                                   .parent_path()
-                                  .parent_path() /
-                              "src/utils/DtoBase.hpp";
-            std::ifstream input(path);
+                                  .parent_path();
+            std::ifstream input(root / relative_path);
             std::ostringstream buffer;
             buffer << input.rdbuf();
             return buffer.str();
         }
 
+        [[nodiscard]] auto CountOccurrences(
+            const std::string& source,
+            std::string_view expected
+        ) -> size_t {
+            size_t count = 0;
+            size_t position = 0;
+            while ((position = source.find(expected, position)) != std::string::npos) {
+                ++count;
+                position += expected.size();
+            }
+            return count;
+        }
+
         TEST(DtoBaseTest, ValidationErrorsArePureResults) {
-            const auto source = DtoBaseSource();
+            const auto source = ReadSourceFile("src/utils/DtoBase.hpp");
             ASSERT_FALSE(source.empty());
             EXPECT_EQ(source.find("Logger::"), std::string::npos);
             EXPECT_EQ(source.find("LogHelper.hpp"), std::string::npos);
@@ -206,6 +220,30 @@ namespace disk::test {
             );
 
             EXPECT_TRUE(capture.Output().empty());
+        }
+
+        TEST(DtoBaseSourceContractTest, RequestDtosShareWhitespaceTrimming) {
+            const auto base = ReadSourceFile("src/utils/DtoBase.hpp");
+            const auto storage_job = ReadSourceFile("src/dtos/StorageJobAdminDto.hpp");
+            const auto storage_recovery =
+                ReadSourceFile("src/dtos/StorageRecoveryAdminDto.hpp");
+            const auto user = ReadSourceFile("src/dtos/UserDto.hpp");
+
+            EXPECT_EQ(CountOccurrences(base, "static auto TrimWhitespace("), 1U);
+            EXPECT_NE(base.find("[](unsigned char character)"), std::string::npos);
+            EXPECT_NE(base.find("std::isspace(character)"), std::string::npos);
+
+            EXPECT_EQ(CountOccurrences(storage_job, "TrimWhitespace("), 1U);
+            EXPECT_EQ(storage_job.find("static auto Trim("), std::string::npos);
+            EXPECT_EQ(storage_job.find("#include <cctype>"), std::string::npos);
+
+            EXPECT_EQ(CountOccurrences(storage_recovery, "TrimWhitespace("), 1U);
+            EXPECT_EQ(storage_recovery.find("static auto Trim("), std::string::npos);
+            EXPECT_EQ(storage_recovery.find("#include <cctype>"), std::string::npos);
+
+            EXPECT_EQ(CountOccurrences(user, "TrimWhitespace("), 2U);
+            EXPECT_EQ(user.find("static auto TrimWhitespace("), std::string::npos);
+            EXPECT_EQ(user.find("#include <cctype>"), std::string::npos);
         }
 
     } // namespace
