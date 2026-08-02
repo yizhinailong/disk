@@ -12,6 +12,7 @@
 #include <string_view>
 
 #include <gtest/gtest.h>
+#include <trantor/utils/Date.h>
 
 namespace disk::share {
     namespace {
@@ -165,12 +166,32 @@ namespace disk::share {
                 anonymous_helpers,
                 "utils::HashUtil::VerifyPassword(password, share.getValueOfPasswordHash())"
             ));
-            EXPECT_TRUE(Contains(anonymous_helpers, "std::localtime(&seconds)"));
+            EXPECT_FALSE(Contains(anonymous_helpers, "std::localtime("));
+            EXPECT_FALSE(Contains(anonymous_helpers, "std::put_time("));
+            EXPECT_FALSE(Contains(anonymous_helpers, "toDbStringLocal()"));
             EXPECT_TRUE(Contains(
                 anonymous_helpers,
-                "std::put_time(&tm, \"%Y-%m-%d %H:%M:%S\")"
+                "return date.toCustomFormattedStringLocal(\"%Y-%m-%d %H:%M:%S\", false);"
             ));
+            EXPECT_EQ(CountOccurrences(service_source, "toCustomFormattedStringLocal("), 1U);
             EXPECT_TRUE(Contains(anonymous_helpers, "return \"/s/\" + share_code"));
+        }
+
+        TEST(ShareDateTimeFormatContractTest, TrantorCustomFormatterKeepsSecondPrecision) {
+            constexpr int64_t timestamp_with_microseconds = 1'234'567;
+            const auto formatted = trantor::Date(timestamp_with_microseconds)
+                                       .toCustomFormattedStringLocal(
+                                           "%Y-%m-%d %H:%M:%S",
+                                           false
+                                       );
+
+            ASSERT_EQ(formatted.size(), 19U);
+            EXPECT_EQ(formatted[4], '-');
+            EXPECT_EQ(formatted[7], '-');
+            EXPECT_EQ(formatted[10], ' ');
+            EXPECT_EQ(formatted[13], ':');
+            EXPECT_EQ(formatted[16], ':');
+            EXPECT_EQ(formatted.find('.'), std::string::npos);
         }
 
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {

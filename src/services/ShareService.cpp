@@ -112,13 +112,7 @@ namespace disk::share {
         }
 
         [[nodiscard]] auto FormatDateTime(const trantor::Date& date) -> std::string {
-            auto micro_seconds = date.microSecondsSinceEpoch();
-            auto seconds = micro_seconds / 1000000;
-            auto tm = *std::localtime(&seconds);
-
-            std::ostringstream oss;
-            oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-            return oss.str();
+            return date.toCustomFormattedStringLocal("%Y-%m-%d %H:%M:%S", false);
         }
 
         [[nodiscard]] auto BuildShareLink(const std::string& share_code) -> std::string {
