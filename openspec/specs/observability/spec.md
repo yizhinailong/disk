@@ -618,6 +618,11 @@ The system SHALL classify numeric file rename, drive move, drive copy, and file 
 - **WHEN** a file mutation records file, folder, content, user, quota, or cache identifiers
 - **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those mutation values SHALL NOT be overloaded into typed correlation fields
 
+#### Scenario: File soft-delete service throws unexpectedly
+- **WHEN** `FileController` catches a standard exception from the soft-delete service boundary
+- **THEN** its directly owned event SHALL use only the fixed complete `Unexpected exception in delete file` summary with the request's existing typed correlation and SHALL NOT append exception text, user, file, or folder identifiers, SQL, connection details, paths, credentials, or tokens
+- **AND** the controller SHALL retain the existing `InternalError` and `Internal error during file deletion` public response without changing parsing, service delegation, trash transactions, rollback, or success behavior
+
 #### Scenario: File mutation classification remains bounded
 - **WHEN** the request targets file query, upload, download, a nonnumeric rename path, or an unrecognized file-domain path
 - **THEN** the file-mutation classifier SHALL NOT absorb it, and the route SHALL retain its existing bounded operation classification

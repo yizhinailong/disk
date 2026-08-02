@@ -2593,6 +2593,14 @@ API、分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统
 
 旧实现上的定向源码合同按预期为 0/1，共 3 个失败断言：精确检出 2 处 `.what()`，且两条固定完整语句计数均为 0、预期均为 1；两个既有 `InternalError` 公开消息断言通过。实现后定向测试 1/1、上传仓储合同/真实上传与授权/上传安全网/分布式拓扑聚焦 CTest 18/18（129.45 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1497 项：1490 项通过、7 项按环境门控跳过、0 失败，总耗时 542.37 秒。`UploadService.cpp` 中 `.what()` 为 0，两条目标固定消息各精确出现 1 次。该批不改变公开错误、对象写入、条件记录、缓存、指标、重试或清理行为，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.159 FileController 删除异常脱敏记录（2026-08-03）
+
+API、分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统一文件软删除 Controller 的最终异常合同。删除服务抛出的标准异常只允许固定完整消息 `Unexpected exception in delete file` 与调用方既有类型化上下文；异常正文、user/file/folder ID、SQL、连接信息、路径、凭据和 token 不得进入失败消息。
+
+catch 继续返回既有 `InternalError` 与 `Internal error during file deletion`。DTO 校验、`FileMutationService::Delete` 委托、`TrashService::MoveToTrash` 事务、回滚、领域失败和成功响应保持不变。
+
+旧实现上的定向源码合同按预期为 0/1，共 2 个失败断言：mutation Controller 区间精确检出 1 处 `.what()`，且固定完整语句计数为 0、预期为 1；既有 `InternalError` 公开消息断言通过。实现后定向测试 1/1、FileMutation 合同/真实复制删除原子性/文件变更与删除回归/分布式拓扑聚焦 CTest 16/16（8.28 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1497 项：1490 项通过、7 项按环境门控跳过、0 失败，总耗时 543.14 秒。`src/controllers/` 中 `.what()` 为 0，固定失败消息与公开错误各精确出现 1 次。该批不改变 DTO、服务委托、回收站事务、回滚、错误或成功响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

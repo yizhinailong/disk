@@ -617,10 +617,8 @@ namespace disk::file {
                 << ", deleted_folder_count=" << result->deleted_folder_count
                 << " (user_id=" << user_id << ")";
             co_return Response::Success(result->ToJson());
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Unexpected exception in delete file: " << e.what()
-                << " (user_id=" << user_id << ")";
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Unexpected exception in delete file";
             co_return Response::Error(
                 ErrorInfo(ErrorCode::InternalError, "Internal error during file deletion")
             );

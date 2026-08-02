@@ -1813,6 +1813,9 @@ Authorization: Bearer <access_token>
 | 401 | 40107 | `TokenMalformed` | 令牌格式错误 | Authorization 头格式不正确 |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Access Token 已超过有效期 |
 | 404 | 50005 | `FileNotFound` | 文件不存在 | 待删除项中包含不存在或无权限访问的文件 |
+| 500 | 10006 | `InternalError` | Internal error during file deletion | 删除服务抛出未预期标准异常 |
+
+`FileController` 捕获删除服务的未预期标准异常时，只允许固定完整日志消息 `Unexpected exception in delete file` 与请求既有 `file_mutation` 类型化上下文，不拼接异常正文、user ID、文件/文件夹 ID、SQL、连接信息、路径、凭据或 token；继续返回上表既有 `InternalError`，不改变 DTO 校验、`FileMutationService::Delete`、`TrashService::MoveToTrash`、事务回滚或成功响应。
 
 **40106 TokenMissing 响应示例**：
 

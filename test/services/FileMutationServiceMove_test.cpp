@@ -455,6 +455,18 @@ namespace disk::file {
             EXPECT_TRUE(Contains(controller_body, "m_mutation_service->Move(*parse_result, user_id, log_context)"));
             EXPECT_TRUE(Contains(controller_body, "m_mutation_service->Copy(*parse_result, user_id, log_context)"));
             EXPECT_TRUE(Contains(controller_body, "m_mutation_service->Delete(*parse_result, user_id, log_context)"));
+            EXPECT_EQ(CountOccurrences(controller_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    controller_body,
+                    "Logger::Error(log_context) << \"Unexpected exception in delete file\";"
+                ),
+                1U
+            );
+            EXPECT_TRUE(Contains(
+                controller_body,
+                "ErrorInfo(ErrorCode::InternalError, \"Internal error during file deletion\")"
+            ));
             EXPECT_FALSE(Contains(mutation_body, "IsFilenameExists("));
             EXPECT_TRUE(Contains(mutation_body, "MoveToTrash(std::move(move_request), user_id, log_context)"));
             EXPECT_TRUE(Contains(trash_body, "Logger::Warn(log_context) << \"File not found or delete failed"));
