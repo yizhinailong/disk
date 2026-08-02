@@ -448,3 +448,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `SystemService::GetBuildTime` is consumed only by `GetInfo` in the same implementation unit
 - **THEN** build-time formatting SHALL have internal linkage and SHALL NOT be declared by `SystemService.hpp`, while system information continues to serialize the `build_time` field from `__DATE__`, one space, and `__TIME__` with unchanged authentication, statistics, logging, and response behavior
+
+#### Scenario: Single-consumer share helpers stay implementation-local
+
+- **WHEN** a whole-repository call-site and object-symbol audit confirms that `ShareService::GenerateShareCode` is consumed only by `Create` and `ShareService::GetStatusFilter` is consumed only by `List` in the same implementation unit
+- **THEN** both pure helpers SHALL have internal linkage and SHALL NOT be declared by `ShareService.hpp`, while creation continues to produce eight-character alphanumeric share codes and listing retains the existing all, active, expired, cancelled, and unknown status-filter behavior without changing share transactions, permissions, audit, logging, or responses

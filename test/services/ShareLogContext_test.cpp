@@ -59,6 +59,39 @@ namespace disk::share {
                    source.substr(begin, end - begin).find("log_context") != std::string::npos;
         }
 
+        TEST(ShareImplementationHelperContractTest, SingleConsumerHelpersHaveInternalLinkage) {
+            const auto service_header = ReadSourceFile("src/services/ShareService.hpp");
+            const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
+
+            EXPECT_FALSE(Contains(service_header, "GenerateShareCode"));
+            EXPECT_FALSE(Contains(service_header, "GetStatusFilter"));
+            EXPECT_FALSE(Contains(service_source, "ShareService::GenerateShareCode"));
+            EXPECT_FALSE(Contains(service_source, "ShareService::GetStatusFilter"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "[[nodiscard]] auto GenerateShareCode() -> std::string"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "[[nodiscard]] auto GetStatusFilter(const std::string& status)"
+            ));
+            EXPECT_EQ(CountOccurrences(service_source, "GenerateShareCode("), 2U);
+            EXPECT_EQ(CountOccurrences(service_source, "GetStatusFilter("), 2U);
+            EXPECT_TRUE(Contains(
+                service_source,
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+            ));
+            EXPECT_TRUE(Contains(service_source, "constexpr int code_length = 8"));
+            EXPECT_TRUE(Contains(service_source, "if (status == \"all\")"));
+            EXPECT_TRUE(Contains(service_source, "if (status == \"active\")"));
+            EXPECT_TRUE(Contains(service_source, "if (status == \"expired\")"));
+            EXPECT_TRUE(Contains(service_source, "if (status == \"cancelled\")"));
+            EXPECT_EQ(CountOccurrences(service_source, "return std::nullopt;"), 2U);
+            EXPECT_TRUE(Contains(service_source, "ShareStatus::Active"));
+            EXPECT_TRUE(Contains(service_source, "ShareStatus::Expired"));
+            EXPECT_TRUE(Contains(service_source, "ShareStatus::Cancelled"));
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");

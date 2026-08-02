@@ -302,13 +302,6 @@ namespace disk::share {
             -> drogon::Task<Result<drogon_model::disk::Shares>>;
 
         /**
-         * @brief 生成唯一的分享码
-         * @return std::string 分享码
-         */
-        [[nodiscard]]
-        static auto GenerateShareCode() -> std::string;
-
-        /**
          * @brief 验证文件所有权
          * @param file_ids 文件ID列表
          * @param user_id 用户ID
@@ -407,14 +400,6 @@ namespace disk::share {
             uint64_t file_id,
             disk::utils::LogContext log_context = {}
         ) -> drogon::Task<void>;
-
-        /**
-         * @brief 获取状态过滤条件
-         * @param status 状态字符串
-         * @return std::optional<int8_t> 状态值（nullopt表示不过滤）
-         */
-        [[nodiscard]]
-        static auto GetStatusFilter(const std::string& status) -> std::optional<int8_t>;
 
         /**
          * @brief 格式化日期时间字符串

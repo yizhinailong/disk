@@ -51,6 +51,42 @@ namespace disk::share {
         constexpr std::string_view SHARE_ACCESS_RATE_LIMIT_ERROR_MESSAGE =
             "Too many password verification attempts, please try again later";
 
+        [[nodiscard]] auto GenerateShareCode() -> std::string {
+            constexpr const char* chars =
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            constexpr int code_length = 8;
+
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dis(0, static_cast<int>(strlen(chars)) - 1);
+
+            std::string code;
+            code.reserve(code_length);
+
+            for (int i = 0; i < code_length; ++i) {
+                code += chars[dis(gen)];
+            }
+
+            return code;
+        }
+
+        [[nodiscard]] auto GetStatusFilter(const std::string& status)
+            -> std::optional<int8_t> {
+            if (status == "all") {
+                return std::nullopt;
+            }
+            if (status == "active") {
+                return static_cast<int8_t>(ShareStatus::Active);
+            }
+            if (status == "expired") {
+                return static_cast<int8_t>(ShareStatus::Expired);
+            }
+            if (status == "cancelled") {
+                return static_cast<int8_t>(ShareStatus::Cancelled);
+            }
+            return std::nullopt;
+        }
+
         [[nodiscard]] auto BuildSharedFolderAccessPredicate(const std::string& folder_alias, size_t start_index = 1)
             -> std::string {
             return "EXISTS (" "SELECT 1 FROM share_files sff " "JOIN folders shared_root ON sff.item_id = shared_root.id " "WHERE sff.share_id = $" + std::to_string(start_index) + " AND sff.item_type = 'folder' " "AND " + folder_alias + ".user_id = shared_root.user_id " "AND (" + folder_alias + ".id = shared_root.id OR " + folder_alias + ".path LIKE CONCAT(shared_root.path, '%'))" ")";
@@ -1438,25 +1474,6 @@ namespace disk::share {
 
     /// ==================== 私有方法 ====================
 
-    auto ShareService::GenerateShareCode() -> std::string {
-        constexpr const char* chars =
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        constexpr int code_length = 8;
-
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, static_cast<int>(strlen(chars)) - 1);
-
-        std::string code;
-        code.reserve(code_length);
-
-        for (int i = 0; i < code_length; ++i) {
-            code += chars[dis(gen)];
-        }
-
-        return code;
-    }
-
     auto ShareService::ValidateFileOwnership(
         const std::vector<uint64_t>& file_ids,
         uint64_t user_id,
@@ -1838,22 +1855,6 @@ namespace disk::share {
                 << "Failed to update shared file download metadata: " << e.base().what()
                 << " (file_id=" << file_id << ")";
         }
-    }
-
-    auto ShareService::GetStatusFilter(const std::string& status) -> std::optional<int8_t> {
-        if (status == "all") {
-            return std::nullopt;
-        }
-        if (status == "active") {
-            return static_cast<int8_t>(ShareStatus::Active);
-        }
-        if (status == "expired") {
-            return static_cast<int8_t>(ShareStatus::Expired);
-        }
-        if (status == "cancelled") {
-            return static_cast<int8_t>(ShareStatus::Cancelled);
-        }
-        return std::nullopt;
     }
 
     auto ShareService::FormatDateTime(const trantor::Date& date) -> std::string {
