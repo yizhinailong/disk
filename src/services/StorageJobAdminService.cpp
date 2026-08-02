@@ -12,6 +12,7 @@
 
 #include "services/StorageReconciliationService.hpp"
 #include "services/TransactionRunner.hpp"
+#include "utils/DbRowUtils.hpp"
 #include "utils/LogHelper.hpp"
 
 namespace disk::jobs {
@@ -29,13 +30,6 @@ namespace disk::jobs {
                 throw std::runtime_error("Storage job payload is not a JSON object");
             }
             return payload;
-        }
-
-        template <typename Row>
-        [[nodiscard]] auto OptionalString(const Row& row, const char* name)
-            -> std::optional<std::string> {
-            return row[name].isNull() ? std::nullopt :
-                                        std::optional(row[name].template as<std::string>());
         }
 
         template <typename Row>
@@ -57,12 +51,12 @@ namespace disk::jobs {
                 .attempts = row["attempts"].template as<uint32_t>(),
                 .max_attempts = row["max_attempts"].template as<uint32_t>(),
                 .available_at = row["available_at"].template as<std::string>(),
-                .locked_by = OptionalString(row, "locked_by"),
-                .locked_until = OptionalString(row, "locked_until"),
-                .last_error = OptionalString(row, "last_error"),
+                .locked_by = disk::utils::OptionalRowValue<std::string>(row, "locked_by"),
+                .locked_until = disk::utils::OptionalRowValue<std::string>(row, "locked_until"),
+                .last_error = disk::utils::OptionalRowValue<std::string>(row, "last_error"),
                 .created_at = row["created_at"].template as<std::string>(),
                 .updated_at = row["updated_at"].template as<std::string>(),
-                .completed_at = OptionalString(row, "completed_at"),
+                .completed_at = disk::utils::OptionalRowValue<std::string>(row, "completed_at"),
             };
         }
 

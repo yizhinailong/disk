@@ -18,17 +18,11 @@
 #include "services/TransactionRunner.hpp"
 #include "services/UploadStateMachine.hpp"
 #include "storage/UploadStagingStorage.hpp"
+#include "utils/DbRowUtils.hpp"
 #include "utils/LogHelper.hpp"
 
 namespace disk::recovery {
     namespace {
-        template <typename Row, typename T>
-        [[nodiscard]] auto OptionalValue(const Row& row, const char* field)
-            -> std::optional<T> {
-            return row[field].isNull() ? std::nullopt :
-                                         std::optional(row[field].template as<T>());
-        }
-
         [[nodiscard]] auto SerializeJson(const Json::Value& value) -> std::string {
             Json::StreamWriterBuilder builder;
             builder["indentation"] = "";
@@ -109,8 +103,10 @@ namespace disk::recovery {
         ) -> disk::admin::UploadLeaseReleaseResponse {
             const auto status = ParseUploadStatus(row);
             const auto state_version = row["state_version"].template as<uint64_t>();
-            auto lease_owner = OptionalValue<Row, std::string>(row, "lease_owner");
-            auto lease_expires_at = OptionalValue<Row, std::string>(row, "lease_expires_at");
+            auto lease_owner =
+                disk::utils::OptionalRowValue<std::string>(row, "lease_owner");
+            auto lease_expires_at =
+                disk::utils::OptionalRowValue<std::string>(row, "lease_expires_at");
             const auto version_matches =
                 !request.expected_state_version.has_value() ||
                 request.expected_state_version.value() == state_version;

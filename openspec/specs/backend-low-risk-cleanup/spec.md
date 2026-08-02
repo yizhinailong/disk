@@ -243,6 +243,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** folder creation and folder rename maintain equivalent private methods that trim only leading and trailing ASCII spaces
 - **THEN** both request parsers SHALL use one `FolderDto` detail helper and the duplicate methods SHALL be removed, while U+0020 trimming and all-space handling remain unchanged and tabs, newlines, and other control characters continue through forbidden-character validation instead of being trimmed as general whitespace
 
+#### Scenario: Administrative services share nullable row extraction
+
+- **WHEN** upload diagnostics, storage-job administration, and storage-recovery administration duplicate the same database NULL-to-optional conversion across sixteen production field reads
+- **THEN** all three services SHALL use one `DbRowUtils` template and remove their local helpers, while NULL values avoid conversion, non-NULL values retain the same `as<T>()` types and exception behavior, and SQL, projections, transactions, audit, logs, errors, and responses remain unchanged
+
 #### Scenario: File extension extraction is shared by active-file writers
 
 - **WHEN** upload finalization and file rename use identical last-dot extension extraction while both implementations already depend on `FileServiceUtils`

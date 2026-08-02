@@ -89,6 +89,47 @@ namespace disk::jobs {
             return count > 0;
         }
 
+        TEST(StorageJobAdminLogContextContractTest, NullableRowsUseSharedExtractor) {
+            const auto helper_header = ReadSourceFile("src/utils/DbRowUtils.hpp");
+            const auto job_source =
+                ReadSourceFile("src/services/StorageJobAdminService.cpp");
+            const auto recovery_source =
+                ReadSourceFile("src/services/StorageRecoveryAdminService.cpp");
+            const auto diagnostic_source =
+                ReadSourceFile("src/services/UploadDiagnosticService.cpp");
+
+            EXPECT_FALSE(helper_header.empty());
+            EXPECT_EQ(CountOccurrences(helper_header, "auto OptionalRowValue("), 1U);
+            EXPECT_EQ(CountOccurrences(helper_header, "row[field].isNull()"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(helper_header, "row[field].template as<T>()"),
+                1U
+            );
+
+            for (const auto* source : {
+                     &job_source,
+                     &recovery_source,
+                     &diagnostic_source,
+                 }) {
+                EXPECT_EQ(CountOccurrences(*source, "#include \"utils/DbRowUtils.hpp\""), 1U);
+            }
+            EXPECT_EQ(
+                CountOccurrences(job_source, "disk::utils::OptionalRowValue<"),
+                4U
+            );
+            EXPECT_EQ(
+                CountOccurrences(recovery_source, "disk::utils::OptionalRowValue<"),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(diagnostic_source, "disk::utils::OptionalRowValue<"),
+                10U
+            );
+            EXPECT_FALSE(Contains(job_source, "auto OptionalString("));
+            EXPECT_FALSE(Contains(recovery_source, "auto OptionalValue("));
+            EXPECT_FALSE(Contains(diagnostic_source, "auto OptionalValue("));
+        }
+
         TEST(StorageJobAdminLogContextContractTest, RequestBoundariesUseTypedContext) {
             const auto controller_source =
                 ReadSourceFile("src/controllers/StorageJobAdminController.cpp");

@@ -12,17 +12,11 @@
 
 #include "services/StorageJobAdminService.hpp"
 #include "storage/UploadStagingStorage.hpp"
+#include "utils/DbRowUtils.hpp"
 #include "utils/LogHelper.hpp"
 
 namespace disk::upload {
     namespace {
-        template <typename Row, typename T>
-        [[nodiscard]] auto OptionalValue(const Row& row, const char* field)
-            -> std::optional<T> {
-            return row[field].isNull() ? std::nullopt :
-                                         std::optional(row[field].template as<T>());
-        }
-
         template <typename Row>
         [[nodiscard]] auto ParseTask(const Row& row) -> disk::admin::UploadDiagnosticTask {
             const auto status = UploadTaskStatusFromStorage(row["status"].template as<int>());
@@ -37,9 +31,10 @@ namespace disk::upload {
             }
 
             std::optional<disk::admin::UploadDiagnosticLease> lease;
-            const auto lease_owner = OptionalValue<Row, std::string>(row, "lease_owner");
+            const auto lease_owner =
+                disk::utils::OptionalRowValue<std::string>(row, "lease_owner");
             const auto lease_expires_at =
-                OptionalValue<Row, std::string>(row, "lease_expires_at");
+                disk::utils::OptionalRowValue<std::string>(row, "lease_expires_at");
             if (lease_owner.has_value() && lease_expires_at.has_value()) {
                 lease = disk::admin::UploadDiagnosticLease{
                     .owner = lease_owner.value(),
@@ -64,11 +59,15 @@ namespace disk::upload {
                 .state_version = row["state_version"].template as<uint64_t>(),
                 .lease = std::move(lease),
                 .finalize_attempts = row["finalize_attempts"].template as<uint32_t>(),
-                .last_error_code = OptionalValue<Row, int32_t>(row, "last_error_code"),
-                .last_error_at = OptionalValue<Row, std::string>(row, "last_error_at"),
-                .completed_file_id = OptionalValue<Row, uint64_t>(row, "completed_file_id"),
+                .last_error_code =
+                    disk::utils::OptionalRowValue<int32_t>(row, "last_error_code"),
+                .last_error_at =
+                    disk::utils::OptionalRowValue<std::string>(row, "last_error_at"),
+                .completed_file_id =
+                    disk::utils::OptionalRowValue<uint64_t>(row, "completed_file_id"),
                 .expires_at = row["expires_at"].template as<std::string>(),
-                .finalized_at = OptionalValue<Row, std::string>(row, "finalized_at"),
+                .finalized_at =
+                    disk::utils::OptionalRowValue<std::string>(row, "finalized_at"),
                 .created_at = row["created_at"].template as<std::string>(),
                 .updated_at = row["updated_at"].template as<std::string>(),
             };
@@ -78,10 +77,10 @@ namespace disk::upload {
         [[nodiscard]] auto ParseChunk(const Row& row) -> disk::admin::UploadDiagnosticChunk {
             return disk::admin::UploadDiagnosticChunk{
                 .chunk_index = row["chunk_index"].template as<uint32_t>(),
-                .size_bytes = OptionalValue<Row, uint64_t>(row, "size_bytes"),
-                .hash_md5 = OptionalValue<Row, std::string>(row, "hash_md5"),
-                .object_key = OptionalValue<Row, std::string>(row, "object_key"),
-                .etag = OptionalValue<Row, std::string>(row, "etag"),
+                .size_bytes = disk::utils::OptionalRowValue<uint64_t>(row, "size_bytes"),
+                .hash_md5 = disk::utils::OptionalRowValue<std::string>(row, "hash_md5"),
+                .object_key = disk::utils::OptionalRowValue<std::string>(row, "object_key"),
+                .etag = disk::utils::OptionalRowValue<std::string>(row, "etag"),
                 .uploaded_at = row["uploaded_at"].template as<std::string>(),
             };
         }
