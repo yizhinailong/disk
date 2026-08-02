@@ -468,6 +468,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `SystemService::GetBuildTime` is consumed only by `GetInfo` in the same implementation unit
 - **THEN** build-time formatting SHALL have internal linkage and SHALL NOT be declared by `SystemService.hpp`, while system information continues to serialize the `build_time` field from `__DATE__`, one space, and `__TIME__` with unchanged authentication, statistics, logging, and response behavior
 
+#### Scenario: System connection statistics stay implementation-local
+
+- **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `SystemService::GetConnectionStats` is stateless and consumed only by `GetInfo` in `SystemService.cpp`
+- **THEN** the connection-statistics collector SHALL have internal linkage and SHALL NOT be declared by `SystemService.hpp`, while configured database and Redis pool sizes, the current and peak estimates, public system information, authentication, storage statistics, logging, errors, and responses remain unchanged
+
 #### Scenario: Single-consumer share helpers stay implementation-local
 
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `ShareService::GenerateShareCode` is consumed only by `Create` and `ShareService::GetStatusFilter` is consumed only by `List` in the same implementation unit

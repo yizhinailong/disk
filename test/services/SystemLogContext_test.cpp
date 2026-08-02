@@ -94,6 +94,33 @@ namespace disk::system {
             ));
         }
 
+        TEST(SystemConnectionStatsContractTest, CollectorHasInternalLinkageAndKeepsFieldSources) {
+            const auto service_header = ReadSourceFile("src/services/SystemService.hpp");
+            const auto service_source = ReadSourceFile("src/services/SystemService.cpp");
+
+            EXPECT_FALSE(Contains(service_header, "GetConnectionStats"));
+            EXPECT_FALSE(Contains(service_source, "SystemService::GetConnectionStats"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "[[nodiscard]] auto GetConnectionStats() -> drogon::Task<ConnectionStats>"
+            ));
+            EXPECT_EQ(CountOccurrences(service_source, "GetConnectionStats()"), 2U);
+            EXPECT_TRUE(Contains(
+                service_source,
+                "info.connections = co_await GetConnectionStats()"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "stats.db_pool_size = config->GetDbPoolSize()"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "stats.redis_pool_size = config->GetRedisPoolSize()"
+            ));
+            EXPECT_TRUE(Contains(service_source, "stats.current = stats.db_pool_size"));
+            EXPECT_TRUE(Contains(service_source, "stats.peak = stats.db_pool_size"));
+        }
+
         TEST(SystemLogContextContractTest, ControllerServiceAndStageTimerKeepExplicitContext) {
             const auto controller_source = ReadSourceFile("src/controllers/SystemController.cpp");
             const auto service_header = ReadSourceFile("src/services/SystemService.hpp");

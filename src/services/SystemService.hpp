@@ -86,9 +86,6 @@ namespace disk::system {
 
     private:
         [[nodiscard]]
-        auto GetConnectionStats() -> drogon::Task<ConnectionStats>;
-
-        [[nodiscard]]
         auto GetStorageStats(disk::utils::LogContext log_context) -> drogon::Task<StorageStats>;
 
         drogon::orm::DbClientPtr m_db_client;

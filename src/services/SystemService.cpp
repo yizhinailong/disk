@@ -26,6 +26,20 @@ namespace disk::system {
         [[nodiscard]] auto GetBuildTime() -> std::string {
             return std::string(__DATE__) + " " + std::string(__TIME__);
         }
+
+        [[nodiscard]] auto GetConnectionStats() -> drogon::Task<ConnectionStats> {
+            ConnectionStats stats;
+
+            auto config = ConfigMgr::GetInstance();
+            stats.db_pool_size = config->GetDbPoolSize();
+            stats.redis_pool_size = config->GetRedisPoolSize();
+
+            /// Drogon 不暴露运行时活跃连接数，使用配置池大小作为上限估算
+            stats.current = stats.db_pool_size;
+            stats.peak = stats.db_pool_size;
+
+            co_return stats;
+        }
     } // namespace
 
     SystemService::SystemService(drogon::orm::DbClientPtr db_client)
@@ -55,20 +69,6 @@ namespace disk::system {
         info.storage = co_await GetStorageStats(log_context);
 
         co_return info;
-    }
-
-    auto SystemService::GetConnectionStats() -> drogon::Task<ConnectionStats> {
-        ConnectionStats stats;
-
-        auto config = ConfigMgr::GetInstance();
-        stats.db_pool_size = config->GetDbPoolSize();
-        stats.redis_pool_size = config->GetRedisPoolSize();
-
-        /// Drogon 不暴露运行时活跃连接数，使用配置池大小作为上限估算
-        stats.current = stats.db_pool_size;
-        stats.peak = stats.db_pool_size;
-
-        co_return stats;
     }
 
     auto SystemService::GetStorageStats(disk::utils::LogContext log_context)

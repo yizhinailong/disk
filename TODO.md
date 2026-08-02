@@ -2481,6 +2481,14 @@ Drogon 1.9.11 `RealIpResolver` 已在默认与分布式配置中启用，固定�
 
 旧实现上的源码合同按预期为 0/1，12 个断言完整检出共享定义缺失、三个本地定义、四个未迁移调用和三处专属 `<cctype>` 依赖。实现后共享基类与三个 DTO 直接测试 26/26、真实存储管理和用户资料集成 2/2、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1485 项：1478 项通过、7 项按环境门控跳过、0 失败，总耗时 542.55 秒。该批不改变持久化 schema、事务、缓存、认证、存储或分布式部署拓扑，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.145 系统连接统计 collector 内部化记录（2026-08-02）
+
+系统测试、单元测试与后端低风险清理 OpenSpec 先行固定系统连接统计 collector 的内部链接合同。全仓调用点、Git 历史、源码和已编译对象审计确认，私有 `SystemService::GetConnectionStats()` 自系统信息 API 初版起始终只有同一实现文件中 `GetInfo()` 的一个调用方，没有测试、集成、工具、客户端、迁移或兼容消费者。函数只读取全局 `ConfigMgr`，不依赖 `m_db_client`、`m_start_time` 或其他服务实例状态；当前生产对象导出一个全局成员符号及其 coroutine 本地符号，测试二进制没有对应符号。
+
+`GetConnectionStats()` 已原样移入 `SystemService.cpp` 既有匿名命名空间并从头文件删除成员声明；依赖实例数据库客户端的 `GetStorageStats()` 继续作为成员保留。`db_pool_size`、`redis_pool_size` 仍取自最终运行配置，Drogon 不暴露活跃连接数时 `current`/`peak` 仍以 DB pool size 作为上限估算；公开 connections JSON、构建时间、uptime、存储统计、认证、日志上下文、错误和响应均未改变。
+
+旧实现上的源码合同按预期为 0/1，精确检出头文件声明、类限定定义和缺失局部定义三个失败点，配置 getter、四个字段赋值与调用数量正向断言均通过。实现后直接系统合同/结构测试 16/16、真实系统信息与分布式拓扑聚焦 CTest 19/19（4.21 秒）、完整构建、OpenSpec 24/24、符号审计和差异检查通过；生产对象只保留匿名命名空间局部 collector 及其 coroutine 符号，测试二进制仍无对应符号。标准完整 CTest 共 1486 项：1479 项通过、7 项按环境门控跳过、0 失败，总耗时 561.74 秒。该批不改变配置值、持久化 schema、事务、认证、存储或部署拓扑，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
