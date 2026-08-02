@@ -190,10 +190,8 @@ namespace disk::upload {
                     co_return std::unexpected(LeaseConflictError());
                 }
                 co_return renewed_version.value();
-            } catch (const std::exception& e) {
-                Logger::Error(log_context)
-                    << "Failed to renew upload finalize lease: upload_id="
-                    << command.upload_id << ", error=" << e.what();
+            } catch (const std::exception&) {
+                Logger::Error(log_context) << "Failed to renew upload finalize lease";
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to renew upload finalize lease")
                 );
@@ -223,10 +221,8 @@ namespace disk::upload {
                         << "Finalize error was not recorded because lease ownership changed: upload_id="
                         << command.upload_id << ", state_version=" << state_version;
                 }
-            } catch (const std::exception& e) {
-                Logger::Warn(log_context)
-                    << "Failed to record upload finalize error: upload_id="
-                    << command.upload_id << ", error=" << e.what();
+            } catch (const std::exception&) {
+                Logger::Warn(log_context) << "Failed to record upload finalize error";
             }
         }
 
@@ -273,10 +269,8 @@ namespace disk::upload {
                         .details = std::move(details),
                     }
                 );
-            } catch (const std::exception& error) {
-                Logger::Warn(log_context)
-                    << "Failed to persist upload staging mismatch: upload_id="
-                    << command.upload_id << ", error=" << error.what();
+            } catch (const std::exception&) {
+                Logger::Warn(log_context) << "Failed to persist upload staging mismatch";
             }
 
             auto reconciliation_job = disk::jobs::BuildStorageReconcileJob(
@@ -287,9 +281,7 @@ namespace disk::upload {
                 }
             );
             if (!reconciliation_job) {
-                Logger::Warn(log_context)
-                    << "Failed to build upload staging reconciliation job: upload_id="
-                    << command.upload_id << ", error=" << reconciliation_job.error();
+                Logger::Warn(log_context) << "Failed to build upload staging reconciliation job";
                 co_return;
             }
 
@@ -299,10 +291,8 @@ namespace disk::upload {
                     db_client,
                     reconciliation_job.value()
                 );
-            } catch (const std::exception& error) {
-                Logger::Warn(log_context)
-                    << "Failed to enqueue upload staging reconciliation: upload_id="
-                    << command.upload_id << ", error=" << error.what();
+            } catch (const std::exception&) {
+                Logger::Warn(log_context) << "Failed to enqueue upload staging reconciliation";
             }
         }
 

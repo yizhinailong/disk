@@ -2677,6 +2677,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 完整构建、Python 语法、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1499 项：1492 项通过、7 项按环境门控跳过、0 失败，总耗时 541.67 秒。源码审计确认 `FileMutationService.cpp` 中 `.what()` 为 0，六条固定摘要各精确出现 1 次；真实 PostgreSQL 插入故障事件保留 response 同一 request/instance/`file_mutation` 与四个空所有权字段，且应用日志拒绝触发器异常正文。该批不改变跳过、事务回滚、预留释放、部分成功响应、类型化关联、名称锁、引用计数、item count、配额、缓存或重试语义，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.169 UploadLifecycle finalize 辅助错误脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧上传完成辅助边界。完成租约续租异常、完成错误 best-effort 记录异常、staging mismatch finding 持久化异常、对账任务构建错误和对账任务入队异常的五条事件只允许固定完整摘要；不得在 message 中重复 upload/lease/version、异常或领域错误正文、SQL、连接信息、对象定位符、凭据或 token。调用方 request/instance/`upload_complete` 与已经权威取得的 upload/lease/version 继续只由类型化字段承载。
+
+续租异常继续返回既有 `InternalError` 与 `Failed to renew upload finalize lease`；错误记录、finding 持久化和任务入队继续 fail-open，任务构建失败继续结束当前对账触发 helper。finding 恢复详情、对账任务 payload/dedupe、CAS、错误码、完成响应与重试语义不得改变。
+
+旧实现上的定向源码合同按预期为 0/1，共 7 个失败断言：finalize helper 区间精确检出 4 处 `.what()` 和 1 处任务构建领域错误转发，五条固定完整日志语句均缺失；既有续租 `InternalError` 断言通过。实现后 helper/finalize/CAS 定向测试 6/6、真实上传安全网 1/1（121.70 秒）和上传 Lifecycle/仓储/状态机/流程/授权/安全网/分布式拓扑聚焦 CTest 34/34（131.83 秒）通过。
+
+完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1500 项：1493 项通过、7 项按环境门控跳过、0 失败，总耗时 542.14 秒。源码审计确认目标 helper 区间 `.what()` 与 `reconciliation_job.error()` 均为 0，五条固定日志语句各精确出现 1 次；全文件仍有 6 处位于该区间之外的异常正文转发，留给后续独立批次。该批不改变类型化关联、续租错误、best-effort、早退、finding、任务、CAS、响应或重试语义，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

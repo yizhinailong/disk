@@ -86,6 +86,19 @@ namespace disk::file {
             return count;
         }
 
+        auto ExtractRange(
+            const std::string& source,
+            std::string_view begin_marker,
+            std::string_view end_marker
+        ) -> std::string {
+            const auto begin = source.find(begin_marker);
+            const auto end = source.find(end_marker, begin);
+            if (begin == std::string::npos || end == std::string::npos) {
+                return {};
+            }
+            return source.substr(begin, end - begin);
+        }
+
         TEST(UploadTaskRepositoryLookupContractTest, LookupMethodsKeepOwnershipAndActiveUploadGuards) {
             const auto source = ReadSourceFile("src/services/UploadTaskRepository.cpp");
             const auto lifecycle_source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
@@ -407,6 +420,35 @@ namespace disk::file {
             EXPECT_LT(cleanup_enqueue, chunk_delete);
             EXPECT_TRUE(Contains(source, "completed_file_id"));
             EXPECT_FALSE(Contains(source, "m_blob_store->DeleteBlob(final_storage_path)"));
+        }
+
+        TEST(UploadLifecycleFinalizeHelperLogContractTest, DependencyFailuresUseFixedSummaries) {
+            const auto source = ReadSourceFile("src/services/UploadLifecycleService.cpp");
+            const auto helper_source = ExtractRange(
+                source,
+                "auto RenewFinalizeLease(",
+                "[[nodiscard]] auto IsFilenameExists("
+            );
+
+            ASSERT_FALSE(helper_source.empty());
+            EXPECT_EQ(CountOccurrences(helper_source, ".what()"), 0U);
+            EXPECT_FALSE(Contains(helper_source, "reconciliation_job.error()"));
+            for (const auto* statement : {
+                     "Logger::Error(log_context) << \"Failed to renew upload finalize lease\";",
+                     "Logger::Warn(log_context) << \"Failed to record upload finalize error\";",
+                     "Logger::Warn(log_context) << \"Failed to persist upload staging mismatch\";",
+                     "Logger::Warn(log_context) << \"Failed to build upload staging reconciliation job\";",
+                     "Logger::Warn(log_context) << \"Failed to enqueue upload staging reconciliation\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(helper_source, statement), 1U) << statement;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    helper_source,
+                    "ErrorInfo(ErrorCode::InternalError, \"Failed to renew upload finalize lease\")"
+                ),
+                1U
+            );
         }
 
         TEST(UploadTaskRepositoryChunkPrimitiveContractTest, ChunkPersistencePrimitivesKeepIdempotencySortingAndTransactionalCleanup) {

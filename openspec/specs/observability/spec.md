@@ -706,6 +706,11 @@ The system SHALL propagate upload-completion correlation explicitly across contr
 - **WHEN** completion creates or rearms a cleanup or reconciliation job through an interface that does not return its persistent row ID
 - **THEN** the completion event SHALL keep `job_id` null and SHALL NOT derive an ID from the dedupe key, aggregate ID, or message text
 
+#### Scenario: Completion helper dependency fails
+- **WHEN** finalize lease renewal, finalize-error recording, staging-mismatch finding persistence, or reconciliation-job enqueue throws, or reconciliation-job construction returns an error
+- **THEN** the directly owned event SHALL use only its operation-specific fixed complete summary and existing typed correlation, and SHALL NOT append upload, lease, or version values, exception or domain-error text, SQL, connection details, object locators, paths, credentials, or tokens to the message
+- **AND** existing renewal error mapping, best-effort recording and persistence, construction early return, finding details, job payload and dedupe, compare-and-set, response, and retry behavior SHALL remain unchanged
+
 #### Scenario: Local storage assembles staged chunks
 - **WHEN** local storage admits and completes or fails an upload assembly across its blocking filesystem queue
 - **THEN** every assembly lifecycle event SHALL retain the caller-supplied request, operation, upload, job, owner, and state-version values exactly, including null values, without reconstructing them from the session, paths, or message text
