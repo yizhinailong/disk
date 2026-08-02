@@ -622,9 +622,8 @@ namespace disk::file {
                     auto file = Files(row, -1);
                     file_map[file.getValueOfId()] = std::move(file);
                 }
-            } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Warn(log_context)
-                    << "File batch fetch failed in copy, skipping chunk: " << e.base().what();
+            } catch (const drogon::orm::DrogonDbException&) {
+                Logger::Warn(log_context) << "File batch fetch failed in copy, skipping chunk";
                 continue;
             }
 
@@ -735,10 +734,8 @@ namespace disk::file {
                     user_id,
                     candidate_names
                 );
-            } catch (const drogon::orm::DrogonDbException& e) {
-                Logger::Warn(log_context)
-                    << "Filename conflict query failed in copy, skipping chunk: "
-                    << e.base().what();
+            } catch (const drogon::orm::DrogonDbException&) {
+                Logger::Warn(log_context) << "Filename conflict query failed in copy, skipping chunk";
                 file_conflict_query_failed = true;
             }
             if (file_conflict_query_failed) {
@@ -794,10 +791,8 @@ namespace disk::file {
                         content_ids,
                         log_context
                     );
-                } catch (const drogon::orm::DrogonDbException& e) {
-                    Logger::Warn(log_context)
-                        << "File content batch query failed in copy, skipping chunk: "
-                        << e.base().what();
+                } catch (const drogon::orm::DrogonDbException&) {
+                    Logger::Warn(log_context) << "File content batch query failed in copy, skipping chunk";
                     content_query_failed = true;
                 }
                 if (content_query_failed) {
@@ -1041,8 +1036,8 @@ namespace disk::file {
                 user_id,
                 root_folder_names
             );
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context) << "Folder conflict query failed in copy: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "Folder conflict query failed in copy";
             folder_conflict_query_failed = true;
         }
 
@@ -1127,9 +1122,8 @@ namespace disk::file {
                             content_ids,
                             log_context
                         );
-                    } catch (const drogon::orm::DrogonDbException& e) {
-                        Logger::Warn(log_context) << "Folder copy content query failed, skipping folder_id=" << folder_id
-                                                  << ": " << e.base().what();
+                    } catch (const drogon::orm::DrogonDbException&) {
+                        Logger::Warn(log_context) << "Folder copy content query failed, skipping folder";
                         content_query_failed = true;
                     }
                     if (content_query_failed) {
@@ -1533,8 +1527,8 @@ namespace disk::file {
                 uint64_t new_id = result[i]["id"].as<uint64_t>();
                 id_mappings.emplace_back(valid_items[i].first, new_id);
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Batch file insert failed in copy: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Batch file insert failed in copy";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to insert copied files"

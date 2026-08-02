@@ -420,6 +420,33 @@ namespace disk::file {
             EXPECT_LT(conflict_check, root_path);
         }
 
+        TEST(FileMutationServiceCopyContractTest, DatabaseFailuresUseFixedSummaries) {
+            const auto source = ReadSourceFile("src/services/FileMutationService.cpp");
+
+            ASSERT_FALSE(source.empty());
+            EXPECT_EQ(CountOccurrences(source, ".what()"), 0U);
+            for (const auto* message : {
+                     "File batch fetch failed in copy, skipping chunk",
+                     "Filename conflict query failed in copy, skipping chunk",
+                     "File content batch query failed in copy, skipping chunk",
+                     "Folder conflict query failed in copy",
+                     "Folder copy content query failed, skipping folder",
+                     "Batch file insert failed in copy",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(
+                        source,
+                        std::string("\"") + message + "\""
+                    ),
+                    1U
+                ) << message;
+            }
+            EXPECT_EQ(
+                CountOccurrences(source, "\"Failed to insert copied files\""),
+                2U
+            );
+        }
+
         TEST(FileMutationLogContextContractTest, ControllerAndServicesUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/FileController.cpp");
             const auto mutation_source = ReadSourceFile("src/services/FileMutationService.cpp");

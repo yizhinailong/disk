@@ -643,6 +643,11 @@ The system SHALL classify numeric file rename, drive move, drive copy, and file 
 - **THEN** its directly owned event SHALL use only the fixed complete `Unexpected exception in delete file` summary with the request's existing typed correlation and SHALL NOT append exception text, user, file, or folder identifiers, SQL, connection details, paths, credentials, or tokens
 - **AND** the controller SHALL retain the existing `InternalError` and `Internal error during file deletion` public response without changing parsing, service delegation, trash transactions, rollback, or success behavior
 
+#### Scenario: File copy catches a database exception
+- **WHEN** explicit-file fetch, file-name conflict lookup, file-content lookup, folder-name conflict lookup, folder-content lookup, or copied-file insertion catches a database exception
+- **THEN** the directly owned event SHALL use only its operation-specific fixed complete summary with the request's existing typed correlation and SHALL NOT append exception text, SQL, connection details, file, folder, content, or user identifiers, names, paths, quota values, credentials, or tokens
+- **AND** existing chunk or folder skipping, reservation release when already reserved, batch rollback, partial-success response, reference-count, item-count, quota, cache, and retry behavior SHALL remain unchanged
+
 #### Scenario: File mutation classification remains bounded
 - **WHEN** the request targets file query, upload, download, a nonnumeric rename path, or an unrecognized file-domain path
 - **THEN** the file-mutation classifier SHALL NOT absorb it, and the route SHALL retain its existing bounded operation classification

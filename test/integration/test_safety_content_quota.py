@@ -330,12 +330,17 @@ def copy_items(file_ids: list[int], folder_ids: list[int], target_folder_id: int
     return json.loads(resp.text).get("data", {})
 
 
-def copy_items_response(file_ids: list[int], folder_ids: list[int], target_folder_id: int = 0):
+def copy_items_response(
+    file_ids: list[int],
+    folder_ids: list[int],
+    target_folder_id: int = 0,
+    request_id: str | None = None,
+):
     """Copy files/folders and return the raw HTTP response."""
     resp = fetch(
         "/api/file/copy",
         method="POST",
-        headers=auth_headers(),
+        headers=auth_headers(request_id=request_id),
         json_body={"file_ids": file_ids, "folder_ids": folder_ids, "target_folder_id": target_folder_id},
     )
     save_evidence(f"{EVIDENCE_PREFIX}-copy-{unique_name()}.json", resp.text)
@@ -3030,9 +3035,15 @@ def test_copy_file_insert_failure_rolls_back_reservation_and_retries() -> None:
 
     before_ref = int(content_row(source_content_id)["ref_count"])
     quota_before = user_quota()
+    request_id = f"safety-copy-insert-failure-{unique_name()}"
     drop_trigger = install_copy_file_insert_failure_trigger(target_folder_id, source_name)
     try:
-        resp = copy_items_response([source_file_id], [], target_folder_id)
+        resp = copy_items_response(
+            [source_file_id],
+            [],
+            target_folder_id,
+            request_id=request_id,
+        )
     finally:
         drop_trigger()
 
@@ -3052,6 +3063,15 @@ def test_copy_file_insert_failure_rolls_back_reservation_and_retries() -> None:
     assert_equal("copy insert failure rolls back ref_count", after_failure_ref, before_ref)
     assert_equal("copy insert failure leaves used storage unchanged", quota_after_failure["storage_used"], quota_before["storage_used"])
     assert_equal("copy insert failure releases reserved bytes", quota_after_failure["storage_reserved"], quota_before["storage_reserved"])
+    wait_for_persistence_failure_log(
+        response=resp,
+        request_id=request_id,
+        expected_message="Batch file insert failed in copy",
+    )
+    assert_application_log_excludes(
+        "injected copy file insert failure",
+        "copy insert log excludes database exception text",
+    )
 
     retry_mappings = copy_file(source_file_id, target_folder_id)
     quota_after_retry = user_quota()

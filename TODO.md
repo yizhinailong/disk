@@ -2667,6 +2667,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 完整构建、Python 语法、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 547.62 秒。源码审计确认 `TransactionRunner.hpp` 中 `.what()` 为 0，`Database transaction failed` 固定字面量精确出现 2 次，`Transaction rollback failed` 精确出现 1 次；内存与真实故障日志均拒绝异常正文。该批不改变类型化关联、错误映射、rollback、commit 或业务响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.168 FileMutationService 复制异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧文件复制边界。显式文件批量读取、文件名冲突查询、文件内容批查、文件夹名冲突查询、文件夹内容批查和复制文件批量插入的六个数据库异常 catch 只允许对应固定完整摘要；不得转发异常正文、SQL、连接信息、file/folder/content/user ID、名称、路径、配额、凭据或 token。
+
+查询失败继续按既有批次/目录跳过语义处理，并在该阶段已经预留配额时释放对应预留；批量插入失败继续返回既有 `InternalError` 与 `Failed to insert copied files` 给内部事务，外层仍按批量部分成功合同回滚该批、释放预留并返回成功信封。类型化关联、名称锁、引用计数、item count、配额、缓存失效、响应计数与重试语义不得改变。
+
+旧实现上的定向源码合同按预期为 0/1，共 7 个失败断言：精确检出 6 处 `.what()`，六条固定完整摘要均缺失；既有 `Failed to insert copied files` 内部错误断言通过。实现后复制源码/上下文合同 6/6、真实内容配额安全网 1/1（24.55 秒）和复制/缓存/原子性/路径/配额/分布式拓扑聚焦 CTest 21/21（33.22 秒）通过。
+
+完整构建、Python 语法、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1499 项：1492 项通过、7 项按环境门控跳过、0 失败，总耗时 541.67 秒。源码审计确认 `FileMutationService.cpp` 中 `.what()` 为 0，六条固定摘要各精确出现 1 次；真实 PostgreSQL 插入故障事件保留 response 同一 request/instance/`file_mutation` 与四个空所有权字段，且应用日志拒绝触发器异常正文。该批不改变跳过、事务回滚、预留释放、部分成功响应、类型化关联、名称锁、引用计数、item count、配额、缓存或重试语义，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
