@@ -59,6 +59,45 @@ namespace disk::auth {
                    source.substr(begin, end - begin).find("log_context") != std::string::npos;
         }
 
+        TEST(AuthImplementationHelperContractTest, UserResponseMapperHasInternalLinkage) {
+            const auto service_header = ReadSourceFile("src/services/AuthService.hpp");
+            const auto service_source = ReadSourceFile("src/services/AuthService.cpp");
+
+            EXPECT_FALSE(Contains(service_header, "UserToResponse("));
+            EXPECT_FALSE(Contains(service_source, "AuthService::UserToResponse("));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "namespace {\n        [[nodiscard]] auto UserToResponse("
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "[[nodiscard]] auto UserToResponse(const Users& user) -> RegisterResponse"
+            ));
+            EXPECT_EQ(CountOccurrences(service_source, "UserToResponse("), 3U);
+            EXPECT_TRUE(Contains(service_source, "response.id = user.getValueOfId()"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "response.username = user.getValueOfUsername()"
+            ));
+            EXPECT_TRUE(Contains(service_source, "response.email = user.getValueOfEmail()"));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "response.nickname = user.getNickname() ? *user.getNickname() : user.getValueOfUsername()"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "response.storage_quota = user.getValueOfStorageQuota()"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "response.storage_used = user.getValueOfStorageUsed()"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "response.created_at = user.getValueOfCreatedAt().toDbStringLocal()"
+            ));
+        }
+
         TEST(AuthLogContextContractTest, ControllerDtoAndServiceUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/AuthController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");

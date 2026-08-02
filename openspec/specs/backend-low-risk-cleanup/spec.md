@@ -463,3 +463,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `HealthController::ToResponse` is consumed only by the liveness and readiness handlers in the same implementation unit
 - **THEN** the response mapper SHALL have internal linkage and SHALL NOT be declared by `HealthController.hpp`, while both probes continue to wrap `HealthResult::ToJson()` in the standard success envelope and return HTTP 503 whenever the overall status is not healthy without changing routes, checks, logging, or response fields
+
+#### Scenario: Authentication user mapping stays implementation-local
+
+- **WHEN** a whole-repository call-site and object-symbol audit confirms that `AuthService::UserToResponse` is consumed only by registration and login in the same implementation unit
+- **THEN** the user-response mapper SHALL have internal linkage and SHALL NOT be declared by `AuthService.hpp`, while both flows continue to emit the existing ID, username, email, nickname fallback, storage quota, storage usage, and creation-time fields without changing authentication, tokens, persistence, logging, errors, or public JSON

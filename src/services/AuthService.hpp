@@ -119,9 +119,6 @@ namespace disk::auth {
             -> drogon::Task<Result<void>>;
 
     private:
-        [[nodiscard]]
-        static auto UserToResponse(const drogon_model::disk::Users& user) -> RegisterResponse;
-
         /**
          * @brief 根据账号（用户名或邮箱）查找用户
          * @param account 账号（用户名或邮箱）

@@ -32,6 +32,20 @@ namespace disk::auth {
     using drogon::orm::Criteria;
     using drogon_model::disk::Users;
 
+    namespace {
+        [[nodiscard]] auto UserToResponse(const Users& user) -> RegisterResponse {
+            RegisterResponse response;
+            response.id = user.getValueOfId();
+            response.username = user.getValueOfUsername();
+            response.email = user.getValueOfEmail();
+            response.nickname = user.getNickname() ? *user.getNickname() : user.getValueOfUsername();
+            response.storage_quota = user.getValueOfStorageQuota();
+            response.storage_used = user.getValueOfStorageUsed();
+            response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
+            return response;
+        }
+    } // namespace
+
     AuthService::AuthService(const drogon::nosql::RedisClientPtr& redis_client)
         : m_db_client(disk::metrics::ObserveDbClient(drogon::app().getDbClient())),
           m_redis_service(disk::services::RedisService::GetInstance()) {
@@ -380,18 +394,6 @@ namespace disk::auth {
 
         Logger::Info(log_context) << "User logout successful: user_id=" << user_id;
         co_return {};
-    }
-
-    auto AuthService::UserToResponse(const Users& user) -> RegisterResponse {
-        RegisterResponse response;
-        response.id = user.getValueOfId();
-        response.username = user.getValueOfUsername();
-        response.email = user.getValueOfEmail();
-        response.nickname = user.getNickname() ? *user.getNickname() : user.getValueOfUsername();
-        response.storage_quota = user.getValueOfStorageQuota();
-        response.storage_used = user.getValueOfStorageUsed();
-        response.created_at = user.getValueOfCreatedAt().toDbStringLocal();
-        return response;
     }
 
     auto AuthService::FindUser(
