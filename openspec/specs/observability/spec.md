@@ -894,6 +894,11 @@ The system SHALL classify the manual expired-cleanup endpoint as the bounded `cl
 - **WHEN** expired-trash deletion decrements a content reference and the repository enqueue interface does not return the durable job's persistent row ID
 - **THEN** request-side cleanup events SHALL keep the job ID null and SHALL NOT derive it from a content ID, aggregate ID, dedupe key, count, or message text
 
+#### Scenario: Expired-trash page cleanup throws
+- **WHEN** one expired-trash page catches a database or other standard exception
+- **THEN** its directly owned event SHALL use only the matching fixed complete `Database error cleaning expired trash page` or `Failed to clean expired trash page` summary with existing typed correlation, and SHALL NOT append cursor, limit, trash, or content values, exception text, SQL, connection details, object locators, paths, credentials, or tokens
+- **AND** the existing `InternalError` and `Failed to clean expired trash` result, pagination, chunked permanent deletion, invalid-reference detection, counters, cursor advancement, and trash-first composition SHALL remain unchanged
+
 #### Scenario: Worker executes expiration through shared services
 - **WHEN** a claimed expired-upload or expired-trash job enters the same lifecycle and trash/content services
 - **THEN** its job-level events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner while request ID and state version remain null; an upload item-level event MAY add only the state version returned by its successful expiration transition

@@ -94,6 +94,36 @@ namespace disk::trash {
             ));
         }
 
+        TEST(TrashCleanupLogContractTest, PageExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
+            const auto cleanup_page = ExtractRange(
+                service_source,
+                "auto TrashService::CleanupExpiredTrashPage(",
+                "    /// ==================== 公共方法实现 ===================="
+            );
+
+            ASSERT_FALSE(cleanup_page.empty());
+            EXPECT_EQ(CountOccurrences(cleanup_page, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    cleanup_page,
+                    "Logger::Error(log_context) << \"Database error cleaning expired trash page\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    cleanup_page,
+                    "Logger::Error(log_context) << \"Failed to clean expired trash page\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(cleanup_page, "\"Failed to clean expired trash\""),
+                1U
+            );
+        }
+
         TEST(TrashLogContextContractTest, ControllerDtoAndServiceUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/TrashController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/TrashDto.hpp");

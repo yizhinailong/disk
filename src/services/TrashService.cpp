@@ -676,12 +676,10 @@ namespace disk::trash {
                    )
                        .count();
             co_return page;
-        } catch (const drogon::orm::DrogonDbException& error) {
-            Logger::Error(log_context)
-                << "Database error cleaning expired trash page: " << error.base().what();
-        } catch (const std::exception& error) {
-            Logger::Error(log_context)
-                << "Failed to clean expired trash page: " << error.what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Database error cleaning expired trash page";
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Failed to clean expired trash page";
         }
         co_return std::unexpected(
             ErrorInfo(ErrorCode::InternalError, "Failed to clean expired trash")
