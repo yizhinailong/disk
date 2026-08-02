@@ -70,11 +70,13 @@ namespace disk::file {
             const auto list_service_begin = service.find("auto FileQueryService::GetFileList(");
             const auto detail_service_begin = service.find("auto FileQueryService::GetFileDetail(");
             const auto download_service_begin = service.find("auto FileQueryService::GetDownloadInfo(");
+            const auto metadata_service_begin = service.find("auto FileQueryService::UpdateDownloadMetadata(");
             const auto search_service_begin = service.find("auto FileQueryService::Search(");
             const auto service_end = service.find("} // namespace disk::file", search_service_begin);
             ASSERT_NE(list_service_begin, std::string::npos);
             ASSERT_NE(detail_service_begin, std::string::npos);
             ASSERT_NE(download_service_begin, std::string::npos);
+            ASSERT_NE(metadata_service_begin, std::string::npos);
             ASSERT_NE(search_service_begin, std::string::npos);
             ASSERT_NE(service_end, std::string::npos);
 
@@ -118,6 +120,35 @@ namespace disk::file {
                 controller.find("m_query_service->Search(*parse_result, user_id, log_context)"),
                 std::string::npos
             );
+            EXPECT_EQ(CountOccurrences(service, ".what()"), 0U);
+            for (const auto* message : {
+                     "File list query failed",
+                     "File download metadata update failed",
+                     "File search failed",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(service, std::string("\"") + message + "\""),
+                    1U
+                ) << message;
+            }
+            EXPECT_EQ(
+                CountOccurrences(service, "\"Failed to query file list\""),
+                1U
+            );
+
+            const auto metadata_section = std::string_view(service).substr(
+                metadata_service_begin,
+                search_service_begin - metadata_service_begin
+            );
+            const auto search_section = std::string_view(service).substr(
+                search_service_begin,
+                service_end - search_service_begin
+            );
+            EXPECT_EQ(
+                metadata_section.find("co_return std::unexpected"),
+                std::string_view::npos
+            );
+            EXPECT_NE(search_section.find("co_return response;"), std::string_view::npos);
         }
 
         TEST(FileListCacheContractTest, EveryDriveMutationBoundaryBumpsTheSharedGeneration) {

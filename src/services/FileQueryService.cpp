@@ -120,8 +120,8 @@ namespace disk::file {
         try {
             FileListQuery query(m_db_client);
             response = co_await query.Execute(query_params, user_id);
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context) << "Failed to query file list: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "File list query failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to query file list"
@@ -341,10 +341,8 @@ namespace disk::file {
                 file_id,
                 user_id
             );
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to update file download metadata: " << e.base().what()
-                << " (file_id=" << file_id << ", user_id=" << user_id << ")";
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "File download metadata update failed";
         }
     }
 
@@ -369,8 +367,8 @@ namespace disk::file {
         try {
             SearchQuery query(m_db_client);
             response = co_await query.Execute(query_params, user_id);
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context) << "Failed to search: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "File search failed";
         }
 
         Logger::Debug(log_context)

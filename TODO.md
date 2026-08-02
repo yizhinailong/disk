@@ -2649,6 +2649,14 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 旧实现上的定向合同按预期为 0/1，共 4 个失败断言：源码精确检出 3 处 `.what()`，三个固定完整消息均缺失；三条既有公开错误映射断言通过。实现后定向合同 1/1、文件夹源码/仓储合同/真实生命周期/浏览突发/上传安全不变量/分布式拓扑聚焦 CTest 14/14（143.25 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 546.03 秒。源码审计确认 `FolderService.cpp` 中 `.what()` 为 0，三个固定服务消息与目录树/面包屑两个公开错误消息均各精确出现 1 次，父目录目标 catch 仍映射 `FolderNotFound`。该批不改变类型化关联、查询、树构造、缓存、错误映射或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.166 FileQueryService 数据库异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统一文件查询异常合同。列表查询、下载元数据更新与搜索的 `DrogonDbException` catch 分别只允许固定完整消息 `File list query failed`、`File download metadata update failed` 和 `File search failed`；不得拼接 file/user/folder ID、异常正文、SQL、连接信息、路径、搜索词、凭据或 token。
+
+列表查询继续返回既有 `InternalError` 与 `Failed to query file list`；下载元数据更新继续 best-effort 吞错，搜索异常继续返回既有默认响应。查询、缓存、下载响应、搜索分页和类型化关联保持不变。
+
+旧实现上的定向合同按预期为 0/1，共 4 个失败断言：源码精确检出 3 处 `.what()`，三个固定完整消息均缺失；列表公开错误、元数据更新吞错与搜索默认响应断言通过。实现后定向合同 1/1、文件查询源码/缓存世代/真实下载/列表与搜索/浏览突发/上传安全不变量/分布式拓扑聚焦 CTest 11/11（144.55 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 548.34 秒。源码审计确认 `FileQueryService.cpp` 中 `.what()` 为 0，三个固定服务消息与列表公开错误消息均各精确出现 1 次。该批不改变类型化关联、查询、缓存、下载元数据 best-effort 更新、搜索分页、错误映射或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

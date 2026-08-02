@@ -613,6 +613,11 @@ The system SHALL classify file-list, numeric file-detail, and file-search reques
 - **WHEN** a file query records identifiers such as a file ID, parent folder ID, or search keyword
 - **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those query values SHALL NOT be overloaded into typed correlation fields
 
+#### Scenario: File query database access throws
+- **WHEN** file-list lookup, download-metadata update, or file search catches a database exception
+- **THEN** the service SHALL log only the fixed complete `File list query failed`, `File download metadata update failed`, or `File search failed` event and SHALL NOT append file, user, or folder ID, search terms, exception text, SQL, connection details, paths, credentials, or tokens to the message
+- **AND** caller correlation, the existing file-list `InternalError` public message, best-effort metadata-update behavior, default search response, queries, cache behavior, pagination, and responses SHALL remain unchanged
+
 #### Scenario: Another file-domain route is classified
 - **WHEN** the request targets upload, download, or a file-mutation route
 - **THEN** the file-query classifier SHALL NOT absorb it, and the route SHALL retain its existing bounded operation classification
