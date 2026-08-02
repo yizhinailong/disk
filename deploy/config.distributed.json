@@ -94,7 +94,18 @@
   ],
   "plugins": [
     {
+      "name": "drogon::plugin::RealIpResolver",
+      "config": {
+        "trust_ips": [],
+        "from_header": "x-real-ip",
+        "attribute_key": "disk-client-ip"
+      }
+    },
+    {
       "name": "drogon::plugin::GlobalFilters",
+      "dependencies": [
+        "drogon::plugin::RealIpResolver"
+      ],
       "config": {
         "filters": [
           "disk::filters::RequestTraceFilter",

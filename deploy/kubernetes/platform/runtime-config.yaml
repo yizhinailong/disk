@@ -14,6 +14,7 @@ data:
   DISK_STORAGE_BACKEND: s3
   DISK_UPLOAD_STAGING_BACKEND: s3
   DISK_UPLOAD_TASK_CREATION_ENABLED: "true"
+  DISK_TRUSTED_PROXY_CIDRS: '["replace-with-ingress-proxy-ip-or-cidr"]'
   DATABASE_HOST: replace-with-private-postgres-writer
   DATABASE_PORT: "5432"
   DATABASE_NAME: disk

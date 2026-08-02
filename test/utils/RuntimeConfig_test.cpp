@@ -127,6 +127,7 @@ namespace {
             "DISK_STORAGE_BACKEND",
             "DISK_UPLOAD_STAGING_BACKEND",
             "DISK_UPLOAD_TASK_CREATION_ENABLED",
+            "DISK_TRUSTED_PROXY_CIDRS",
             "DISK_S3_BUCKET",
             "DISK_S3_REGION",
             "DISK_S3_ENDPOINT",
@@ -154,6 +155,8 @@ namespace {
         config["redis_clients"][0]["host"] = "localhost";
         config["redis_clients"][0]["port"] = 6379;
         config["custom_config"]["disk"] = Json::Value(Json::objectValue);
+        config["plugins"][0]["name"] = "drogon::plugin::RealIpResolver";
+        config["plugins"][0]["config"]["trust_ips"] = Json::Value(Json::arrayValue);
         return config;
     }
 
@@ -255,6 +258,10 @@ namespace {
         EnvironmentScope::Set("DISK_STORAGE_BACKEND", "s3");
         EnvironmentScope::Set("DISK_UPLOAD_STAGING_BACKEND", "s3");
         EnvironmentScope::Set("DISK_UPLOAD_TASK_CREATION_ENABLED", "false");
+        EnvironmentScope::Set(
+            "DISK_TRUSTED_PROXY_CIDRS",
+            R"(["10.20.0.10","10.20.1.0/24"])"
+        );
         EnvironmentScope::Set("DISK_S3_BUCKET", "disk-test");
         EnvironmentScope::Set("DISK_S3_REGION", "us-west-2");
         EnvironmentScope::Set("DISK_S3_ENDPOINT", "https://minio:9000");
@@ -294,6 +301,11 @@ namespace {
         EXPECT_EQ(disk["storage_backend"].asString(), "s3");
         EXPECT_EQ(disk["upload_staging_backend"].asString(), "s3");
         EXPECT_FALSE(disk["upload_task_creation_enabled"].asBool());
+        const auto& trust_ips = config["plugins"][0]["config"]["trust_ips"];
+        ASSERT_TRUE(trust_ips.isArray());
+        ASSERT_EQ(trust_ips.size(), 2U);
+        EXPECT_EQ(trust_ips[0].asString(), "10.20.0.10");
+        EXPECT_EQ(trust_ips[1].asString(), "10.20.1.0/24");
         EXPECT_EQ(disk["s3"]["bucket"].asString(), "disk-test");
         EXPECT_EQ(disk["s3"]["region"].asString(), "us-west-2");
         EXPECT_EQ(disk["s3"]["endpoint"].asString(), "https://minio:9000");
@@ -383,6 +395,50 @@ namespace {
         EnvironmentScope::Set("REDIS_HOST", "redis");
         EXPECT_THROW(
             LoadRuntimeConfig(config),
+            std::runtime_error
+        );
+    }
+
+    TEST(RuntimeConfigTest, RejectsInvalidTrustedProxyCidrsWithoutEchoingValues) {
+        EnvironmentScope environment(RuntimeEnvironmentNames());
+
+        for (const auto* invalid : {
+                 "not-json-secret",
+                 "{}",
+                 "[]",
+                 R"([""])",
+             }) {
+            EnvironmentScope::Set("DISK_TRUSTED_PROXY_CIDRS", invalid);
+            try {
+                static_cast<void>(LoadRuntimeConfig(BaseConfig()));
+                FAIL() << "Expected invalid trusted proxy CIDRs to fail";
+            } catch (const std::runtime_error& error) {
+                EXPECT_NE(
+                    std::string(error.what()).find("DISK_TRUSTED_PROXY_CIDRS"),
+                    std::string::npos
+                );
+                EXPECT_EQ(std::string(error.what()).find(invalid), std::string::npos);
+            }
+        }
+
+        Json::Value too_many(Json::arrayValue);
+        for (size_t index = 0; index < 33; ++index) {
+            too_many.append("10.0.0.1");
+        }
+        Json::StreamWriterBuilder writer;
+        writer["indentation"] = "";
+        const auto too_many_json = Json::writeString(writer, too_many);
+        EnvironmentScope::Set("DISK_TRUSTED_PROXY_CIDRS", too_many_json.c_str());
+        EXPECT_THROW(
+            LoadRuntimeConfig(BaseConfig()),
+            std::runtime_error
+        );
+
+        EnvironmentScope::Set("DISK_TRUSTED_PROXY_CIDRS", R"(["10.20.0.10"])");
+        auto missing_plugin = BaseConfig();
+        missing_plugin.removeMember("plugins");
+        EXPECT_THROW(
+            LoadRuntimeConfig(missing_plugin),
             std::runtime_error
         );
     }

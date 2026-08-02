@@ -9,6 +9,7 @@
 #include "dtos/StorageRecoveryAdminDto.hpp"
 #include "services/ObservedDbClient.hpp"
 #include "services/StorageRecoveryAdminService.hpp"
+#include "utils/ClientIp.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::controllers {
@@ -23,7 +24,7 @@ namespace disk::controllers {
             -> disk::recovery::RecoveryAuditContext {
             return disk::recovery::RecoveryAuditContext{
                 .operator_id = request->attributes()->get<uint64_t>("user_id"),
-                .ip_address = request->getPeerAddr().toIp(),
+                .ip_address = disk::utils::ResolveClientIp(request),
                 .user_agent = request->getHeader("User-Agent"),
             };
         }

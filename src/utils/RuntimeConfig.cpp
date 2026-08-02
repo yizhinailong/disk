@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -90,6 +91,47 @@ namespace disk::utils {
                 throw std::runtime_error("Configuration must contain custom_config.disk object");
             }
             return disk;
+        }
+
+        auto PluginConfig(Json::Value& root, std::string_view plugin_name) -> Json::Value& {
+            auto& plugins = root["plugins"];
+            if (!plugins.isArray()) {
+                throw std::runtime_error("Configuration must contain plugins array");
+            }
+
+            Json::Value* matched_plugin = nullptr;
+            for (auto& plugin : plugins) {
+                if (!plugin.isObject() || !plugin["name"].isString() ||
+                    plugin["name"].asString() != plugin_name) {
+                    continue;
+                }
+                if (matched_plugin != nullptr) {
+                    throw std::runtime_error("Configuration contains duplicate required plugin");
+                }
+                matched_plugin = &plugin;
+            }
+            if (matched_plugin == nullptr || !(*matched_plugin)["config"].isObject()) {
+                throw std::runtime_error("Configuration is missing required plugin");
+            }
+            return (*matched_plugin)["config"];
+        }
+
+        [[nodiscard]]
+        auto ParseStringArray(const std::string& value, const char* name) -> Json::Value {
+            Json::Value parsed;
+            Json::CharReaderBuilder builder;
+            std::string errors;
+            std::istringstream input(value);
+            if (!Json::parseFromStream(builder, input, &parsed, &errors) || !parsed.isArray() ||
+                parsed.empty() || parsed.size() > 32) {
+                throw std::runtime_error(std::string("Invalid JSON string array: ") + name);
+            }
+            for (const auto& item : parsed) {
+                if (!item.isString() || item.asString().empty()) {
+                    throw std::runtime_error(std::string("Invalid JSON string array: ") + name);
+                }
+            }
+            return parsed;
         }
 
         template <typename Setter>
@@ -218,6 +260,10 @@ namespace disk::utils {
             ApplyBoolean("DISK_UPLOAD_TASK_CREATION_ENABLED", [&config](bool value) {
                 DiskConfig(config)["upload_task_creation_enabled"] = value;
             });
+            if (auto value = ReadEnvironment("DISK_TRUSTED_PROXY_CIDRS"); value.has_value()) {
+                PluginConfig(config, "drogon::plugin::RealIpResolver")["trust_ips"] =
+                    ParseStringArray(*value, "DISK_TRUSTED_PROXY_CIDRS");
+            }
 
             ApplyString("DISK_S3_BUCKET", [&config](std::string value) {
                 DiskConfig(config)["s3"]["bucket"] = std::move(value);

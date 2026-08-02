@@ -16,6 +16,7 @@
 #include "filters/RateLimitHelper.hpp"
 #include "filters/ShareAuthFilter.hpp"
 #include "services/RedisService.hpp"
+#include "utils/ClientIp.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/RedisKeyPrefix.hpp"
 
@@ -78,16 +79,15 @@ namespace disk::filters {
         const auto configured_limit = config->GetShareAccessRateLimitPerMinute();
         const auto limit = configured_limit > 0 ? configured_limit : DEFAULT_LIMIT;
         const auto window = GetFixedWindowStart(window_seconds);
-        const auto peer_ip = request->peerAddr().toIp();
-        const auto normalized_ip = disk::redis::RedisKeyPrefix::ExtractIPOnly(peer_ip);
+        const auto client_ip = disk::utils::ResolveClientIp(request);
         const auto key =
-            disk::redis::RedisKeyPrefix::BuildShareAccessRateLimitKey(peer_ip, window);
+            disk::redis::RedisKeyPrefix::BuildShareAccessRateLimitKey(client_ip, window);
 
         auto count_result = co_await m_counter(key, window_seconds, log_context);
         if (!count_result) {
             Logger::Error(log_context)
                 << "Share rate-limit counter failed: operation=access, client_ip="
-                << normalized_ip << ", error=" << count_result.error().message;
+                << client_ip << ", error=" << count_result.error().message;
             co_return nullptr;
         }
 

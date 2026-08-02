@@ -143,4 +143,9 @@ The system SHALL enforce account status and rate-limit protections for authentic
 
 #### Scenario: Authentication persists a normalized peer address
 - **WHEN** login or logout receives a transport peer endpoint containing an IPv4 or bracketed IPv6 address and a TCP source port
-- **THEN** login rate limiting, `users.last_login_ip`, and logout audit persistence SHALL reuse one normalized address without the source port, and the service SHALL NOT trust forwarded client-IP headers unless an explicit trusted-proxy resolver owns that boundary
+- **THEN** login rate limiting, `users.last_login_ip`, and logout audit persistence SHALL reuse one normalized address without the source port
+
+#### Scenario: A trusted reverse proxy supplies the client address
+- **WHEN** the transport peer matches an explicitly configured Drogon `RealIpResolver` IPv4/CIDR allowlist and the proxy overwrites `X-Real-IP` with one IPv4 client address
+- **THEN** registration/login/share IP rate limits and authentication/share/storage-management audits SHALL use only the resolver-owned `disk-client-ip` request attribute
+- **AND** an empty allowlist, an untrusted transport peer, a missing resolver attribute, or caller-controlled `X-Forwarded-For` SHALL fall back to the transport peer without business code parsing either forwarded header

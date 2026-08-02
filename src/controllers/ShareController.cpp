@@ -15,6 +15,7 @@
 #include "application/ApplicationContext.hpp"
 #include "controllers/ControllerHelpers.hpp"
 #include "dtos/ShareDto.hpp"
+#include "utils/ClientIp.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::share {
@@ -22,7 +23,7 @@ namespace disk::share {
     namespace {
         auto BuildAuditContext(const drogon::HttpRequestPtr& request) -> ShareAuditContext {
             return ShareAuditContext{
-                .ip_address = request->getPeerAddr().toIp(),
+                .ip_address = disk::utils::ResolveClientIp(request),
                 .user_agent = std::string(request->getHeader("User-Agent")),
             };
         }

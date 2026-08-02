@@ -468,6 +468,7 @@ def main() -> int:
         "DISK_SECURE_MODE": "true",
         "DISK_STORAGE_BACKEND": "s3",
         "DISK_UPLOAD_STAGING_BACKEND": "s3",
+        "DISK_TRUSTED_PROXY_CIDRS": '["replace-with-ingress-proxy-ip-or-cidr"]',
         "DATABASE_POOL_SIZE": "8",
         "REDIS_HOST": "127.0.0.1",
         "REDIS_PORT": "6379",
@@ -1400,6 +1401,10 @@ def main() -> int:
             == "${DISK_UPLOAD_TASK_CREATION_ENABLED:-true}",
             f"{name} upload creation cutoff override is missing",
         )
+        require(
+            environment["DISK_TRUSTED_PROXY_CIDRS"] == '["172.28.0.10"]',
+            f"{name} trusted proxy boundary drifted",
+        )
 
     env_example = set(
         (root / "deploy/distributed.env.example").read_text(encoding="utf-8").splitlines()
@@ -1415,6 +1420,19 @@ def main() -> int:
     require(
         "DISK_STOP_GRACE_PERIOD=40s" in env_example,
         "distributed env template must expose the termination grace",
+    )
+    require(
+        "DISK_TRUSTED_PROXY_CIDRS='[\"replace-with-load-balancer-ip-or-cidr\"]'"
+        in env_example,
+        "distributed env template must expose the trusted proxy allowlist",
+    )
+
+    load_balancer_network = services["load-balancer"]["networks"]["disk-backend"]
+    require(
+        load_balancer_network["ipv4_address"] == "172.28.0.10"
+        and compose["networks"]["disk-backend"]["ipam"]["config"]
+        == [{"subnet": "172.28.0.0/24"}],
+        "trusted load-balancer address must be fixed inside the backend network",
     )
 
     require(
@@ -1441,6 +1459,35 @@ def main() -> int:
             and isinstance(database_clients[0], dict)
             and database_clients[0].get("name") == "default",
             f"{relative_path} must contain exactly one default database client",
+        )
+        real_ip_plugins = [
+            plugin
+            for plugin in checked_config.get("plugins", [])
+            if plugin.get("name") == "drogon::plugin::RealIpResolver"
+        ]
+        require(
+            len(real_ip_plugins) == 1
+            and real_ip_plugins[0].get("config")
+            == {
+                "trust_ips": [],
+                "from_header": "x-real-ip",
+                "attribute_key": "disk-client-ip",
+            },
+            f"{relative_path} trusted client-IP resolver drifted",
+        )
+        global_filters = next(
+            (
+                plugin
+                for plugin in checked_config["plugins"]
+                if plugin.get("name") == "drogon::plugin::GlobalFilters"
+            ),
+            None,
+        )
+        require(
+            global_filters is not None
+            and "drogon::plugin::RealIpResolver"
+            in global_filters.get("dependencies", []),
+            f"{relative_path} filters may run before trusted IP resolution",
         )
 
     production_sources = "\n".join(

@@ -15,9 +15,9 @@
 #include "filters/FilterLogContext.hpp"
 #include "filters/RateLimitHelper.hpp"
 #include "services/RedisService.hpp"
+#include "utils/ClientIp.hpp"
 #include "utils/ConfigMgr.hpp"
 #include "utils/ErrorCode.hpp"
-#include "utils/RedisKeyPrefix.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::filters {
@@ -36,8 +36,6 @@ namespace disk::filters {
         }
 
     } // namespace
-
-    using disk::redis::RedisKeyPrefix;
 
     RegisterRateLimitFilter::RegisterRateLimitFilter()
         : RegisterRateLimitFilter(MakeRedisCounter()) {
@@ -58,7 +56,7 @@ namespace disk::filters {
         }
 
         /// 从请求获取 IP 地址
-        const auto ip = RedisKeyPrefix::ExtractIPOnly(request->peerAddr().toIp());
+        const auto ip = disk::utils::ResolveClientIp(request);
         const auto config = disk::utils::ConfigMgr::GetInstance();
         const auto configured_window = config->GetRegisterRateLimitWindowSeconds();
         const auto window_seconds = configured_window > 0 ? configured_window : WINDOW_SECONDS;

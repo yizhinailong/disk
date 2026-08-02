@@ -379,6 +379,31 @@ def cluster_config(
         }
     )
     config["custom_config"]["disk"]["auth_cpu_pool_metrics_interval_seconds"] = 1
+    real_ip_plugin = next(
+        (
+            plugin
+            for plugin in config["plugins"]
+            if plugin.get("name") == "drogon::plugin::RealIpResolver"
+        ),
+        None,
+    )
+    if real_ip_plugin is None:
+        real_ip_plugin = {
+            "name": "drogon::plugin::RealIpResolver",
+            "config": {
+                "trust_ips": [],
+                "from_header": "x-real-ip",
+                "attribute_key": "disk-client-ip",
+            },
+        }
+        config["plugins"].insert(0, real_ip_plugin)
+    real_ip_plugin["config"]["trust_ips"] = ["127.0.0.1"]
+    global_filters = next(
+        plugin
+        for plugin in config["plugins"]
+        if plugin.get("name") == "drogon::plugin::GlobalFilters"
+    )
+    global_filters["dependencies"] = ["drogon::plugin::RealIpResolver"]
     return config
 
 
@@ -416,7 +441,13 @@ def start_api(
     )
 
 
-def register_and_login(base_url: str, username: str, password: str) -> dict[str, str]:
+def register_and_login(
+    base_url: str,
+    username: str,
+    password: str,
+    *,
+    client_ip: str | None = None,
+) -> dict[str, str]:
     register = httpx.post(
         base_url + "/api/auth/register",
         json={
@@ -427,8 +458,10 @@ def register_and_login(base_url: str, username: str, password: str) -> dict[str,
         timeout=20,
     )
     success_data(register, "register on API A")
+    headers = {"X-Real-IP": client_ip} if client_ip is not None else None
     login = httpx.post(
         base_url + "/api/auth/login",
+        headers=headers,
         json={"account": username, "password": password},
         timeout=20,
     )
@@ -652,6 +685,8 @@ def require_normalized_auth_peer_persistence(
     database_name: str,
     login_username: str,
     logout_username: str,
+    expected_login_ip: str,
+    expected_logout_ip: str,
 ) -> dict[str, Any]:
     with connect(database_name) as connection:
         login_row = connection.execute(
@@ -668,18 +703,18 @@ def require_normalized_auth_peer_persistence(
 
     require(login_row is not None, "login peer persistence user is missing")
     require(
-        login_row["last_login_ip"] == "127.0.0.1",
-        f"last_login_ip retained a source port: {login_row}",
+        login_row["last_login_ip"] == expected_login_ip,
+        f"last_login_ip ignored trusted proxy resolution: {login_row}",
     )
     require(logout_row is not None, "logout peer audit row is missing")
     require(
-        logout_row["ip_address"] == "127.0.0.1",
-        f"logout audit IP retained a source port: {logout_row}",
+        logout_row["ip_address"] == expected_logout_ip,
+        f"logout audit IP ignored trusted proxy resolution: {logout_row}",
     )
     return {
         "auth_peer_login_ip_normalized": True,
         "auth_peer_logout_ip_normalized": True,
-        "auth_peer_forwarded_headers_trusted": False,
+        "auth_peer_trusted_proxy_resolved": True,
     }
 
 
@@ -917,7 +952,14 @@ def main() -> int:
             )
             base_urls = (api_a.base_url, api_b.base_url)
 
-            initial = register_and_login(api_a.base_url, username, password)
+            login_client_ip = "198.51.100.27"
+            logout_client_ip = "203.0.113.41"
+            initial = register_and_login(
+                api_a.base_url,
+                username,
+                password,
+                client_ip=login_client_ip,
+            )
             require_profile(api_b.base_url, initial["access_token"], username)
             account_lock_evidence = require_account_lock_consistency(
                 base_urls,
@@ -937,7 +979,10 @@ def main() -> int:
             )
             pre_fault_logout = httpx.post(
                 api_a.base_url + "/api/auth/logout",
-                headers=auth_headers(pre_fault_revoked["access_token"]),
+                headers={
+                    **auth_headers(pre_fault_revoked["access_token"]),
+                    "X-Real-IP": logout_client_ip,
+                },
                 timeout=15,
             )
             require_success(pre_fault_logout, "pre-fault logout on API A")
@@ -945,6 +990,8 @@ def main() -> int:
                 database_name,
                 username,
                 f"revoked_{suffix}",
+                login_client_ip,
+                logout_client_ip,
             )
 
             cancelled_folder = create_folder(

@@ -10,6 +10,7 @@
 #include "AuthController.hpp"
 
 #include "controllers/ControllerHelpers.hpp"
+#include "utils/ClientIp.hpp"
 #include "utils/Response.hpp"
 
 namespace disk::auth {
@@ -71,7 +72,7 @@ namespace disk::auth {
         }
 
         /// 2. 调用 Service 登录
-        const auto ip_address = request->getPeerAddr().toIpPort();
+        const auto ip_address = disk::utils::ResolveClientIp(request);
         auto login_result =
             co_await m_auth_service->Login(*parse_result, ip_address, log_context);
 
@@ -145,7 +146,7 @@ namespace disk::auth {
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
 
         /// 步骤 3: 提取 IP 地址
-        const auto ip_address = request->getPeerAddr().toIpPort();
+        const auto ip_address = disk::utils::ResolveClientIp(request);
 
         /// 步骤 4: 调用 Service 层登出
         auto logout_result =
