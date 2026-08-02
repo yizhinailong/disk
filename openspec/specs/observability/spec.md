@@ -488,6 +488,11 @@ The system SHALL propagate storage-recovery administration request correlation e
 - **WHEN** a storage-recovery command succeeds or fails
 - **THEN** application and audit events SHALL NOT contain Authorization header values, administrator JWTs, object-storage credentials, object keys or prefixes, arbitrary cursors, or storage-job payloads
 
+#### Scenario: Storage-recovery inspection throws
+- **WHEN** lease dry-run inspection, cleanup-rebuild dry-run inspection, or reconciliation enqueue inspection catches a standard exception
+- **THEN** the service SHALL log only the fixed complete `Upload lease release dry-run failed`, `Upload cleanup rebuild dry-run failed`, or `Storage reconciliation enqueue inspection failed` event and SHALL NOT append upload ID, scan ID, exception text, SQL, connection details, object locators, credentials, or tokens to the message
+- **AND** the validated upload ID SHALL remain only in typed context where applicable, while the three existing `InternalError` public messages, transactions, audits, and command behavior remain unchanged
+
 ### Requirement: Side-Effect-Free Shared DTO Validation
 The shared `DtoBase` parsing helpers SHALL be deterministic validation utilities that report failures only through their existing `Result<T>` contracts. They SHALL NOT emit application or framework logs, infer request correlation, or retain caller input.
 

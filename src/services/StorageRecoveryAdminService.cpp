@@ -297,10 +297,8 @@ namespace disk::recovery {
                 log_context.lease_owner = response.lease_owner;
                 Logger::Info(log_context) << "Upload lease release dry-run inspected";
                 co_return response;
-            } catch (const std::exception& error) {
-                Logger::Error(log_context)
-                    << "Upload lease release dry-run failed: upload_id="
-                    << request.upload_id << ", error=" << error.what();
+            } catch (const std::exception&) {
+                Logger::Error(log_context) << "Upload lease release dry-run failed";
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
                     "Failed to inspect upload lease"
@@ -397,10 +395,8 @@ namespace disk::recovery {
                 log_context.job_id = response.job_id;
                 Logger::Info(log_context) << "Upload cleanup rebuild dry-run inspected";
                 co_return response;
-            } catch (const std::exception& error) {
-                Logger::Error(log_context)
-                    << "Upload cleanup rebuild dry-run failed: upload_id="
-                    << request.upload_id << ", error=" << error.what();
+            } catch (const std::exception&) {
+                Logger::Error(log_context) << "Upload cleanup rebuild dry-run failed";
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::InternalError,
                     "Failed to inspect upload cleanup task"
@@ -516,10 +512,9 @@ namespace disk::recovery {
                     << "Storage reconciliation enqueue dry-run inspected";
                 co_return response;
             }
-        } catch (const std::exception& error) {
+        } catch (const std::exception&) {
             Logger::Error(log_context)
-                << "Storage reconciliation enqueue inspection failed: scan_id="
-                << request.scan_id << ", error=" << error.what();
+                << "Storage reconciliation enqueue inspection failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to inspect storage reconciliation task"

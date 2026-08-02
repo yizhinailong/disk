@@ -2633,6 +2633,14 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 旧实现上的定向合同按预期为 0/1，共 2 个失败断言：源码精确检出 1 处 `.what()`，固定计划错误返回缺失；既有 `SeedOnce` 错误映射断言通过。实现后定向合同 1/1、周期计划/真实角色切换/任务队列/Worker drain/分布式拓扑聚焦 CTest 9/9（35.74 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 559.27 秒。源码审计确认 `ScheduledTasks.cpp` 中 `.what()` 为 0，固定计划错误与既有 `SeedOnce` 错误映射各精确出现 1 次。该批不改变 UTC 窗口、计划内容、错误映射、播种、去重、角色归属或排空行为，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.164 StorageRecoveryAdminService inspection 异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统一存储恢复管理 inspection 异常合同。租约 dry-run、cleanup rebuild dry-run 与对账入队 inspection 标准异常 catch 分别只允许固定完整消息 `Upload lease release dry-run failed`、`Upload cleanup rebuild dry-run failed` 和 `Storage reconciliation enqueue inspection failed`；upload/scan ID、异常正文、SQL、连接信息、对象定位符、凭据和 token 不得进入日志消息。
+
+已验证 upload ID 继续只由类型化上下文承载。三个既有 `InternalError` 公开消息、实际变更事务、CAS、去重、审计和响应语义保持不变。
+
+旧实现上的定向合同按预期为 0/1，共 4 个失败断言：源码精确检出 3 处 `.what()`，三个固定完整消息均缺失；三个既有公开错误消息断言通过。实现后定向合同 1/1、恢复管理源码合同/DTO/真实操作流/任务失败持久化/分布式拓扑聚焦 CTest 11/11（13.61 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 542.69 秒。源码审计确认 `StorageRecoveryAdminService.cpp` 中 `.what()`、`failed:` 与 `error=` 均为 0，三个固定服务消息与三个公开错误消息均各精确出现 1 次。该批不改变类型化关联、错误映射、实际变更事务、CAS、去重、审计或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

@@ -130,6 +130,30 @@ namespace disk::recovery {
             EXPECT_TRUE(AllCallsContainContext(service_source, "co_await RecordAudit("));
             EXPECT_TRUE(AllLoggerCallsUseContext(service_source));
 
+            EXPECT_EQ(CountOccurrences(service_source, ".what()"), 0U);
+            for (const auto* message : {
+                     "Upload lease release dry-run failed",
+                     "Upload cleanup rebuild dry-run failed",
+                     "Storage reconciliation enqueue inspection failed",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(
+                        service_source,
+                        std::string("\"") + message + "\""
+                    ),
+                    1U
+                ) << message;
+            }
+            EXPECT_EQ(CountOccurrences(service_source, "failed:"), 0U);
+            EXPECT_EQ(CountOccurrences(service_source, "error="), 0U);
+            for (const auto* message : {
+                     "Failed to inspect upload lease",
+                     "Failed to inspect upload cleanup task",
+                     "Failed to inspect storage reconciliation task",
+                 }) {
+                EXPECT_EQ(CountOccurrences(service_source, message), 1U) << message;
+            }
+
             EXPECT_TRUE(Contains(
                 service_source,
                 "disk::utils::SetRequestCorrelationFields(details, log_context);"
