@@ -2601,6 +2601,14 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 旧实现上的定向源码合同按预期为 0/1，共 2 个失败断言：mutation Controller 区间精确检出 1 处 `.what()`，且固定完整语句计数为 0、预期为 1；既有 `InternalError` 公开消息断言通过。实现后定向测试 1/1、FileMutation 合同/真实复制删除原子性/文件变更与删除回归/分布式拓扑聚焦 CTest 16/16（8.28 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1497 项：1490 项通过、7 项按环境门控跳过、0 失败，总耗时 543.14 秒。`src/controllers/` 中 `.what()` 为 0，固定失败消息与公开错误各精确出现 1 次。该批不改变 DTO、服务委托、回收站事务、回滚、错误或成功响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.160 StorageFactory S3 初始化错误脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统一存储工厂异常合同。S3 client factory、bucket 可访问性校验或适配器构造异常只允许重新抛出固定完整文本 `Failed to initialize S3 storage backend`；provider `ErrorInfo.message`、标准异常正文、bucket、endpoint、region、prefix/key、路径、凭据和 token 不得进入最终异常链。
+
+外层 `storage_runtime`/bootstrap 固定失败摘要与退出码 1 保持不变。local/S3 选择、bucket 校验调用、共享 S3 adapter 构造、队列/指标注册和初始化顺序保持不变。
+
+旧实现上的两个定向测试按预期为 0/2，共 3 个失败断言：源码精确检出 1 处 `.what()`、缺失固定 throw，行为测试直接观察到注入的 `access denied` 被传播。实现后定向测试 2/2、StorageFactory/观察 Worker/安全 local staging 截止/S3 生命周期/分布式拓扑聚焦 CTest 8/8（2.55 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1497 项：1490 项通过、7 项按环境门控跳过、0 失败，总耗时 544.14 秒。源码审计确认 `StorageFactory.cpp` 中 `.what()` 为 0，固定 throw 精确出现 1 次，注入 provider 文本只存在于测试夹具。该批不改变后端选择、bucket 校验、构造顺序、日志或退出码，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

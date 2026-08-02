@@ -775,6 +775,11 @@ The system SHALL correlate storage backend selection, adapter initialization, ma
 - **WHEN** backend construction or manager installation throws before the process starts serving
 - **THEN** the process SHALL emit a fixed `storage_runtime` error without exception text or deployment details and SHALL preserve the existing non-zero exit behavior
 
+#### Scenario: S3 storage factory initialization fails
+- **WHEN** `StorageFactory` catches an exception from the S3 client factory, bucket-access validation, or S3 adapter construction
+- **THEN** it SHALL rethrow only the fixed complete `Failed to initialize S3 storage backend` text and SHALL NOT append provider error messages, exception text, bucket, endpoint, region, object prefix or key, path, credential, or token values
+- **AND** backend selection, bucket validation, construction order, outer fixed runtime diagnostics, and non-zero process exit behavior SHALL remain unchanged
+
 ### Requirement: Typed Initialized Process Runtime Diagnostics
 The system SHALL correlate post-registration process initialization stages without assigning them to an HTTP request, upload, or durable job.
 

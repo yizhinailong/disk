@@ -239,6 +239,14 @@ TEST(StorageRuntimeLogContextContractTest, UsesTypedContextAndBoundedDeploymentD
     EXPECT_FALSE(Contains(combined_source, "Logger::Info()"));
     EXPECT_TRUE(Contains(factory_source, "Storage backend selected: backend=local"));
     EXPECT_TRUE(Contains(factory_source, "Storage backend selected: backend=s3"));
+    EXPECT_EQ(CountOccurrences(factory_source, ".what()"), 0U);
+    EXPECT_EQ(
+        CountOccurrences(
+            factory_source,
+            "throw std::runtime_error(\"Failed to initialize S3 storage backend\");"
+        ),
+        1U
+    );
     EXPECT_TRUE(Contains(local_file_source, "Local file storage initialized: io_threads="));
     EXPECT_TRUE(Contains(local_blob_source, "Local blob storage initialized: io_threads="));
     EXPECT_TRUE(Contains(s3_constructor, "S3 object storage initialized: max_connections="));
@@ -435,10 +443,7 @@ TEST_F(StorageFactoryTest, MapsBucketValidationFailureToStableInitializationErro
         );
         FAIL() << "Expected S3 initialization to fail";
     } catch (const std::runtime_error& e) {
-        EXPECT_EQ(
-            std::string(e.what()),
-            "Failed to initialize S3 storage backend: S3 GetBucketLocation failed: access denied"
-        );
+        EXPECT_EQ(std::string(e.what()), "Failed to initialize S3 storage backend");
     }
 
     EXPECT_EQ(client->validate_calls, 1);

@@ -46,10 +46,8 @@ namespace disk::storage {
                         .upload_staging_storage = s3_storage,
                         .blob_store = s3_storage,
                     };
-                } catch (const std::exception& e) {
-                    throw std::runtime_error(
-                        std::string("Failed to initialize S3 storage backend: ") + e.what()
-                    );
+                } catch (const std::exception&) {
+                    throw std::runtime_error("Failed to initialize S3 storage backend");
                 }
             }
         }
