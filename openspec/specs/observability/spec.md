@@ -100,6 +100,14 @@ The shared token service SHALL accept explicit correlation by value for request-
 - **WHEN** token work receives a JWT secret, access token, refresh token, share token, Authorization value, or `X-Share-Token` value, or a unit/utility caller omits explicit correlation
 - **THEN** application events SHALL NOT contain those credential values, and the compatibility call SHALL use explicit JSON null correlation rather than thread-local or token-derived state
 
+#### Scenario: Token service records a token failure
+- **WHEN** access-token, refresh-token, or share-token verification or parsing fails, revocation JTI extraction throws, or share-token generation throws
+- **THEN** the directly owned event SHALL use its fixed complete failure summary and SHALL NOT append exception text, provider text, claims, token values, signing secrets, endpoints, or connection details
+
+#### Scenario: Token service classifies token expiry
+- **WHEN** JWT verification throws a token verification exception
+- **THEN** expiry SHALL be identified only by comparing the structured error code with `token_verification_error::token_expired`, and SHALL NOT be inferred by searching exception text
+
 #### Scenario: Token service emits process events
 - **WHEN** token-singleton initialization, authentication CPU-pool creation, cache-maintenance timer startup, metrics timer startup, periodic pool metrics, or cache eviction emits a process event
 - **THEN** the event SHALL use fixed `operation=auth_runtime`, SHALL accept only the structured logger's registered process instance, and SHALL keep request ID, upload ID, job ID, lease owner, and state version JSON null because no HTTP request or durable job owns that event

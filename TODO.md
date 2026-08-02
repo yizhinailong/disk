@@ -2537,6 +2537,14 @@ API、数据库、分布式 ADR、部署、系统测试、单元测试与 OpenSp
 
 旧实现上的四个定向测试按预期全部失败，共 10 个失败断言：五个行为断言直接检出连接串、bucket/key、provider 文本和未知任务类型回显，源码合同检出 12 次 `error.message` 文本出现、1 次错误码拼接、8 次 `what()` 和缺失固定 handler 摘要。实现后定向测试 4/4、Worker 仓储/合同/运行时/S3/Blob GC/multipart/接管/任务运维聚焦 CTest 106/106（78.06 秒）、完整构建、OpenSpec 24/24 和差异检查通过；生产实现中 `error.message`、`error.CodeInt()` 和 `.what()` 均为 0，六类依赖操作、未知类型、Blob GC 异常及顶层 handler 都只生成固定摘要。标准完整 CTest 共 1495 项：1488 项通过、7 项按环境门控跳过、0 失败，总耗时 534.47 秒。该批不改变 SQL、schema、重试分类/预算、租约、死信或管理员字段，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.152 TokenService JWT 异常脱敏记录（2026-08-03）
+
+ADR、部署、系统测试、单元测试与 OpenSpec 先行固定认证异常边界。access、refresh 和 share token 的验签、解析、撤销 JTI 提取及分享令牌生成失败只允许固定完整日志消息，不得拼接 `what()`、JWT/provider 异常正文、claim、token、secret、endpoint 或连接信息；既有调用方 request/instance/operation、日志级别和所有权字段保持不变。
+
+过期分类必须比较 `jwt-cpp` 的 `token_verification_exception::code()` 与 `token_verification_error::token_expired`，不得搜索英文 `expired`。三类过期 token 继续返回既有 `TokenExpired`，其他验签/解析错误映射、签名、claim、TTL、Redis key/CAS/撤销、CPU pool、指标和公开响应不变。
+
+旧实现上的 7 个定向测试按预期为 3 通过、4 失败，共 14 个失败断言：源码合同检出缺失结构化 helper、12 次 `.what()`、3 处英文过期判断和 4 条动态失败日志，行为断言直接检出 5 条异常正文；三类过期行为仍通过。实现后定向测试 7/7、Token/认证过滤器/刷新与分享安全/Redis 故障切换/分布式拓扑聚焦 CTest 145/145（51.35 秒）、完整构建、OpenSpec 24/24 和差异检查通过。首次完整回归发现安全网集成仍匹配旧带冒号日志标记，同步为固定消息后独立复验 1/1（121.68 秒）；最终标准完整 CTest 共 1495 项：1488 项通过、7 项按环境门控跳过、0 失败，总耗时 540.87 秒。生产实现中 `.what()` 和英文 `expired` 搜索均为 0，三类验签统一使用结构化错误码 helper。该批不改变签名、claim、TTL、Redis、错误码或公开响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

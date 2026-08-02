@@ -167,8 +167,17 @@ namespace disk::services {
                 anonymous_helpers,
                 "[[nodiscard]] auto BuildShareJwtVerifier(const std::string& jwt_secret) -> JwtVerifier"
             ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "[[nodiscard]] auto IsTokenExpired(\n" "            const jwt::error::token_verification_exception& error\n" "        ) noexcept -> bool"
+            ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "error.code() == jwt::error::token_verification_error::token_expired"
+            ));
             EXPECT_EQ(CountOccurrences(source, "BuildJwtVerifier("), 3U);
             EXPECT_EQ(CountOccurrences(source, "BuildShareJwtVerifier("), 4U);
+            EXPECT_EQ(CountOccurrences(source, "IsTokenExpired("), 4U);
             EXPECT_EQ(
                 CountOccurrences(
                     anonymous_helpers,
@@ -225,6 +234,24 @@ namespace disk::services {
             EXPECT_EQ(CountOccurrences(source, "Logger::Trace(log_context)"), 2U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Warn(log_context)"), 11U);
             EXPECT_EQ(CountOccurrences(source, "Logger::Error(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(source, ".what()"), 0U);
+            EXPECT_FALSE(Contains(source, ".find(\"expired\")"));
+            EXPECT_TRUE(Contains(
+                source,
+                "Logger::Warn(log_context) << \"JWT verification failed\";"
+            ));
+            EXPECT_TRUE(Contains(
+                source,
+                "Logger::Warn(log_context) << \"Refresh token verification failed\";"
+            ));
+            EXPECT_TRUE(Contains(
+                source,
+                "Logger::Warn(log_context) << \"Share token verification failed\";"
+            ));
+            EXPECT_TRUE(Contains(
+                source,
+                "Logger::Error(log_context) << \"Failed to generate share token\";"
+            ));
 
             EXPECT_EQ(
                 CountOccurrences(source, "Logger::Debug(AuthRuntimeLogContext())"),
@@ -508,11 +535,15 @@ namespace disk::services {
             const auto records = DrainRecords(6);
             ASSERT_EQ(records.size(), 6U);
             ExpectContext(records[0], "token-invalid-auth", "auth", "info", "op=jwt_verify");
-            ExpectContext(records[1], "token-invalid-auth", "auth", "warning", "JWT parsing failed:");
+            ExpectContext(records[1], "token-invalid-auth", "auth", "warning", "JWT parsing failed");
             ExpectContext(records[2], "token-invalid-auth", "auth", "info", "op=jwt_refresh_verify");
-            ExpectContext(records[3], "token-invalid-auth", "auth", "warning", "Refresh token parsing failed:");
-            ExpectContext(records[4], "token-invalid-auth", "auth", "warning", "Failed to extract JTI:");
-            ExpectContext(records[5], "token-invalid-share", "share", "warning", "Share token parsing failed:");
+            ExpectContext(records[3], "token-invalid-auth", "auth", "warning", "Refresh token parsing failed");
+            ExpectContext(records[4], "token-invalid-auth", "auth", "warning", "Failed to extract JTI");
+            ExpectContext(records[5], "token-invalid-share", "share", "warning", "Share token parsing failed");
+            EXPECT_EQ(records[1]["message"].asString(), "JWT parsing failed");
+            EXPECT_EQ(records[3]["message"].asString(), "Refresh token parsing failed");
+            EXPECT_EQ(records[4]["message"].asString(), "Failed to extract JTI");
+            EXPECT_EQ(records[5]["message"].asString(), "Share token parsing failed");
             ExpectSecretsExcluded(
                 records,
                 {
@@ -535,8 +566,9 @@ namespace disk::services {
                 nullptr,
                 nullptr,
                 "warning",
-                "Share token parsing failed:"
+                "Share token parsing failed"
             );
+            EXPECT_EQ(records[0]["message"].asString(), "Share token parsing failed");
             ExpectSecretsExcluded(
                 records,
                 {

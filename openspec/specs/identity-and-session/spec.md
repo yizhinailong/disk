@@ -65,6 +65,10 @@ The system SHALL support refresh-token-based access token renewal and SHALL prev
 - **WHEN** a client presents an invalid, expired, revoked, or already-used refresh token
 - **THEN** the system SHALL reject the refresh request
 
+#### Scenario: Expired JWT types retain their public error
+- **WHEN** an expired access, refresh, or share JWT is verified
+- **THEN** the system SHALL classify it from the JWT library's structured expiry error and return the existing token-expired domain error rather than depending on exception text
+
 #### Scenario: Refresh races across API instances
 - **WHEN** the same valid refresh token is submitted concurrently to two API instances sharing Redis
 - **THEN** exactly one request SHALL atomically rotate the stored token, while the other request and every replay of the old token SHALL be rejected

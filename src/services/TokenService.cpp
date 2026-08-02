@@ -73,6 +73,12 @@ namespace disk::services {
                 .with_issuer("disk_share");
         }
 
+        [[nodiscard]] auto IsTokenExpired(
+            const jwt::error::token_verification_exception& error
+        ) noexcept -> bool {
+            return error.code() == jwt::error::token_verification_error::token_expired;
+        }
+
         auto CreateAuthCpuPool() -> trantor::EventLoopThreadPool* {
             const auto thread_count = disk::utils::ConfigMgr::GetInstance()->GetAuthCpuPoolThreads();
             auto* pool = new trantor::EventLoopThreadPool(
@@ -221,16 +227,16 @@ namespace disk::services {
                 << ", role=" << token_role << ", status=" << token_status;
             return AccessTokenClaims{ .user_id = user_id, .username = username, .jti = jti, .role = token_role, .status = token_status };
 
-        } catch (const jwt::error::token_verification_exception& e) {
+        } catch (const jwt::error::token_verification_exception& error) {
             cleanup();
-            Logger::Warn(log_context) << "JWT verification failed: " << e.what();
-            if (std::string(e.what()).find("expired") != std::string::npos) {
+            Logger::Warn(log_context) << "JWT verification failed";
+            if (IsTokenExpired(error)) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::InvalidToken));
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
             cleanup();
-            Logger::Warn(log_context) << "JWT parsing failed: " << e.what();
+            Logger::Warn(log_context) << "JWT parsing failed";
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -277,16 +283,16 @@ namespace disk::services {
                 << ", jti=" << jti;
             return std::make_pair(user_id, jti);
 
-        } catch (const jwt::error::token_verification_exception& e) {
+        } catch (const jwt::error::token_verification_exception& error) {
             cleanup();
-            Logger::Warn(log_context) << "Refresh token verification failed: " << e.what();
-            if (std::string(e.what()).find("expired") != std::string::npos) {
+            Logger::Warn(log_context) << "Refresh token verification failed";
+            if (IsTokenExpired(error)) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::InvalidRefreshToken));
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
             cleanup();
-            Logger::Warn(log_context) << "Refresh token parsing failed: " << e.what();
+            Logger::Warn(log_context) << "Refresh token parsing failed";
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -527,11 +533,11 @@ namespace disk::services {
 
             Logger::Warn(log_context) << "Token missing JTI claim";
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
-        } catch (const jwt::error::token_verification_exception& e) {
-            Logger::Warn(log_context) << "Failed to extract JTI: " << e.what();
+        } catch (const jwt::error::token_verification_exception&) {
+            Logger::Warn(log_context) << "Failed to extract JTI";
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
-        } catch (const std::exception& e) {
-            Logger::Warn(log_context) << "Failed to extract JTI: " << e.what();
+        } catch (const std::exception&) {
+            Logger::Warn(log_context) << "Failed to extract JTI";
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }
@@ -577,8 +583,8 @@ namespace disk::services {
             Logger::Debug(log_context) << "Generated share token: share_code=" << share_code
                                        << ", share_id=" << share_id;
             return token;
-        } catch (const std::exception& e) {
-            Logger::Error(log_context) << "Failed to generate share token: " << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Failed to generate share token";
             return std::unexpected(
                 ErrorInfo(disk::error::Code::InternalError, "Token generation failed")
             );
@@ -645,14 +651,14 @@ namespace disk::services {
                           },
             };
 
-        } catch (const jwt::error::token_verification_exception& e) {
-            Logger::Warn(log_context) << "Share token verification failed: " << e.what();
-            if (std::string(e.what()).find("expired") != std::string::npos) {
+        } catch (const jwt::error::token_verification_exception& error) {
+            Logger::Warn(log_context) << "Share token verification failed";
+            if (IsTokenExpired(error)) {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenExpired));
             }
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
-        } catch (const std::exception& e) {
-            Logger::Warn(log_context) << "Share token parsing failed: " << e.what();
+        } catch (const std::exception&) {
+            Logger::Warn(log_context) << "Share token parsing failed";
             return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
         }
     }

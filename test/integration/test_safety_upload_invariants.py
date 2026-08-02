@@ -1875,7 +1875,7 @@ def test_auth_filter_log_context_invariants() -> None:
         instance_id=jwt_instance_id,
         operation="file_query",
         upload_id=None,
-        message_marker="JWT parsing failed:",
+        message_marker="JWT parsing failed",
     )
     log_pass("access-token parser rejection keeps caller request correlation")
 
@@ -1900,7 +1900,7 @@ def test_auth_filter_log_context_invariants() -> None:
         instance_id=share_instance_id,
         operation="share",
         upload_id=None,
-        message_marker="Share token parsing failed:",
+        message_marker="Share token parsing failed",
     )
     log_pass("share-token parser rejection keeps caller request correlation")
 
