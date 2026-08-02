@@ -149,7 +149,7 @@ namespace disk::file {
      *
      * 仅负责数据库事务 begin/rollback 和错误映射；文件系统补偿保持在调用方显式处理。
      * 映射规则：callback 返回的 ErrorInfo 是公开领域错误，rollback 后原样返回；
-     * DB/普通异常仅记录内部细节，对客户端统一返回默认 InternalError；rollback 失败只记录日志。
+     * DB/普通异常仅记录固定摘要，对客户端统一返回默认 InternalError；rollback 失败只记录固定日志。
      */
     class TransactionRunner {
     public:
@@ -195,13 +195,13 @@ namespace disk::file {
                     co_return std::unexpected(m_default_error);
                 }
                 co_return {};
-            } catch (const drogon::orm::DrogonDbException& e) {
+            } catch (const drogon::orm::DrogonDbException&) {
                 rollbackQuietly(transaction, m_log_context);
-                Logger::Error(m_log_context) << "Database transaction failed: " << e.base().what();
+                Logger::Error(m_log_context) << "Database transaction failed";
                 co_return std::unexpected(m_default_error);
-            } catch (const std::exception& e) {
+            } catch (const std::exception&) {
                 rollbackQuietly(transaction, m_log_context);
-                Logger::Error(m_log_context) << "Database transaction failed: " << e.what();
+                Logger::Error(m_log_context) << "Database transaction failed";
                 co_return std::unexpected(m_default_error);
             }
         }
@@ -266,8 +266,8 @@ namespace disk::file {
 
             try {
                 transaction->rollback();
-            } catch (const std::exception& e) {
-                Logger::Error(log_context) << "Transaction rollback failed: " << e.what();
+            } catch (const std::exception&) {
+                Logger::Error(log_context) << "Transaction rollback failed";
             }
         }
 

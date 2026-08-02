@@ -519,6 +519,11 @@ The shared `TransactionRunner` SHALL accept caller-owned `LogContext` explicitly
 - **WHEN** a managed transaction encounters a database or standard exception, a failed commit callback, or a rollback exception
 - **THEN** every event emitted by the runner SHALL retain the caller-supplied request, operation, upload, job, lease-owner, and state-version values exactly
 
+#### Scenario: Managed transaction catches an exception
+- **WHEN** the runner catches a database or standard exception, including an exception raised while rolling back
+- **THEN** database and standard transaction failures SHALL log only the fixed complete `Database transaction failed` event, while rollback failures SHALL log only `Transaction rollback failed`
+- **AND** neither event SHALL contain exception text, SQL, connection details, transaction objects, domain identifiers, paths, credentials, or tokens, while callback errors, default error mapping, rollback precedence, commit waiting, and existing fixed commit diagnostics remain unchanged
+
 #### Scenario: Caller commits a manually managed transaction
 - **WHEN** a service passes an explicit context to the standalone commit helper and commit is rejected because the transaction has persistent outstanding owners
 - **THEN** the rejection event SHALL retain that context without deriving correlation from the owner count, transaction object, SQL, or error message

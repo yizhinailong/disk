@@ -504,9 +504,16 @@ namespace disk::file {
                     return record["message"].asString().find(marker) != std::string::npos;
                 });
             };
-            EXPECT_TRUE(has_message("Transaction rollback failed"));
-            EXPECT_TRUE(has_message("Database transaction failed: raw database detail"));
-            EXPECT_TRUE(has_message("Database transaction failed: raw implementation detail"));
+            const auto count_exact_message = [&](std::string_view expected) {
+                return std::ranges::count_if(records, [expected](const Json::Value& record) {
+                    return record["message"].asString() == expected;
+                });
+            };
+            EXPECT_EQ(count_exact_message("Transaction rollback failed"), 1);
+            EXPECT_EQ(count_exact_message("Database transaction failed"), 2);
+            EXPECT_FALSE(has_message("rollback implementation detail"));
+            EXPECT_FALSE(has_message("raw database detail"));
+            EXPECT_FALSE(has_message("raw implementation detail"));
             EXPECT_TRUE(has_message("Database transaction commit failed"));
             EXPECT_TRUE(has_message("Database transaction has outstanding owners at commit"));
 
@@ -527,6 +534,7 @@ namespace disk::file {
             EXPECT_TRUE(default_record["job_id"].isNull());
             EXPECT_TRUE(default_record["lease_owner"].isNull());
             EXPECT_TRUE(default_record["state_version"].isNull());
+            EXPECT_EQ(default_record["message"].asString(), "Database transaction failed");
         }
 
     } // namespace

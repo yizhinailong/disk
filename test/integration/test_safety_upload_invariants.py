@@ -716,6 +716,28 @@ def assert_no_unscoped_application_log(
     assert_equal(assertion, len(duplicates), 0)
 
 
+def assert_application_logs_exclude_text(text: str, assertion: str) -> None:
+    """Assert structured application messages exclude one dependency detail."""
+    violations: list[dict[str, object]] = []
+    if SERVER_LOG_PATH.is_file():
+        for line in SERVER_LOG_PATH.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(record, dict)
+                and record.get("source") == "application"
+                and text in str(record.get("message", ""))
+            ):
+                violations.append(record)
+
+    assert_equal(assertion, len(violations), 0)
+
+
 def assert_file_query_log_context(
     *,
     response,
@@ -6038,14 +6060,17 @@ def test_complete_upload_db_failure_after_promotion_retains_final_blob() -> None
         instance_id=instance_id,
         operation="upload_complete",
         upload_id=upload_id,
-        message_marker="intentional safety upload finalization failure",
+        message_marker="Database transaction failed",
         lease_owner=str(task["lease_owner"]),
         state_version=int(task["state_version"]),
     )
     assert_no_unscoped_application_log(
-        "intentional safety upload finalization failure",
-        exact=False,
+        "Database transaction failed",
         assertion="transaction failure emits no unscoped duplicate",
+    )
+    assert_application_logs_exclude_text(
+        "intentional safety upload finalization failure",
+        "transaction failure application logs exclude database exception text",
     )
     log_pass("transaction failure log matches response and persisted upload ownership")
     assert_chunk_row_count(upload_id, 1)

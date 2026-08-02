@@ -2657,6 +2657,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 旧实现上的定向合同按预期为 0/1，共 4 个失败断言：源码精确检出 3 处 `.what()`，三个固定完整消息均缺失；列表公开错误、元数据更新吞错与搜索默认响应断言通过。实现后定向合同 1/1、文件查询源码/缓存世代/真实下载/列表与搜索/浏览突发/上传安全不变量/分布式拓扑聚焦 CTest 11/11（144.55 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 548.34 秒。源码审计确认 `FileQueryService.cpp` 中 `.what()` 为 0，三个固定服务消息与列表公开错误消息均各精确出现 1 次。该批不改变类型化关联、查询、缓存、下载元数据 best-effort 更新、搜索分页、错误映射或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.167 TransactionRunner 异常日志脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧共享事务边界。数据库异常与标准异常的 `Run()` catch 只允许固定完整消息 `Database transaction failed`；`rollbackQuietly()` 的 rollback 异常只允许 `Transaction rollback failed`。不得转发异常正文、SQL、连接信息、事务对象、业务标识、路径、凭据或 token。
+
+调用方六个类型化关联字段继续按值原样保留。callback 领域错误原样返回、数据库/标准异常映射调用方默认错误、rollback 失败不覆盖原结果、commit callback 等待、持久 owner 拒绝提交和既有固定提交诊断均保持不变。
+
+旧实现上的定向内存日志合同按预期为 0/1，共 6 个失败断言：两条固定完整消息均未精确出现，rollback、数据库和标准异常三类 fake 实现细节均泄露，默认空上下文消息也携带异常正文；错误映射、回滚和六个关联字段断言通过。实现后定向合同和事务全分支 10/10 通过。首次聚焦 CTest 唯一失败是真实故障注入仍查找旧 PostgreSQL 异常正文；更新为精确查找固定事务消息并解析 application 事件拒绝故障正文后，安全网 1/1（121.70 秒）与最终事务/缓存/文件/文件夹/回收站/存储任务/上传安全网/分布式拓扑聚焦 CTest 20/20（136.97 秒）通过。
+
+完整构建、Python 语法、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1498 项：1491 项通过、7 项按环境门控跳过、0 失败，总耗时 547.62 秒。源码审计确认 `TransactionRunner.hpp` 中 `.what()` 为 0，`Database transaction failed` 固定字面量精确出现 2 次，`Transaction rollback failed` 精确出现 1 次；内存与真实故障日志均拒绝异常正文。该批不改变类型化关联、错误映射、rollback、commit 或业务响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
