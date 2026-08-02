@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <vector>
 
 #include <drogon/orm/DbClient.h>
 
@@ -141,17 +140,6 @@ namespace disk::folder {
             disk::utils::LogContext log_context
         ) const
             -> drogon::Task<Result<void>>;
-
-        /**
-         * @brief 从扁平列表构建树结构
-         *
-         * @param nodes 文件夹节点数据列表
-         * @param root_id 根节点 ID
-         * @return FolderTreeNode 构建好的树结构
-         */
-        [[nodiscard]]
-        auto BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
-            -> FolderTreeNode;
 
         drogon::orm::DbClientPtr m_db_client;                                                                         ///< 数据库客户端
         FolderRepository m_folder_repository;                                                                         ///< 文件夹持久化原语

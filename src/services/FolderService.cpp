@@ -10,6 +10,7 @@
 #include "FolderService.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <unordered_map>
 #include <vector>
 
@@ -22,6 +23,49 @@
 namespace disk::folder {
 
     using drogon_model::disk::Folders;
+
+    namespace {
+
+        [[nodiscard]]
+        auto BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id)
+            -> FolderTreeNode {
+
+            /// 构建 parent_id -> children 映射
+            std::unordered_map<uint64_t, std::vector<FolderNodeData>> children_map;
+
+            for (auto& node : nodes) {
+                children_map[node.parent_id].push_back(std::move(node));
+            }
+
+            /// 递归构建子树
+            std::function<void(FolderTreeNode&, uint64_t)> build_children =
+                [&children_map, &build_children](FolderTreeNode& parent, uint64_t parent_id) {
+                    auto it = children_map.find(parent_id);
+                    if (it == children_map.end()) {
+                        return;
+                    }
+
+                    for (const auto& node_data : it->second) {
+                        FolderTreeNode child;
+                        child.id = node_data.id;
+                        child.name = node_data.name;
+
+                        build_children(child, node_data.id);
+                        parent.children.push_back(std::move(child));
+                    }
+                };
+
+            /// 构建根节点
+            FolderTreeNode root;
+            root.id = root_id;
+            root.name = (root_id == 0) ? "根目录" : "";
+
+            build_children(root, root_id);
+
+            return root;
+        }
+
+    } // namespace
 
     FolderService::FolderService(drogon::orm::DbClientPtr db_client)
         : m_db_client(std::move(db_client)) {
@@ -398,45 +442,6 @@ namespace disk::folder {
                 << e.base().what();
             co_return std::unexpected(ErrorInfo(ErrorCode::FolderNotFound));
         }
-    }
-
-    auto
-    FolderService::BuildTreeFromFlatList(std::vector<FolderNodeData>& nodes, uint64_t root_id) const
-        -> FolderTreeNode {
-
-        /// 构建 parent_id -> children 映射
-        std::unordered_map<uint64_t, std::vector<FolderNodeData>> children_map;
-
-        for (auto& node : nodes) {
-            children_map[node.parent_id].push_back(std::move(node));
-        }
-
-        /// 递归构建子树
-        std::function<void(FolderTreeNode&, uint64_t)> build_children =
-            [&children_map, &build_children](FolderTreeNode& parent, uint64_t parent_id) {
-                auto it = children_map.find(parent_id);
-                if (it == children_map.end()) {
-                    return;
-                }
-
-                for (const auto& node_data : it->second) {
-                    FolderTreeNode child;
-                    child.id = node_data.id;
-                    child.name = node_data.name;
-
-                    build_children(child, node_data.id);
-                    parent.children.push_back(std::move(child));
-                }
-            };
-
-        /// 构建根节点
-        FolderTreeNode root;
-        root.id = root_id;
-        root.name = (root_id == 0) ? "根目录" : "";
-
-        build_children(root, root_id);
-
-        return root;
     }
 
     auto FolderService::GetBreadcrumb(

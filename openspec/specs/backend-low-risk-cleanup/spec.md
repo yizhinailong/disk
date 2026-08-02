@@ -111,6 +111,15 @@ Backend filters SHALL expose only helper capabilities consumed across production
 - **WHEN** whole-repository and compiled-object audits confirm that `JwtAuthFilter::IsPublicPath` is consumed in production only by the filter implementation while direct external calls belong only to unit tests
 - **THEN** public-path classification SHALL become implementation-private and auth, health, metrics, public-share, and protected near-miss behavior SHALL be covered through `JwtAuthFilter::doFilter` without changing global-filter ownership or route-level protection
 
+### Requirement: Service helper surfaces follow production use
+
+Backend services SHALL keep stateless transformation helpers out of class declarations when they have no consumer outside the service implementation translation unit.
+
+#### Scenario: Folder tree construction is internalized
+
+- **WHEN** whole-repository, history, and compiled-object audits confirm that `FolderService::BuildTreeFromFlatList` is stateless and consumed only by `FolderService.cpp`
+- **THEN** the unchanged tree construction SHALL become an implementation-private helper while root identity, names, hierarchy, ownership validation, depth selection, errors, and the folder-tree response remain unchanged
+
 ### Requirement: Repository surfaces follow production use
 
 Backend repository classes SHALL expose only persistence primitives used by production flows, while persisted compatibility contracts remain governed by their separate migration-retirement gates.

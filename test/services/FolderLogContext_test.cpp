@@ -133,5 +133,22 @@ namespace disk::folder {
             }
         }
 
+        TEST(FolderTreeHelperContractTest, ConstructionIsImplementationPrivate) {
+            const auto header_source = ReadSourceFile("src/services/FolderService.hpp");
+            const auto implementation_source = ReadSourceFile("src/services/FolderService.cpp");
+
+            ASSERT_FALSE(header_source.empty());
+            ASSERT_FALSE(implementation_source.empty());
+            EXPECT_FALSE(Contains(header_source, "BuildTreeFromFlatList"));
+            EXPECT_FALSE(Contains(
+                implementation_source,
+                "FolderService::BuildTreeFromFlatList"
+            ));
+            EXPECT_EQ(
+                CountOccurrences(implementation_source, "BuildTreeFromFlatList("),
+                2U
+            );
+        }
+
     } // namespace
 } // namespace disk::folder
