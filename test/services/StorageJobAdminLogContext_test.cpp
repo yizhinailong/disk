@@ -196,6 +196,30 @@ namespace disk::jobs {
             EXPECT_TRUE(AllCallsContainContext(replay_source, "co_await Get("));
             EXPECT_TRUE(AllCallsContainContext(replay_source, "co_await ReplayInTransaction("));
 
+            EXPECT_EQ(CountOccurrences(service_source, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_and_get_source,
+                    "Logger::Error(log_context) << \"Storage job admin list failed\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_and_get_source,
+                    "Logger::Error(log_context) << \"Storage job admin detail failed\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(list_and_get_source, "Failed to list storage jobs"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(list_and_get_source, "Failed to get storage job"),
+                1U
+            );
+
             EXPECT_TRUE(Contains(
                 service_source,
                 "disk::utils::SetRequestCorrelationFields(details, log_context);"

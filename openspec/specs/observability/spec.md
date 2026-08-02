@@ -425,6 +425,11 @@ The system SHALL propagate storage-job administration request correlation explic
 - **WHEN** an authenticated administrator supplies a valid positive persistent storage-job ID to the detail or replay route
 - **THEN** controller and storage-job administration service events SHALL retain the same request ID, actual handling instance, and `admin` operation and SHALL use that parsed database row ID as `job_id`; upload ID, lease owner, and state version SHALL remain null
 
+#### Scenario: Storage-job list or detail processing fails
+- **WHEN** the storage-job administration service catches a database, row-decoding, or other standard exception while listing jobs or reading one job
+- **THEN** the service SHALL log only the fixed complete `Storage job admin list failed` or `Storage job admin detail failed` event and SHALL NOT append exception text, SQL, connection details, job IDs, payloads, object locators, credentials, or tokens to the message
+- **AND** detail correlation SHALL continue to carry the validated persistent job ID only in the typed `job_id` field, while error codes and public messages remain unchanged
+
 #### Scenario: Storage-job path validation fails
 - **WHEN** a detail or replay path does not contain a valid positive storage-job ID
 - **THEN** request-scoped validation and HTTP completion events SHALL keep the response request ID and `admin` operation while job ID remains null, and the system SHALL NOT derive a job ID from raw path text, dedupe keys, aggregate IDs, payloads, or messages

@@ -2609,6 +2609,14 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 旧实现上的两个定向测试按预期为 0/2，共 3 个失败断言：源码精确检出 1 处 `.what()`、缺失固定 throw，行为测试直接观察到注入的 `access denied` 被传播。实现后定向测试 2/2、StorageFactory/观察 Worker/安全 local staging 截止/S3 生命周期/分布式拓扑聚焦 CTest 8/8（2.55 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1497 项：1490 项通过、7 项按环境门控跳过、0 失败，总耗时 544.14 秒。源码审计确认 `StorageFactory.cpp` 中 `.what()` 为 0，固定 throw 精确出现 1 次，注入 provider 文本只存在于测试夹具。该批不改变后端选择、bucket 校验、构造顺序、日志或退出码，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.161 StorageJobAdminService 列表与详情异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统一存储任务管理服务异常合同。列表与详情 catch 分别只允许固定完整消息 `Storage job admin list failed` 和 `Storage job admin detail failed`；PostgreSQL/行解析/标准异常正文、SQL、连接信息、job ID、payload、对象定位符、凭据和 token 不得进入日志消息。
+
+详情的已验证持久任务 ID 继续只由类型化 `job_id` 字段承载，列表保持 `job_id=null`。既有 `InternalError`、`Failed to list storage jobs`/`Failed to get storage job` 公开消息、分页、详情、重放事务和审计语义保持不变。
+
+旧实现上的定向合同按预期为 0/1，共 3 个失败断言：服务源码精确检出 2 处 `.what()`，两个固定完整消息均缺失；两个既有公开错误消息断言通过。实现后定向合同 1/1、存储任务管理源码合同/DTO/真实操作流/分布式拓扑聚焦 CTest 13/13（4.18 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1497 项：1490 项通过、7 项按环境门控跳过、0 失败，总耗时 545.33 秒。源码审计确认 `StorageJobAdminService.cpp` 中 `.what()` 为 0，两个固定服务消息与两个公开错误消息均各精确出现 1 次。该批不改变查询、分页、类型化关联、错误映射、重放事务或审计，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

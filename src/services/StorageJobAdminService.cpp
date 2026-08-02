@@ -186,9 +186,8 @@ namespace disk::jobs {
                 response.items.push_back(ToStorageJobItem(row));
             }
             co_return response;
-        } catch (const std::exception& error) {
-            Logger::Error(log_context)
-                << "Storage job admin list failed: error=" << error.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Storage job admin list failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to list storage jobs"
@@ -213,10 +212,8 @@ namespace disk::jobs {
                 ));
             }
             co_return ToStorageJobItem(rows[0]);
-        } catch (const std::exception& error) {
-            Logger::Error(log_context)
-                << "Storage job admin detail failed: job_id=" << job_id
-                << ", error=" << error.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Storage job admin detail failed";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get storage job"
