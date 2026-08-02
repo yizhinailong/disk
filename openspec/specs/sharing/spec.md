@@ -29,6 +29,12 @@ The system SHALL use an external share identifier for API paths and responses in
 - **THEN** it SHALL use libsodium's cryptographically secure uniform random source to select exactly eight characters from the existing ASCII alphanumeric alphabet
 - **AND** the identifier format, database uniqueness constraint, API fields, links, and client handling SHALL remain unchanged
 
+#### Scenario: Generated share identifier collides
+- **WHEN** the database uniqueness constraint rejects a generated external share identifier because it already exists
+- **THEN** the system SHALL generate and atomically try a fresh identifier within the same share-creation transaction
+- **AND** it SHALL stop after five total candidates and fail without persisting a share or item association if every candidate collides
+- **AND** non-identifier database failures SHALL not be treated as identifier collisions
+
 ### Requirement: Owner Share Management
 The system SHALL allow share owners to list, inspect, update, and cancel their own shares, and clients SHALL authenticate owner share management requests with the owner's bearer access token.
 

@@ -105,6 +105,35 @@ namespace disk::share {
                 "randombytes_uniform(static_cast<uint32_t>(chars.size()))"
             ));
             EXPECT_EQ(CountOccurrences(service_source, "randombytes_uniform("), 1U);
+            EXPECT_TRUE(Contains(
+                service_source,
+                "constexpr int SHARE_CODE_GENERATION_MAX_ATTEMPTS = 5"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "ON CONFLICT (share_code) DO NOTHING RETURNING *"
+            ));
+            EXPECT_TRUE(Contains(
+                service_source,
+                "attempt <= SHARE_CODE_GENERATION_MAX_ATTEMPTS"
+            ));
+            EXPECT_TRUE(Contains(service_source, "if (!insert_result.empty())"));
+            EXPECT_TRUE(Contains(service_source, "if (share_code.empty())"));
+
+            const auto create_body = SourceSection(
+                service_source,
+                "auto ShareService::Create(",
+                "auto ShareService::List("
+            );
+            EXPECT_FALSE(Contains(create_body, "CoroMapper<Shares> share_mapper"));
+            const auto candidate_insert = create_body.find("ON CONFLICT (share_code)");
+            const auto exhausted_check = create_body.find("if (share_code.empty())");
+            const auto association_insert = create_body.find("INSERT INTO share_files");
+            ASSERT_NE(candidate_insert, std::string::npos);
+            ASSERT_NE(exhausted_check, std::string::npos);
+            ASSERT_NE(association_insert, std::string::npos);
+            EXPECT_LT(candidate_insert, exhausted_check);
+            EXPECT_LT(exhausted_check, association_insert);
             EXPECT_TRUE(Contains(service_source, "if (status == \"all\")"));
             EXPECT_TRUE(Contains(service_source, "if (status == \"active\")"));
             EXPECT_TRUE(Contains(service_source, "if (status == \"expired\")"));

@@ -45,6 +45,7 @@ namespace disk::share {
     namespace {
         constexpr int SHARE_ACCESS_FAILURE_LIMIT = 5;
         constexpr int SHARE_ACCESS_FAILURE_WINDOW_SECONDS = 900;
+        constexpr int SHARE_CODE_GENERATION_MAX_ATTEMPTS = 5;
         constexpr std::string_view SHARE_ACCESS_VALIDATION_ERROR_MESSAGE =
             "Share access validation failed";
         constexpr std::string_view SHARE_ACCESS_RATE_LIMIT_ERROR_MESSAGE =
@@ -179,17 +180,14 @@ namespace disk::share {
             folders = std::move(*folders_result);
         }
 
-        /// 2. 生成分享码
-        auto share_code = GenerateShareCode();
-
-        /// 3. 计算过期时间
+        /// 2. 计算过期时间
         auto now = trantor::Date::now();
         std::optional<trantor::Date> expires_at;
         if (request.expire_days > 0) {
             expires_at = now.after(request.expire_days * 86400);
         }
 
-        /// 4. 哈希密码（如果有）
+        /// 3. 哈希密码（如果有）
         std::optional<std::string> password_hash;
         if (request.password.has_value() && !request.password->empty()) {
             auto hash_result = utils::HashUtil::HashPassword(*request.password);
@@ -202,31 +200,50 @@ namespace disk::share {
             password_hash = *hash_result;
         }
 
-        /// 5. 创建分享记录 + 分享文件关联（事务保证原子性）
-        Shares share;
-        share.setShareCode(share_code);
-        share.setUserId(user_id);
-        if (password_hash.has_value()) {
-            share.setPasswordHash(*password_hash);
-        }
-        share.setPermission(SharePermissionToString(request.permission));
-        share.setViewCount(0);
-        share.setDownloadCount(0);
-        share.setStatus(static_cast<int8_t>(ShareStatus::Active));
-        if (expires_at.has_value()) {
-            share.setExpiresAt(*expires_at);
-        }
-        share.setCreatedAt(now);
-        share.setUpdatedAt(now);
-
+        /// 4. 创建分享记录 + 分享文件关联（事务保证原子性）
+        std::string share_code;
         Shares created_share;
         std::shared_ptr<drogon::orm::Transaction> transaction;
         try {
             transaction = co_await disk::file::TransactionRunner::Begin(m_db_client);
 
-            /// 插入分享行
-            CoroMapper<Shares> share_mapper(transaction);
-            created_share = co_await share_mapper.insert(share);
+            for (int attempt = 1;
+                 attempt <= SHARE_CODE_GENERATION_MAX_ATTEMPTS;
+                 ++attempt) {
+                const auto candidate = GenerateShareCode();
+                auto insert_result = co_await transaction->execSqlCoro(
+                    "INSERT INTO shares (" "share_code, user_id, password_hash, permission, view_count, download_count, " "status, expires_at, created_at, updated_at" ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) " "ON CONFLICT (share_code) DO NOTHING RETURNING *",
+                    candidate,
+                    user_id,
+                    password_hash,
+                    SharePermissionToString(request.permission),
+                    static_cast<int32_t>(0),
+                    static_cast<int32_t>(0),
+                    static_cast<int16_t>(ShareStatus::Active),
+                    expires_at,
+                    now,
+                    now
+                );
+                if (!insert_result.empty()) {
+                    created_share = Shares(insert_result[0], -1);
+                    share_code = created_share.getValueOfShareCode();
+                    break;
+                }
+
+                Logger::Warn(log_context)
+                    << "Share code collision, retrying: attempt=" << attempt << "/"
+                    << SHARE_CODE_GENERATION_MAX_ATTEMPTS;
+            }
+
+            if (share_code.empty()) {
+                Logger::Error(log_context)
+                    << "Share code generation exhausted after database conflicts";
+                transaction->rollback();
+                transaction.reset();
+                co_return std::unexpected(
+                    ErrorInfo(ErrorCode::InternalError, "Failed to create share")
+                );
+            }
 
             /// 批量插入 share_files 关联
             if (!files.empty()) {

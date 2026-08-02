@@ -2606,6 +2606,8 @@ Authorization: Bearer <access_token>
 
 > **所有权验证**：所有 `file_ids` 必须属于当前用户（`files.user_id == current_user_id` 或 `folders.user_id == current_user_id`），否则返回 `404 + 50005 FileNotFound`。
 
+> **分享码唯一性**：服务使用密码学随机源生成 8 位大小写字母数字分享码，并以数据库 `uk_shares_code` 约束作为最终唯一性裁决。候选码冲突时，服务在同一创建事务内透明生成新候选并重试，最多尝试 5 个候选；全部冲突时返回现有 `500 + 10006 InternalError`，且不保留 `shares` 或 `share_files` 部分记录。其他数据库错误不得伪装为分享码冲突重试。
+
 #### 错误响应矩阵
 
 | HTTP 状态码 | 业务码 | 枚举名称 | 错误消息 | 触发场景 |
@@ -2615,6 +2617,7 @@ Authorization: Bearer <access_token>
 | 401 | 40106 | `TokenMissing` | 未提供令牌 | 请求头缺少 Authorization |
 | 401 | 40108 | `TokenExpired` | 令牌已过期 | Token 已超过有效期 |
 | 404 | 50005 | `FileNotFound` | 文件不存在 | 指定的 file_id 不存在或不属于当前用户 |
+| 500 | 10006 | `InternalError` | 服务器内部错误 | 5 个分享码候选均冲突，或创建事务发生其他数据库错误 |
 
 **10002 ValidationFailed 响应示例**：
 
