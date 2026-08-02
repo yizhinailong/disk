@@ -161,6 +161,24 @@ namespace disk::auth {
                 EXPECT_TRUE(CallContainsContext(service_request_body, call_marker));
             }
 
+            EXPECT_EQ(CountOccurrences(service_request_body, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(service_request_body, ".error().message"), 0U);
+            for (const auto* fixed_failure : {
+                     "Logger::Error(log_context) << \"Uniqueness check failed\";",
+                     "Logger::Error(log_context) << \"User registration database insert failed\";",
+                     "Logger::Warn(log_context) << \"Redis rate limit check failed\";",
+                     "Logger::Error(log_context) << \"User query failed\";",
+                     "Logger::Error(log_context) << \"Token refresh processing failed\";",
+                     "Logger::Warn(log_context) << \"Failed to record logout log\";",
+                     "Logger::Warn(log_context) << \"User lookup failed\";",
+                     "Logger::Error(log_context) << \"Failed to validate account access\";",
+                     "Logger::Warn(log_context) << \"Failed to clear login rate limit counter\";",
+                     "Logger::Error(log_context) << \"Failed to update login info\";",
+                     "Logger::Error(log_context) << \"Failed to increment login attempts\";",
+                 }) {
+                EXPECT_TRUE(Contains(service_request_body, fixed_failure)) << fixed_failure;
+            }
+
             for (const auto* body : {
                      &controller_source,
                      &dto_source,

@@ -92,9 +92,8 @@ namespace disk::auth {
                     co_return std::unexpected(ErrorInfo(ErrorCode::EmailExists));
                 }
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Uniqueness check failed: " << request.username << " - " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Uniqueness check failed";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Registration failed, please try again later")
             );
@@ -131,10 +130,8 @@ namespace disk::auth {
             Logger::Info(log_context)
                 << "User data inserted successfully: " << request.username
                 << " (ID: " << user.getValueOfId() << ")";
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "User registration database insert failed: " << request.username << " - "
-                << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "User registration database insert failed";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Registration failed, please try again later")
             );
@@ -179,8 +176,7 @@ namespace disk::auth {
             }
         } else {
             /// 失败开放策略：Redis 失败时只记录警告，不阻止登录
-            Logger::Warn(log_context)
-                << "Redis rate limit check failed: " << incr_result.error().message;
+            Logger::Warn(log_context) << "Redis rate limit check failed";
         }
 
         /// 1. 查找用户（用户名或邮箱）
@@ -323,13 +319,11 @@ namespace disk::auth {
             Logger::Info(log_context) << "Token refresh successful: user_id=" << user_id;
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "User query failed: " << user_id << " - " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "User query failed";
             co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Token refresh processing failed: " << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Token refresh processing failed";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Token refresh failed, please try again later")
             );
@@ -390,8 +384,8 @@ namespace disk::auth {
 
             co_await mapper.insert(log);
             Logger::Debug(log_context) << "Logout log recorded: user_id=" << user_id;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context) << "Failed to record logout log: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "Failed to record logout log";
             /// 不中断流程
         }
 
@@ -418,9 +412,8 @@ namespace disk::auth {
             Logger::Debug(log_context) << "Found user: " << account;
             co_return user;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context)
-                << "User lookup failed: " << account << " - " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "User lookup failed";
             co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
         }
     }
@@ -450,10 +443,8 @@ namespace disk::auth {
             }
 
             co_return {};
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to validate account access: " << user_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to validate account access";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to validate account status")
             );
@@ -500,13 +491,10 @@ namespace disk::auth {
                 Logger::Debug(log_context)
                     << "Login rate limit counter cleared: ip=" << client_ip;
             } else {
-                Logger::Warn(log_context)
-                    << "Failed to clear login rate limit counter: "
-                    << delete_result.error().message;
+                Logger::Warn(log_context) << "Failed to clear login rate limit counter";
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to update login info: " << user_id << " - " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to update login info";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to update login state")
             );
@@ -543,10 +531,8 @@ namespace disk::auth {
                 Logger::Warn(log_context)
                     << "Failed login attempts: " << user_id << " = " << attempts;
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to increment login attempts: " << user_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to increment login attempts";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to record login attempt")
             );

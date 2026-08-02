@@ -340,6 +340,11 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **WHEN** any authentication path succeeds or fails
 - **THEN** application events and typed correlation fields SHALL NOT contain passwords, password hashes, Authorization header values, access tokens, or refresh tokens
 
+#### Scenario: Authentication service dependency work fails
+- **WHEN** authentication-service database work or standard processing throws, or login rate-limit maintenance receives a Redis domain error
+- **THEN** the directly owned event SHALL use its fixed complete failure summary and SHALL NOT append exception text, downstream domain messages, SQL, connection details, Redis keys or values, credentials, or tokens
+- **AND** username and email conflict handling, database-time account locking, login rate-limit fail-open behavior, token rotation and revocation, logout audit fail-open behavior, domain errors, and public responses SHALL remain unchanged
+
 #### Scenario: Authentication classification remains bounded
 - **WHEN** an authentication path is not exactly one of the four supported paths, including the collection root, a trailing slash, an extra suffix, or an unknown action
 - **THEN** the authentication classifier SHALL NOT absorb it, and the route SHALL retain the `other` operation classification

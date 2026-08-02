@@ -1783,6 +1783,7 @@ def test_auth_log_context_invariants() -> None:
             message_markers=(
                 "Received login request",
                 "Redis operation failed: IncrWithExpire",
+                "Redis rate limit check failed",
                 "User login successful",
                 "Login successful",
             ),
