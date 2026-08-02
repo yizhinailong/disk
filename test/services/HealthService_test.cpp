@@ -106,6 +106,19 @@ namespace disk::health {
             EXPECT_EQ(readiness.ToJson()["timestamp"].asString(), readiness.timestamp);
         }
 
+        TEST(HealthServiceHelperContractTest, ComponentRunnerHasInternalLinkage) {
+            const auto header = ReadSourceFile("src/services/HealthService.hpp");
+            const auto source = ReadSourceFile("src/services/HealthService.cpp");
+
+            EXPECT_EQ(header.find("RunComponentCheck"), std::string::npos);
+            EXPECT_EQ(
+                source.find("HealthService::RunComponentCheck"),
+                std::string::npos
+            );
+            EXPECT_NE(source.find("auto RunComponentCheck("), std::string::npos);
+            EXPECT_EQ(CountOccurrences(source, "RunComponentCheck("), 6U);
+        }
+
         TEST(HealthControllerResponseContractTest, MapperHasInternalLinkage) {
             const auto header = ReadSourceFile("src/controllers/HealthController.hpp");
             const auto source = ReadSourceFile("src/controllers/HealthController.cpp");
@@ -290,6 +303,51 @@ namespace disk::health {
             );
             EXPECT_EQ(json.find("password"), std::string::npos);
             EXPECT_EQ(json.find("secret-host"), std::string::npos);
+        }
+
+        TEST(HealthServiceTest, NormalizesDependencyCheckResults) {
+            CheckCounts counts;
+            auto checks = HealthyChecks(counts);
+            checks.database = {};
+            checks.staging_storage = [](disk::utils::LogContext)
+                -> drogon::Task<ComponentStatus> {
+                co_return ComponentStatus{
+                    .status = "unhealthy",
+                    .message = "internal staging detail",
+                    .latency_ms = 37,
+                };
+            };
+            checks.final_storage = [](disk::utils::LogContext)
+                -> drogon::Task<ComponentStatus> {
+                co_return ComponentStatus{
+                    .status = "healthy",
+                    .message = "discard this detail",
+                    .latency_ms = 11,
+                };
+            };
+            auto runtime = std::make_shared<disk::runtime::ProcessRuntimeState>(
+                disk::utils::ProcessRole::Api,
+                "api-1"
+            );
+            runtime->MarkInitialized();
+            HealthService service(runtime, std::move(checks));
+
+            const auto result = drogon::sync_wait(service.CheckReadiness());
+
+            EXPECT_EQ(result.overall_status, "unhealthy");
+            EXPECT_EQ(result.components.at("database").status, "unhealthy");
+            EXPECT_EQ(
+                result.components.at("database").message,
+                "Database check failed"
+            );
+            EXPECT_EQ(result.components.at("database").latency_ms, 0);
+            EXPECT_EQ(
+                result.components.at("staging_storage").message,
+                "Staging storage check failed"
+            );
+            EXPECT_EQ(result.components.at("staging_storage").latency_ms, 37);
+            EXPECT_TRUE(result.components.at("final_storage").message.empty());
+            EXPECT_EQ(result.components.at("final_storage").latency_ms, 11);
         }
     } // namespace
 } // namespace disk::health

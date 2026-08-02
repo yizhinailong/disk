@@ -2465,6 +2465,14 @@ Drogon 1.9.11 `RealIpResolver` 已在默认与分布式配置中启用，固定�
 
 旧实现上的源码合同按预期为 0/1，精确检出头文件声明和成员定义两个失败点。实现后源码/DTO 直接测试 10/10、文件夹命名聚焦 CTest 105/105、完整构建、OpenSpec 24/24 和差异检查通过。首轮完整套件唯一失败是未改动的分享过期令牌过滤器用例在断言前偶发超时；Redis 同期 `PONG`、无 blocked client，定向复跑 1/1（0.02 秒）通过。第二轮标准完整 CTest 共 1482 项：1475 项通过、7 项按环境门控跳过、0 失败，总耗时 542.17 秒。本批不删除迁移字段、兼容分支、本地暂存或部署能力，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.143 健康依赖检查 runner 内部化记录（2026-08-02）
+
+系统测试、单元测试与后端低风险清理 OpenSpec 先行固定健康依赖检查 runner 的内部链接合同。全仓调用点、Git 历史、源码和已编译对象审计确认，私有 `HealthService::RunComponentCheck()` 自 2026-07-20 角色化健康探针引入起始终只有同一实现文件中 readiness 的 database、staging storage、final storage、Redis 与 storage job queue 五个调用方，没有测试、集成、工具、客户端、迁移或兼容消费者。函数只读取四个参数，不依赖 `HealthService` 实例状态；当前生产对象导出一个全局成员符号，其 coroutine 重定位全部来自同一对象。
+
+函数体已原样移入 `HealthService.cpp` 既有匿名命名空间并从头文件删除成员声明；依赖 runtime state 与 start time 的 `BuildBaseResult()` 继续作为成员保留。角色化 callback 选择、缺失 callback 与异常处理、warning 日志上下文、调用方固定失败消息净化、健康消息清除、latency、总状态聚合、公开健康字段和响应均未改变。重建后的生产对象只保留匿名命名空间本地 `t` runner，后端不再包含旧成员符号。
+
+旧实现上的源码合同按预期为 0/1，精确检出头文件声明、类限定定义和缺失局部定义三个失败点，调用数量断言通过。实现后直接健康测试 10/10、健康与真实日志聚焦 CTest 11/11、完整构建、OpenSpec 24/24、符号审计和差异检查通过。标准完整 CTest 共 1484 项：1477 项通过、7 项按环境门控跳过、0 失败，总耗时 560.89 秒。该批不改变部署拓扑、持久化 schema、缓存、认证、存储或任务状态机，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

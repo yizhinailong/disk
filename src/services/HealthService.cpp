@@ -156,6 +156,34 @@ namespace disk::health {
             stream << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");
             return stream.str();
         }
+
+        auto RunComponentCheck(
+            std::string component,
+            std::string failure_message,
+            const ComponentCheck& check,
+            disk::utils::LogContext log_context
+        ) -> drogon::Task<ComponentStatus> {
+            ComponentStatus status;
+            try {
+                if (!check) {
+                    throw std::runtime_error("Component check is not configured");
+                }
+                status = co_await check(log_context);
+            } catch (const std::exception&) {
+                status.status = "unhealthy";
+                status.latency_ms = 0;
+            }
+
+            if (status.status != "healthy") {
+                Logger::Warn(log_context)
+                    << "Health dependency check failed: component=" << component;
+                status.status = "unhealthy";
+                status.message = std::move(failure_message);
+            } else {
+                status.message.clear();
+            }
+            co_return status;
+        }
     } // namespace
 
     auto ComponentStatus::ToJson() const -> Json::Value {
@@ -308,34 +336,6 @@ namespace disk::health {
             .uptime = std::chrono::duration_cast<std::chrono::seconds>(now - m_start_time).count(),
             .timestamp = GetTimestamp(),
         };
-    }
-
-    auto HealthService::RunComponentCheck(
-        std::string component,
-        std::string failure_message,
-        const ComponentCheck& check,
-        disk::utils::LogContext log_context
-    ) const -> drogon::Task<ComponentStatus> {
-        ComponentStatus status;
-        try {
-            if (!check) {
-                throw std::runtime_error("Component check is not configured");
-            }
-            status = co_await check(log_context);
-        } catch (const std::exception&) {
-            status.status = "unhealthy";
-            status.latency_ms = 0;
-        }
-
-        if (status.status != "healthy") {
-            Logger::Warn(log_context)
-                << "Health dependency check failed: component=" << component;
-            status.status = "unhealthy";
-            status.message = std::move(failure_message);
-        } else {
-            status.message.clear();
-        }
-        co_return status;
     }
 
 } // namespace disk::health

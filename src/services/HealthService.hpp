@@ -93,14 +93,6 @@ namespace disk::health {
         [[nodiscard]]
         auto BuildBaseResult() const -> HealthResult;
 
-        [[nodiscard]]
-        auto RunComponentCheck(
-            std::string component,
-            std::string failure_message,
-            const ComponentCheck& check,
-            disk::utils::LogContext log_context
-        ) const -> drogon::Task<ComponentStatus>;
-
         std::shared_ptr<disk::runtime::ProcessRuntimeState> m_runtime_state;
         HealthCheckCallbacks m_checks;
         std::chrono::steady_clock::time_point m_start_time;

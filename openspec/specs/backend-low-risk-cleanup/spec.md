@@ -453,6 +453,11 @@ Backend shared services SHALL expose only command capabilities used by productio
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `HealthService::GetTimestamp` is consumed only by `BuildBaseResult` in the same implementation unit
 - **THEN** timestamp formatting SHALL have internal linkage and SHALL NOT be declared by `HealthService.hpp`, while liveness and readiness continue to emit a UTC `YYYY-MM-DDTHH:MM:SSZ` timestamp with unchanged health fields and behavior
 
+#### Scenario: Health dependency runner stays implementation-local
+
+- **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `HealthService::RunComponentCheck` is stateless and consumed only by the five readiness dependency checks in `HealthService.cpp`
+- **THEN** the dependency runner SHALL have internal linkage and SHALL NOT be declared by `HealthService.hpp`, while role-based callback selection, missing callbacks, thrown exceptions, warning context, fixed caller-safe failure messages, latency, health aggregation, and readiness responses remain unchanged
+
 #### Scenario: System build-time formatting stays implementation-local
 
 - **WHEN** a whole-repository call-site and object-symbol audit confirms that `SystemService::GetBuildTime` is consumed only by `GetInfo` in the same implementation unit
