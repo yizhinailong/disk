@@ -24,6 +24,11 @@
 namespace disk::utils {
     namespace {
 
+        constexpr std::string_view REAL_IP_RESOLVER_PLUGIN =
+            "drogon::plugin::RealIpResolver";
+        constexpr std::string_view REAL_IP_HEADER = "x-real-ip";
+        constexpr std::string_view REAL_IP_ATTRIBUTE = "disk-client-ip";
+
         [[nodiscard]]
         auto ReadEnvironment(const char* name) -> std::optional<std::string> {
             const auto* value = std::getenv(name);
@@ -96,7 +101,10 @@ namespace disk::utils {
         auto PluginConfig(Json::Value& root, std::string_view plugin_name) -> Json::Value& {
             auto& plugins = root["plugins"];
             if (!plugins.isArray()) {
-                throw std::runtime_error("Configuration must contain plugins array");
+                throw std::runtime_error(
+                    "Configuration must contain plugins array for required plugin: " +
+                    std::string(plugin_name)
+                );
             }
 
             Json::Value* matched_plugin = nullptr;
@@ -106,12 +114,18 @@ namespace disk::utils {
                     continue;
                 }
                 if (matched_plugin != nullptr) {
-                    throw std::runtime_error("Configuration contains duplicate required plugin");
+                    throw std::runtime_error(
+                        "Configuration must contain exactly one required plugin: " +
+                        std::string(plugin_name)
+                    );
                 }
                 matched_plugin = &plugin;
             }
             if (matched_plugin == nullptr || !(*matched_plugin)["config"].isObject()) {
-                throw std::runtime_error("Configuration is missing required plugin");
+                throw std::runtime_error(
+                    "Configuration must contain exactly one required plugin: " +
+                    std::string(plugin_name)
+                );
             }
             return (*matched_plugin)["config"];
         }
@@ -186,21 +200,42 @@ namespace disk::utils {
         }
 
         [[nodiscard]]
+        auto IsValidTrustedProxyCidrs(const Json::Value& values, bool allow_empty) -> bool {
+            if (!values.isArray() || (!allow_empty && values.empty()) || values.size() > 32) {
+                return false;
+            }
+            for (const auto& item : values) {
+                if (!item.isString() || !IsCanonicalTrustedProxyCidr(item.asString())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        [[nodiscard]]
         auto ParseTrustedProxyCidrs(const std::string& value, const char* name) -> Json::Value {
             Json::Value parsed;
             Json::CharReaderBuilder builder;
             std::string errors;
             std::istringstream input(value);
-            if (!Json::parseFromStream(builder, input, &parsed, &errors) || !parsed.isArray() ||
-                parsed.empty() || parsed.size() > 32) {
-                throw std::runtime_error(std::string("Invalid trusted proxy CIDR variable: ") + name);
-            }
-            for (const auto& item : parsed) {
-                if (!item.isString() || !IsCanonicalTrustedProxyCidr(item.asString())) {
-                    throw std::runtime_error(std::string("Invalid trusted proxy CIDR variable: ") + name);
-                }
+            if (!Json::parseFromStream(builder, input, &parsed, &errors) ||
+                !IsValidTrustedProxyCidrs(parsed, false)) {
+                throw std::runtime_error(
+                    std::string("Invalid trusted proxy CIDR variable: ") + name
+                );
             }
             return parsed;
+        }
+
+        auto ValidateRealIpResolverConfig(Json::Value& root) -> void {
+            const auto& config = PluginConfig(root, REAL_IP_RESOLVER_PLUGIN);
+            const auto& from_header = config["from_header"];
+            const auto& attribute_key = config["attribute_key"];
+            if (!from_header.isString() || from_header.asString() != REAL_IP_HEADER ||
+                !attribute_key.isString() || attribute_key.asString() != REAL_IP_ATTRIBUTE ||
+                !IsValidTrustedProxyCidrs(config["trust_ips"], true)) {
+                throw std::runtime_error("Invalid RealIpResolver configuration");
+            }
         }
 
         template <typename Setter>
@@ -330,7 +365,7 @@ namespace disk::utils {
                 DiskConfig(config)["upload_task_creation_enabled"] = value;
             });
             if (auto value = ReadEnvironment("DISK_TRUSTED_PROXY_CIDRS"); value.has_value()) {
-                PluginConfig(config, "drogon::plugin::RealIpResolver")["trust_ips"] =
+                PluginConfig(config, REAL_IP_RESOLVER_PLUGIN)["trust_ips"] =
                     ParseTrustedProxyCidrs(*value, "DISK_TRUSTED_PROXY_CIDRS");
             }
 
@@ -385,6 +420,7 @@ namespace disk::utils {
         auto config = LoadConfigFile(path);
         ValidateDatabaseRouting(config);
         ApplyEnvironmentOverrides(config);
+        ValidateRealIpResolverConfig(config);
         return config;
     }
 

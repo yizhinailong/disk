@@ -2441,6 +2441,14 @@ Drogon 1.9.11 `RealIpResolver` 已在默认与分布式配置中启用，固定�
 
 旧实现上的语义反例直接测试按预期为 0/1，在首个 `not-an-ip` 输入处证明旧管线错误放行。实现后客户端 IP 与运行时配置直接测试 14/14、分布式拓扑合同、完整构建、OpenSpec 24/24 和差异检查均通过；标准完整 CTest 共 1479 项：1472 项通过、7 项按环境门控跳过、0 失败，总耗时 552.92 秒。Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.140 受信代理最终配置启动门禁记录（2026-08-02）
+
+运行时配置、部署、系统测试、单元测试与 OpenSpec 先行固定最终配置合同。审计确认 15.139 只校验 `DISK_TRUSTED_PROXY_CIDRS` 覆盖值；未设置该变量时，自定义 `DISK_CONFIG_FILE` 仍可携带非法 `trust_ips`，也可删除或复制 `RealIpResolver`、把 `from_header` 改为可追加的 `x-forwarded-for`，或把 `attribute_key` 改到业务 helper 不读取的位置。环境覆盖存在时才调用的 `PluginConfig()` 不能保护这些启动路径。
+
+环境覆盖完成后现会统一验证最终生效配置：必须恰有一个 `RealIpResolver`，固定 `from_header=x-real-ip` 与 `attribute_key=disk-client-ip`，并带 0-32 项已通过 15.139 同一语义规则的 `trust_ips` 数组。缺失、重复、畸形、重定向和非法 allowlist 都会在 Drogon 插件初始化前以不回显配置值的固定诊断失败；环境变量覆盖仍保持非空 1-32 项要求。共享滚动升级集成夹具同步加入空 allowlist resolver 与 GlobalFilters 显式依赖，使旧/新制品使用同一配置边界。
+
+旧实现上的 10 组自定义 JSON 反例直接测试按预期为 0/1，全部被错误放行；实现后客户端 IP 与运行时配置直接测试 15/15，分布式拓扑、双 API 认证一致性、首轮受影响集成复验 13/13、完整构建、Python 编译、OpenSpec 24/24 和差异检查通过。首轮完整套件精确暴露 13 个共享夹具缺失 resolver 的启动失败，修正唯一 `server_config()` 后全部复验通过；第二轮仅既有内容/配额安全网 397 条断言中的删除后内容行收敛偶发失败，定向复跑 1/1 通过且未放宽断言。第三轮标准完整 CTest 共 1480 项：1473 项通过、7 项按环境门控跳过、0 失败，总耗时 540.97 秒。Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

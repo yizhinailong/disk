@@ -157,6 +157,8 @@ namespace {
         config["custom_config"]["disk"] = Json::Value(Json::objectValue);
         config["plugins"][0]["name"] = "drogon::plugin::RealIpResolver";
         config["plugins"][0]["config"]["trust_ips"] = Json::Value(Json::arrayValue);
+        config["plugins"][0]["config"]["from_header"] = "x-real-ip";
+        config["plugins"][0]["config"]["attribute_key"] = "disk-client-ip";
         return config;
     }
 
@@ -390,8 +392,10 @@ namespace {
 
     TEST(RuntimeConfigTest, RequiresTargetSectionOnlyWhenItsOverrideIsPresent) {
         EnvironmentScope environment(RuntimeEnvironmentNames());
-        Json::Value config(Json::objectValue);
-        config["db_clients"][0]["name"] = "default";
+        auto config = BaseConfig();
+        config.removeMember("listeners");
+        config.removeMember("redis_clients");
+        config.removeMember("custom_config");
         EXPECT_NO_THROW(static_cast<void>(LoadRuntimeConfig(config)));
 
         EnvironmentScope::Set("REDIS_HOST", "redis");
@@ -457,6 +461,69 @@ namespace {
             LoadRuntimeConfig(missing_plugin),
             std::runtime_error
         );
+    }
+
+    TEST(RuntimeConfigTest, RejectsInvalidEffectiveRealIpResolverConfiguration) {
+        EnvironmentScope environment(RuntimeEnvironmentNames());
+        const auto expect_rejected = [](Json::Value config, std::string_view sensitive_value) {
+            try {
+                static_cast<void>(LoadRuntimeConfig(config));
+                FAIL() << "Expected invalid effective real IP resolver configuration to fail";
+            } catch (const std::runtime_error& error) {
+                const std::string message(error.what());
+                EXPECT_NE(message.find("RealIpResolver"), std::string::npos);
+                if (!sensitive_value.empty()) {
+                    EXPECT_EQ(message.find(sensitive_value), std::string::npos);
+                }
+            }
+        };
+
+        auto missing_plugin = BaseConfig();
+        missing_plugin.removeMember("plugins");
+        expect_rejected(std::move(missing_plugin), {});
+
+        auto duplicate_plugin = BaseConfig();
+        duplicate_plugin["plugins"].append(duplicate_plugin["plugins"][0]);
+        expect_rejected(std::move(duplicate_plugin), {});
+
+        auto malformed_config = BaseConfig();
+        malformed_config["plugins"][0]["config"] = "resolver-config-secret";
+        expect_rejected(std::move(malformed_config), "resolver-config-secret");
+
+        auto missing_header = BaseConfig();
+        missing_header["plugins"][0]["config"].removeMember("from_header");
+        expect_rejected(std::move(missing_header), {});
+
+        auto redirected_header = BaseConfig();
+        redirected_header["plugins"][0]["config"]["from_header"] =
+            "x-forwarded-for-secret";
+        expect_rejected(std::move(redirected_header), "x-forwarded-for-secret");
+
+        auto missing_attribute = BaseConfig();
+        missing_attribute["plugins"][0]["config"].removeMember("attribute_key");
+        expect_rejected(std::move(missing_attribute), {});
+
+        auto redirected_attribute = BaseConfig();
+        redirected_attribute["plugins"][0]["config"]["attribute_key"] =
+            "other-client-ip-secret";
+        expect_rejected(std::move(redirected_attribute), "other-client-ip-secret");
+
+        auto malformed_allowlist = BaseConfig();
+        malformed_allowlist["plugins"][0]["config"]["trust_ips"] =
+            "allowlist-secret";
+        expect_rejected(std::move(malformed_allowlist), "allowlist-secret");
+
+        auto invalid_allowlist = BaseConfig();
+        invalid_allowlist["plugins"][0]["config"]["trust_ips"].append(
+            "not-an-address-secret"
+        );
+        expect_rejected(std::move(invalid_allowlist), "not-an-address-secret");
+
+        auto oversized_allowlist = BaseConfig();
+        for (size_t index = 0; index < 33; ++index) {
+            oversized_allowlist["plugins"][0]["config"]["trust_ips"].append("10.0.0.1");
+        }
+        expect_rejected(std::move(oversized_allowlist), {});
     }
 
 } // namespace
