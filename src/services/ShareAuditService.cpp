@@ -205,19 +205,10 @@ namespace disk::share {
                    << Truncate(context.user_agent, MAX_USER_AGENT_LENGTH);
 
             co_await drogon::orm::internal::SqlAwaiter(std::move(binder));
-        } catch (const drogon::orm::DrogonDbException& error) {
-            Logger::Error(log_context)
-                << "Failed to record share audit event: action=" << action
-                << ", share_id="
-                << (share_id.has_value() ? std::to_string(*share_id) : "null")
-                << ", share_code=" << share_code
-                << ", error=" << error.base().what();
-        } catch (const std::exception& error) {
-            Logger::Error(log_context)
-                << "Failed to record share audit event: action=" << action
-                << ", share_id="
-                << (share_id.has_value() ? std::to_string(*share_id) : "null")
-                << ", share_code=" << share_code << ", error=" << error.what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to record share audit event";
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Failed to record share audit event";
         }
     }
 

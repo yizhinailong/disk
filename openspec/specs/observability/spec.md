@@ -374,6 +374,11 @@ The system SHALL classify only registered non-download share path shapes as the 
 - **WHEN** a share request records a share code, internal share ID, file, folder, user, permission, password-attempt count, view count, cache value, or audit result
 - **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those share-domain values SHALL NOT be overloaded into typed correlation fields
 
+#### Scenario: Share audit persistence fails
+- **WHEN** a share or download request encounters a database or standard exception while persisting its audit event
+- **THEN** the directly owned event SHALL use only the fixed complete `Failed to record share audit event` summary with the caller's existing typed correlation and SHALL NOT append action, internal share ID, share code, exception text, SQL, connection details, credentials, or tokens
+- **AND** audit persistence SHALL remain fail-open without automatic retry, while successful audit content, business results, and public responses SHALL remain unchanged
+
 #### Scenario: Share credentials remain secret
 - **WHEN** any share path succeeds or fails
 - **THEN** application and audit events SHALL NOT contain a raw Share Token, `X-Share-Token` or owner Authorization header value, share password, or password hash

@@ -351,6 +351,14 @@ namespace disk::share {
                 audit_source,
                 "disk::utils::SetRequestCorrelationFields(details, log_context);"
             ));
+            EXPECT_EQ(CountOccurrences(audit_source, ".what()"), 0);
+            EXPECT_EQ(
+                CountOccurrences(
+                    audit_source,
+                    "Logger::Error(log_context) << \"Failed to record share audit event\";"
+                ),
+                2
+            );
 
             for (const auto* body : {
                      &controller_source,

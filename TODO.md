@@ -2577,6 +2577,14 @@ ADR、部署、系统测试、单元测试与 OpenSpec 先行固定认证异常�
 
 旧实现上的定向源码合同按预期为 0/1，共 3 个失败断言：精确检出 2 处 `.what()` 及缺失的两条固定完整摘要；两条既有公开错误消息断言通过。实现后定向测试 1/1、CleanupService/领域提取/上传与内容配额安全网聚焦 CTest 17/17（149.80 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1496 项：1489 项通过、7 项按环境门控跳过、0 失败，总耗时 546.08 秒。`CleanupService.cpp` 中 `.what()` 为 0，两条失败路径继续返回相同 `InternalError` 与公开消息。该批不改变组合顺序、批次、Lifecycle、计数、上下文或公开响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.157 ShareAuditService fail-open 错误脱敏记录（2026-08-03）
+
+API、分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行统一分享审计失败合同。数据库与标准异常路径只允许固定完整消息 `Failed to record share audit event` 与调用方既有类型化上下文；action、内部分享 ID、分享码、异常正文、SQL、连接信息、凭据和 token 不得进入失败日志。
+
+审计继续 fail-open 且不自动重试。成功审计行的 action、target、details、IP 与 User-Agent 截断，以及创建、访问、口令失败、下载、逐项取消的业务结果和公开响应保持不变。
+
+旧实现上的定向源码合同按预期为 0/1，共 2 个失败断言：精确检出 2 处 `.what()`，且固定完整语句计数为 0、预期为 2。实现后定向测试 1/1、分享审计/下载响应/真实分享与下载流程/分布式拓扑聚焦 CTest 25/25（34.16 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1496 项：1489 项通过、7 项按环境门控跳过、0 失败，总耗时 536.83 秒。`ShareAuditService.cpp` 中 `.what()`、`action=` 与 `share_code=` 均为 0，固定失败消息精确出现 2 次。该批不改变成功审计内容、fail-open/无重试、日志上下文、业务结果或公开响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

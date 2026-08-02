@@ -4259,7 +4259,7 @@ user_agent  VARCHAR(512)     -- 客户端标识
 created_at  TIMESTAMP        -- 操作时间
 ```
 
-分享审计统一由 `ShareAuditService` 写入，controller 只向业务 service 传递经过解析的 IP 和 User-Agent，不得包含审计 SQL。审计写入采用 **fail-open、无自动重试** 策略：创建、访问、验证失败、下载和逐项取消均先保持既有业务结果；审计写入失败时记录包含 action、内部分享 ID（若有）和 `share_code` 的错误日志，但不得把数据库错误改写成业务失败。无自动重试可避免未设置幂等键时重复记录；后续若引入可靠重试，必须先增加稳定事件 ID 和唯一约束。
+分享审计统一由 `ShareAuditService` 写入，controller 只向业务 service 传递经过解析的 IP 和 User-Agent，不得包含审计 SQL。审计写入采用 **fail-open、无自动重试** 策略：创建、访问、验证失败、下载和逐项取消均先保持既有业务结果；审计写入失败时只记录固定完整消息 `Failed to record share audit event` 与调用方既有类型化上下文，不记录 action、内部分享 ID、`share_code`、数据库/标准异常正文、SQL 或连接信息，也不得把数据库错误改写成业务失败。无自动重试可避免未设置幂等键时重复记录；后续若引入可靠重试，必须先增加稳定事件 ID 和唯一约束。
 
 审计字段和应用日志严禁保存访问密码、密码哈希、原始 Share Token、Authorization/X-Share-Token 请求头或其他可重放凭据。User-Agent 最多保留 512 个字符。公开访问、验证失败和下载的 `user_id` 必须为 `NULL`，不得归到分享所有者名下。
 
