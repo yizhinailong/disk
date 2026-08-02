@@ -30,6 +30,11 @@ The system SHALL validate security-sensitive configuration before accepting runt
 - **THEN** exactly one Drogon `RealIpResolver` SHALL be present with `from_header` equal to `x-real-ip`, `attribute_key` equal to `disk-client-ip`, and an array of at most 32 trusted IPv4 addresses or canonical networks
 - **AND** a missing, duplicate, malformed, redirected, or semantically invalid resolver configuration SHALL fail before plugin initialization without echoing configured values
 
+#### Scenario: Trusted client-IP plugin topology is loaded
+- **WHEN** runtime configuration has been loaded and environment overrides have been applied
+- **THEN** exactly one Drogon `GlobalFilters` plugin SHALL be present and its `dependencies` array SHALL contain `drogon::plugin::RealIpResolver` exactly once
+- **AND** a missing or duplicate `GlobalFilters`, a malformed dependency list, or a missing or duplicate resolver dependency SHALL fail before plugin initialization without echoing configured values
+
 ### Requirement: Database Connectivity Configuration
 The system SHALL use configured PostgreSQL connection settings for persistent metadata storage.
 

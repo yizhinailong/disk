@@ -26,6 +26,8 @@ namespace disk::utils {
 
         constexpr std::string_view REAL_IP_RESOLVER_PLUGIN =
             "drogon::plugin::RealIpResolver";
+        constexpr std::string_view GLOBAL_FILTERS_PLUGIN =
+            "drogon::plugin::GlobalFilters";
         constexpr std::string_view REAL_IP_HEADER = "x-real-ip";
         constexpr std::string_view REAL_IP_ATTRIBUTE = "disk-client-ip";
 
@@ -98,7 +100,7 @@ namespace disk::utils {
             return disk;
         }
 
-        auto PluginConfig(Json::Value& root, std::string_view plugin_name) -> Json::Value& {
+        auto RequiredPlugin(Json::Value& root, std::string_view plugin_name) -> Json::Value& {
             auto& plugins = root["plugins"];
             if (!plugins.isArray()) {
                 throw std::runtime_error(
@@ -121,13 +123,24 @@ namespace disk::utils {
                 }
                 matched_plugin = &plugin;
             }
-            if (matched_plugin == nullptr || !(*matched_plugin)["config"].isObject()) {
+            if (matched_plugin == nullptr) {
                 throw std::runtime_error(
                     "Configuration must contain exactly one required plugin: " +
                     std::string(plugin_name)
                 );
             }
-            return (*matched_plugin)["config"];
+            return *matched_plugin;
+        }
+
+        auto PluginConfig(Json::Value& root, std::string_view plugin_name) -> Json::Value& {
+            auto& plugin = RequiredPlugin(root, plugin_name);
+            if (!plugin["config"].isObject()) {
+                throw std::runtime_error(
+                    "Configuration must contain exactly one required plugin: " +
+                    std::string(plugin_name)
+                );
+            }
+            return plugin["config"];
         }
 
         [[nodiscard]]
@@ -235,6 +248,27 @@ namespace disk::utils {
                 !attribute_key.isString() || attribute_key.asString() != REAL_IP_ATTRIBUTE ||
                 !IsValidTrustedProxyCidrs(config["trust_ips"], true)) {
                 throw std::runtime_error("Invalid RealIpResolver configuration");
+            }
+        }
+
+        auto ValidateGlobalFiltersTopology(Json::Value& root) -> void {
+            const auto& plugin = RequiredPlugin(root, GLOBAL_FILTERS_PLUGIN);
+            const auto& dependencies = plugin["dependencies"];
+            if (!dependencies.isArray()) {
+                throw std::runtime_error("Invalid GlobalFilters plugin topology");
+            }
+
+            size_t resolver_dependency_count = 0;
+            for (const auto& dependency : dependencies) {
+                if (!dependency.isString()) {
+                    throw std::runtime_error("Invalid GlobalFilters plugin topology");
+                }
+                if (dependency.asString() == REAL_IP_RESOLVER_PLUGIN) {
+                    ++resolver_dependency_count;
+                }
+            }
+            if (resolver_dependency_count != 1) {
+                throw std::runtime_error("Invalid GlobalFilters plugin topology");
             }
         }
 
@@ -421,6 +455,7 @@ namespace disk::utils {
         ValidateDatabaseRouting(config);
         ApplyEnvironmentOverrides(config);
         ValidateRealIpResolverConfig(config);
+        ValidateGlobalFiltersTopology(config);
         return config;
     }
 

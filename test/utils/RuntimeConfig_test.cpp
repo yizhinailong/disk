@@ -159,6 +159,10 @@ namespace {
         config["plugins"][0]["config"]["trust_ips"] = Json::Value(Json::arrayValue);
         config["plugins"][0]["config"]["from_header"] = "x-real-ip";
         config["plugins"][0]["config"]["attribute_key"] = "disk-client-ip";
+        config["plugins"][1]["name"] = "drogon::plugin::GlobalFilters";
+        config["plugins"][1]["dependencies"][0] =
+            "drogon::plugin::RealIpResolver";
+        config["plugins"][1]["config"]["filters"] = Json::Value(Json::arrayValue);
         return config;
     }
 
@@ -524,6 +528,57 @@ namespace {
             oversized_allowlist["plugins"][0]["config"]["trust_ips"].append("10.0.0.1");
         }
         expect_rejected(std::move(oversized_allowlist), {});
+    }
+
+    TEST(RuntimeConfigTest, RejectsInvalidEffectiveGlobalFiltersTopology) {
+        EnvironmentScope environment(RuntimeEnvironmentNames());
+        const auto expect_rejected = [](Json::Value config, std::string_view sensitive_value) {
+            try {
+                static_cast<void>(LoadRuntimeConfig(config));
+                FAIL() << "Expected invalid GlobalFilters topology to fail";
+            } catch (const std::runtime_error& error) {
+                const std::string message(error.what());
+                EXPECT_NE(message.find("GlobalFilters"), std::string::npos);
+                if (!sensitive_value.empty()) {
+                    EXPECT_EQ(message.find(sensitive_value), std::string::npos);
+                }
+            }
+        };
+
+        auto missing_plugin = BaseConfig();
+        missing_plugin["plugins"].resize(1);
+        expect_rejected(std::move(missing_plugin), {});
+
+        auto duplicate_plugin = BaseConfig();
+        duplicate_plugin["plugins"].append(duplicate_plugin["plugins"][1]);
+        expect_rejected(std::move(duplicate_plugin), {});
+
+        auto missing_dependencies = BaseConfig();
+        missing_dependencies["plugins"][1].removeMember("dependencies");
+        expect_rejected(std::move(missing_dependencies), {});
+
+        auto malformed_dependencies = BaseConfig();
+        malformed_dependencies["plugins"][1]["dependencies"] =
+            "dependency-list-secret";
+        expect_rejected(std::move(malformed_dependencies), "dependency-list-secret");
+
+        auto malformed_dependency = BaseConfig();
+        malformed_dependency["plugins"][1]["dependencies"].append(42);
+        expect_rejected(std::move(malformed_dependency), {});
+
+        auto missing_resolver_dependency = BaseConfig();
+        missing_resolver_dependency["plugins"][1]["dependencies"] =
+            Json::Value(Json::arrayValue);
+        missing_resolver_dependency["plugins"][1]["dependencies"].append(
+            "other-plugin-secret"
+        );
+        expect_rejected(std::move(missing_resolver_dependency), "other-plugin-secret");
+
+        auto duplicate_resolver_dependency = BaseConfig();
+        duplicate_resolver_dependency["plugins"][1]["dependencies"].append(
+            "drogon::plugin::RealIpResolver"
+        );
+        expect_rejected(std::move(duplicate_resolver_dependency), {});
     }
 
 } // namespace
