@@ -473,3 +473,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `LocalFileStorage::GetChunkObjectKey` is consumed only by local chunk writes and descriptor validation in the same implementation unit
 - **THEN** the key builder SHALL have internal linkage and SHALL NOT be declared by `LocalFileStorage.hpp`, while immutable local chunks continue to use `<upload_id>/chunks/<chunk_index>-<md5>.part` and legacy descriptors without an object key continue to resolve as `<upload_id>/<chunk_index>.chunk` without changing upload, retry, validation, assembly, cleanup, or inventory behavior
+
+#### Scenario: Token verifier construction stays implementation-local
+
+- **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `TokenService::BuildJwtVerifier` and `BuildShareJwtVerifier` are consumed only by token construction, initialization, and temporary share-secret verification in the same implementation unit
+- **THEN** both builders SHALL have internal linkage and SHALL NOT be declared by `TokenService.hpp`, while the private member verifier types, HS256 algorithm, `disk` and `disk_share` issuers, initialized-secret reuse, temporary-secret verification, claims, expiry, revocation, logging, and errors remain unchanged

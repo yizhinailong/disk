@@ -390,12 +390,6 @@ namespace disk::services {
          */
         TokenService();
 
-        [[nodiscard]]
-        static auto BuildJwtVerifier(const std::string& jwt_secret) -> JwtVerifier;
-
-        [[nodiscard]]
-        static auto BuildShareJwtVerifier(const std::string& jwt_secret) -> JwtVerifier;
-
         /**
          * @brief 从 JWT 中提取 JTI
          * @param token JWT 令牌

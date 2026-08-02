@@ -63,6 +63,19 @@ namespace disk::services {
             return count;
         }
 
+        auto SourceSection(
+            const std::string& source,
+            std::string_view begin_marker,
+            std::string_view end_marker
+        ) -> std::string {
+            const auto begin = source.find(begin_marker);
+            const auto end = source.find(end_marker, begin);
+            if (begin == std::string::npos || end == std::string::npos || end <= begin) {
+                return {};
+            }
+            return source.substr(begin, end - begin);
+        }
+
         auto StreamsIdentifier(const std::string& source, std::string_view identifier) -> bool {
             size_t position = 0;
             while ((position = source.find("<<", position)) != std::string::npos) {
@@ -114,6 +127,65 @@ namespace disk::services {
             Json::StreamWriterBuilder builder;
             builder["indentation"] = "";
             return Json::writeString(builder, value);
+        }
+
+        TEST(TokenImplementationHelperContractTest, VerifierBuildersHaveInternalLinkage) {
+            const auto header = ReadSourceFile("src/services/TokenService.hpp");
+            const auto source = ReadSourceFile("src/services/TokenService.cpp");
+            const auto anonymous_helpers = SourceSection(
+                source,
+                "    namespace {",
+                "    } // namespace"
+            );
+
+            EXPECT_TRUE(Contains(
+                header,
+                "using JwtTraits = jwt::traits::open_source_parsers_jsoncpp;"
+            ));
+            EXPECT_TRUE(Contains(
+                header,
+                "using JwtVerifier = jwt::verifier<jwt::default_clock, JwtTraits>;"
+            ));
+            EXPECT_FALSE(Contains(header, "BuildJwtVerifier("));
+            EXPECT_FALSE(Contains(header, "BuildShareJwtVerifier("));
+            EXPECT_FALSE(Contains(source, "TokenService::BuildJwtVerifier("));
+            EXPECT_FALSE(Contains(source, "TokenService::BuildShareJwtVerifier("));
+            ASSERT_FALSE(anonymous_helpers.empty());
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "using JwtTraits = jwt::traits::open_source_parsers_jsoncpp;"
+            ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "using JwtVerifier = jwt::verifier<jwt::default_clock, JwtTraits>;"
+            ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "[[nodiscard]] auto BuildJwtVerifier(const std::string& jwt_secret) -> JwtVerifier"
+            ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "[[nodiscard]] auto BuildShareJwtVerifier(const std::string& jwt_secret) -> JwtVerifier"
+            ));
+            EXPECT_EQ(CountOccurrences(source, "BuildJwtVerifier("), 3U);
+            EXPECT_EQ(CountOccurrences(source, "BuildShareJwtVerifier("), 4U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    anonymous_helpers,
+                    ".allow_algorithm(jwt::algorithm::hs256{ jwt_secret })"
+                ),
+                2U
+            );
+            EXPECT_TRUE(Contains(anonymous_helpers, ".with_issuer(\"disk\")"));
+            EXPECT_TRUE(Contains(anonymous_helpers, ".with_issuer(\"disk_share\")"));
+            EXPECT_TRUE(Contains(
+                source,
+                "instance->m_jwt_verifier = BuildJwtVerifier(instance->m_jwt_secret)"
+            ));
+            EXPECT_TRUE(Contains(
+                source,
+                "BuildShareJwtVerifier(jwt_secret).verify(decoded)"
+            ));
         }
 
         TEST(TokenServiceLogContextContractTest, RequestAndProcessEventsHaveExplicitOwnership) {

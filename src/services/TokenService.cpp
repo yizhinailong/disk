@@ -27,6 +27,9 @@ namespace disk::services {
 
     namespace {
 
+        using JwtTraits = jwt::traits::open_source_parsers_jsoncpp;
+        using JwtVerifier = jwt::verifier<jwt::default_clock, JwtTraits>;
+
         struct PoolMetrics {
             std::atomic<size_t> active_tasks{ 0 };
             std::atomic<size_t> total_submitted{ 0 };
@@ -56,6 +59,18 @@ namespace disk::services {
 
         [[nodiscard]] auto IsValidSharePermission(const std::string& permission) -> bool {
             return permission == "view" || permission == "download";
+        }
+
+        [[nodiscard]] auto BuildJwtVerifier(const std::string& jwt_secret) -> JwtVerifier {
+            return jwt::verify<JwtTraits>()
+                .allow_algorithm(jwt::algorithm::hs256{ jwt_secret })
+                .with_issuer("disk");
+        }
+
+        [[nodiscard]] auto BuildShareJwtVerifier(const std::string& jwt_secret) -> JwtVerifier {
+            return jwt::verify<JwtTraits>()
+                .allow_algorithm(jwt::algorithm::hs256{ jwt_secret })
+                .with_issuer("disk_share");
         }
 
         auto CreateAuthCpuPool() -> trantor::EventLoopThreadPool* {
@@ -100,18 +115,6 @@ namespace disk::services {
         instance->m_jwt_secret = std::move(jwt_secret);
         instance->m_jwt_verifier = BuildJwtVerifier(instance->m_jwt_secret);
         instance->m_share_jwt_verifier = BuildShareJwtVerifier(instance->m_jwt_secret);
-    }
-
-    auto TokenService::BuildJwtVerifier(const std::string& jwt_secret) -> JwtVerifier {
-        return jwt::verify<JwtTraits>()
-            .allow_algorithm(jwt::algorithm::hs256{ jwt_secret })
-            .with_issuer("disk");
-    }
-
-    auto TokenService::BuildShareJwtVerifier(const std::string& jwt_secret) -> JwtVerifier {
-        return jwt::verify<JwtTraits>()
-            .allow_algorithm(jwt::algorithm::hs256{ jwt_secret })
-            .with_issuer("disk_share");
     }
 
     auto TokenService::GenerateTokens(

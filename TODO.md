@@ -2357,6 +2357,14 @@ ShareService 的本地模板已删除，两个调用点改用 `disk::file::utils
 
 旧实现上新增合同按预期为 0/1，精确检出 6 个内部链接与局部实现失败断言，两个调用点、描述符等值校验和 legacy 回退正向断言均通过。实现后直接合同 1/1、本地分片写入/HEAD/组装/不可变重试/篡改拒绝/legacy 行/清理/inventory/分布式拓扑聚焦 CTest 38/38（1.35 秒）、完整构建、OpenSpec 24/24 和差异检查通过；两个制品均只保留一个匿名命名空间局部 key-builder 符号。标准完整 CTest 共 1466 项：1459 项通过、7 项按环境门控跳过、0 失败，总耗时 550.59 秒。该批只收敛本地存储实现边界；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.130 Token verifier builder 内部化记录（2026-08-02）
+
+系统测试、单元测试和后端低风险清理 OpenSpec 先行固定 token verifier 构造的内部链接合同。全仓调用点、Git 历史、源码和已编译对象审计确认，私有静态 `TokenService::BuildJwtVerifier()` 与 `BuildShareJwtVerifier()` 自认证 CPU pool 重构引入起只在同一实现文件内使用：普通 builder 由构造与 `Initialize()` 调用，分享 builder 另由显式临时密钥验证分支调用；没有外部消费者，旧后端与测试二进制各导出两个类成员符号。
+
+两个函数体已原样移入 `TokenService.cpp` 既有匿名命名空间，并使用实现局部 `JwtTraits/JwtVerifier` 别名；头文件只删除两个 builder 声明，承载 `m_jwt_verifier` 与 `m_share_jwt_verifier` 的私有类型别名继续保留。两个 builder 仍使用 HS256 并分别要求 `disk`/`disk_share` issuer；单例构造、密钥初始化、已初始化 verifier 复用、显式临时分享密钥、claims、过期、撤销、CPU pool、日志和错误均未改变。
+
+旧实现上新增合同按预期为 0/1，精确检出 11 个内部链接与局部实现失败断言，成员类型、调用数量、初始化赋值和临时密钥调用正向断言均通过。实现后直接合同 1/1，token 日志/share/access/refresh/撤销/JWT 与分享过滤器/真实认证生命周期/分享令牌安全/分布式拓扑聚焦 CTest 123/123（16.18 秒）、完整构建、OpenSpec 24/24 和差异检查通过；两个制品均只保留两个匿名命名空间局部 builder 符号。标准完整 CTest 共 1467 项：1460 项通过、7 项按环境门控跳过、0 失败，总耗时 529.44 秒。该批只收敛 token verifier 构造边界；Phase 6/9/10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
