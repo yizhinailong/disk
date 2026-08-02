@@ -146,6 +146,11 @@ namespace {
         auto missing_result = drogon::sync_wait(m_service->Get(key));
         ASSERT_FALSE(missing_result.has_value());
         EXPECT_EQ(missing_result.error().code, Code::RedisKeyNotFound);
+        EXPECT_EQ(
+            missing_result.error().message,
+            disk::error::GetErrorMessage(Code::RedisKeyNotFound)
+        );
+        EXPECT_EQ(missing_result.error().message.find(key), std::string::npos);
     }
 
     TEST_F(RedisServiceRuntimeTest, SetWithTtlRemovesKeyAfterExpiry) {

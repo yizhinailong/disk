@@ -209,7 +209,20 @@ namespace disk::services {
             EXPECT_FALSE(Contains(source, "Logger::Error()"));
             EXPECT_FALSE(Contains(source, "Logger::Debug(log_context)"));
             EXPECT_TRUE(Contains(source, "Service initialized: service=redis"));
-            EXPECT_TRUE(Contains(source, "WrapRedisResultParseError(\"PING\", ex, log_context)"));
+            EXPECT_TRUE(Contains(source, "WrapRedisResultParseError(\"PING\", log_context)"));
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "ErrorInfo(ErrorCode::RedisOperationFailed)"
+                ),
+                9U
+            );
+            EXPECT_EQ(
+                CountOccurrences(source, "ErrorInfo(ErrorCode::RedisKeyNotFound)"),
+                1U
+            );
+            EXPECT_FALSE(Contains(source, "std::string(ex.what())"));
+            EXPECT_FALSE(Contains(source, "\"Redis key not found: \" + key"));
 
             for (const auto* sensitive : {
                      "key",
@@ -446,6 +459,11 @@ namespace disk::services {
             const auto result = drogon::sync_wait(m_service->Incr(key, context));
             ASSERT_FALSE(result.has_value());
             EXPECT_EQ(result.error().code, ErrorCode::RedisOperationFailed);
+            EXPECT_EQ(
+                result.error().message,
+                disk::error::GetErrorMessage(ErrorCode::RedisOperationFailed)
+            );
+            EXPECT_FALSE(Contains(result.error().message, poison_value));
 
             const auto records = DrainRecords(1);
             ASSERT_EQ(records.size(), 1U);

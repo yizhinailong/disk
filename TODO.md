@@ -2513,6 +2513,14 @@ API、系统测试、单元测试与后端低风险清理 OpenSpec 先行固定�
 
 旧实现上的新增源码合同按预期为 0/1，精确检出共享声明/定义、两次可空写入、管理员显式 include、12 个限定调用和删除五个局部 helper 的 15 个失败断言；日志、分享审计、管理边界和下载响应行为基线 29/29 通过。实现后直接源码/行为测试 31/31、日志/审计/下载/存储管理与分布式拓扑聚焦 CTest 36/36（17.56 秒）、完整构建、OpenSpec 24/24、符号审计和差异检查通过；后端与测试二进制各只保留一个共享函数符号，旧局部符号均消失。标准完整 CTest 共 1493 项：1486 项通过、7 项按环境门控跳过、0 失败，总耗时 555.78 秒。该批不改变 details 业务字段、持久化、日志、错误或公开响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.149 Redis 领域错误脱敏记录（2026-08-03）
+
+API、部署、系统测试、单元测试与 OpenSpec 先行固定 Redis 领域错误边界。`RedisService` 的命令异常和结果解析异常必须只返回 `RedisOperationFailed` 默认消息，缺失 key 只返回 `RedisKeyNotFound` 默认消息；hiredis/代理异常正文、endpoint、连接细节、实际 key、value、命令参数和凭据不得进入 `ErrorInfo` 或 HTTP JSON。
+
+实现与测试必须保留既有错误码、HTTP 状态、Redis 命令、TTL/Lua/CAS、结构化日志的固定命令名和调用方关联、依赖指标分类，以及认证 fail-closed、限流 fail-open、文件列表缓存降级和 readiness 行为。源码合同应拒绝 `ex.what()` 或 key 拼入 `ErrorInfo`，真实 wrong-type Redis 行为应验证错误消息固定且日志继续脱敏。
+
+旧实现上的三个定向合同按预期全部失败，精确检出缺失 key 回显、9 条依赖/解析异常正文拼接和 wrong-type 领域消息不稳定。实现后定向红绿测试 3/3、Redis/认证撤销/限流/健康/故障切换聚焦 CTest 167/167（63.15 秒）、完整构建、OpenSpec 24/24 和源码审计通过；9 条 `RedisOperationFailed` 与 1 条 `RedisKeyNotFound` 均只使用默认构造，生产实现不再包含 `ex.what()` 或带 key 的缺失消息。标准完整 CTest 共 1493 项：1486 项通过、7 项按环境门控跳过、0 失败，总耗时 537.53 秒。该批不改变 Redis 协议、错误码、HTTP 状态、指标或上层故障策略，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

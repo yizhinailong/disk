@@ -109,7 +109,7 @@ The shared token service SHALL accept explicit correlation by value for request-
 - **THEN** its message SHALL contain only those bounded diagnostics and SHALL NOT contain request context, a manually copied instance ID, token, JTI, token hash, cache key, credential, secret, endpoint, or exception text; token, pool, timer, cache, metric-reset, and log-level behavior SHALL remain unchanged
 
 ### Requirement: Redis Service Correlation
-The shared Redis service SHALL accept explicit correlation by value for every command API and SHALL apply the supplied context to every directly owned command success, protocol, parsing, and dependency-failure event. Authentication, token, share, file-list cache, rate-limit, administrator status, and readiness callers SHALL pass their already established context without changing Redis commands, keys, values, TTLs, transactions, Lua scripts, CAS behavior, metrics, error results, or dependency-failure policy.
+The shared Redis service SHALL accept explicit correlation by value for every command API and SHALL apply the supplied context to every directly owned command success, protocol, parsing, and dependency-failure event. Authentication, token, share, file-list cache, rate-limit, administrator status, and readiness callers SHALL pass their already established context without changing Redis commands, keys, values, TTLs, transactions, Lua scripts, CAS behavior, metrics, error codes, HTTP status, or dependency-failure policy.
 
 #### Scenario: A request reaches Redis through a shared service
 - **WHEN** an authenticated, share, file, administrator, or readiness request performs Redis work through a service or cache helper
@@ -122,6 +122,10 @@ The shared Redis service SHALL accept explicit correlation by value for every co
 #### Scenario: Redis observes command inputs and dependency failures
 - **WHEN** the service observes a key, value, expected or replacement value, Lua script, TTL, user or token identifier, Redis exception, or parse failure
 - **THEN** its application event SHALL contain only the fixed command name and bounded result metadata, SHALL NOT contain the key, value, script, exception text, credential, token hash, JTI, share code, IP address, file-list payload, or connection detail, and SHALL NOT derive upload ID, job ID, lease owner, or state version from any command input
+
+#### Scenario: Redis returns a domain error
+- **WHEN** a Redis exception, result parse failure, or missing key is converted to `ErrorInfo`
+- **THEN** the result SHALL use only the corresponding default business message and SHALL NOT contain the exception text, endpoint, connection detail, key, value, command parameter, or credential
 
 #### Scenario: Redis receives no request context
 - **WHEN** a unit, utility, background, or compatibility caller omits explicit correlation

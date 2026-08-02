@@ -129,8 +129,10 @@
 
 | 错误码 | 枚举名称 | HTTP状态码 | 说明 |
 |--------|----------|------------|------|
-| 70002 | `RedisOperationFailed` | 500 | Redis操作失败 |
-| 70003 | `RedisKeyNotFound` | 404 | Redis key不存在 |
+| 70002 | `RedisOperationFailed` | 500 | Redis操作失败；消息固定为 `Redis operation failed`，不得包含上游异常正文、连接信息或命令参数 |
+| 70003 | `RedisKeyNotFound` | 404 | Redis key不存在；消息固定为 `Redis key not found`，不得回显实际 key |
+
+Redis 错误响应只公开业务码、固定消息和 HTTP 状态。具体命令由携带请求关联的结构化日志记录，依赖故障类型由低基数指标记录；hiredis/代理异常正文、endpoint、key、value、Lua 参数和凭据不得进入 `ErrorInfo` 或 HTTP JSON。该脱敏不改变认证撤销的 fail-closed、限流的 fail-open、文件列表缓存降级或 readiness 判定。
 
 #### 管理员错误码
 

@@ -28,6 +28,10 @@ The system SHALL expose stable business error codes for common, authentication, 
 - **WHEN** a known business error is returned without a custom message
 - **THEN** the response SHALL use that error code's human-readable default message and SHALL NOT fall back to `Unknown error`
 
+#### Scenario: Redis dependency errors expose no upstream diagnostics
+- **WHEN** a Redis command, result conversion, or key lookup returns `RedisOperationFailed` or `RedisKeyNotFound`
+- **THEN** the error SHALL use the documented fixed default message and SHALL NOT expose the Redis exception text, endpoint, connection details, key, value, command parameters, or credentials
+
 ### Requirement: Pagination Envelope
 The system SHALL return paginated collection results with item data and pagination metadata.
 
