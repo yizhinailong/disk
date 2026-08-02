@@ -161,6 +161,11 @@ namespace disk::system {
             ));
             EXPECT_TRUE(Contains(service_request_body, "GetStorageStats(log_context)"));
             EXPECT_TRUE(Contains(service_request_body, "Logger::Error(log_context)"));
+            EXPECT_EQ(CountOccurrences(service_request_body, ".what()"), 0U);
+            EXPECT_TRUE(Contains(
+                service_request_body,
+                "Logger::Error(log_context) << \"Failed to get storage stats\";"
+            ));
             EXPECT_TRUE(Contains(stage_timer_source, "LogContext log_context = {}"));
             EXPECT_TRUE(Contains(
                 stage_timer_source,

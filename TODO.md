@@ -2561,6 +2561,14 @@ ADR、部署、系统测试、单元测试与 OpenSpec 先行固定认证异常�
 
 旧实现上的定向源码合同按预期为 0/1，共 13 个失败断言：精确检出 9 处 `.what()`、各 2 处 `condition`/`empty` 英文搜索、零个结构化 `UnexpectedRows` 捕获及缺失的 7 条固定完整摘要。实现后定向测试 1/1、UserService/用户资料与存储/PostgreSQL 故障切换/上传安全网聚焦 CTest 13/13（143.12 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1495 项：1488 项通过、7 项按环境门控跳过、0 失败，总耗时 555.90 秒。`UserService.cpp` 中 `.what()` 和两类英文搜索均为 0，两处 `UnexpectedRows` 在通用数据库异常前结构化处理。该批不改变 SQL、资料字段、密码验证/哈希、聚合统计、其他错误码或公开响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.155 SystemService 存储统计错误脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行固定系统信息聚合统计的依赖错误边界。数据库失败事件只允许固定完整消息 `Failed to get storage stats`；PostgreSQL 异常正文、SQL、连接信息、凭据和 token 不得进入该事件。
+
+数据库失败后继续返回已取得或默认的存储统计，系统信息认证、版本、运行时间、连接统计、查询 SQL、request/instance/`system_info` 关联和公开成功响应保持不变。
+
+旧实现上的定向源码合同按预期为 0/1，共 2 个失败断言：精确检出 1 处 `.what()` 和缺失的固定完整摘要。实现后定向测试 1/1、SystemService/真实系统信息/PostgreSQL 故障切换/上传安全网聚焦 CTest 10/10（135.88 秒）、完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1495 项：1488 项通过、7 项按环境门控跳过、0 失败，总耗时 541.29 秒。`SystemService.cpp` 中 `.what()` 为 0，数据库异常捕获后仍直接返回现有 `StorageStats`。该批不改变认证、查询、降级、日志上下文或公开响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

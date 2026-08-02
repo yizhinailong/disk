@@ -103,8 +103,8 @@ namespace disk::system {
             if (!folders_result.empty()) {
                 stats.total_folders = folders_result[0]["count"].as<int64_t>();
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to get storage stats: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to get storage stats";
         }
 
         co_return stats;

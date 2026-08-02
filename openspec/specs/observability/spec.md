@@ -24,6 +24,11 @@ The system SHALL expose authenticated system information for operational visibil
 - **WHEN** an authenticated user requests system information
 - **THEN** the system SHALL return version, runtime, connection, and storage summary information available to that user
 
+#### Scenario: System storage aggregation fails
+- **WHEN** the system-information storage aggregation encounters a database exception
+- **THEN** its directly owned event SHALL use the fixed complete `Failed to get storage stats` summary and SHALL NOT append exception text, SQL, connection details, credentials, or tokens
+- **AND** the response SHALL retain any collected or default storage values and the existing successful system-information contract
+
 ### Requirement: Typed System Information Correlation
 The system SHALL classify only the exact authenticated system-information path as the bounded `system_info` operation and SHALL propagate its correlation explicitly by value across the controller, service, request stage timer, and storage-statistics error boundary.
 
