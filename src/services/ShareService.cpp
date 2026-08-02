@@ -87,6 +87,44 @@ namespace disk::share {
             return std::nullopt;
         }
 
+        [[nodiscard]] auto IsShareExpired(const Shares& share) -> bool {
+            if (share.getExpiresAt() == nullptr) {
+                return false;
+            }
+            return share.getValueOfExpiresAt() < trantor::Date::now();
+        }
+
+        [[nodiscard]] auto IsShareActive(const Shares& share) -> bool {
+            if (share.getValueOfStatus() != static_cast<int8_t>(ShareStatus::Active)) {
+                return false;
+            }
+            if (share.getExpiresAt() != nullptr && IsShareExpired(share)) {
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] auto VerifyPassword(const Shares& share, const std::string& password) -> bool {
+            if (share.getPasswordHash() == nullptr) {
+                return true;
+            }
+            return utils::HashUtil::VerifyPassword(password, share.getValueOfPasswordHash());
+        }
+
+        [[nodiscard]] auto FormatDateTime(const trantor::Date& date) -> std::string {
+            auto micro_seconds = date.microSecondsSinceEpoch();
+            auto seconds = micro_seconds / 1000000;
+            auto tm = *std::localtime(&seconds);
+
+            std::ostringstream oss;
+            oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+            return oss.str();
+        }
+
+        [[nodiscard]] auto BuildShareLink(const std::string& share_code) -> std::string {
+            return "/s/" + share_code;
+        }
+
         [[nodiscard]] auto BuildSharedFolderAccessPredicate(const std::string& folder_alias, size_t start_index = 1)
             -> std::string {
             return "EXISTS (" "SELECT 1 FROM share_files sff " "JOIN folders shared_root ON sff.item_id = shared_root.id " "WHERE sff.share_id = $" + std::to_string(start_index) + " AND sff.item_type = 'folder' " "AND " + folder_alias + ".user_id = shared_root.user_id " "AND (" + folder_alias + ".id = shared_root.id OR " + folder_alias + ".path LIKE CONCAT(shared_root.path, '%'))" ")";
@@ -1765,23 +1803,6 @@ namespace disk::share {
         co_return result;
     }
 
-    auto ShareService::IsShareExpired(const Shares& share) -> bool {
-        if (share.getExpiresAt() == nullptr) {
-            return false;
-        }
-        return share.getValueOfExpiresAt() < trantor::Date::now();
-    }
-
-    auto ShareService::IsShareActive(const Shares& share) -> bool {
-        if (share.getValueOfStatus() != static_cast<int8_t>(ShareStatus::Active)) {
-            return false;
-        }
-        if (share.getExpiresAt() != nullptr && IsShareExpired(share)) {
-            return false;
-        }
-        return true;
-    }
-
     auto ShareService::ValidateShareActive(
         uint64_t share_id,
         disk::utils::LogContext log_context
@@ -1803,13 +1824,6 @@ namespace disk::share {
         }
 
         co_return {};
-    }
-
-    auto ShareService::VerifyPassword(const Shares& share, const std::string& password) -> bool {
-        if (share.getPasswordHash() == nullptr) {
-            return true;
-        }
-        return utils::HashUtil::VerifyPassword(password, share.getValueOfPasswordHash());
     }
 
     auto ShareService::IncrementViewCount(
@@ -1855,20 +1869,6 @@ namespace disk::share {
                 << "Failed to update shared file download metadata: " << e.base().what()
                 << " (file_id=" << file_id << ")";
         }
-    }
-
-    auto ShareService::FormatDateTime(const trantor::Date& date) -> std::string {
-        auto micro_seconds = date.microSecondsSinceEpoch();
-        auto seconds = micro_seconds / 1000000;
-        auto tm = *std::localtime(&seconds);
-
-        std::ostringstream oss;
-        oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-        return oss.str();
-    }
-
-    auto ShareService::BuildShareLink(const std::string& share_code) -> std::string {
-        return "/s/" + share_code;
     }
 
     auto ShareService::HandleFailedShareAccess(

@@ -49,6 +49,19 @@ namespace disk::share {
             return source.substr(begin);
         }
 
+        auto SourceSection(
+            const std::string& source,
+            std::string_view begin_marker,
+            std::string_view end_marker
+        ) -> std::string {
+            const auto begin = source.find(begin_marker);
+            const auto end = source.find(end_marker, begin);
+            if (begin == std::string::npos || end == std::string::npos || end <= begin) {
+                return {};
+            }
+            return source.substr(begin, end - begin);
+        }
+
         auto CallContainsContext(const std::string& source, std::string_view call_marker) -> bool {
             const auto begin = source.find(call_marker);
             if (begin == std::string::npos) {
@@ -90,6 +103,74 @@ namespace disk::share {
             EXPECT_TRUE(Contains(service_source, "ShareStatus::Active"));
             EXPECT_TRUE(Contains(service_source, "ShareStatus::Expired"));
             EXPECT_TRUE(Contains(service_source, "ShareStatus::Cancelled"));
+        }
+
+        TEST(ShareImplementationHelperContractTest, StatelessDomainHelpersHaveInternalLinkage) {
+            const auto service_header = ReadSourceFile("src/services/ShareService.hpp");
+            const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
+            const auto anonymous_helpers =
+                SourceSection(service_source, "    namespace {", "    } // namespace");
+
+            ASSERT_FALSE(anonymous_helpers.empty());
+            for (const auto* helper : {
+                     "IsShareExpired",
+                     "IsShareActive",
+                     "VerifyPassword",
+                     "FormatDateTime",
+                     "BuildShareLink",
+                 }) {
+                EXPECT_FALSE(Contains(service_header, helper)) << helper;
+                EXPECT_FALSE(Contains(service_source, std::string("ShareService::") + helper))
+                    << helper;
+            }
+
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "[[nodiscard]] auto IsShareExpired(const Shares& share) -> bool"
+            ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "[[nodiscard]] auto IsShareActive(const Shares& share) -> bool"
+            ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "[[nodiscard]] auto VerifyPassword(const Shares& share, const std::string& password) -> bool"
+            ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "[[nodiscard]] auto FormatDateTime(const trantor::Date& date) -> std::string"
+            ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "[[nodiscard]] auto BuildShareLink(const std::string& share_code) -> std::string"
+            ));
+
+            EXPECT_EQ(CountOccurrences(service_source, "IsShareExpired("), 5U);
+            EXPECT_EQ(CountOccurrences(service_source, "IsShareActive("), 4U);
+            EXPECT_EQ(CountOccurrences(service_source, "VerifyPassword("), 3U);
+            EXPECT_EQ(CountOccurrences(service_source, "FormatDateTime("), 9U);
+            EXPECT_EQ(CountOccurrences(service_source, "BuildShareLink("), 4U);
+
+            EXPECT_TRUE(Contains(anonymous_helpers, "share.getExpiresAt() == nullptr"));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "share.getValueOfExpiresAt() < trantor::Date::now()"
+            ));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "share.getValueOfStatus() != static_cast<int8_t>(ShareStatus::Active)"
+            ));
+            EXPECT_TRUE(Contains(anonymous_helpers, "share.getPasswordHash() == nullptr"));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "utils::HashUtil::VerifyPassword(password, share.getValueOfPasswordHash())"
+            ));
+            EXPECT_TRUE(Contains(anonymous_helpers, "std::localtime(&seconds)"));
+            EXPECT_TRUE(Contains(
+                anonymous_helpers,
+                "std::put_time(&tm, \"%Y-%m-%d %H:%M:%S\")"
+            ));
+            EXPECT_TRUE(Contains(anonymous_helpers, "return \"/s/\" + share_code"));
         }
 
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {

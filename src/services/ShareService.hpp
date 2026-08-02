@@ -353,35 +353,9 @@ namespace disk::share {
         ) const
             -> drogon::Task<std::unordered_map<uint64_t, std::vector<ShareFile>>>;
 
-        /**
-         * @brief 检查分享是否过期
-         * @param share 分享模型
-         * @return bool 是否过期
-         */
-        [[nodiscard]]
-        static auto IsShareExpired(const drogon_model::disk::Shares& share) -> bool;
-
-        /**
-         * @brief 检查分享状态是否为有效
-         * @param share 分享模型
-         * @return bool 是否有效
-         */
-        [[nodiscard]]
-        static auto IsShareActive(const drogon_model::disk::Shares& share) -> bool;
-
         [[nodiscard]]
         auto ValidateShareActive(uint64_t share_id, disk::utils::LogContext log_context) const
             -> drogon::Task<Result<void>>;
-
-        /**
-         * @brief 验证分享密码
-         * @param share 分享模型
-         * @param password 用户输入的密码
-         * @return bool 密码是否正确
-         */
-        [[nodiscard]]
-        static auto VerifyPassword(const drogon_model::disk::Shares& share, const std::string& password)
-            -> bool;
 
         /**
          * @brief 增加访问次数
@@ -400,22 +374,6 @@ namespace disk::share {
             uint64_t file_id,
             disk::utils::LogContext log_context = {}
         ) -> drogon::Task<void>;
-
-        /**
-         * @brief 格式化日期时间字符串
-         * @param date 日期对象
-         * @return std::string 格式化的日期时间字符串
-         */
-        [[nodiscard]]
-        static auto FormatDateTime(const trantor::Date& date) -> std::string;
-
-        /**
-         * @brief 构建分享链接
-         * @param share_code 分享码
-         * @return std::string 分享链接
-         */
-        [[nodiscard]]
-        static auto BuildShareLink(const std::string& share_code) -> std::string;
 
         /**
          * @brief 记录失败的公开分享访问并构建统一错误

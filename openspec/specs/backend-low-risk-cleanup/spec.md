@@ -478,3 +478,8 @@ Backend shared services SHALL expose only command capabilities used by productio
 
 - **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `TokenService::BuildJwtVerifier` and `BuildShareJwtVerifier` are consumed only by token construction, initialization, and temporary share-secret verification in the same implementation unit
 - **THEN** both builders SHALL have internal linkage and SHALL NOT be declared by `TokenService.hpp`, while the private member verifier types, HS256 algorithm, `disk` and `disk_share` issuers, initialized-secret reuse, temporary-secret verification, claims, expiry, revocation, logging, and errors remain unchanged
+
+#### Scenario: Stateless share-domain helpers stay implementation-local
+
+- **WHEN** a whole-repository call-site, history, and object-symbol audit confirms that `ShareService::IsShareExpired`, `IsShareActive`, `VerifyPassword`, `FormatDateTime`, and `BuildShareLink` are consumed only by share flows in the same implementation unit
+- **THEN** all five helpers SHALL have internal linkage and SHALL NOT be declared by `ShareService.hpp`, while persisted status plus expiry determines activity, passwordless shares pass verification, password hashes use the existing verifier, dates retain local `%Y-%m-%d %H:%M:%S` formatting, links retain `/s/<share_code>`, and share transactions, permissions, counters, rate limits, audit, logging, errors, and responses remain unchanged
