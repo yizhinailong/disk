@@ -2757,6 +2757,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 完整构建确认 `ShareService.cpp` 实际重新编译，OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1507 项：1500 项通过、7 项按环境门控跳过、0 失败，总耗时 548.68 秒。源码审计确认 `Create()` 中 `.what()` 为 0，两条固定日志语句各精确出现 1 次；`ShareService.cpp` 其余路径仍有 18 处 `.what()`，留待后续独立批次处理。本批不改变校验、哈希、碰撞重试、关联写入、回滚、提交、审计、响应、类型化关联、公开错误或 Controller 组合，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.177 ShareService 管理写入异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧分享更新及批量取消边界。设置更新数据库异常、取消分块预取异常与取消批量更新异常必须分别只记录固定完整摘要 `Failed to update share`、`Failed to fetch shares for cancel` 与 `Failed to cancel share`；不得在 message 中追加 user/share ID、分块内容、异常正文、SQL、连接信息、密码、凭据或 token。
+
+更新异常继续返回既有 `InternalError` 与 `Failed to update share`。取消预取失败继续把当前分块全部映射为既有 `Operation failed/internal_error` 并逐项审计后处理后续分块；取消更新失败继续只把当前分块中原计划成功的项目改为同一固定失败。所有权/活动状态校验、可选过期时间/密码/权限更新、密码哈希、输入顺序、分块、重复项规则、部分成功、计数、审计、响应映射、类型化关联及 Controller 组合不得改变。
+
+旧实现上的定向源码合同按预期为 0/1，共 5 个失败断言：`Update()` 精确检出 1 处、`Cancel()` 精确检出 2 处 `.what()`，三条固定完整日志语句均缺失；更新公开错误、取消两处固定逐项失败、成功计数回退和两处审计调用断言通过。实现后 Share 定向合同 8/8、Share 单元/DTO/查询/管理/碰撞/审计/Token/限流/分布式拓扑聚焦 CTest 150/150（43.62 秒）通过。
+
+完整构建确认 `ShareService.cpp` 实际重新编译，OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1508 项：1501 项通过、7 项按环境门控跳过、0 失败，总耗时 544.68 秒。源码审计确认 `Update()` 与 `Cancel()` 中 `.what()` 均为 0，三条固定日志语句各精确出现 1 次；`ShareService.cpp` 其余路径仍有 15 处 `.what()`，留待后续独立批次处理。本批不改变校验、可选字段更新、密码哈希、输入顺序、分块、重复项、部分成功、计数、审计、响应、类型化关联、公开错误或 Controller 组合，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

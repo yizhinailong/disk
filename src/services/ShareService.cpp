@@ -595,8 +595,8 @@ namespace disk::share {
         CoroMapper<Shares> mapper(m_db_client);
         try {
             co_await mapper.update(share);
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to update share: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to update share";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to update share")
             );
@@ -670,9 +670,8 @@ namespace disk::share {
                                   .status = row["status"].as<int8_t>() }
                     );
                 }
-            } catch (const DrogonDbException& e) {
-                Logger::Error(log_context)
-                    << "Failed to fetch shares for cancel: " << e.base().what();
+            } catch (const DrogonDbException&) {
+                Logger::Error(log_context) << "Failed to fetch shares for cancel";
 
                 for (const auto& share_id : chunk) {
                     CancelShareResult result;
@@ -773,9 +772,8 @@ namespace disk::share {
 
                 try {
                     co_await m_db_client->execSqlCoro(update_sql, std::as_const(update_args));
-                } catch (const DrogonDbException& e) {
-                    Logger::Error(log_context)
-                        << "Failed to cancel share: " << e.base().what();
+                } catch (const DrogonDbException&) {
+                    Logger::Error(log_context) << "Failed to cancel share";
 
                     for (auto result_it = response.results.begin() + static_cast<std::ptrdiff_t>(chunk_result_start);
                          result_it != response.results.end();

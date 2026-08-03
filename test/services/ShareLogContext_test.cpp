@@ -266,6 +266,59 @@ namespace disk::share {
             EXPECT_EQ(CountOccurrences(create_body, "transaction->rollback();"), 2U);
         }
 
+        TEST(ShareManagementLogContractTest, WriteExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
+            const auto update_body = SourceSection(
+                service_source,
+                "auto ShareService::Update(",
+                "    auto ShareService::Cancel("
+            );
+            const auto cancel_body = SourceSection(
+                service_source,
+                "auto ShareService::Cancel(",
+                "    auto ShareService::Access("
+            );
+
+            ASSERT_FALSE(update_body.empty());
+            ASSERT_FALSE(cancel_body.empty());
+            EXPECT_EQ(CountOccurrences(update_body, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(cancel_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    update_body,
+                    "Logger::Error(log_context) << \"Failed to update share\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    cancel_body,
+                    "Logger::Error(log_context) << \"Failed to fetch shares for cancel\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    cancel_body,
+                    "Logger::Error(log_context) << \"Failed to cancel share\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    update_body,
+                    "ErrorInfo(ErrorCode::InternalError, \"Failed to update share\")"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(cancel_body, "\"Operation failed\""), 2U);
+            EXPECT_EQ(CountOccurrences(cancel_body, "response.summary.succeeded--;"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(cancel_body, "co_await m_audit_service.RecordCancel("),
+                2U
+            );
+        }
+
         TEST(ShareReadLogContractTest, ListExceptionsUseFixedSummaries) {
             const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
             const auto list_body = SourceSection(
