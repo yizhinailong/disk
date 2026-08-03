@@ -929,6 +929,11 @@ The system SHALL classify the manual expired-cleanup endpoint as the bounded `cl
 - **THEN** its directly owned event SHALL use only the matching fixed complete `Failed to update share`, `Failed to fetch shares for cancel`, or `Failed to cancel share` summary with existing typed correlation, and SHALL NOT append user or share IDs, chunk contents, exception text, SQL, connection details, passwords, credentials, or tokens
 - **AND** the existing update error result, cancellation per-item fixed failures and later-chunk continuation, ownership and active-state validation, optional-field updates, password hashing, input order, chunking, duplicate handling, partial-success counters, audits, and response mapping SHALL remain unchanged
 
+#### Scenario: Public share read throws
+- **WHEN** shared-folder browsing or download-metadata loading catches a database exception
+- **THEN** its directly owned event SHALL use only the matching fixed complete `Failed to browse share folder` or `Failed to get download info` summary with existing typed correlation, and SHALL NOT append share, file, folder, or user IDs, exception text, SQL, connection details, storage locators, credentials, or tokens
+- **AND** the existing public errors, active-state validation, root browsing, shared-folder predicates, child ordering, breadcrumbs, single four-table download join, status, expiry, membership and permission checks, Blob mapping, and Range capability SHALL remain unchanged
+
 #### Scenario: Worker executes expiration through shared services
 - **WHEN** a claimed expired-upload or expired-trash job enters the same lifecycle and trash/content services
 - **THEN** its job-level events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner while request ID and state version remain null; an upload item-level event MAY add only the state version returned by its successful expiration transition

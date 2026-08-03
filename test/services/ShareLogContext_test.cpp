@@ -319,6 +319,55 @@ namespace disk::share {
             );
         }
 
+        TEST(SharePublicReadLogContractTest, QueryExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
+            const auto browse_body = SourceSection(
+                service_source,
+                "auto ShareService::Browse(",
+                "    auto ShareService::GetDownloadInfo("
+            );
+            const auto download_body = SourceSection(
+                service_source,
+                "auto ShareService::GetDownloadInfo(",
+                "    auto ShareService::CompleteDownload("
+            );
+
+            ASSERT_FALSE(browse_body.empty());
+            ASSERT_FALSE(download_body.empty());
+            EXPECT_EQ(CountOccurrences(browse_body, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(download_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    browse_body,
+                    "Logger::Error(log_context) << \"Failed to browse share folder\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    download_body,
+                    "Logger::Error(log_context) << \"Failed to get download info\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    browse_body,
+                    "ErrorInfo(ErrorCode::InternalError, \"Failed to browse share content\")"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    download_body,
+                    "ErrorInfo(ErrorCode::InternalError, \"Failed to get download info\")"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(browse_body, "BuildSharedFolderAccessPredicate("), 2U);
+            EXPECT_EQ(CountOccurrences(download_body, "BuildSharedFileAccessPredicate("), 1U);
+        }
+
         TEST(ShareReadLogContractTest, ListExceptionsUseFixedSummaries) {
             const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
             const auto list_body = SourceSection(

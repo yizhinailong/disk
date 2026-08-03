@@ -1034,9 +1034,8 @@ namespace disk::share {
                 crumb.name = row["name"].as<std::string>();
                 response.breadcrumb.push_back(crumb);
             }
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to browse share folder: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to browse share folder";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to browse share content")
             );
@@ -1106,9 +1105,8 @@ namespace disk::share {
             info.supports_range = true;
 
             co_return info;
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to get download info: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to get download info";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get download info")
             );
