@@ -775,10 +775,8 @@ namespace disk::trash {
             for (auto& item : prefetched_items) {
                 trash_items_by_id[item.id] = std::move(item);
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to batch fetch trash items for restore: user_id=" << user_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to batch fetch trash items for restore";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to restore trash items, please try again later"
@@ -871,10 +869,8 @@ namespace disk::trash {
             for (auto& item : prefetched_items) {
                 trash_items_by_id[item.id] = std::move(item);
             }
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to batch fetch trash items for delete: user_id=" << user_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to batch fetch trash items for delete";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to delete trash items, please try again later"

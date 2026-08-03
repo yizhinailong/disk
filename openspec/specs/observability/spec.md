@@ -904,6 +904,11 @@ The system SHALL classify the manual expired-cleanup endpoint as the bounded `cl
 - **THEN** its directly owned event SHALL use only the matching fixed complete `Database error fetching trash list`, `Unknown error fetching trash list`, or `Failed to count trash items` summary with existing typed correlation, and SHALL NOT append user, page, or page-size values, exception text, SQL, connection details, paths, credentials, or tokens
 - **AND** the existing list/count `InternalError` and public messages, user scoping, pagination, sorting, response mapping, count query, and controller composition SHALL remain unchanged
 
+#### Scenario: Trash restore or deletion prefetch throws
+- **WHEN** the single batch prefetch for trash restoration or permanent deletion catches a database exception before per-item processing
+- **THEN** its directly owned event SHALL use only the matching fixed complete `Failed to batch fetch trash items for restore` or `Failed to batch fetch trash items for delete` summary with existing typed correlation, and SHALL NOT append user or trash IDs, exception text, SQL, connection details, paths, credentials, or tokens
+- **AND** the existing batch `InternalError` and public messages, one-shot prefetch, snapshot ownership checks, input order, missing or cross-user item results, transactions, partial-success behavior, cache invalidation, reference counts, and quota SHALL remain unchanged
+
 #### Scenario: Worker executes expiration through shared services
 - **WHEN** a claimed expired-upload or expired-trash job enters the same lifecycle and trash/content services
 - **THEN** its job-level events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner while request ID and state version remain null; an upload item-level event MAY add only the state version returned by its successful expiration transition

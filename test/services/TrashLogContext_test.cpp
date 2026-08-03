@@ -171,6 +171,53 @@ namespace disk::trash {
             );
         }
 
+        TEST(TrashBatchPrefetchLogContractTest, RestoreAndDeleteUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
+            const auto restore_prefetch = ExtractRange(
+                service_source,
+                "auto TrashService::Restore(",
+                "        for (auto trash_id : trash_ids) {"
+            );
+            const auto delete_prefetch = ExtractRange(
+                service_source,
+                "auto TrashService::Delete(",
+                "        for (auto trash_id : trash_ids) {"
+            );
+
+            ASSERT_FALSE(restore_prefetch.empty());
+            ASSERT_FALSE(delete_prefetch.empty());
+            EXPECT_EQ(CountOccurrences(restore_prefetch, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(delete_prefetch, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    restore_prefetch,
+                    "Logger::Error(log_context) << \"Failed to batch fetch trash items for restore\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_prefetch,
+                    "Logger::Error(log_context) << \"Failed to batch fetch trash items for delete\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    restore_prefetch,
+                    "\"Failed to restore trash items, please try again later\""
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_prefetch,
+                    "\"Failed to delete trash items, please try again later\""
+                ),
+                1U
+            );
+        }
+
         TEST(TrashLogContextContractTest, ControllerDtoAndServiceUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/TrashController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/TrashDto.hpp");

@@ -2717,6 +2717,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1503 项：1496 项通过、7 项按环境门控跳过、0 失败，总耗时 551.50 秒。源码审计确认 `List()`/`Count()` 目标范围 `.what()` 为 0，三条固定日志语句各精确出现 1 次；`TrashService.cpp` 其余路径仍有 7 处 `.what()`，留待后续独立批次处理。本批不改变用户范围、分页、排序、响应映射、计数查询、类型化关联、公开错误或 Controller 组合，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.173 TrashService 批量预取异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧回收站恢复/永久删除的批量预取边界。两条数据库异常必须分别只记录固定完整摘要 `Failed to batch fetch trash items for restore` 与 `Failed to batch fetch trash items for delete`；不得在 message 中追加 user/trash ID、异常正文、SQL、连接信息、路径、凭据或 token。
+
+恢复预取异常继续返回既有 `InternalError` 与 `Failed to restore trash items, please try again later`，删除预取异常继续返回既有 `InternalError` 与 `Failed to delete trash items, please try again later`。单次批量预取、快照所有权判定、输入顺序、缺失/跨用户逐项结果、恢复/删除事务、部分成功、缓存、引用计数、配额、类型化关联及 Controller 组合不得改变。
+
+旧实现上的定向源码合同按预期为 0/1，共 4 个失败断言：两个预取块各精确检出 1 处 `.what()`，两条固定完整日志语句均缺失；恢复/删除既有公开错误断言通过。实现后 Trash 定向合同 5/5、Trash 单元/DTO/批处理刻画/真实生命周期/配额安全网/分布式拓扑聚焦 CTest 69/69（28.86 秒，其中配额安全网 24.55 秒）通过。
+
+首次完整 CTest 的 `SafetyContentQuotaIntegration` 在 DeleteAll 最终内容行收敛处出现 1 个未稳定复现的失败，前 400 个断言通过；该测试随即单独复跑 1/1（25.53 秒）通过。随后标准完整 CTest 重跑共 1504 项：1497 项通过、7 项按环境门控跳过、0 失败，总耗时 545.54 秒。完整构建、OpenSpec 24/24 和差异检查通过。源码审计确认两个预取块 `.what()` 均为 0，两条固定日志语句各精确出现 1 次；`TrashService.cpp` 其余路径仍有 5 处 `.what()`，留待后续独立批次处理。本批不改变单次预取、快照授权、输入顺序、逐项结果、事务、部分成功、缓存、引用计数、配额、类型化关联或公开错误，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
