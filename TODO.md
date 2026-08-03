@@ -2777,6 +2777,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 完整构建确认 `ShareService.cpp` 实际重新编译，OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1509 项：1502 项通过、7 项按环境门控跳过、0 失败，总耗时 555.92 秒。源码审计确认 `Browse()` 与 `GetDownloadInfo()` 中 `.what()` 均为 0，两条固定日志语句各精确出现 1 次；`ShareService.cpp` 其余路径仍有 13 处 `.what()`，留待后续独立批次处理。本批不改变活动状态、根目录、访问谓词、排序、面包屑、单次 JOIN、成员/权限校验、Blob/Range 映射、类型化关联、公开错误或 Controller 组合，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.179 ShareService 保存事务异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧分享保存到网盘的事务补偿边界。数据库异常与标准异常必须只记录固定完整摘要 `Failed to save share items`，两类失败随后各自的回滚异常必须只记录固定完整摘要 `Transaction rollback failed`；不得在 message 中追加 share/file/folder/user/content ID、异常正文、SQL、连接信息、路径、存储定位符、凭据或 token。
+
+两类异常继续返回既有 `InternalError` 与 `Failed to save share items`，回滚异常继续不覆盖原失败。分享状态/权限、目标文件夹归属、共享成员校验、递归复制计划、冲突跳过、配额预留及按实际保存量退款、内容引用计数、路径/层级、项目计数、父目录计数、显式提交、成功后缓存失效、响应映射、类型化关联及 Controller 组合不得改变。
+
+旧实现上的定向源码合同按预期为 0/1，共 3 个失败断言：`SaveToDrive()` 精确检出 4 处 `.what()`，两类固定完整日志语句均缺失；3 处既有公开错误、3 次回滚、单次提交、两处引用递增和成功后一次缓存失效断言通过。实现后 Share 定向合同 10/10、Share 单元/DTO/查询/管理/碰撞/审计/Token/限流/分布式拓扑聚焦 CTest 152/152（43.00 秒）通过。
+
+完整构建确认 `ShareService.cpp` 实际重新编译，OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1510 项：1503 项通过、7 项按环境门控跳过、0 失败，总耗时 548.49 秒。源码审计确认 `SaveToDrive()` 中 `.what()` 为 0，保存失败与回滚失败两条固定日志语句各精确出现 2 次；`ShareService.cpp` 其余路径仍有 9 处 `.what()`，留待后续独立批次处理。本批不改变校验、递归计划、冲突、配额、引用、路径、计数、回滚、提交、缓存、响应、类型化关联、公开错误或 Controller 组合，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

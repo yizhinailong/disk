@@ -1463,28 +1463,25 @@ namespace disk::share {
             }
 
             co_return response;
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to save share items: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to save share items";
             if (transaction) {
                 try {
                     transaction->rollback();
-                } catch (const std::exception& rollback_e) {
-                    Logger::Error(log_context)
-                        << "Transaction rollback failed: " << rollback_e.what();
+                } catch (const std::exception&) {
+                    Logger::Error(log_context) << "Transaction rollback failed";
                 }
             }
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to save share items")
             );
-        } catch (const std::exception& e) {
-            Logger::Error(log_context) << "Failed to save share items: " << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Failed to save share items";
             if (transaction) {
                 try {
                     transaction->rollback();
-                } catch (const std::exception& rollback_e) {
-                    Logger::Error(log_context)
-                        << "Transaction rollback failed: " << rollback_e.what();
+                } catch (const std::exception&) {
+                    Logger::Error(log_context) << "Transaction rollback failed";
                 }
             }
             co_return std::unexpected(

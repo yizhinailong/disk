@@ -934,6 +934,11 @@ The system SHALL classify the manual expired-cleanup endpoint as the bounded `cl
 - **THEN** its directly owned event SHALL use only the matching fixed complete `Failed to browse share folder` or `Failed to get download info` summary with existing typed correlation, and SHALL NOT append share, file, folder, or user IDs, exception text, SQL, connection details, storage locators, credentials, or tokens
 - **AND** the existing public errors, active-state validation, root browsing, shared-folder predicates, child ordering, breadcrumbs, single four-table download join, status, expiry, membership and permission checks, Blob mapping, and Range capability SHALL remain unchanged
 
+#### Scenario: Save shared items transaction throws
+- **WHEN** saving shared items catches a database or standard exception and its subsequent rollback may also throw
+- **THEN** its directly owned events SHALL use only the fixed complete `Failed to save share items` failure summary and `Transaction rollback failed` rollback summary with existing typed correlation, and SHALL NOT append share, file, folder, user, or content IDs, exception text, SQL, connection details, paths, storage locators, credentials, or tokens
+- **AND** the existing public error, rollback preservation, share and target validation, recursive copy plan, conflict skips, quota reservation and refund, content reference counts, paths and hierarchy, item and parent counts, explicit commit, post-success cache invalidation, and response mapping SHALL remain unchanged
+
 #### Scenario: Worker executes expiration through shared services
 - **WHEN** a claimed expired-upload or expired-trash job enters the same lifecycle and trash/content services
 - **THEN** its job-level events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner while request ID and state version remain null; an upload item-level event MAY add only the state version returned by its successful expiration transition

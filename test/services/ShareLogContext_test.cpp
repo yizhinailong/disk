@@ -368,6 +368,43 @@ namespace disk::share {
             EXPECT_EQ(CountOccurrences(download_body, "BuildSharedFileAccessPredicate("), 1U);
         }
 
+        TEST(ShareSaveLogContractTest, TransactionExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
+            const auto save_body = SourceSection(
+                service_source,
+                "auto ShareService::SaveToDrive(",
+                "    auto ShareService::FindShareByCode("
+            );
+
+            ASSERT_FALSE(save_body.empty());
+            EXPECT_EQ(CountOccurrences(save_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    save_body,
+                    "Logger::Error(log_context) << \"Failed to save share items\";"
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    save_body,
+                    "Logger::Error(log_context) << \"Transaction rollback failed\";"
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    save_body,
+                    "ErrorInfo(ErrorCode::InternalError, \"Failed to save share items\")"
+                ),
+                3U
+            );
+            EXPECT_EQ(CountOccurrences(save_body, "transaction->rollback();"), 3U);
+            EXPECT_EQ(CountOccurrences(save_body, "TransactionRunner::Commit("), 1U);
+            EXPECT_EQ(CountOccurrences(save_body, "content_service.IncrementRefCount("), 2U);
+            EXPECT_EQ(CountOccurrences(save_body, "FileListCache::Invalidate("), 1U);
+        }
+
         TEST(ShareReadLogContractTest, ListExceptionsUseFixedSummaries) {
             const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
             const auto list_body = SourceSection(
