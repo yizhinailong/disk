@@ -2747,6 +2747,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 完整构建确认 `ShareService.cpp` 实际重新编译，OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1506 项：1499 项通过、7 项按环境门控跳过、0 失败，总耗时 542.67 秒。源码审计确认 `List()` 中 `.what()` 为 0，两条固定日志语句各精确出现 1 次；`ShareService.cpp` 其余路径仍有 20 处 `.what()`，留待后续独立批次处理。本批不改变用户范围、状态/过期过滤、倒序分页、关联文件加载、响应映射、类型化关联、公开错误或 Controller 组合，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.176 ShareService 创建事务异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧分享创建事务边界。创建事务数据库异常与随后回滚异常必须分别只记录固定完整摘要 `Failed to create share (transaction)` 与 `Transaction rollback failed`；不得在 message 中追加 user/file/folder/share ID、候选分享码、异常正文、SQL、连接信息、密码、凭据或 token。
+
+数据库异常继续返回既有 `InternalError` 与 `Failed to create share`，回滚异常继续不覆盖原失败。所有权校验、密码哈希、最多 5 次数据库唯一冲突重试、分享及关联行原子写入、碰撞耗尽回滚、显式提交、提交后 fail-open 审计、响应映射、类型化关联及 Controller 组合不得改变。
+
+旧实现上的定向源码合同按预期为 0/1，共 3 个失败断言：`Create()` 精确检出 2 处 `.what()`，两条固定完整日志语句均缺失；3 处既有公开错误和 2 次回滚调用断言通过。实现后 Share 定向合同 7/7、Share 单元/DTO/查询/管理/碰撞/审计/Token/限流/分布式拓扑聚焦 CTest 149/149（42.93 秒）通过。
+
+完整构建确认 `ShareService.cpp` 实际重新编译，OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1507 项：1500 项通过、7 项按环境门控跳过、0 失败，总耗时 548.68 秒。源码审计确认 `Create()` 中 `.what()` 为 0，两条固定日志语句各精确出现 1 次；`ShareService.cpp` 其余路径仍有 18 处 `.what()`，留待后续独立批次处理。本批不改变校验、哈希、碰撞重试、关联写入、回滚、提交、审计、响应、类型化关联、公开错误或 Controller 组合，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

@@ -919,6 +919,11 @@ The system SHALL classify the manual expired-cleanup endpoint as the bounded `cl
 - **THEN** its directly owned event SHALL use only the matching fixed complete `Failed to get share count` or `Failed to get share list` summary with existing typed correlation, and SHALL NOT append user, status, page, or page-size values, exception text, SQL, connection details, share codes, credentials, or tokens
 - **AND** the existing `InternalError` and `Failed to get share list` result, user scoping, active-expiry filtering, other status filters, descending creation-time pagination, batched share-file loading, and response mapping SHALL remain unchanged
 
+#### Scenario: Share creation transaction throws
+- **WHEN** share creation catches a database exception from its transaction or a subsequent rollback exception
+- **THEN** its directly owned event SHALL use only the matching fixed complete `Failed to create share (transaction)` or `Transaction rollback failed` summary with existing typed correlation, and SHALL NOT append user, file, folder, or share IDs, candidate share codes, exception text, SQL, connection details, passwords, credentials, or tokens
+- **AND** the existing `InternalError` and `Failed to create share` result, rollback preservation, ownership validation, password hashing, five-attempt uniqueness retry, atomic share and association writes, explicit commit, post-commit fail-open audit, and response mapping SHALL remain unchanged
+
 #### Scenario: Worker executes expiration through shared services
 - **WHEN** a claimed expired-upload or expired-trash job enters the same lifecycle and trash/content services
 - **THEN** its job-level events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner while request ID and state version remain null; an upload item-level event MAY add only the state version returned by its successful expiration transition

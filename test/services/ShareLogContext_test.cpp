@@ -232,6 +232,40 @@ namespace disk::share {
             EXPECT_EQ(formatted.find('.'), std::string::npos);
         }
 
+        TEST(ShareCreateLogContractTest, TransactionExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
+            const auto create_body = SourceSection(
+                service_source,
+                "auto ShareService::Create(",
+                "    auto ShareService::List("
+            );
+
+            ASSERT_FALSE(create_body.empty());
+            EXPECT_EQ(CountOccurrences(create_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    create_body,
+                    "Logger::Error(log_context) << \"Failed to create share (transaction)\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    create_body,
+                    "Logger::Error(log_context) << \"Transaction rollback failed\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    create_body,
+                    "ErrorInfo(ErrorCode::InternalError, \"Failed to create share\")"
+                ),
+                3U
+            );
+            EXPECT_EQ(CountOccurrences(create_body, "transaction->rollback();"), 2U);
+        }
+
         TEST(ShareReadLogContractTest, ListExceptionsUseFixedSummaries) {
             const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
             const auto list_body = SourceSection(

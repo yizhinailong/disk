@@ -295,15 +295,13 @@ namespace disk::share {
                     );
                 }
             }
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to create share (transaction): " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to create share (transaction)";
             if (transaction) {
                 try {
                     transaction->rollback();
-                } catch (const std::exception& rollback_e) {
-                    Logger::Error(log_context)
-                        << "Transaction rollback failed: " << rollback_e.what();
+                } catch (const std::exception&) {
+                    Logger::Error(log_context) << "Transaction rollback failed";
                 }
             }
             co_return std::unexpected(
