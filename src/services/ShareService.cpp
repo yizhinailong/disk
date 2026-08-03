@@ -1502,8 +1502,8 @@ namespace disk::share {
             co_return share;
         } catch (const UnexpectedRows&) {
             co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to find share: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to find share";
             co_return std::unexpected(ErrorInfo(ErrorCode::InternalError, "Failed to find share"));
         }
     }
@@ -1560,9 +1560,8 @@ namespace disk::share {
                 }
                 files.push_back(matched_files[it->second]);
             }
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to validate file ownership: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to validate file ownership";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to validate file ownership")
             );
@@ -1621,9 +1620,8 @@ namespace disk::share {
                 }
                 folders.push_back(matched_folders[it->second]);
             }
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to validate folder ownership: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to validate folder ownership";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to validate folder ownership")
             );
@@ -1713,9 +1711,8 @@ namespace disk::share {
             for (auto& item : ordered_items) {
                 result.push_back(std::move(item.share_file));
             }
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to get share file list: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to get share file list";
         }
 
         co_return result;
@@ -1793,9 +1790,8 @@ namespace disk::share {
                     share_files.push_back(std::move(ordered_item.share_file));
                 }
             }
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to get share file list: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to get share file list";
         }
 
         co_return result;
@@ -1813,9 +1809,8 @@ namespace disk::share {
             }
         } catch (const UnexpectedRows&) {
             co_return std::unexpected(ErrorInfo(ErrorCode::ShareNotFound, "Share not found"));
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to validate share active state: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to validate share active state";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to validate share status")
             );
@@ -1833,8 +1828,8 @@ namespace disk::share {
                 "UPDATE shares SET view_count = view_count + 1 WHERE id = $1",
                 share_id
             );
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to update view count: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to update view count";
         }
     }
 
@@ -1847,9 +1842,8 @@ namespace disk::share {
                 "UPDATE shares SET download_count = download_count + 1 WHERE id = $1",
                 share_id
             );
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to update download count: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to update download count";
         }
     }
 
@@ -1862,10 +1856,8 @@ namespace disk::share {
                 "UPDATE files " "SET download_count = download_count + 1, last_accessed_at = NOW() " "WHERE id = $1",
                 file_id
             );
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Failed to update shared file download metadata: " << e.base().what()
-                << " (file_id=" << file_id << ")";
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to update shared file download metadata";
         }
     }
 

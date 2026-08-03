@@ -405,6 +405,57 @@ namespace disk::share {
             EXPECT_EQ(CountOccurrences(save_body, "FileListCache::Invalidate("), 1U);
         }
 
+        TEST(ShareHelperLogContractTest, DatabaseExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
+            const auto helper_body = SourceSection(
+                service_source,
+                "auto ShareService::FindShareByCode(",
+                "    auto ShareService::HandleFailedShareAccess("
+            );
+
+            ASSERT_FALSE(helper_body.empty());
+            EXPECT_EQ(CountOccurrences(helper_body, ".what()"), 0U);
+            for (const auto* summary : {
+                     "Failed to find share",
+                     "Failed to validate file ownership",
+                     "Failed to validate folder ownership",
+                     "Failed to validate share active state",
+                     "Failed to update view count",
+                     "Failed to update download count",
+                     "Failed to update shared file download metadata",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(
+                        helper_body,
+                        std::string("Logger::Error(log_context) << \"") + summary + "\";"
+                    ),
+                    1U
+                ) << summary;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    helper_body,
+                    "Logger::Error(log_context) << \"Failed to get share file list\";"
+                ),
+                2U
+            );
+            EXPECT_FALSE(Contains(helper_body, "(file_id="));
+            for (const auto* public_error : {
+                     "Failed to find share",
+                     "Failed to validate file ownership",
+                     "Failed to validate folder ownership",
+                     "Failed to validate share status",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(
+                        helper_body,
+                        std::string("ErrorInfo(ErrorCode::InternalError, \"") + public_error + "\")"
+                    ),
+                    1U
+                ) << public_error;
+            }
+        }
+
         TEST(ShareReadLogContractTest, ListExceptionsUseFixedSummaries) {
             const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
             const auto list_body = SourceSection(
