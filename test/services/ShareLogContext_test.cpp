@@ -232,6 +232,39 @@ namespace disk::share {
             EXPECT_EQ(formatted.find('.'), std::string::npos);
         }
 
+        TEST(ShareReadLogContractTest, ListExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/ShareService.cpp");
+            const auto list_body = SourceSection(
+                service_source,
+                "auto ShareService::List(",
+                "    auto ShareService::Detail("
+            );
+
+            ASSERT_FALSE(list_body.empty());
+            EXPECT_EQ(CountOccurrences(list_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "Logger::Error(log_context) << \"Failed to get share count\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "Logger::Error(log_context) << \"Failed to get share list\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "ErrorInfo(ErrorCode::InternalError, \"Failed to get share list\")"
+                ),
+                2U
+            );
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");

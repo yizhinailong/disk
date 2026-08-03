@@ -379,8 +379,8 @@ namespace disk::share {
             } else {
                 total = co_await mapper.count(criteria);
             }
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to get share count: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to get share count";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get share list")
             );
@@ -407,8 +407,8 @@ namespace disk::share {
                              .limit(request.page_size)
                              .findBy(criteria);
             }
-        } catch (const DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to get share list: " << e.base().what();
+        } catch (const DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to get share list";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to get share list")
             );
