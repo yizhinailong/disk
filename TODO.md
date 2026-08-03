@@ -2727,6 +2727,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 首次完整 CTest 的 `SafetyContentQuotaIntegration` 在 DeleteAll 最终内容行收敛处出现 1 个未稳定复现的失败，前 400 个断言通过；该测试随即单独复跑 1/1（25.53 秒）通过。随后标准完整 CTest 重跑共 1504 项：1497 项通过、7 项按环境门控跳过、0 失败，总耗时 545.54 秒。完整构建、OpenSpec 24/24 和差异检查通过。源码审计确认两个预取块 `.what()` 均为 0，两条固定日志语句各精确出现 1 次；`TrashService.cpp` 其余路径仍有 5 处 `.what()`，留待后续独立批次处理。本批不改变单次预取、快照授权、输入顺序、逐项结果、事务、部分成功、缓存、引用计数、配额、类型化关联或公开错误，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.174 TrashService 永久删除异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧回收站永久删除链的剩余异常边界。逐项删除、DeleteAll 分块、DeleteAll 外层数据库/标准异常和事务回滚必须分别只记录固定完整摘要 `Failed to permanently delete trash item`、`Failed to process DeleteAll chunk atomically`、`Database error emptying trash`、`Unknown error emptying trash` 与 `Trash permanent-delete rollback failed`；不得在 message 中追加 user/trash/content ID、异常正文、SQL、连接信息、路径、凭据或 token。
+
+逐项异常继续生成既有 item-type 固定失败结果；DeleteAll 分块异常继续跳过该块并处理后续块，外层异常继续返回既有 `InternalError` 与 `Failed to empty trash, please try again later`；回滚异常继续不覆盖并重抛原失败。输入顺序、分块边界、部分成功、删除计数、释放空间、事务、缓存、引用计数、Blob GC、配额、类型化关联及 Controller 组合不得改变。
+
+旧实现上的定向源码合同按预期为 0/1，共 9 个失败断言：全服务精确检出剩余 5 处 `.what()`，逐项删除/DeleteAll/永久删除三个目标范围分别检出 1/3/1 处，五条固定完整日志语句均缺失；逐项/外层公开错误和回滚重抛断言通过。实现后 Trash 定向合同 6/6、Trash 单元/DTO/批处理刻画/真实生命周期/配额安全网/分布式拓扑聚焦 CTest 70/70（28.77 秒，其中配额安全网 24.50 秒）通过。
+
+完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1505 项：1498 项通过、7 项按环境门控跳过、0 失败，总耗时 548.28 秒。源码审计确认 `TrashService.cpp` 中 `.what()` 为 0，五条固定日志语句各精确出现 1 次。本批不改变逐项固定失败、分块继续、外层错误、回滚重抛、输入顺序、分块、部分成功、计数、释放空间、事务、缓存、引用计数、Blob GC、配额、类型化关联或 Controller 组合，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

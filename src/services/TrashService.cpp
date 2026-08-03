@@ -947,10 +947,8 @@ namespace disk::trash {
                 Logger::Info(log_context)
                     << "Trash item permanently deleted: trash_id=" << trash_id
                     << ", freed_space=" << delete_result.freed_space;
-            } catch (const std::exception& e) {
-                Logger::Error(log_context)
-                    << "Failed to permanently delete trash item: trash_id=" << trash_id << " - "
-                    << e.what();
+            } catch (const std::exception&) {
+                Logger::Error(log_context) << "Failed to permanently delete trash item";
                 result.status = "failed";
                 result.code = static_cast<uint16_t>(ErrorCode::InternalError);
                 result.message = trash_item.item_type == "folder" ? "Failed to permanently delete folder" : "Failed to permanently delete file";
@@ -993,10 +991,8 @@ namespace disk::trash {
                     );
                     response.deleted_count += delete_result.deleted_count;
                     response.freed_space += delete_result.freed_space;
-                } catch (const std::exception& e) {
-                    Logger::Error(log_context)
-                        << "Failed to process DeleteAll chunk atomically: user_id=" << user_id
-                        << " - " << e.what();
+                } catch (const std::exception&) {
+                    Logger::Error(log_context) << "Failed to process DeleteAll chunk atomically";
                     continue;
                 }
             }
@@ -1007,15 +1003,13 @@ namespace disk::trash {
 
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Database error emptying trash: user_id=" << user_id
-                                       << " - " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Database error emptying trash";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to empty trash, please try again later")
             );
-        } catch (const std::exception& e) {
-            Logger::Error(log_context) << "Unknown error emptying trash: user_id=" << user_id
-                                       << " - " << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Unknown error emptying trash";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to empty trash, please try again later")
             );
@@ -1626,9 +1620,8 @@ namespace disk::trash {
             if (transaction) {
                 try {
                     transaction->rollback();
-                } catch (const std::exception& rollback_error) {
-                    Logger::Error(log_context)
-                        << "Trash permanent-delete rollback failed: " << rollback_error.what();
+                } catch (const std::exception&) {
+                    Logger::Error(log_context) << "Trash permanent-delete rollback failed";
                 }
             }
             throw;

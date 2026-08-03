@@ -909,6 +909,11 @@ The system SHALL classify the manual expired-cleanup endpoint as the bounded `cl
 - **THEN** its directly owned event SHALL use only the matching fixed complete `Failed to batch fetch trash items for restore` or `Failed to batch fetch trash items for delete` summary with existing typed correlation, and SHALL NOT append user or trash IDs, exception text, SQL, connection details, paths, credentials, or tokens
 - **AND** the existing batch `InternalError` and public messages, one-shot prefetch, snapshot ownership checks, input order, missing or cross-user item results, transactions, partial-success behavior, cache invalidation, reference counts, and quota SHALL remain unchanged
 
+#### Scenario: Trash permanent-deletion handling throws
+- **WHEN** per-item deletion, DeleteAll chunk or outer handling, or permanent-delete rollback catches an exception
+- **THEN** its directly owned event SHALL use only the matching fixed complete `Failed to permanently delete trash item`, `Failed to process DeleteAll chunk atomically`, `Database error emptying trash`, `Unknown error emptying trash`, or `Trash permanent-delete rollback failed` summary with existing typed correlation, and SHALL NOT append user, trash, or content IDs, exception text, SQL, connection details, paths, credentials, or tokens
+- **AND** per-item fixed failures, chunk continuation, outer `InternalError` and public message, rollback rethrow, input order, chunking, partial-success counters, freed-space accounting, transactions, cache invalidation, reference counts, Blob garbage collection, and quota SHALL remain unchanged
+
 #### Scenario: Worker executes expiration through shared services
 - **WHEN** a claimed expired-upload or expired-trash job enters the same lifecycle and trash/content services
 - **THEN** its job-level events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner while request ID and state version remain null; an upload item-level event MAY add only the state version returned by its successful expiration transition

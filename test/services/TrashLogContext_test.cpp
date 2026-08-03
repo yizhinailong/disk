@@ -218,6 +218,84 @@ namespace disk::trash {
             );
         }
 
+        TEST(TrashDeleteLogContractTest, PermanentDeleteExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
+            const auto delete_items = ExtractRange(
+                service_source,
+                "auto TrashService::Delete(",
+                "    auto TrashService::DeleteAll("
+            );
+            const auto delete_all = ExtractRange(
+                service_source,
+                "auto TrashService::DeleteAll(",
+                "    /// ==================== 私有方法实现 ===================="
+            );
+            const auto permanent_delete = ExtractRange(
+                service_source,
+                "auto TrashService::PermanentlyDeleteTrashItems(",
+                "\n} // namespace disk::trash"
+            );
+
+            ASSERT_FALSE(delete_items.empty());
+            ASSERT_FALSE(delete_all.empty());
+            ASSERT_FALSE(permanent_delete.empty());
+            EXPECT_EQ(CountOccurrences(service_source, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(delete_items, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(delete_all, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(permanent_delete, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_items,
+                    "Logger::Error(log_context) << \"Failed to permanently delete trash item\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_all,
+                    "Logger::Error(log_context) << \"Failed to process DeleteAll chunk atomically\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_all,
+                    "Logger::Error(log_context) << \"Database error emptying trash\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_all,
+                    "Logger::Error(log_context) << \"Unknown error emptying trash\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    permanent_delete,
+                    "Logger::Error(log_context) << \"Trash permanent-delete rollback failed\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(delete_items, "\"Failed to permanently delete folder\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(delete_items, "\"Failed to permanently delete file\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_all,
+                    "\"Failed to empty trash, please try again later\""
+                ),
+                2U
+            );
+            EXPECT_EQ(CountOccurrences(permanent_delete, "throw;"), 1U);
+        }
+
         TEST(TrashLogContextContractTest, ControllerDtoAndServiceUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/TrashController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/TrashDto.hpp");
