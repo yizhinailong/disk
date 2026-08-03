@@ -2707,6 +2707,16 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1502 项：1495 项通过、7 项按环境门控跳过、0 失败，总耗时 544.39 秒。源码审计确认 `CleanupExpiredTrashPage()` 中 `.what()` 为 0，两条固定日志语句各精确出现 1 次；`TrashService.cpp` 其余路径仍有 10 处 `.what()`，留待后续独立批次处理。本批不改变分页、分块删除、无效引用检测、计数、cursor、类型化关联、公开错误或清理组合语义，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.172 TrashService 列表计数异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧回收站列表和计数读取边界。`List()` 的数据库异常与其他标准异常必须分别只记录固定完整摘要 `Database error fetching trash list` 与 `Unknown error fetching trash list`，`Count()` 的数据库异常只记录固定 `Failed to count trash items`；不得在 message 中追加 user/page/page_size、异常正文、SQL、连接信息、路径、凭据或 token。
+
+列表异常继续返回既有 `InternalError` 与 `Failed to fetch trash list, please try again later`，计数异常继续返回既有 `InternalError` 与 `Failed to count trash items`。用户范围、分页、排序、响应映射、计数查询、类型化关联及 Controller 组合不得改变。
+
+旧实现上的定向源码合同按预期为 0/1，共 4 个失败断言：目标范围精确检出 3 处 `.what()`，三条固定完整日志语句均缺失；列表与计数既有公开错误断言通过。实现后 Trash 定向合同 4/4、Trash 单元/DTO/真实生命周期/分布式拓扑聚焦 CTest 67/67（4.47 秒）通过。
+
+完整构建、OpenSpec 24/24 和差异检查通过。标准完整 CTest 共 1503 项：1496 项通过、7 项按环境门控跳过、0 失败，总耗时 551.50 秒。源码审计确认 `List()`/`Count()` 目标范围 `.what()` 为 0，三条固定日志语句各精确出现 1 次；`TrashService.cpp` 其余路径仍有 7 处 `.what()`，留待后续独立批次处理。本批不改变用户范围、分页、排序、响应映射、计数查询、类型化关联、公开错误或 Controller 组合，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

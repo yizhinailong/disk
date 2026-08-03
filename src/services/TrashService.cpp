@@ -722,17 +722,14 @@ namespace disk::trash {
             Logger::Debug(log_context) << "Found " << responses.size() << " trash items";
             co_return responses;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Database error fetching trash list: user_id=" << user_id << " - "
-                << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Database error fetching trash list";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to fetch trash list, please try again later"
             ));
-        } catch (const std::exception& e) {
-            Logger::Error(log_context)
-                << "Unknown error fetching trash list: user_id=" << user_id << " - " << e.what();
+        } catch (const std::exception&) {
+            Logger::Error(log_context) << "Unknown error fetching trash list";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to fetch trash list, please try again later"
@@ -748,8 +745,8 @@ namespace disk::trash {
             auto count = co_await m_trash_query.CountForUser(user_id);
             co_return count;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to count trash items: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to count trash items";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Failed to count trash items")
             );

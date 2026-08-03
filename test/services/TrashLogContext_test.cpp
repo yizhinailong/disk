@@ -124,6 +124,53 @@ namespace disk::trash {
             );
         }
 
+        TEST(TrashReadLogContractTest, ListAndCountExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/TrashService.cpp");
+            const auto list_and_count = ExtractRange(
+                service_source,
+                "auto TrashService::List(",
+                "    auto TrashService::Restore("
+            );
+
+            ASSERT_FALSE(list_and_count.empty());
+            EXPECT_EQ(CountOccurrences(list_and_count, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_and_count,
+                    "Logger::Error(log_context) << \"Database error fetching trash list\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_and_count,
+                    "Logger::Error(log_context) << \"Unknown error fetching trash list\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_and_count,
+                    "Logger::Error(log_context) << \"Failed to count trash items\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_and_count,
+                    "\"Failed to fetch trash list, please try again later\""
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_and_count,
+                    "ErrorInfo(ErrorCode::InternalError, \"Failed to count trash items\")"
+                ),
+                1U
+            );
+        }
+
         TEST(TrashLogContextContractTest, ControllerDtoAndServiceUseExplicitRequestContext) {
             const auto controller_source = ReadSourceFile("src/controllers/TrashController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/TrashDto.hpp");
