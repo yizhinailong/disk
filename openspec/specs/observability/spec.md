@@ -96,6 +96,11 @@ The JWT authentication, share-token authentication, and administrator-authorizat
 - **WHEN** JWT or share-token authentication succeeds or fails
 - **THEN** filter events and typed correlation fields SHALL NOT contain raw Authorization or `X-Share-Token` header values, access tokens, refresh tokens, share tokens, passwords, password hashes, or storage credentials
 
+#### Scenario: Owner-token revocation diagnostics exclude identity and JTI values
+- **WHEN** the JWT authentication filter cannot read shared access-token revocation state or rejects a verified access token as revoked
+- **THEN** its directly owned ERROR or WARN event SHALL use the fixed complete summary `Access token revocation check failed` or `Access token has been revoked` with the request's typed correlation and SHALL NOT append the user ID, username, JTI, Authorization value, raw access token, Redis key or value, revocation result or error, cache state, TTL, exception, or other authentication-session value
+- **AND** access-token verification, structured claims, the shared revocation lookup using the verified JTI and caller context, fail-closed dependency-error mapping, revoked-token mapping, authentication attributes, duration events, and public responses SHALL remain unchanged
+
 ### Requirement: Token Service Correlation
 The shared token service SHALL accept explicit correlation by value for request-reachable access-token, refresh-token, and share-token generation, verification, rotation, revocation parsing, and revoked-token rejection events. Authentication services and JWT/share authentication filters SHALL pass their already established request context without changing token claims, signatures, TTLs, Redis keys, CAS behavior, revocation behavior, error mapping, or public responses.
 

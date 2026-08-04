@@ -3169,6 +3169,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、源码合同与内存结构化日志聚焦用例 2/2、全部 Token GoogleTest 155/155、JWT filter GoogleTest 46/46、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1547 项：1540 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 555.75 秒。源码审计确认固定验签摘要 1 处，用户 ID 与 JTI 两段旧动态日志片段均为 0，21 项验签数据流、4 个 cleanup 出口和原 TRACE 级别保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.217 JWT 撤销检查诊断脱敏记录（2026-08-05）
+
+`JwtAuthFilter::doFilter()` 的 access token 撤销依赖失败与已撤销拒绝事件必须分别只记录固定完整摘要 `Access token revocation check failed` 与 `Access token has been revoked`。两条 message 不得追加用户 ID、用户名、JTI、Authorization、原始 access token、Redis key/value、撤销结果/错误、缓存状态、TTL、异常或其他认证会话状态值；调用方 request/instance/operation 上下文、原 ERROR/WARN 级别和原条件触发位置保持不变。
+
+既有单次 access token 验签、结构化 claims、携带 JTI 与调用方上下文的共享 Redis 撤销查询、依赖失败 fail closed 与原错误码透传、已撤销 `TokenRevoked` 映射、认证属性注入、耗时事件和公开响应不得改变。验证必须新增源码合同锁定固定摘要、身份/JTI 值排除和两条分支的数据流，并执行 auth filter/Token GoogleTest、OpenSpec、完整构建、真实认证与 refresh 流、双实例认证一致性、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 5 个失败断言：两条固定摘要均缺失，依赖失败分支的用户 ID 与已撤销分支的用户 ID/JTI 三处原始 claims 各命中一次；撤销查询、错误透传、`TokenRevoked`、耗时失败事件和四个认证属性断言均通过。
+
+实现后定向源码合同 1/1、auth filter 聚焦 CTest 49/49、全部 Token GoogleTest 155/155、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1548 项：1541 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 555.86 秒。源码审计确认两条固定摘要各 1 处，依赖失败用户 ID 与已撤销用户 ID/JTI 三处旧动态日志片段均为 0，撤销查询、错误透传、`TokenRevoked`、耗时失败事件、四个认证属性及原 ERROR/WARN 级别保持不变。Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

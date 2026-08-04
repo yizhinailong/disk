@@ -88,12 +88,12 @@ namespace disk::filters {
         auto revocation_result =
             co_await token_service->IsAccessTokenRevoked(claims.jti, log_context);
         if (!revocation_result) {
-            Logger::Error(log_context) << "Access token revocation check failed: user_id=" << claims.user_id;
+            Logger::Error(log_context) << "Access token revocation check failed";
             co_return disk::Response::Error(revocation_result.error().code);
         }
 
         if (revocation_result.value()) {
-            Logger::Warn(log_context) << "Token revoked: user_id=" << claims.user_id << ", jti=" << claims.jti;
+            Logger::Warn(log_context) << "Access token has been revoked";
 
             auto end = std::chrono::steady_clock::now();
             auto duration_us =

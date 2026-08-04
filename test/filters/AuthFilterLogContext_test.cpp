@@ -188,6 +188,91 @@ namespace disk::filters {
             EXPECT_EQ(CountOccurrences(admin_source, "Logger::Trace(log_context)"), 1U);
         }
 
+        TEST(JwtAuthFilterRevocationValueLogContractTest, EventsUseFixedSummaries) {
+            const auto source = ReadSourceFile("src/filters/JwtAuthFilter.cpp");
+
+            const auto dependency_begin = source.find("if (!revocation_result)");
+            const auto revoked_begin = source.find("if (revocation_result.value())");
+            const auto attributes_begin = source.find(
+                "request->attributes()->insert(\"user_id\""
+            );
+            ASSERT_NE(dependency_begin, std::string::npos);
+            ASSERT_NE(revoked_begin, std::string::npos);
+            ASSERT_NE(attributes_begin, std::string::npos);
+            ASSERT_LT(dependency_begin, revoked_begin);
+            ASSERT_LT(revoked_begin, attributes_begin);
+
+            const auto dependency_branch = source.substr(
+                dependency_begin,
+                revoked_begin - dependency_begin
+            );
+            const auto revoked_branch = source.substr(
+                revoked_begin,
+                attributes_begin - revoked_begin
+            );
+
+            const auto dependency_log_begin = dependency_branch.find("Logger::Error(log_context)");
+            const auto dependency_log_end = dependency_branch.find(';', dependency_log_begin);
+            const auto revoked_log_begin = revoked_branch.find("Logger::Warn(log_context)");
+            const auto revoked_log_end = revoked_branch.find(';', revoked_log_begin);
+            ASSERT_NE(dependency_log_begin, std::string::npos);
+            ASSERT_NE(dependency_log_end, std::string::npos);
+            ASSERT_NE(revoked_log_begin, std::string::npos);
+            ASSERT_NE(revoked_log_end, std::string::npos);
+
+            const auto dependency_log = dependency_branch.substr(
+                dependency_log_begin,
+                dependency_log_end - dependency_log_begin + 1
+            );
+            const auto revoked_log = revoked_branch.substr(
+                revoked_log_begin,
+                revoked_log_end - revoked_log_begin + 1
+            );
+            EXPECT_EQ(
+                dependency_log,
+                "Logger::Error(log_context) << \"Access token revocation check failed\";"
+            );
+            EXPECT_EQ(
+                revoked_log,
+                "Logger::Warn(log_context) << \"Access token has been revoked\";"
+            );
+            for (const auto* raw_claim : { "claims.user_id", "claims.username", "claims.jti" }) {
+                EXPECT_EQ(CountOccurrences(dependency_log, raw_claim), 0U) << raw_claim;
+                EXPECT_EQ(CountOccurrences(revoked_log, raw_claim), 0U) << raw_claim;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "co_await token_service->IsAccessTokenRevoked(claims.jti, log_context);"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    dependency_branch,
+                    "co_return disk::Response::Error(revocation_result.error().code);"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    revoked_branch,
+                    "co_return disk::Response::Error(disk::error::Code::TokenRevoked);"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(revoked_branch, "outcome=failure"), 1U);
+            for (const auto* attribute : {
+                     "request->attributes()->insert(\"user_id\", claims.user_id);",
+                     "request->attributes()->insert(\"username\", claims.username);",
+                     "request->attributes()->insert(\"role\", claims.role);",
+                     "request->attributes()->insert(\"status\", claims.status);",
+                 }) {
+                EXPECT_EQ(CountOccurrences(source, attribute), 1U) << attribute;
+            }
+        }
+
         TEST_F(AuthFilterLogContextTest, RejectionsPreserveBoundedContextWithoutOwnershipInference) {
             auto jwt_request = CreateRequest("/api/file/list", "jwt-filter-request");
             const auto jwt_response = drogon::sync_wait(JwtAuthFilter{}.doFilter(jwt_request));
