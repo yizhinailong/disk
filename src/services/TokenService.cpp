@@ -219,10 +219,7 @@ namespace disk::services {
 
             cleanup();
 
-            Logger::Trace(log_context)
-                << "JWT verification successful: user_id=" << user_id
-                << ", username=" << username << ", jti=" << jti
-                << ", role=" << token_role << ", status=" << token_status;
+            Logger::Trace(log_context) << "Access token verification successful";
             return AccessTokenClaims{ .user_id = user_id, .username = username, .jti = jti, .role = token_role, .status = token_status };
 
         } catch (const jwt::error::token_verification_exception& error) {

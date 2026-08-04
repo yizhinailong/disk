@@ -3149,6 +3149,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、源码合同与内存结构化日志聚焦用例 2/2、全部 Token GoogleTest 153/153、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1545 项：1538 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 554.50 秒；其中上传安全网为 886/886。源码审计确认固定签发摘要 1 处，用户 ID、access JTI 与 refresh JTI 三种旧动态日志片段均为 0，21 项签发数据流和原 DEBUG 级别保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.215 Access Token 验签成功诊断脱敏记录（2026-08-05）
+
+`TokenService::VerifyAccessToken()` 的验签成功事件必须只记录固定完整摘要 `Access token verification successful`。message 不得追加用户 ID/名称、角色、状态、JTI、JWT secret、原始 access token、claim、签名、验签/解析结果、时间、TTL、异常或其他认证会话状态值；原 TRACE 级别、调用方 request/instance/`auth` 上下文和全部 claims 校验完成后的触发位置保持不变。
+
+既有 JWT 解码、`disk` issuer/HS256 签名/过期验证、access 类型校验、subject/username/JTI 解析、数值 user ID 转换、缺失 role/status 时的 0/1 默认值、显式 role/status 覆盖、结构化 `AccessTokenClaims` 返回、固定失败摘要和错误映射不得改变。验证必须新增源码合同锁定固定摘要、原始身份/JTI/claim 值排除和完整验签数据流，并执行 Token/auth/JWT filter GoogleTest、OpenSpec、完整构建、真实认证与 refresh 流、双实例认证一致性、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：待迁移固定成功摘要缺失，用户 ID、username、JTI、role 与 status 五段动态日志片段各命中一次；28 项验签数据流与 4 个 cleanup 出口断言均通过。
+
+实现后定向源码合同 1/1、源码合同与内存结构化日志聚焦用例 2/2、全部 Token GoogleTest 154/154、JWT filter GoogleTest 46/46、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1546 项：1539 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 566.47 秒。源码审计确认固定验签摘要 1 处，用户 ID、username、JTI、role 与 status 五段旧动态日志片段均为 0，28 项验签数据流、4 个 cleanup 出口和原 TRACE 级别保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
