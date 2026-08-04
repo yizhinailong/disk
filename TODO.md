@@ -3009,6 +3009,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 116/116、`LoginRequest` DTO 9/9、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 888/888 均通过、0 失败。标准完整 CTest 共 1531 项：1524 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 553.33 秒。源码审计确认四条固定摘要各 1 处、四种旧动态边界日志均为 0，完整登录控制器数据流继续由源码合同锁定。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.201 刷新令牌控制器诊断脱敏记录（2026-08-05）
+
+`AuthController::RefreshTokens()` 的请求接收、DTO 校验失败、业务失败和刷新成功四条事件，必须分别只记录固定完整摘要 `Received refresh token request`、`Refresh token request validation failed`、`Refresh token failed` 与 `Refresh token successful`。message 不得追加客户端 IP/端口、refresh token、下游错误消息或其他刷新请求/响应值；原 INFO/WARN/ERROR/INFO 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变，既有成功摘要继续保持原样。
+
+既有请求上下文创建、`RefreshTokenRequest::FromRequest()` 调用、`AuthService::RefreshTokens()` 调用、DTO/业务错误响应、新令牌响应序列化和成功响应不得改变。验证必须新增源码合同锁定四条固定摘要、原始边界值排除和完整控制器数据流，并执行认证日志/DTO GoogleTest、OpenSpec、完整构建、真实 refresh/认证生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：请求接收、DTO 校验失败和业务失败三条固定摘要均缺失，对应端点或下游错误动态日志各命中一次；既有成功固定摘要、上下文、DTO/Service 调用、两类错误响应和成功序列化响应断言均通过。
+
+实现后定向源码合同 1/1、含 Auth 的 GoogleTest 117/117、`RefreshTokenRequest` DTO 3/3、OpenSpec 24/24 和完整后端构建通过；真实 refresh 轮换 6/6、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1532 项：1525 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 565.96 秒。源码审计确认四条固定摘要各 1 处、三种旧动态边界日志均为 0，完整刷新控制器数据流继续由源码合同锁定。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

@@ -478,5 +478,44 @@ namespace disk::auth {
             }
         }
 
+        TEST(AuthRefreshControllerValueLogContractTest, RefreshUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/AuthController.cpp");
+            const auto refresh_controller = ExtractBetween(
+                controller_source,
+                "auto AuthController::RefreshTokens(",
+                "auto AuthController::Logout("
+            );
+
+            ASSERT_FALSE(refresh_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received refresh token request\";",
+                     "Logger::Warn(log_context) << \"Refresh token request validation failed\";",
+                     "Logger::Error(log_context) << \"Refresh token failed\";",
+                     "Logger::Info(log_context) << \"Refresh token successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(refresh_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received refresh token request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Refresh token request validation failed: \" << parse_result.error().message",
+                     "<< \"Refresh token failed: \" << refresh_result.error().message",
+                 }) {
+                EXPECT_EQ(CountOccurrences(refresh_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"auth\")",
+                     "RefreshTokenRequest::FromRequest(request, log_context)",
+                     "co_return Response::Error(parse_result.error());",
+                     "m_auth_service->RefreshTokens(*parse_result, log_context)",
+                     "co_return Response::Error(refresh_result.error());",
+                     "co_return Response::Success(refresh_result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(refresh_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
     } // namespace
 } // namespace disk::auth

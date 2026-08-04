@@ -79,14 +79,12 @@ namespace disk::auth {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "auth");
 
-        Logger::Info(log_context)
-            << "Received refresh token request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received refresh token request";
 
         /// 1. 解析请求
         auto parse_result = RefreshTokenRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Refresh token request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context) << "Refresh token request validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -95,8 +93,7 @@ namespace disk::auth {
             co_await m_auth_service->RefreshTokens(*parse_result, log_context);
 
         if (!refresh_result) {
-            Logger::Error(log_context)
-                << "Refresh token failed: " << refresh_result.error().message;
+            Logger::Error(log_context) << "Refresh token failed";
             co_return Response::Error(refresh_result.error());
         }
 

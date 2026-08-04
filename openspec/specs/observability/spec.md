@@ -380,6 +380,11 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the client endpoint, username, email-form account, downstream error message, or other request or response value
 - **AND** context creation, DTO parsing, trusted client-IP resolution, the service call, error responses, response serialization, and the successful response SHALL remain unchanged
 
+#### Scenario: Refresh controller diagnostics exclude boundary values
+- **WHEN** the refresh controller receives a request, rejects DTO validation, receives a business failure, or completes token rotation
+- **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the client endpoint, refresh token, downstream error message, or other request or response value
+- **AND** context creation, DTO and service calls, error responses, token-response serialization, and the successful response SHALL remain unchanged
+
 #### Scenario: Authentication service dependency work fails
 - **WHEN** authentication-service database work or standard processing throws, or login rate-limit maintenance receives a Redis domain error
 - **THEN** the directly owned event SHALL use its fixed complete failure summary and SHALL NOT append exception text, downstream domain messages, SQL, connection details, Redis keys or values, credentials, or tokens
