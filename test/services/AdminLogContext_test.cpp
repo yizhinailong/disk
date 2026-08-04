@@ -411,6 +411,119 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminChangeUserAvailableSpaceContractTest, SeparatesMissingRowsFromDatabaseErrors) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto available_space_body = ExtractRange(
+                service_source,
+                "auto AdminService::ChangeUserAvailableSpace(",
+                "    auto AdminService::SoftDeleteUser("
+            );
+
+            ASSERT_FALSE(available_space_body.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "catch (const drogon::orm::UnexpectedRows&)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "catch (const drogon::orm::DrogonDbException&)"
+                ),
+                1U
+            );
+
+            const auto missing_catch = available_space_body.find(
+                "catch (const drogon::orm::UnexpectedRows&)"
+            );
+            const auto database_catch = available_space_body.find(
+                "catch (const drogon::orm::DrogonDbException&)"
+            );
+            EXPECT_NE(missing_catch, std::string::npos);
+            EXPECT_NE(database_catch, std::string::npos);
+            EXPECT_LT(missing_catch, database_catch);
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "ErrorInfo(ErrorCode::AdminUserNotFound)"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(available_space_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(available_space_body, "error_msg.find("),
+                0U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "Logger::Error(log_context)\n                << \"Admin change user available space database error\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "ErrorCode::InternalError,\n                \"Failed to change user available space\""
+                ),
+                1U
+            );
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "constexpr uint64_t bytes_per_g = 1024ULL * 1024ULL * 1024ULL;"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "available_space_g > std::numeric_limits<uint64_t>::max() / bytes_per_g"
+                ),
+                1U
+            );
+            EXPECT_TRUE(Contains(
+                available_space_body,
+                "storage_used + storage_reserved > std::numeric_limits<uint64_t>::max() - available_space_bytes"
+            ));
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "const auto new_storage_quota = storage_used + storage_reserved + available_space_bytes;"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "user.setStorageQuota(new_storage_quota);"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(available_space_body, "co_await mapper.update(user);"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "response.storage_quota = new_storage_quota;"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_body,
+                    "\"admin.user.available_space_set\""
+                ),
+                1U
+            );
+        }
+
         TEST(AdminListSharesLogContractTest, DatabaseExceptionUsesFixedSummary) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto list_body = ExtractRange(

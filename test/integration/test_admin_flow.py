@@ -822,6 +822,28 @@ def test_admin_change_user_available_space():
         print(logs_resp.text)
         sys.exit(1)
 
+    missing_resp = fetch(
+        "/api/admin/users/999999/available-space",
+        method="PUT",
+        headers={**admin_headers, "Content-Type": "application/json"},
+        json_body={"available_space_g": 1},
+    )
+    missing_code = json_field(missing_resp.text, "code")
+    missing_message = json_field(missing_resp.text, "message")
+    if (
+        missing_resp.status_code == 404
+        and missing_code == "80002"
+        and missing_message == "User not found"
+    ):
+        log_pass("Admin change missing user available space: HTTP 404, code=80002, message=User not found")
+    else:
+        log_fail(
+            "Admin change missing user available space: expected HTTP 404 code=80002 message=User not found, "
+            f"got HTTP {missing_resp.status_code} code={missing_code} message={missing_message}"
+        )
+        print(missing_resp.text)
+        sys.exit(1)
+
 
 def test_admin_change_user_available_space_validation():
     log_info("[Test 17] Admin 修改用户可用空间参数校验...")

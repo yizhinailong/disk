@@ -87,6 +87,10 @@ The system SHALL allow administrators to update supported user storage quota val
 - **WHEN** an administrator submits an invalid storage quota value, targets a missing user, or requests a quota that conflicts with the user's current storage usage
 - **THEN** the system SHALL reject the operation without changing the user's storage values
 
+#### Scenario: Administrator changes storage for a missing user
+- **WHEN** an administrator requests a valid available-space change for a user ID that does not exist
+- **THEN** the system SHALL return the administrator user-not-found error with HTTP 404 without changing storage values or recording an administrative audit
+
 #### Scenario: Non-administrator updates user storage quota
 - **WHEN** a non-administrator attempts to update a user's storage quota through administrator operations
 - **THEN** the system SHALL reject the request with an administrator authorization error
