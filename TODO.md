@@ -3069,6 +3069,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 122/122、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1537 项：1530 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 548.29 秒。源码审计确认三条固定摘要各 1 处、两种旧动态账号日志均为 0，11 项查找数据流和原有 WARN/DEBUG/WARN 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.207 账户访问校验诊断脱敏记录（2026-08-05）
+
+`AuthService::ValidateAccountAccess()` 的账户禁用、账户锁定和数据库校验失败三条事件，必须分别只记录固定完整摘要 `Account access disabled`、`Account access locked` 与 `Failed to validate account access`。message 不得追加用户 ID、账户状态、锁定时间/布尔值、查询结果、SQL、连接信息、数据库异常或其他账户/依赖值；原 WARN/WARN/ERROR 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变，既有数据库失败摘要继续保持原样。
+
+既有以 PostgreSQL `NOW()` 计算锁定状态的参数化查询、缺失用户 `UserNotFound`、禁用 `AccountDisabled`、锁定 `AccountLocked`、正常成功及数据库异常 `InternalError` 映射不得改变。验证必须新增源码合同锁定三条固定摘要、原始账户状态值排除和完整访问校验数据流，并执行认证服务 GoogleTest、OpenSpec、完整构建、真实认证流/生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 4 个失败断言：账户禁用和锁定两条待迁移固定摘要均缺失，对应用户 ID 动态日志各命中一次；既有数据库失败固定摘要与数据库时间 SQL、缺失/禁用/锁定/成功/异常映射共 13 项数据流断言均通过。
+
+实现后定向源码合同 1/1、含 Auth 的 GoogleTest 123/123、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1538 项：1531 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 561.00 秒。源码审计确认三条固定摘要各 1 处、两种旧动态用户 ID 日志均为 0，13 项访问校验数据流和原有 WARN/WARN/ERROR 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

@@ -419,12 +419,12 @@ namespace disk::auth {
             }
 
             if (result[0]["status"].as<int>() == ACCOUNT_STATUS_DISABLED) {
-                Logger::Warn(log_context) << "Account disabled: user_id=" << user_id;
+                Logger::Warn(log_context) << "Account access disabled";
                 co_return std::unexpected(ErrorInfo(ErrorCode::AccountDisabled));
             }
 
             if (result[0]["account_locked"].as<bool>()) {
-                Logger::Warn(log_context) << "Account locked: user_id=" << user_id;
+                Logger::Warn(log_context) << "Account access locked";
                 co_return std::unexpected(ErrorInfo(ErrorCode::AccountLocked));
             }
 

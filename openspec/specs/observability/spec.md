@@ -380,6 +380,11 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username or email account, user ID, query or ORM result, SQL, connection detail, exception, or other account or dependency value
 - **AND** the parameterized username-or-email query, complete field selection, empty-result and database-error mapping, ORM user construction, and public result SHALL remain unchanged
 
+#### Scenario: Account access diagnostics exclude user and status values
+- **WHEN** account access validation finds a disabled or locked account or encounters a database failure
+- **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the user ID, account status, lock time or Boolean, query result, SQL, connection detail, exception, or other account or dependency value
+- **AND** the parameterized database-time lock query and missing-user, disabled, locked, normal, and database-error result mapping SHALL remain unchanged
+
 #### Scenario: Registration request diagnostics exclude raw fields
 - **WHEN** registration request fields are parsed or username, email, or password validation fails
 - **THEN** the directly owned DTO event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username, email, password, or other request value

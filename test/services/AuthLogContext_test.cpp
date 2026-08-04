@@ -487,6 +487,50 @@ namespace disk::auth {
             );
         }
 
+        TEST(AuthAccountAccessValueLogContractTest, ValidationUsesFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/AuthService.cpp");
+            const auto validation_body = ExtractBetween(
+                service_source,
+                "auto AuthService::ValidateAccountAccess(",
+                "auto AuthService::UpdateLoginInfo("
+            );
+
+            ASSERT_FALSE(validation_body.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Warn(log_context) << \"Account access disabled\";",
+                     "Logger::Warn(log_context) << \"Account access locked\";",
+                     "Logger::Error(log_context) << \"Failed to validate account access\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(validation_body, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_account_log : {
+                     "<< \"Account disabled: user_id=\" << user_id",
+                     "<< \"Account locked: user_id=\" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(validation_body, raw_account_log), 0U)
+                    << raw_account_log;
+            }
+
+            for (const auto* preserved_validation_step : {
+                     "m_db_client->execSqlCoro(",
+                     "SELECT status, ((status = 2 AND locked_until IS NULL)",
+                     "OR COALESCE(locked_until > NOW(), FALSE)) AS account_locked",
+                     "FROM users WHERE id = $1",
+                     "if (result.empty())",
+                     "ErrorInfo(ErrorCode::UserNotFound)",
+                     "result[0][\"status\"].as<int>() == ACCOUNT_STATUS_DISABLED",
+                     "ErrorInfo(ErrorCode::AccountDisabled)",
+                     "result[0][\"account_locked\"].as<bool>()",
+                     "ErrorInfo(ErrorCode::AccountLocked)",
+                     "co_return {};",
+                     "catch (const drogon::orm::DrogonDbException&)",
+                     "ErrorInfo(ErrorCode::InternalError, \"Failed to validate account status\")",
+                 }) {
+                EXPECT_EQ(CountOccurrences(validation_body, preserved_validation_step), 1U)
+                    << preserved_validation_step;
+            }
+        }
+
         TEST(AuthRegistrationDtoValueLogContractTest, RegisterRequestUsesFixedSummaries) {
             const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");
             const auto register_request = ExtractBetween(
