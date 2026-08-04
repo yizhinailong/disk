@@ -798,9 +798,8 @@ namespace disk::services {
             Logger::Info(log_context) << "admin.stats.overview successful";
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "admin.stats.overview database error: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "admin.stats.overview database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get overview stats"

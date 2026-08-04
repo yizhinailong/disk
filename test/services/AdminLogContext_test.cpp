@@ -652,6 +652,65 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminOverviewStatsContractTest, DatabaseExceptionUsesFixedSummary) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto stats_body = ExtractRange(
+                service_source,
+                "auto AdminService::GetOverviewStats(",
+                "    auto AdminService::GetSystemStatus("
+            );
+
+            ASSERT_FALSE(stats_body.empty());
+            EXPECT_EQ(CountOccurrences(stats_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    stats_body,
+                    "catch (const drogon::orm::DrogonDbException&)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    stats_body,
+                    "Logger::Error(log_context) << \"admin.stats.overview database error\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    stats_body,
+                    "ErrorCode::InternalError,\n                \"Failed to get overview stats\""
+                ),
+                1U
+            );
+
+            EXPECT_EQ(CountOccurrences(stats_body, "execSqlCoro("), 3U);
+            EXPECT_TRUE(Contains(stats_body, "COUNT(*) AS total_users"));
+            EXPECT_TRUE(Contains(stats_body, "COALESCE(SUM(storage_used), 0)"));
+            EXPECT_TRUE(Contains(stats_body, "COALESCE(SUM(storage_quota), 0)"));
+            EXPECT_TRUE(Contains(stats_body, "COUNT(*) AS total_files FROM files"));
+            EXPECT_TRUE(Contains(
+                stats_body,
+                "COUNT(*) AS active_shares FROM shares WHERE status = 1"
+            ));
+            for (const auto* field : {
+                     "response.total_users =",
+                     "response.total_storage_used =",
+                     "response.total_storage_quota =",
+                     "response.total_files =",
+                     "response.active_shares =",
+                 }) {
+                EXPECT_EQ(CountOccurrences(stats_body, field), 1U) << field;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    stats_body,
+                    "Logger::Info(log_context) << \"admin.stats.overview successful\";"
+                ),
+                1U
+            );
+        }
+
         TEST(AdminListSharesLogContractTest, DatabaseExceptionUsesFixedSummary) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto list_body = ExtractRange(
