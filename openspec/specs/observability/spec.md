@@ -134,6 +134,11 @@ The shared token service SHALL accept explicit correlation by value for request-
 - **THEN** the directly owned DEBUG event SHALL use the fixed complete summary `Share token verification successful` with the caller's typed correlation and SHALL NOT append the share code, internal share ID, permission, JTI, JWT secret, raw share token, claim or scope, verification or parsing result, exception, or other share-session value
 - **AND** empty-token rejection, JWT decoding, initialized or temporary-secret verifier selection, issuer, signature and expiry verification, claim and scope integrity checks, permission constraints, structured claims result, fixed failure summaries, and error mapping SHALL remain unchanged
 
+#### Scenario: Share-token revocation rejection excludes share and Redis values
+- **WHEN** shared revocation state reports a verified share token as revoked
+- **THEN** the directly owned WARN event SHALL use the fixed complete summary `Share token has been revoked` with the caller's typed correlation and SHALL NOT append the share code, raw token, token hash, Redis key or value, revocation result or error, cache state, TTL, exception, or other share-session value
+- **AND** the unused share-code parameter and its constant-empty call arguments SHALL be absent, while static verification and error forwarding, token hashing and error forwarding, local positive-cache and Redis-blacklist lookup, fail-closed dependency errors, revoked-token mapping, and non-revoked claims result SHALL remain unchanged
+
 #### Scenario: Token service classifies token expiry
 - **WHEN** JWT verification throws a token verification exception
 - **THEN** expiry SHALL be identified only by comparing the structured error code with `token_verification_error::token_expired`, and SHALL NOT be inferred by searching exception text

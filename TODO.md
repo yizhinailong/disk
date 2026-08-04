@@ -3129,6 +3129,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、源码合同与内存结构化日志聚焦用例 2/2、全部 Token GoogleTest 151/151、OpenSpec 24/24 和完整后端构建通过；真实分享令牌安全流 12/12、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1543 项：1536 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 568.70 秒；其中上传安全网为 886/886。源码审计确认固定成功摘要 1 处、旧分享码与内部分享 ID 动态日志片段均为 0，35 项验签数据流和原 DEBUG 级别保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.213 分享令牌撤销拒绝诊断脱敏与死参数清理记录（2026-08-05）
+
+`TokenService::VerifyShareTokenWithRedis()` 的已撤销拒绝事件必须只记录固定完整摘要 `Share token has been revoked`。message 不得追加分享码、原始分享 token、token hash、Redis key/value、撤销查询结果/错误、缓存状态、TTL、异常或其他分享会话状态值；原 WARN 级别、调用方 request/instance/`share` 上下文和撤销命中后的触发位置保持不变。
+
+全仓调用点审计确认该函数的 `share_code` 参数只被这条动态日志读取，唯一生产调用与唯一测试调用均传空字符串；它不参与 token claim/scope 校验、路由绑定、撤销键构建或公开响应，必须连同头文件参数说明和空实参一起删除。既有静态验签与错误透传、token 单向哈希与错误透传、本地正缓存/Redis blacklist 撤销查询与 fail-closed 错误透传、`TokenRevoked` 映射和未撤销 claims 返回不得改变。验证必须新增源码合同锁定固定摘要、原始分享/Redis 值排除、死参数消失和完整撤销数据流，并执行 Token/share/过滤器 GoogleTest、OpenSpec、完整构建、真实分享限流与撤销流、双实例认证一致性、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 11 个失败断言：待迁移固定摘要缺失、分享码动态日志仍存在，`share_code` 参数在实现/声明/注释中仍存在且生产/测试调用仍传空字符串，对应四项新签名/调用面尚未出现；静态验签、hash、撤销查询、三类错误透传、撤销映射和未撤销结果共 12 项数据流及 4 处上下文断言均通过。
+
+实现后定向源码合同 1/1、新合同/畸形令牌/ShareAuthFilter 聚焦用例 18/18、Token/ShareAuthFilter GoogleTest 155/155、OpenSpec 24/24 和完整后端构建通过；真实分享限流与 blacklist 撤销流 10/10、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1544 项：1537 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 554.26 秒；其中上传安全网为 886/886。源码审计确认固定撤销摘要 1 处，旧动态日志、实现/声明中的死参数和两个空实参均为 0，12 项撤销数据流、4 处上下文、WARN 级别和 fail-closed 语义保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

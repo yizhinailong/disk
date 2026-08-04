@@ -670,7 +670,6 @@ namespace disk::services {
     /// ==================== Share Token Redis 异步方法 ====================
 
     auto TokenService::VerifyShareTokenWithRedis(
-        const std::string& share_code,
         const std::string& token,
         disk::utils::LogContext log_context
     )
@@ -690,7 +689,7 @@ namespace disk::services {
             co_return std::unexpected(revoked.error());
         }
         if (revoked.value()) {
-            Logger::Warn(log_context) << "Share token has been revoked: share_code=" << share_code;
+            Logger::Warn(log_context) << "Share token has been revoked";
             co_return std::unexpected(ErrorInfo(disk::error::Code::TokenRevoked));
         }
 

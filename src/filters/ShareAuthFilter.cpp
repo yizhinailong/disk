@@ -45,7 +45,6 @@ namespace disk::filters {
 
         auto verify_result =
             co_await TokenService::GetInstance()->VerifyShareTokenWithRedis(
-                "",
                 share_token_header,
                 log_context
             );

@@ -534,6 +534,120 @@ namespace disk::services {
             }
         }
 
+        TEST(TokenShareRevocationValueLogContractTest, RejectionUsesFixedSummaryAndNoDeadCode) {
+            const auto source = ReadSourceFile("src/services/TokenService.cpp");
+            const auto header = ReadSourceFile("src/services/TokenService.hpp");
+            const auto share_filter = ReadSourceFile("src/filters/ShareAuthFilter.cpp");
+            const auto test_source = ReadSourceFile("test/services/TokenServiceLogContext_test.cpp");
+            const auto malformed_begin = test_source.rfind(
+                "TEST_F(TokenServiceLogContextTest, MalformedTokensPreserveContextWithoutEchoingValues)"
+            );
+            const auto malformed_end = test_source.find(
+                "TEST_F(TokenServiceLogContextTest, DefaultCallerKeepsNullRequestCorrelation)",
+                malformed_begin
+            );
+            const auto revocation_body = SourceSection(
+                source,
+                "auto TokenService::VerifyShareTokenWithRedis(",
+                "auto TokenService::IsShareTokenRevoked("
+            );
+            const auto revocation_header = SourceSection(
+                header,
+                "auto VerifyShareTokenWithRedis(",
+                "auto IsShareTokenRevoked("
+            );
+
+            ASSERT_FALSE(revocation_body.empty());
+            ASSERT_FALSE(revocation_header.empty());
+            ASSERT_NE(malformed_begin, std::string::npos);
+            ASSERT_NE(malformed_end, std::string::npos);
+            ASSERT_GT(malformed_end, malformed_begin);
+            const auto malformed_test = test_source.substr(
+                malformed_begin,
+                malformed_end - malformed_begin
+            );
+            ASSERT_FALSE(malformed_test.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    revocation_body,
+                    "Logger::Warn(log_context) << \"Share token has been revoked\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    revocation_body,
+                    "<< \"Share token has been revoked: share_code=\" << share_code"
+                ),
+                0U
+            );
+
+            EXPECT_EQ(CountOccurrences(revocation_body, "const std::string& share_code,"), 0U);
+            EXPECT_EQ(CountOccurrences(revocation_header, "const std::string& share_code,"), 0U);
+            EXPECT_EQ(CountOccurrences(header, "@param share_code"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    share_filter,
+                    "VerifyShareTokenWithRedis(\n                \"\","
+                ),
+                0U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    malformed_test,
+                    "VerifyShareTokenWithRedis(\"\", std::string(RAW_SHARE_TOKEN)"
+                ),
+                0U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    revocation_body,
+                    "auto TokenService::VerifyShareTokenWithRedis(\n        const std::string& token,"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    revocation_header,
+                    "auto VerifyShareTokenWithRedis(\n            const std::string& token,"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    share_filter,
+                    "VerifyShareTokenWithRedis(\n                share_token_header,\n                log_context"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    malformed_test,
+                    "VerifyShareTokenWithRedis(std::string(RAW_SHARE_TOKEN), share_context)"
+                ),
+                1U
+            );
+
+            for (const auto* preserved_revocation_step : {
+                     "VerifyShareToken(m_jwt_secret, token, log_context)",
+                     "if (!verify_result)",
+                     "co_return std::unexpected(verify_result.error());",
+                     "ExtractShareTokenHash(token)",
+                     "if (!hash_result)",
+                     "co_return std::unexpected(hash_result.error());",
+                     "IsShareTokenRevoked(hash_result.value(), log_context)",
+                     "if (!revoked)",
+                     "co_return std::unexpected(revoked.error());",
+                     "if (revoked.value())",
+                     "ErrorInfo(disk::error::Code::TokenRevoked)",
+                     "co_return verify_result.value();",
+                 }) {
+                EXPECT_EQ(CountOccurrences(revocation_body, preserved_revocation_step), 1U)
+                    << preserved_revocation_step;
+            }
+            EXPECT_EQ(CountOccurrences(revocation_body, "log_context"), 4U);
+        }
+
         class TokenServiceLogContextTest : public ::testing::Test {
         protected:
             auto SetUp() -> void override {
@@ -700,7 +814,7 @@ namespace disk::services {
             )
                              .has_value());
             EXPECT_FALSE(drogon::sync_wait(m_service->InvalidateAccessToken(std::string(RAW_REVOKE_TOKEN), auth_context)).has_value());
-            EXPECT_FALSE(drogon::sync_wait(m_service->VerifyShareTokenWithRedis("", std::string(RAW_SHARE_TOKEN), share_context)).has_value());
+            EXPECT_FALSE(drogon::sync_wait(m_service->VerifyShareTokenWithRedis(std::string(RAW_SHARE_TOKEN), share_context)).has_value());
 
             const auto records = DrainRecords(6);
             ASSERT_EQ(records.size(), 6U);

@@ -328,13 +328,11 @@ namespace disk::services {
         /**
          * @brief 验证分享令牌（含 Redis 撤销检查）
          *
-         * @param share_code 分享码
          * @param token 分享令牌
          * @return drogon::Task<Result<ShareTokenClaims>> 成功返回声明信息，失败返回错误
          */
         [[nodiscard]]
         auto VerifyShareTokenWithRedis(
-            const std::string& share_code,
             const std::string& token,
             disk::utils::LogContext log_context = {}
         )
