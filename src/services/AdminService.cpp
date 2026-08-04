@@ -456,17 +456,13 @@ namespace disk::services {
                 << "Admin soft delete user successful: target_id=" << target_id;
             co_return {};
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            const auto error_msg = std::string(e.base().what());
-            if (error_msg.find("condition") != std::string::npos ||
-                error_msg.find("empty") != std::string::npos) {
-                Logger::Warn(log_context)
-                    << "Admin user not found for soft delete: target_id=" << target_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
-            }
-
+        } catch (const drogon::orm::UnexpectedRows&) {
+            Logger::Warn(log_context)
+                << "Admin user not found for soft delete: target_id=" << target_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
+        } catch (const drogon::orm::DrogonDbException&) {
             Logger::Error(log_context)
-                << "Admin soft delete user database error: " << e.base().what();
+                << "Admin soft delete user database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to soft delete user"

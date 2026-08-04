@@ -495,6 +495,27 @@ def test_admin_soft_delete_user():
         print(resp.text)
         sys.exit(1)
 
+    missing_resp = fetch(
+        "/api/admin/users/999999",
+        method="DELETE",
+        headers=get_admin_headers(),
+    )
+    missing_code = json_field(missing_resp.text, "code")
+    missing_message = json_field(missing_resp.text, "message")
+    if (
+        missing_resp.status_code == 404
+        and missing_code == "80002"
+        and missing_message == "User not found"
+    ):
+        log_pass("Admin soft delete missing user: HTTP 404, code=80002, message=User not found")
+    else:
+        log_fail(
+            "Admin soft delete missing user: expected HTTP 404 code=80002 message=User not found, "
+            f"got HTTP {missing_resp.status_code} code={missing_code} message={missing_message}"
+        )
+        print(missing_resp.text)
+        sys.exit(1)
+
 
 # ─── Test 7: Admin 自我修改状态保护 ─────────────────────────────────────────
 

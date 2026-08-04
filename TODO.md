@@ -2877,6 +2877,16 @@ Web API/store/view、Qt `AdminShareListModel`/`AdminManager`/QML 与 TUI client/
 
 实现后直接源码合同 1/1、全部 Admin GoogleTest 73/73、Python 语法和 OpenSpec 24/24 通过，完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流全部 24 个断言组通过、0 失败，成功配额更新和审计检查后，不存在用户的可用空间变更精确得到 `404/80002/User not found`，后续校验和鉴权场景继续通过。标准完整 CTest 共 1518 项：1511 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 553.40 秒。源码审计确认 `ChangeUserAvailableSpace()` 范围内专用捕获与固定数据库摘要各 1 处、`.what()` 和异常文本猜测均为 0；`AdminService.cpp` 其余 10 处 `.what()` 留待后续独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.188 AdminService 软删除用户缺失映射修复记录（2026-08-04）
+
+管理员软删除不存在用户时，`SoftDeleteUser()` 必须在一般 `DrogonDbException` 之前显式捕获 `drogon::orm::UnexpectedRows`，并返回既有 `AdminUserNotFound`（HTTP 404、业务码 80002、`User not found`）；禁止依赖第三方异常正文中的 `condition`/`empty` 片段推断缺失状态。
+
+真实数据库异常继续返回既有 `InternalError` 与 `Failed to soft delete user`，诊断只允许固定完整摘要 `Admin soft delete user database error`；不得追加目标/管理员 ID、用户名、异常正文、SQL、连接信息、凭据或 token。自身删除保护、状态置为 0、用户更新、`admin.user.soft_delete` 审计、成功响应、鉴权和类型化关联不得改变。
+
+验证必须新增源码合同锁定专用捕获顺序、两类公开错误、状态更新/审计和固定诊断，并在真实管理流软删除场景中精确断言不存在用户返回 `404/80002/User not found`。旧实现上的定向源码合同按预期为 0/1，共 8 个失败断言：专用捕获缺失，一般捕获仍绑定异常对象，精确检出 2 处 `.what()`、2 处异常文本猜测且固定数据库摘要缺失；状态置零、更新、审计和两类公开错误断言通过。
+
+实现后直接源码合同 1/1、全部 Admin GoogleTest 74/74、Python 语法和 OpenSpec 24/24 通过，完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流全部 25 个断言组通过、0 失败，成功软删除临时用户后，不存在用户的软删除精确得到 `404/80002/User not found`，后续自身保护、分享、统计、配额和鉴权场景继续通过。标准完整 CTest 共 1519 项：1512 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 565.51 秒。源码审计确认 `SoftDeleteUser()` 范围内专用捕获与固定数据库摘要各 1 处、`.what()` 和异常文本猜测均为 0；`AdminService.cpp` 其余 8 处 `.what()` 留待后续独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

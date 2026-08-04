@@ -524,6 +524,78 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminSoftDeleteUserContractTest, SeparatesMissingRowsFromDatabaseErrors) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto delete_body = ExtractRange(
+                service_source,
+                "auto AdminService::SoftDeleteUser(",
+                "    auto AdminService::GetGlobalStorageStats("
+            );
+
+            ASSERT_FALSE(delete_body.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_body,
+                    "catch (const drogon::orm::UnexpectedRows&)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_body,
+                    "catch (const drogon::orm::DrogonDbException&)"
+                ),
+                1U
+            );
+
+            const auto missing_catch = delete_body.find(
+                "catch (const drogon::orm::UnexpectedRows&)"
+            );
+            const auto database_catch = delete_body.find(
+                "catch (const drogon::orm::DrogonDbException&)"
+            );
+            EXPECT_NE(missing_catch, std::string::npos);
+            EXPECT_NE(database_catch, std::string::npos);
+            EXPECT_LT(missing_catch, database_catch);
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_body,
+                    "ErrorInfo(ErrorCode::AdminUserNotFound)"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(delete_body, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(delete_body, "error_msg.find("), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_body,
+                    "Logger::Error(log_context)\n                << \"Admin soft delete user database error\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_body,
+                    "ErrorCode::InternalError,\n                \"Failed to soft delete user\""
+                ),
+                1U
+            );
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_body,
+                    "user.setStatus(static_cast<int8_t>(0));"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(delete_body, "co_await mapper.update(user);"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(delete_body, "\"admin.user.soft_delete\""),
+                1U
+            );
+        }
+
         TEST(AdminListSharesLogContractTest, DatabaseExceptionUsesFixedSummary) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto list_body = ExtractRange(
