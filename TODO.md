@@ -3049,6 +3049,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 120/120、RefreshToken request/response DTO GoogleTest 4/4、OpenSpec 24/24 和完整后端构建通过；真实 refresh 轮换 6/6、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1535 项：1528 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 552.18 秒。源码审计确认八条固定摘要各 1 处、四种旧动态刷新日志均为 0，17 项刷新数据流和原有 DEBUG/WARN/DEBUG/DEBUG/WARN/INFO/ERROR/ERROR 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.205 登出服务诊断脱敏记录（2026-08-05）
+
+`AuthService::Logout()` 的登出开始、access token 撤销失败、refresh token 撤销失败、审计写入成功、审计写入失败和登出成功六条事件，必须分别只记录固定完整摘要 `User logout started`、`Access token invalidation failed`、`Refresh token revocation failed`、`Logout audit recorded`、`Failed to record logout log` 与 `User logout successful`。message 不得追加用户 ID、客户端 IP、Authorization 值、access/refresh token、JTI、审计详情、数据库异常或其他登出请求/持久化值；原 INFO/WARN/WARN/DEBUG/WARN/INFO 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变，既有审计写入失败摘要继续保持原样。
+
+既有客户端 IP 归一化、access token 撤销失败 fail-closed 及公开 `InternalError`、refresh token 撤销失败 fail-open、`operation_logs` 的用户 ID/action/target/details/IP/时间完整持久化、审计数据库异常 fail-open 和成功响应不得改变。验证必须新增源码合同锁定六条固定摘要、原始登出领域值排除和完整登出数据流，并执行认证服务 GoogleTest、OpenSpec、完整构建、真实登出/认证生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 10 个失败断言：登出开始、两类撤销失败、审计写入成功和登出成功五条待迁移固定摘要均缺失，对应用户 ID/IP 与用户 ID 五条动态日志各命中一次；既有审计写入失败固定摘要和 IP、两类撤销、公开错误、完整审计字段/写入、异常及成功返回共 21 项数据流断言均通过。
+
+实现后的首次上传安全网在认证日志阶段按预期暴露 1 个过期测试标记：前 152 项通过，旧 `User logout:` 起始串无法匹配新的固定摘要；将生产 NDJSON 期望更新为精确 `User logout started` 后 Python 语法检查和完整安全网 886/886 通过。最终定向源码合同 1/1、含 Auth 的 GoogleTest 121/121、OpenSpec 24/24 和完整后端构建通过，真实认证生命周期 6/6、上传安全网均为 0 失败。标准完整 CTest 共 1536 项：1529 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 558.24 秒。源码审计确认六条固定摘要各 1 处、五种旧动态登出日志均为 0，21 项登出数据流和原有 INFO/WARN/WARN/DEBUG/WARN/INFO 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

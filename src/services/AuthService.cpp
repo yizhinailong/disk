@@ -329,7 +329,7 @@ namespace disk::auth {
 
         const std::string client_ip =
             disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
-        Logger::Info(log_context) << "User logout: user_id=" << user_id << ", ip=" << client_ip;
+        Logger::Info(log_context) << "User logout started";
 
         /// 步骤 1: 使访问令牌失效
         auto invalidate_result = co_await TokenService::GetInstance()->InvalidateAccessToken(
@@ -337,8 +337,7 @@ namespace disk::auth {
             log_context
         );
         if (!invalidate_result.has_value()) {
-            Logger::Warn(log_context)
-                << "Access token invalidation failed: user_id=" << user_id;
+            Logger::Warn(log_context) << "Access token invalidation failed";
             co_return std::unexpected(
                 ErrorInfo(ErrorCode::InternalError, "Logout failed, please try again later")
             );
@@ -348,8 +347,7 @@ namespace disk::auth {
         auto revoke_result =
             co_await TokenService::GetInstance()->RevokeRefreshToken(user_id, log_context);
         if (!revoke_result) {
-            Logger::Warn(log_context)
-                << "Refresh token revocation failed: user_id=" << user_id;
+            Logger::Warn(log_context) << "Refresh token revocation failed";
             /// 不中断流程，继续返回成功
         }
 
@@ -371,13 +369,13 @@ namespace disk::auth {
             log.setCreatedAt(trantor::Date::now());
 
             co_await mapper.insert(log);
-            Logger::Debug(log_context) << "Logout log recorded: user_id=" << user_id;
+            Logger::Debug(log_context) << "Logout audit recorded";
         } catch (const drogon::orm::DrogonDbException&) {
             Logger::Warn(log_context) << "Failed to record logout log";
             /// 不中断流程
         }
 
-        Logger::Info(log_context) << "User logout successful: user_id=" << user_id;
+        Logger::Info(log_context) << "User logout successful";
         co_return {};
     }
 

@@ -382,6 +382,63 @@ namespace disk::auth {
             EXPECT_EQ(CountOccurrences(refresh_body, "new_refresh_token,"), 1U);
         }
 
+        TEST(AuthLogoutServiceValueLogContractTest, LogoutUsesFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/AuthService.cpp");
+            const auto logout_body = ExtractBetween(
+                service_source,
+                "AuthService::Logout(",
+                "auto AuthService::FindUser("
+            );
+
+            ASSERT_FALSE(logout_body.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"User logout started\";",
+                     "Logger::Warn(log_context) << \"Access token invalidation failed\";",
+                     "Logger::Warn(log_context) << \"Refresh token revocation failed\";",
+                     "Logger::Debug(log_context) << \"Logout audit recorded\";",
+                     "Logger::Warn(log_context) << \"Failed to record logout log\";",
+                     "Logger::Info(log_context) << \"User logout successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(logout_body, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_logout_log : {
+                     "<< \"User logout: user_id=\" << user_id << \", ip=\" << client_ip",
+                     "<< \"Access token invalidation failed: user_id=\" << user_id",
+                     "<< \"Refresh token revocation failed: user_id=\" << user_id",
+                     "<< \"Logout log recorded: user_id=\" << user_id",
+                     "<< \"User logout successful: user_id=\" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(logout_body, raw_logout_log), 0U) << raw_logout_log;
+            }
+
+            for (const auto* preserved_logout_step : {
+                     "disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address)",
+                     "TokenService::GetInstance()->InvalidateAccessToken(",
+                     "if (!invalidate_result.has_value())",
+                     "ErrorInfo(ErrorCode::InternalError, \"Logout failed, please try again later\")",
+                     "TokenService::GetInstance()->RevokeRefreshToken(user_id, log_context)",
+                     "if (!revoke_result)",
+                     "CoroMapper<drogon_model::disk::OperationLogs> mapper(m_db_client)",
+                     "drogon_model::disk::OperationLogs log;",
+                     "log.setUserId(user_id);",
+                     "log.setAction(\"logout\");",
+                     "log.setTargetType(\"user\");",
+                     "log.setTargetId(0);",
+                     "details_json[\"message\"] = \"User logged out\";",
+                     "builder[\"indentation\"] = \"\";",
+                     "log.setDetails(Json::writeString(builder, details_json));",
+                     "log.setIpAddress(client_ip);",
+                     "log.setCreatedAt(trantor::Date::now());",
+                     "co_await mapper.insert(log);",
+                     "catch (const drogon::orm::DrogonDbException&)",
+                     "co_return {};",
+                 }) {
+                EXPECT_EQ(CountOccurrences(logout_body, preserved_logout_step), 1U)
+                    << preserved_logout_step;
+            }
+            EXPECT_EQ(CountOccurrences(logout_body, "access_token,"), 2U);
+        }
+
         TEST(AuthRegistrationDtoValueLogContractTest, RegisterRequestUsesFixedSummaries) {
             const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");
             const auto register_request = ExtractBetween(

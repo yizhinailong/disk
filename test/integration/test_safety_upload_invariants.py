@@ -1852,7 +1852,7 @@ def test_auth_log_context_invariants() -> None:
         message_markers=(
             "[auth_cpu_pool] op=jwt_verify",
             "Received logout request",
-            "User logout:",
+            "User logout started",
             "User logout successful",
             "Logout successful",
         ),
