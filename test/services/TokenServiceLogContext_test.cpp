@@ -538,6 +538,60 @@ namespace disk::services {
             EXPECT_EQ(CountOccurrences(verification_body, "cleanup();"), 4U);
         }
 
+        TEST(TokenRefreshVerificationValueLogContractTest, SuccessUsesFixedSummary) {
+            const auto source = ReadSourceFile("src/services/TokenService.cpp");
+            const auto verification_body = SourceSection(
+                source,
+                "auto TokenService::VerifyRefreshToken(",
+                "auto TokenService::StoreRefreshToken("
+            );
+
+            ASSERT_FALSE(verification_body.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    verification_body,
+                    "Logger::Trace(log_context) << \"Refresh token verification successful\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(verification_body, "Logger::Trace(log_context)"), 1U);
+            for (const auto* raw_claim_log : {
+                     "<< \"Refresh token verification successful: user_id=\" << user_id",
+                     "<< \", jti=\" << jti",
+                 }) {
+                EXPECT_EQ(CountOccurrences(verification_body, raw_claim_log), 0U)
+                    << raw_claim_log;
+            }
+
+            for (const auto* preserved_verification_step : {
+                     "g_pool_metrics.OnSubmit();",
+                     "const auto start = std::chrono::steady_clock::now();",
+                     "g_pool_metrics.OnComplete();",
+                     "[auth_cpu_pool] op=jwt_refresh_verify duration_us=",
+                     "auto decoded = jwt::decode<JwtTraits>(token);",
+                     "m_jwt_verifier.verify(decoded);",
+                     "decoded.get_payload_claim(\"type\").as_string()",
+                     "if (type != \"refresh\")",
+                     "ErrorInfo(disk::error::Code::TokenWrongType)",
+                     "const auto jti = decoded.get_payload_claim(\"jti\").as_string();",
+                     "const auto user_id_str = decoded.get_subject();",
+                     "const auto user_id = std::stoull(user_id_str);",
+                     "return std::make_pair(user_id, jti);",
+                     "catch (const jwt::error::token_verification_exception& error)",
+                     "Logger::Warn(log_context) << \"Refresh token verification failed\";",
+                     "if (IsTokenExpired(error))",
+                     "ErrorInfo(disk::error::Code::TokenExpired)",
+                     "ErrorInfo(disk::error::Code::InvalidRefreshToken)",
+                     "catch (const std::exception&)",
+                     "Logger::Warn(log_context) << \"Refresh token parsing failed\";",
+                     "ErrorInfo(disk::error::Code::TokenMalformed)",
+                 }) {
+                EXPECT_EQ(CountOccurrences(verification_body, preserved_verification_step), 1U)
+                    << preserved_verification_step;
+            }
+            EXPECT_EQ(CountOccurrences(verification_body, "cleanup();"), 4U);
+        }
+
         TEST(TokenShareGenerationValueLogContractTest, SuccessUsesFixedSummary) {
             const auto source = ReadSourceFile("src/services/TokenService.cpp");
             const auto generation_body = SourceSection(
@@ -908,7 +962,7 @@ namespace disk::services {
             ExpectContext(records[1], "token-auth-request", "auth", "info", "op=jwt_verify");
             ExpectContext(records[2], "token-auth-request", "auth", "trace", "Access token verification successful");
             ExpectContext(records[3], "token-auth-request", "auth", "info", "op=jwt_refresh_verify");
-            ExpectContext(records[4], "token-auth-request", "auth", "trace", "Refresh token verification successful:");
+            ExpectContext(records[4], "token-auth-request", "auth", "trace", "Refresh token verification successful");
             ExpectContext(records[5], "token-share-request", "share", "debug", "Share token generated successfully");
             ExpectContext(records[6], "token-share-request", "share", "debug", "Share token verification successful");
             ExpectSecretsExcluded(

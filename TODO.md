@@ -3159,6 +3159,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、源码合同与内存结构化日志聚焦用例 2/2、全部 Token GoogleTest 154/154、JWT filter GoogleTest 46/46、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1546 项：1539 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 566.47 秒。源码审计确认固定验签摘要 1 处，用户 ID、username、JTI、role 与 status 五段旧动态日志片段均为 0，28 项验签数据流、4 个 cleanup 出口和原 TRACE 级别保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.216 Refresh Token 验签成功诊断脱敏记录（2026-08-05）
+
+`TokenService::VerifyRefreshToken()` 的验签成功事件必须只记录固定完整摘要 `Refresh token verification successful`。message 不得追加用户 ID、JTI、JWT secret、原始 refresh token、claim、签名、验签/解析结果、签发/过期时间、TTL、异常或其他认证会话状态值；原 TRACE 级别、调用方 request/instance/`auth` 上下文和全部 refresh claims 校验完成后的触发位置保持不变。
+
+既有 Auth CPU pool 计时、JWT 解码、`disk` issuer/HS256 签名/过期验证、refresh 类型校验、JTI/subject 解析、数值 user ID 转换、结构化 `(user_id, jti)` 返回、固定失败摘要以及 `TokenWrongType`/`TokenExpired`/`InvalidRefreshToken`/`TokenMalformed` 错误映射不得改变。验证必须新增源码合同锁定固定摘要、原始身份/JTI/claim 值排除和完整 refresh 验签数据流，并执行 Token/auth/JWT filter GoogleTest、OpenSpec、完整构建、真实认证与 refresh 流、双实例认证一致性、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 3 个失败断言：待迁移固定成功摘要缺失，用户 ID 与 JTI 两段动态日志片段各命中一次；21 项验签数据流与 4 个 cleanup 出口断言均通过。
+
+实现后定向源码合同 1/1、源码合同与内存结构化日志聚焦用例 2/2、全部 Token GoogleTest 155/155、JWT filter GoogleTest 46/46、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1547 项：1540 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 555.75 秒。源码审计确认固定验签摘要 1 处，用户 ID 与 JTI 两段旧动态日志片段均为 0，21 项验签数据流、4 个 cleanup 出口和原 TRACE 级别保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

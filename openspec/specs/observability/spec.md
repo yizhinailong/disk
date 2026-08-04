@@ -149,6 +149,11 @@ The shared token service SHALL accept explicit correlation by value for request-
 - **THEN** the directly owned TRACE event SHALL use the fixed complete summary `Access token verification successful` with the caller's typed correlation and SHALL NOT append the user ID or name, role, status, JTI, JWT secret, raw access token, claim, signature, verification or parsing result, issued or expiry time, TTL, exception, or other session-state value
 - **AND** JWT decoding, issuer, HS256 signature and expiry verification, access-type validation, subject, username and JTI extraction, numeric user-ID parsing, role and status defaults and overrides, fixed failure summaries, error mapping, and structured claims result SHALL remain unchanged
 
+#### Scenario: Refresh-token verification diagnostics exclude identity and JTI values
+- **WHEN** refresh-token verification succeeds after type and claim parsing
+- **THEN** the directly owned TRACE event SHALL use the fixed complete summary `Refresh token verification successful` with the caller's typed correlation and SHALL NOT append the user ID, JTI, JWT secret, raw refresh token, claim, signature, verification or parsing result, issued or expiry time, TTL, exception, or other session-state value
+- **AND** authentication CPU-pool timing, JWT decoding, issuer, HS256 signature and expiry verification, refresh-type validation, JTI and subject extraction, numeric user-ID parsing, fixed failure summaries, error mapping, and structured user-ID/JTI pair result SHALL remain unchanged
+
 #### Scenario: Token service classifies token expiry
 - **WHEN** JWT verification throws a token verification exception
 - **THEN** expiry SHALL be identified only by comparing the structured error code with `token_verification_error::token_expired`, and SHALL NOT be inferred by searching exception text

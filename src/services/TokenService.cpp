@@ -273,9 +273,7 @@ namespace disk::services {
 
             cleanup();
 
-            Logger::Trace(log_context)
-                << "Refresh token verification successful: user_id=" << user_id
-                << ", jti=" << jti;
+            Logger::Trace(log_context) << "Refresh token verification successful";
             return std::make_pair(user_id, jti);
 
         } catch (const jwt::error::token_verification_exception& error) {
