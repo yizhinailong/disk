@@ -3079,6 +3079,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 123/123、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1538 项：1531 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 561.00 秒。源码审计确认三条固定摘要各 1 处、两种旧动态用户 ID 日志均为 0，13 项访问校验数据流和原有 WARN/WARN/ERROR 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.208 登录状态更新诊断脱敏记录（2026-08-05）
+
+`AuthService::UpdateLoginInfo()` 的条件更新竞争、更新成功、限流计数清理成功、清理失败和数据库更新失败五条事件，必须分别只记录固定完整摘要 `Login state changed before update`、`Login info updated`、`Login rate limit counter cleared`、`Failed to clear login rate limit counter` 与 `Failed to update login info`。message 不得追加用户 ID、客户端 IP、Redis 限流 key/value、账户状态、锁定时间、查询/删除结果、SQL、连接信息、数据库/Redis 错误或其他登录状态值；原 ERROR/DEBUG/DEBUG/WARN/ERROR 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变，两条既有失败摘要继续保持原样。
+
+既有数据库时间条件 UPDATE、登录尝试/锁定清零、last login 时间/IP 写入、竞争时账户访问复检与错误透传、`InternalError` 映射、限流 key 构建、Redis 删除成功/失败均不影响登录成功的 fail-open 策略和最终成功返回不得改变。验证必须新增源码合同锁定五条固定摘要、原始用户/IP/限流值排除和完整更新数据流，并执行认证服务 GoogleTest、OpenSpec、完整构建、真实认证流/生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：条件更新竞争、更新成功和限流计数清理成功三条待迁移固定摘要均缺失，对应用户 ID/IP 动态日志各命中一次；两条既有失败固定摘要与条件 UPDATE、账户复检、错误透传、限流 key/删除、fail-open 和成功返回共 18 项数据流断言均通过。
+
+实现后定向源码合同 1/1、含 Auth 的 GoogleTest 124/124、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网直接执行 888/888 均通过、0 失败。标准完整 CTest 共 1539 项：1532 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 558.16 秒；其中上传安全网按本轮竞态分支为 886/886。源码审计确认五条固定摘要各 1 处、三种旧动态用户 ID/IP 日志均为 0，18 项状态更新数据流和原有 ERROR/DEBUG/DEBUG/WARN/ERROR 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

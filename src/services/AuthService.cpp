@@ -459,14 +459,13 @@ namespace disk::auth {
                     co_return std::unexpected(access_result.error());
                 }
 
-                Logger::Error(log_context)
-                    << "Login state changed before update: user_id=" << user_id;
+                Logger::Error(log_context) << "Login state changed before update";
                 co_return std::unexpected(
                     ErrorInfo(ErrorCode::InternalError, "Failed to update login state")
                 );
             }
 
-            Logger::Debug(log_context) << "Login info updated successfully: " << user_id;
+            Logger::Debug(log_context) << "Login info updated";
 
             /// 清除 IP 频率限制计数器
             const std::string rate_key =
@@ -474,8 +473,7 @@ namespace disk::auth {
 
             auto delete_result = co_await m_redis_service->Delete(rate_key, log_context);
             if (delete_result.has_value()) {
-                Logger::Debug(log_context)
-                    << "Login rate limit counter cleared: ip=" << client_ip;
+                Logger::Debug(log_context) << "Login rate limit counter cleared";
             } else {
                 Logger::Warn(log_context) << "Failed to clear login rate limit counter";
             }

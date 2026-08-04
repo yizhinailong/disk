@@ -531,6 +531,63 @@ namespace disk::auth {
             }
         }
 
+        TEST(AuthLoginStateUpdateValueLogContractTest, UpdateUsesFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/AuthService.cpp");
+            const auto update_body = ExtractBetween(
+                service_source,
+                "auto AuthService::UpdateLoginInfo(",
+                "auto AuthService::IncrementLoginAttempts("
+            );
+
+            ASSERT_FALSE(update_body.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Error(log_context) << \"Login state changed before update\";",
+                     "Logger::Debug(log_context) << \"Login info updated\";",
+                     "Logger::Debug(log_context) << \"Login rate limit counter cleared\";",
+                     "Logger::Warn(log_context) << \"Failed to clear login rate limit counter\";",
+                     "Logger::Error(log_context) << \"Failed to update login info\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_body, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_update_log : {
+                     "<< \"Login state changed before update: user_id=\" << user_id",
+                     "<< \"Login info updated successfully: \" << user_id",
+                     "<< \"Login rate limit counter cleared: ip=\" << client_ip",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_body, raw_update_log), 0U) << raw_update_log;
+            }
+
+            for (const auto* preserved_update_step : {
+                     "m_db_client->execSqlCoro(",
+                     "UPDATE users SET status = $1, login_attempts = 0, locked_until = NULL",
+                     "last_login_at = NOW(), last_login_ip = $2, updated_at = NOW()",
+                     "WHERE id = $3 AND ((status = $1 AND",
+                     "locked_until IS NULL OR locked_until <= NOW()",
+                     "status = $4 AND locked_until IS NOT NULL AND locked_until <= NOW()",
+                     "RETURNING id",
+                     "ACCOUNT_STATUS_ACTIVE",
+                     "ACCOUNT_STATUS_LOCKED",
+                     "if (result.empty())",
+                     "ValidateAccountAccess(user_id, log_context)",
+                     "co_return std::unexpected(access_result.error());",
+                     "disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(client_ip)",
+                     "m_redis_service->Delete(rate_key, log_context)",
+                     "if (delete_result.has_value())",
+                     "catch (const drogon::orm::DrogonDbException&)",
+                     "co_return {};",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_body, preserved_update_step), 1U)
+                    << preserved_update_step;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    update_body,
+                    "ErrorInfo(ErrorCode::InternalError, \"Failed to update login state\")"
+                ),
+                2U
+            );
+        }
+
         TEST(AuthRegistrationDtoValueLogContractTest, RegisterRequestUsesFixedSummaries) {
             const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");
             const auto register_request = ExtractBetween(
