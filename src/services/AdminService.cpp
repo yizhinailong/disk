@@ -592,7 +592,8 @@ namespace disk::services {
                 total = count_result[0]["total"].as<int>();
             }
 
-            int offset = (req.page - 1) * req.page_size;
+            const auto page_size = static_cast<int64_t>(req.page_size);
+            const auto offset = static_cast<int64_t>(req.page - 1) * page_size;
             int total_pages = req.page_size > 0 ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size)) : 0;
 
             auto limit_offset = " ORDER BY s.created_at DESC LIMIT $" + std::to_string(limit_index) + " OFFSET $" + std::to_string(offset_index);
@@ -601,12 +602,12 @@ namespace disk::services {
             auto result = req.username.has_value() ? co_await m_db_client->execSqlCoro(
                                                          query_sql,
                                                          username_like,
-                                                         req.page_size,
+                                                         page_size,
                                                          offset
                                                      ) :
                                                      co_await m_db_client->execSqlCoro(
                                                          query_sql,
-                                                         req.page_size,
+                                                         page_size,
                                                          offset
                                                      );
 
@@ -626,7 +627,7 @@ namespace disk::services {
                 share.share_code = row["share_code"].as<std::string>();
                 share.status = row["status"].as<int>();
                 share.access_count = row["access_count"].isNull() ? 0 : row["access_count"].as<int>();
-                share.password_set = !row["password_set"].isNull() && row["password_set"].as<int>() != 0;
+                share.password_set = !row["password_set"].isNull() && row["password_set"].as<bool>();
                 share.created_at = row["created_at"].as<std::string>();
                 share.expires_at = row["expires_at"].isNull() ? "" : row["expires_at"].as<std::string>();
                 response.items.push_back(std::move(share));
@@ -649,9 +650,8 @@ namespace disk::services {
             Logger::Info(log_context) << "Admin list shares successful: total=" << total;
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Admin list shares database error: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Admin list shares database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to list shares"

@@ -2809,6 +2809,20 @@ PostgreSQL 将 `LIMIT $1 OFFSET $2` 推断为 `bigint` 参数，因此 `page_siz
 
 实现后 Admin 定向合同 3/3、管理员单元/DTO/过滤器/分布式拓扑聚焦 CTest 59/59（1.70 秒）、Python 语法、OpenSpec 24/24 和差异检查通过；完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流的用户列表、搜索、详情、状态/角色变更、软删除、两项自保护与两项鉴权共前 10 场景通过；第 11 场景在本批范围外的 `ListShares()` 旧分页边界返回 `500/Failed to list shares`，留待 15.182 独立处理。标准完整 CTest 共 1512 项：1505 项通过、7 项按环境门控跳过、0 失败，总耗时 561.13 秒。源码审计确认 `ListUsers()` 中 `.what()` 为 0、固定摘要精确出现 1 次、`int64_t` 转换精确出现 2 次；`AdminService.cpp` 其余路径仍有 22 处 `.what()`。本批不改变筛选、SQL、页码算法、字段映射、类型化关联、公开错误或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.182 AdminService 分享列表查询异常脱敏记录（2026-08-04）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧管理员分享列表诊断边界。`ListShares()` 的空分享停用、计数或分页查询遇到数据库异常时，只允许记录固定完整摘要 `Admin list shares database error`；message 不得追加管理员/分享/用户/文件 ID、筛选或分页值、异常正文、SQL、连接信息、凭据或 token。
+
+该异常继续返回既有 `InternalError` 与 `Failed to list shares`。无文件活动分享停用、状态/用户 ID/用户名筛选、参数化用户名模糊匹配、总数查询、创建时间倒序分页、首个分享文件映射、可空字段映射、分页元数据、操作审计、request/instance/`admin` 类型化关联、公开响应及 Controller 组合不得改变。
+
+有无用户名筛选的两条 PostgreSQL 分页分支都必须将 `LIMIT/OFFSET` 显式绑定为 `int64_t`，禁止以 4 字节 `int` 二进制参数触发 `int8` 解码失败。这只修正绑定宽度，不改变占位符编号、SQL、页码算法或响应数值。
+
+分页查询返回的 PostgreSQL `boolean password_set` 必须按仓内既有方言直接使用 `as<bool>()` 读取；禁止按 `int` 解析 `t/f` 文本并抛出未捕获的 `std::invalid_argument("stoi")`。该修复不改变 `password_set` 的 JSON 布尔类型或真假语义，分享详情的同类旧映射留待独立批次。
+
+旧实现上的首轮定向源码合同按预期为 0/1，共 3 个失败断言：`ListShares()` 精确检出 1 处 `.what()`，固定完整摘要缺失，且 `int64_t` 转换为 0/2；既有公开错误、五个查询调用点、参数化用户名筛选与倒序分页断言通过。修正分页和日志后首次真实管理流仍在第 11 场景返回空响应 500，受管服务日志定位为 PostgreSQL `boolean password_set` 被 `as<int>()` 读取后抛出未捕获的 `std::invalid_argument("stoi")`。补充布尔映射合同后旧映射再按预期为 0/1，共 2 个失败断言：`as<int>()` 为 1/0、`as<bool>()` 为 0/1，其余断言通过。
+
+实现后 Admin 定向合同 4/4、管理员单元/DTO/过滤器/分布式拓扑聚焦 CTest 60/60（1.64 秒）、Python 语法、OpenSpec 24/24 和差异检查通过；完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流前 11 场景通过；第 12 场景将创建接口返回的外部分享标识传给管理员强制取消路径时，被旧数字 ID 校验以 `400/10002 Invalid share id format` 拒绝，留待 15.183 独立处理。标准完整 CTest 共 1513 项：1506 项通过、7 项按环境门控跳过、0 失败，总耗时 565.26 秒。源码审计确认 `ListShares()` 中 `.what()` 为 0、固定摘要精确出现 1 次、`int64_t` 转换精确出现 2 次、`password_set` 的 `as<int>()` 为 0 且 `as<bool>()` 为 1；`AdminService.cpp` 其余路径仍有 21 处 `.what()`。本批不改变停用、筛选、查询、占位符、页码算法、首文件/可空字段映射、审计、类型化关联、公开错误或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

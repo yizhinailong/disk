@@ -170,6 +170,47 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminListSharesLogContractTest, DatabaseExceptionUsesFixedSummary) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto list_body = ExtractRange(
+                service_source,
+                "auto AdminService::ListShares(",
+                "    auto AdminService::GetShareDetail("
+            );
+
+            ASSERT_FALSE(list_body.empty());
+            EXPECT_EQ(CountOccurrences(list_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "Logger::Error(log_context) << \"Admin list shares database error\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "ErrorInfo(\n                ErrorCode::InternalError,\n                \"Failed to list shares\""
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(list_body, "execSqlCoro("), 5U);
+            EXPECT_TRUE(Contains(list_body, "AND u.username LIKE $"));
+            EXPECT_TRUE(Contains(list_body, "ORDER BY s.created_at DESC LIMIT $"));
+            EXPECT_EQ(
+                CountOccurrences(list_body, "static_cast<int64_t>("),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(list_body, "row[\"password_set\"].as<int>()"),
+                0U
+            );
+            EXPECT_EQ(
+                CountOccurrences(list_body, "row[\"password_set\"].as<bool>()"),
+                1U
+            );
+        }
+
         TEST(AdminLogContextContractTest, CoreBoundariesUseExplicitTypedContext) {
             const auto controller_source =
                 ReadSourceFile("src/controllers/AdminController.cpp");
