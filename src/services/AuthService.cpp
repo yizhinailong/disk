@@ -146,7 +146,7 @@ namespace disk::auth {
     )
         -> drogon::Task<Result<LoginResponse>> {
 
-        Logger::Debug(log_context) << "User login attempt: " << request.account;
+        Logger::Debug(log_context) << "User login started";
         const std::string client_ip =
             disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address);
 
@@ -161,8 +161,7 @@ namespace disk::auth {
 
             /// 检查是否超过阈值（5 次）
             if (count > 5) {
-                Logger::Warn(log_context)
-                    << "Login rate limit triggered: ip=" << client_ip << ", attempts=" << count;
+                Logger::Warn(log_context) << "Login rate limit exceeded";
                 co_return std::unexpected(ErrorInfo(
                     ErrorCode::TooManyRequests,
                     "Too many login attempts, please try again in 5 minutes"
@@ -176,7 +175,7 @@ namespace disk::auth {
         /// 1. 查找用户（用户名或邮箱）
         auto user_result = co_await FindUser(request.account, log_context);
         if (!user_result) {
-            Logger::Warn(log_context) << "User not found: " << request.account;
+            Logger::Warn(log_context) << "Login account not found";
             co_return std::unexpected(user_result.error());
         }
 
@@ -197,7 +196,7 @@ namespace disk::auth {
             }
         );
         if (!password_matches) {
-            Logger::Warn(log_context) << "Invalid password: " << request.account;
+            Logger::Warn(log_context) << "Login password rejected";
             auto increment_result =
                 co_await IncrementLoginAttempts(user.getValueOfId(), log_context);
             if (!increment_result) {
@@ -229,8 +228,7 @@ namespace disk::auth {
             log_context
         );
         if (!store_result.has_value()) {
-            Logger::Warn(log_context)
-                << "Failed to store refresh_token in Redis: " << user.getValueOfId();
+            Logger::Warn(log_context) << "Failed to store refresh token";
         }
 
         /// 7. 构造响应
@@ -241,9 +239,7 @@ namespace disk::auth {
         response.expires_in = disk::services::TokenService::GetAccessTokenExpireSeconds();
         response.user = UserToResponse(user);
 
-        Logger::Info(log_context)
-            << "User login successful: " << request.account << " (ID: " << user.getValueOfId()
-            << ")";
+        Logger::Info(log_context) << "User login successful";
         co_return response;
     }
 

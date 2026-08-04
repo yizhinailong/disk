@@ -3029,6 +3029,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 118/118、OpenSpec 24/24 和完整后端构建通过；真实认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1533 项：1526 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 550.98 秒。源码审计确认六条固定摘要各 1 处、三种旧动态边界日志均为 0，2/3/1 级别分布和完整登出控制器数据流继续由源码合同锁定。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.203 登录服务诊断脱敏记录（2026-08-05）
+
+`AuthService::Login()` 的登录开始、限流拒绝、Redis 限流失败、账号未找到、密码拒绝、refresh token 持久化失败和登录成功七条事件，必须分别只记录固定完整摘要 `User login started`、`Login rate limit exceeded`、`Redis rate limit check failed`、`Login account not found`、`Login password rejected`、`Failed to store refresh token` 与 `User login successful`。message 不得追加用户名、邮箱形式账号、客户端 IP、尝试次数、用户 ID、密码/哈希、access/refresh token、Redis key/value、下游错误或其他登录请求/响应值；原 DEBUG/WARN/WARN/WARN/WARN/WARN/INFO 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变，既有限流依赖失败摘要继续保持原样。
+
+既有 IP 归一化、限流键与 300 秒/5 次阈值、fail-open、用户查找、数据库时间账户校验、认证 CPU pool 密码验证、失败计数、登录状态更新、令牌生成/持久化、完整响应映射和公开错误不得改变。验证必须新增源码合同锁定七条固定摘要、原始账户/限流值排除和完整登录数据流，并执行认证服务/DTO GoogleTest、OpenSpec、完整构建、真实认证流/生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 12 个失败断言：六条待迁移固定摘要均缺失，账号、IP/尝试次数和用户 ID 六条动态日志各命中一次；既有 Redis fail-open 固定摘要、IP/限流、用户/账户校验、密码池、失败计数、状态更新、令牌与完整响应的 19 项数据流断言均通过。
+
+实现后定向源码合同 1/1、含 Auth 的 GoogleTest 119/119、LoginRequest DTO GoogleTest 9/9、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1534 项：1527 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 560.68 秒。源码审计确认七条固定摘要各 1 处、六种旧动态登录日志均为 0，19 项登录数据流和原有 DEBUG/WARN/WARN/WARN/WARN/WARN/INFO 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

@@ -360,6 +360,11 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username, email or mask, user ID, password, password hash, or other account or request value
 - **AND** the parameterized uniqueness query and conflict errors, authentication CPU-pool hashing, user-field initialization, single insert, response mapping, and public response SHALL remain unchanged
 
+#### Scenario: Login diagnostics exclude raw account and limiter values
+- **WHEN** login starts, is rate limited, cannot read the limiter, cannot find the account, rejects the password, cannot persist the refresh token, or succeeds
+- **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the account, client IP, attempt count, user ID, password or hash, token, Redis key or value, downstream error, or other request or response value
+- **AND** IP normalization, rate-limit behavior, user and account validation, CPU-pool password verification, failure counting, login-state update, token generation and persistence, response mapping, and public errors SHALL remain unchanged
+
 #### Scenario: Registration request diagnostics exclude raw fields
 - **WHEN** registration request fields are parsed or username, email, or password validation fails
 - **THEN** the directly owned DTO event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username, email, password, or other request value

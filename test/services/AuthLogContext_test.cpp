@@ -270,6 +270,63 @@ namespace disk::auth {
             EXPECT_EQ(CountOccurrences(register_body, "ErrorCode::EmailExists"), 1U);
         }
 
+        TEST(AuthLoginServiceValueLogContractTest, LoginUsesFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/AuthService.cpp");
+            const auto login_body = ExtractBetween(
+                service_source,
+                "auto AuthService::Login(",
+                "auto AuthService::RefreshTokens("
+            );
+
+            ASSERT_FALSE(login_body.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Debug(log_context) << \"User login started\";",
+                     "Logger::Warn(log_context) << \"Login rate limit exceeded\";",
+                     "Logger::Warn(log_context) << \"Redis rate limit check failed\";",
+                     "Logger::Warn(log_context) << \"Login account not found\";",
+                     "Logger::Warn(log_context) << \"Login password rejected\";",
+                     "Logger::Warn(log_context) << \"Failed to store refresh token\";",
+                     "Logger::Info(log_context) << \"User login successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(login_body, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_login_log : {
+                     "\"User login attempt: \" << request.account",
+                     "<< \"Login rate limit triggered: ip=\" << client_ip << \", attempts=\" << count",
+                     "<< \"User not found: \" << request.account",
+                     "<< \"Invalid password: \" << request.account",
+                     "<< \"Failed to store refresh_token in Redis: \" << user.getValueOfId()",
+                     "<< \"User login successful: \" << request.account",
+                 }) {
+                EXPECT_EQ(CountOccurrences(login_body, raw_login_log), 0U) << raw_login_log;
+            }
+
+            for (const auto* preserved_login_step : {
+                     "disk::redis::RedisKeyPrefix::ExtractIPOnly(ip_address)",
+                     "disk::redis::RedisKeyPrefix::BuildLoginRateLimitKey(client_ip)",
+                     "m_redis_service->IncrWithExpire(rate_key, 300, log_context)",
+                     "if (count > 5)",
+                     "ErrorCode::TooManyRequests",
+                     "FindUser(request.account, log_context)",
+                     "ValidateAccountAccess(user.getValueOfId(), log_context)",
+                     "co_await RunOnAuthCpuPool(",
+                     "HashUtil::VerifyPassword(password, stored_password_hash)",
+                     "IncrementLoginAttempts(user.getValueOfId(), log_context)",
+                     "UpdateLoginInfo(user.getValueOfId(), client_ip, log_context)",
+                     "TokenService::GetInstance()->GenerateTokens(",
+                     "TokenService::GetInstance()->StoreRefreshToken(",
+                     "response.access_token = access_token;",
+                     "response.refresh_token = refresh_token;",
+                     "response.token_type = \"Bearer\";",
+                     "response.expires_in = disk::services::TokenService::GetAccessTokenExpireSeconds();",
+                     "response.user = UserToResponse(user);",
+                     "co_return response;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(login_body, preserved_login_step), 1U)
+                    << preserved_login_step;
+            }
+        }
+
         TEST(AuthRegistrationDtoValueLogContractTest, RegisterRequestUsesFixedSummaries) {
             const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");
             const auto register_request = ExtractBetween(
