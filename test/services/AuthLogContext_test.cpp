@@ -437,5 +437,46 @@ namespace disk::auth {
             }
         }
 
+        TEST(AuthLoginControllerValueLogContractTest, LoginUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/AuthController.cpp");
+            const auto login_controller = ExtractBetween(
+                controller_source,
+                "auto AuthController::Login(",
+                "auto AuthController::RefreshTokens("
+            );
+
+            ASSERT_FALSE(login_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received login request\";",
+                     "Logger::Warn(log_context) << \"Login request validation failed\";",
+                     "Logger::Error(log_context) << \"Login failed\";",
+                     "Logger::Info(log_context) << \"Login successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(login_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received login request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Login request validation failed: \" << parse_result.error().message",
+                     "<< \"Login failed: \" << login_result.error().message",
+                     "<< \"Login successful: \" << parse_result->account",
+                 }) {
+                EXPECT_EQ(CountOccurrences(login_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"auth\")",
+                     "LoginRequest::FromRequest(request, log_context)",
+                     "co_return Response::Error(parse_result.error());",
+                     "disk::utils::ResolveClientIp(request)",
+                     "m_auth_service->Login(*parse_result, ip_address, log_context)",
+                     "co_return Response::Error(login_result.error());",
+                     "co_return Response::Success(login_result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(login_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
     } // namespace
 } // namespace disk::auth

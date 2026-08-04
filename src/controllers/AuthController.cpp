@@ -51,14 +51,12 @@ namespace disk::auth {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "auth");
 
-        Logger::Info(log_context)
-            << "Received login request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received login request";
 
         /// 1. 解析请求
         auto parse_result = LoginRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Login request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context) << "Login request validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -68,12 +66,12 @@ namespace disk::auth {
             co_await m_auth_service->Login(*parse_result, ip_address, log_context);
 
         if (!login_result) {
-            Logger::Error(log_context) << "Login failed: " << login_result.error().message;
+            Logger::Error(log_context) << "Login failed";
             co_return Response::Error(login_result.error());
         }
 
         /// 3. 构造响应
-        Logger::Info(log_context) << "Login successful: " << parse_result->account;
+        Logger::Info(log_context) << "Login successful";
         co_return Response::Success(login_result->ToJson());
     }
 
