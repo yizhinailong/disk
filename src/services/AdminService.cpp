@@ -517,9 +517,9 @@ namespace disk::services {
             Logger::Info(log_context) << "Admin get global storage stats successful";
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
+        } catch (const drogon::orm::DrogonDbException&) {
             Logger::Error(log_context)
-                << "Admin get global storage stats database error: " << e.base().what();
+                << "Admin get global storage stats database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get global storage stats"

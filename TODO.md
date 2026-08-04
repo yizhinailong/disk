@@ -2887,6 +2887,16 @@ Web API/store/view、Qt `AdminShareListModel`/`AdminManager`/QML 与 TUI client/
 
 实现后直接源码合同 1/1、全部 Admin GoogleTest 74/74、Python 语法和 OpenSpec 24/24 通过，完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流全部 25 个断言组通过、0 失败，成功软删除临时用户后，不存在用户的软删除精确得到 `404/80002/User not found`，后续自身保护、分享、统计、配额和鉴权场景继续通过。标准完整 CTest 共 1519 项：1512 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 565.51 秒。源码审计确认 `SoftDeleteUser()` 范围内专用捕获与固定数据库摘要各 1 处、`.what()` 和异常文本猜测均为 0；`AdminService.cpp` 其余 8 处 `.what()` 留待后续独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.189 AdminService 全局存储统计诊断脱敏记录（2026-08-04）
+
+`GetGlobalStorageStats()` 的任一用户、文件或活动分享聚合查询遇到数据库异常时，只允许记录固定完整摘要 `Admin get global storage stats database error`；message 不得追加管理员 ID、聚合值、异常正文、SQL、连接信息、凭据或 token。该异常继续返回既有 `InternalError` 与 `Failed to get global storage stats`。
+
+用户数/已用空间/总配额、文件数和活动分享数三条聚合查询、空结果回退、响应映射、`admin.storage.global_stats` 读取审计、真实管理员操作人、成功响应和类型化关联不得改变。验证必须新增源码合同锁定固定诊断、公开错误、三条查询、字段映射和审计，并执行全部 Admin GoogleTest、OpenSpec、完整构建、真实统计集成覆盖及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 3 个失败断言：方法范围内仍有 1 处 `.what()`，一般数据库异常捕获仍绑定异常对象，固定完整摘要缺失；三条查询、关键 SQL、五项响应字段、公开错误和读取审计断言均通过。
+
+实现后定向源码合同 1/1、全部 Admin GoogleTest 75/75、OpenSpec 24/24 和完整后端构建通过。真实 `SafetyUploadInvariantsIntegration` 共 888 个断言通过、0 失败，确认全局存储统计、真实管理员读取审计及上传安全不变量不变。标准完整 CTest 共 1520 项：1513 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 549.80 秒。源码审计确认 `GetGlobalStorageStats()` 范围内固定数据库摘要 1 处、`.what()` 为 0；`AdminService.cpp` 其余 7 处 `.what()` 留待后续独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
