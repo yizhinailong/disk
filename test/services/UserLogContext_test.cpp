@@ -227,5 +227,77 @@ namespace disk::user {
             }
         }
 
+        TEST(UserAccountValueLogContractTest, ReadAndPasswordUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/UserService.cpp");
+            const auto get_profile_body = ExtractBetween(
+                service_source,
+                "auto UserService::GetProfile(",
+                "auto UserService::ChangePassword("
+            );
+            const auto change_password_body = ExtractBetween(
+                service_source,
+                "auto UserService::ChangePassword(",
+                "auto UserService::UpdateProfile("
+            );
+
+            ASSERT_FALSE(get_profile_body.empty());
+            ASSERT_FALSE(change_password_body.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    get_profile_body,
+                    "Logger::Debug(log_context) << \"User profile record loaded\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    change_password_body,
+                    "Logger::Debug(log_context) << \"Password change target loaded\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    get_profile_body,
+                    "<< \"Found user: \" << row[\"username\"].as<std::string>()"
+                ),
+                0U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    change_password_body,
+                    "<< \"Found user: \" << user.getValueOfUsername()"
+                ),
+                0U
+            );
+
+            for (const auto* response_mapping : {
+                     "response.id = row[\"id\"].as<uint64_t>();",
+                     "response.username = row[\"username\"].as<std::string>();",
+                     "response.email = row[\"email\"].as<std::string>();",
+                     "response.nickname = row[\"nickname\"].as<std::string>();",
+                     "response.avatar = row[\"avatar\"].as<std::string>();",
+                     "response.storage_quota = row[\"storage_quota\"].as<uint64_t>();",
+                     "response.storage_used = row[\"storage_used\"].as<uint64_t>();",
+                     "response.file_count = row[\"file_count\"].as<uint32_t>();",
+                     "response.folder_count = row[\"folder_count\"].as<uint32_t>();",
+                     "response.created_at = row[\"created_at\"].as<std::string>();",
+                     "response.updated_at = row[\"updated_at\"].as<std::string>();",
+                 }) {
+                EXPECT_EQ(CountOccurrences(get_profile_body, response_mapping), 1U)
+                    << response_mapping;
+            }
+            for (const auto* password_step : {
+                     "HashUtil::VerifyPassword(request.old_password, user.getValueOfPasswordHash())",
+                     "request.old_password == request.new_password",
+                     "HashUtil::HashPassword(request.new_password)",
+                     "user.setPasswordHash(hash_result.value());",
+                     "co_await mapper.update(user);",
+                 }) {
+                EXPECT_EQ(CountOccurrences(change_password_body, password_step), 1U)
+                    << password_step;
+            }
+        }
+
     } // namespace
 } // namespace disk::user

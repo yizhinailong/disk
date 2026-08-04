@@ -48,9 +48,7 @@ namespace disk::user {
             }
 
             const auto& row = result[0];
-            Logger::Debug(log_context)
-                << "Found user: " << row["username"].as<std::string>() << " (ID: " << user_id
-                << ")";
+            Logger::Debug(log_context) << "User profile record loaded";
 
             UserProfileResponse response;
             response.id = row["id"].as<uint64_t>();
@@ -111,8 +109,7 @@ namespace disk::user {
             /// 步骤 1: 查找用户
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
-            Logger::Debug(log_context)
-                << "Found user: " << user.getValueOfUsername() << " (ID: " << user_id << ")";
+            Logger::Debug(log_context) << "Password change target loaded";
 
             /// 步骤 2: 验证旧密码
             if (!HashUtil::VerifyPassword(request.old_password, user.getValueOfPasswordHash())) {
