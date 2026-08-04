@@ -188,16 +188,16 @@ namespace disk::user {
             /// 步骤 1: 查找用户
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
-            Logger::Debug(log_context) << "Found user: " << user.getValueOfUsername();
+            Logger::Debug(log_context) << "User profile target loaded";
 
             /// 步骤 2: 更新提供的字段
             if (request.nickname.has_value()) {
                 user.setNickname(*request.nickname);
-                Logger::Debug(log_context) << "Updating nickname: " << *request.nickname;
+                Logger::Debug(log_context) << "User profile nickname update selected";
             }
             if (request.avatar.has_value()) {
                 user.setAvatar(*request.avatar);
-                Logger::Debug(log_context) << "Updating avatar: " << *request.avatar;
+                Logger::Debug(log_context) << "User profile avatar update selected";
             }
 
             /// 步骤 3: 保存到数据库

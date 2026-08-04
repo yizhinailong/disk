@@ -172,5 +172,60 @@ namespace disk::user {
             }
         }
 
+        TEST(UserProfileValueLogContractTest, UpdateUsesFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/UserService.cpp");
+            const auto update_profile_body = ExtractBetween(
+                service_source,
+                "auto UserService::UpdateProfile(",
+                "auto UserService::GetStorage("
+            );
+
+            ASSERT_FALSE(update_profile_body.empty());
+            EXPECT_EQ(CountOccurrences(update_profile_body, "Logger::Debug(log_context)"), 3U);
+            for (const auto* fixed_message : {
+                     "Logger::Debug(log_context) << \"User profile target loaded\";",
+                     "Logger::Debug(log_context) << \"User profile nickname update selected\";",
+                     "Logger::Debug(log_context) << \"User profile avatar update selected\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_profile_body, fixed_message), 1U)
+                    << fixed_message;
+            }
+            for (const auto* raw_profile_log : {
+                     "<< \"Found user: \" << user.getValueOfUsername()",
+                     "<< \"Updating nickname: \" << *request.nickname",
+                     "<< \"Updating avatar: \" << *request.avatar",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_profile_body, raw_profile_log), 0U)
+                    << raw_profile_log;
+            }
+
+            for (const auto* preserved_update : {
+                     "if (request.nickname.has_value())",
+                     "user.setNickname(*request.nickname);",
+                     "if (request.avatar.has_value())",
+                     "user.setAvatar(*request.avatar);",
+                     "co_await mapper.update(user);",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_profile_body, preserved_update), 1U)
+                    << preserved_update;
+            }
+            for (const auto* response_mapping : {
+                     "response.id = user.getValueOfId();",
+                     "response.username = user.getValueOfUsername();",
+                     "response.email = user.getValueOfEmail();",
+                     "response.nickname = user.getNickname() ? *user.getNickname() : \"\";",
+                     "response.avatar = user.getAvatar() ? *user.getAvatar() : \"\";",
+                     "response.storage_quota = user.getValueOfStorageQuota();",
+                     "response.storage_used = user.getValueOfStorageUsed();",
+                     "response.file_count = 0;",
+                     "response.folder_count = 0;",
+                     "response.created_at = user.getValueOfCreatedAt().toDbStringLocal();",
+                     "response.updated_at = user.getValueOfUpdatedAt().toDbStringLocal();",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_profile_body, response_mapping), 1U)
+                    << response_mapping;
+            }
+        }
+
     } // namespace
 } // namespace disk::user

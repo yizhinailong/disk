@@ -63,6 +63,11 @@ The system SHALL classify only the exact authenticated user-profile, password, a
 - **WHEN** a user request records account, profile, password-change, quota, or aggregate storage values
 - **THEN** upload ID, job ID, lease owner, and state version SHALL remain null, and those user-domain values SHALL NOT be overloaded into typed correlation fields
 
+#### Scenario: Profile-update diagnostics exclude raw profile values
+- **WHEN** profile update loads its target user or selects an optional nickname or avatar update
+- **THEN** each DEBUG event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username, nickname, avatar URL, URL query, fragment, credential, or other request profile value
+- **AND** optional-field selection, field assignment, the single persistence update, response mapping, error mapping, authorization, and public response SHALL remain unchanged
+
 #### Scenario: User-profile service dependency work fails
 - **WHEN** profile read or update, password change, or storage-statistics database or standard processing fails
 - **THEN** the directly owned event SHALL use its fixed complete failure summary and SHALL NOT append exception text, SQL, connection details, credentials, or tokens

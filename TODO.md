@@ -2937,6 +2937,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、全部 Admin GoogleTest 79/79、OpenSpec 24/24 和完整后端构建通过。真实管理流全部 25 个断言组通过、0 失败，可用空间变更审计继续通过管理日志筛选读取；标准完整 CTest 共 1524 项：1517 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 551.04 秒。源码审计确认 `LogOperation()` 的数据库异常匿名捕获与固定摘要各 1 处、无重试/无传播，`AdminService.cpp` 的 `.what()` 已收口为 0。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.194 UserService 资料更新诊断脱敏记录（2026-08-04）
+
+`UserService::UpdateProfile()` 加载目标用户以及选择更新昵称或头像时，三条 DEBUG 事件必须分别只记录固定完整摘要 `User profile target loaded`、`User profile nickname update selected` 与 `User profile avatar update selected`；message 不得追加用户名、昵称、头像 URL、URL 查询/片段/凭据或其他请求资料值。三条事件继续使用调用方的 request/instance/`user` 类型化上下文，并保持原级别和条件触发位置。
+
+昵称和头像的可选字段判断、`setNickname`/`setAvatar`、单次 `mapper.update()`、响应中的用户/资料/配额/时间字段、结构化未找到与依赖错误映射、Controller/DTO、鉴权和公开响应不得改变。验证必须新增源码合同锁定三条固定摘要、原始资料排除、字段更新、持久化和响应映射，并执行 UserService/User DTO GoogleTest、OpenSpec、完整构建、真实资料更新流及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：三条固定摘要均缺失，加载目标时仍拼接用户名，两个可选字段分支仍分别拼接昵称与头像；三条 DEBUG 调用数量、可选字段判断/赋值、单次持久化和 11 项响应映射断言均通过。
+
+实现后定向源码合同 1/1、含 User 的 GoogleTest 84/84、`UpdateProfileRequest` DTO 9/9、OpenSpec 24/24 和完整后端构建通过。真实资料更新流全部 6 个断言组通过、0 失败，唯一昵称更新、持久化、空请求拒绝和原昵称恢复均保持不变。标准完整 CTest 共 1525 项：1518 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 549.94 秒。源码审计确认三条固定摘要各 1 处，资料更新范围内用户名、昵称和头像的日志拼接均为 0；字段赋值、单次持久化和 11 项响应映射继续由源码合同锁定。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
