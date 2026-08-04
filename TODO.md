@@ -2823,6 +2823,20 @@ PostgreSQL 将 `LIMIT $1 OFFSET $2` 推断为 `bigint` 参数，因此 `page_siz
 
 实现后 Admin 定向合同 4/4、管理员单元/DTO/过滤器/分布式拓扑聚焦 CTest 60/60（1.64 秒）、Python 语法、OpenSpec 24/24 和差异检查通过；完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流前 11 场景通过；第 12 场景将创建接口返回的外部分享标识传给管理员强制取消路径时，被旧数字 ID 校验以 `400/10002 Invalid share id format` 拒绝，留待 15.183 独立处理。标准完整 CTest 共 1513 项：1506 项通过、7 项按环境门控跳过、0 失败，总耗时 565.26 秒。源码审计确认 `ListShares()` 中 `.what()` 为 0、固定摘要精确出现 1 次、`int64_t` 转换精确出现 2 次、`password_set` 的 `as<int>()` 为 0 且 `as<bool>()` 为 1；`AdminService.cpp` 其余路径仍有 21 处 `.what()`。本批不改变停用、筛选、查询、占位符、页码算法、首文件/可空字段映射、审计、类型化关联、公开错误或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.183 管理员分享外部标识一致性记录（2026-08-04）
+
+API 设计、功能规格、管理员 OpenSpec、分享 OpenSpec、系统/单元测试、桌面权威文档、Web 对接文档与 TUI 端点清单先行统一管理员分享标识。`GET /api/admin/shares`、`GET /api/admin/shares/{share_id}` 与 `DELETE /api/admin/shares/{share_id}` 的路径和响应只允许使用字符串外部标识 `shares.share_code`；禁止向管理员 Web、桌面或 TUI 客户端序列化、要求或传回内部自增主键 `shares.id`。
+
+管理员分享列表/详情 DTO 必须只公开 `share_id`，不得并行保留 `id` 或 `share_code` 兼容字段。详情与强制取消必须按 `share_code` 查找记录；查询得到的内部 ID 只可继续用于 `share_files` 关联、精确状态更新和操作审计。详情响应继续保持 Controller 既有成功信封，但不再额外嵌套 `share` 对象；不存在、已取消、数据库失败及成功语义保持既有错误码和消息。
+
+详情查询返回的 PostgreSQL `boolean password_set` 必须使用 `as<bool>()` 读取。详情与强制取消数据库异常分别只允许固定完整摘要 `Admin get share detail database error` 与 `Admin force cancel share database error`，不得追加管理员/分享/用户/文件 ID、外部标识、异常正文、SQL、连接信息、凭据或 token；request/instance/`admin` 类型化关联保持不变。
+
+Web API/store/view、Qt `AdminShareListModel`/`AdminManager`/QML 与 TUI client/view 必须把管理员分享主键统一建模为字符串 `share_id`，并对路径段进行既有客户端适用的安全编码。不得以数字转换截断、拒绝或替换八字符 ASCII 字母数字分享标识；三端的列表展示、详情打开、复制和强制取消工作流保持不变。
+
+旧后端实现上的源码合同按预期为 0/1，共 20 个失败断言，精确检出 DTO/路由/Controller/Service 仍暴露或要求内部数字 ID、详情额外嵌套、布尔错误映射和两条异常正文日志；旧 Web 定向测试为 0/1，精确检出路径段未编码；Qt 模型测试因缺少字符串 `share_id`/`ShareIdRole` 编译失败；Go 客户端测试因仍要求 `uint64` 且缺少 `ShareID` 编译失败。实现后后端直接合同/DTO 8/8、全部 Admin GoogleTest 69/69、Web 114/114 与类型检查/生产构建、桌面 unit CTest 1/1、管理员分享 Quick 函数 2/2、TUI `go test ./...`、Python 语法、OpenSpec 24/24 和差异检查通过。综合 API 脚本也已删除内部 ID 反查并通过语法/源码审计，但实际运行在任何端点前因固定前置账号 `test001/Test1234` 不存在而停止，不能计为通过。桌面完整 Quick 仍有 473 通过、24 失败、1 跳过，失败位置在未改动的 OwnerShell/SystemTab 等既有合同；管理员页单文件 21 项通过，唯一失败为未改动的 MySQL 状态文案断言，不阻断本批分享函数级 2/2 证据。
+
+真实管理流以创建接口返回的 `nnuckdS5` 依次完成管理员列表匹配、详情直接响应结构断言和强制取消，前 14 场景全部通过；第 15 场景查询不存在用户仍返回 `500/10006 Failed to get user detail`，留待 15.184 独立修复。标准完整 CTest 共 1514 项：1507 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 554.37 秒。该批不改变分享所有者/访客接口、创建/访问/密码/令牌、状态语义、审计内容或错误码；Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

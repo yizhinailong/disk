@@ -26,8 +26,8 @@ namespace disk::controllers {
      * - DELETE /api/admin/users/{id}       软删除用户
      * - GET    /api/admin/storage/stats    获取全局存储统计
      * - GET    /api/admin/shares            获取分享列表
-     * - GET    /api/admin/shares/{id}       获取分享详情
-     * - DELETE /api/admin/shares/{id}       强制取消分享
+     * - GET    /api/admin/shares/<share_id> 获取分享详情
+     * - DELETE /api/admin/shares/<share_id> 强制取消分享
      * - GET    /api/admin/stats/overview    获取系统概览统计
      * - GET    /api/admin/stats/system      获取系统状态
      *
@@ -96,14 +96,14 @@ namespace disk::controllers {
         );
         ADD_METHOD_TO(
             AdminController::GetShareDetail,
-            "/api/admin/shares/{id}",
+            "/api/admin/shares/{share_id}",
             drogon::Get,
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
         );
         ADD_METHOD_TO(
             AdminController::ForceCancelShare,
-            "/api/admin/shares/{id}",
+            "/api/admin/shares/{share_id}",
             drogon::Delete,
             "disk::filters::AdminAuthFilter",
             "disk::filters::AdminRateLimitFilter",
@@ -171,11 +171,11 @@ namespace disk::controllers {
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
-        auto GetShareDetail(drogon::HttpRequestPtr request, std::string id)
+        auto GetShareDetail(drogon::HttpRequestPtr request, std::string share_id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
-        auto ForceCancelShare(drogon::HttpRequestPtr request, std::string id)
+        auto ForceCancelShare(drogon::HttpRequestPtr request, std::string share_id)
             -> drogon::Task<drogon::HttpResponsePtr>;
 
         [[nodiscard]]
@@ -195,4 +195,4 @@ namespace disk::controllers {
             -> drogon::Task<drogon::HttpResponsePtr>;
     };
 
-} ///< namespace disk::controllers
+} // namespace disk::controllers

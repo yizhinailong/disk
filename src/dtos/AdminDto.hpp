@@ -772,12 +772,11 @@ namespace disk::admin {
      * 包含分享的详细信息，用于管理员查看分享详情。
      */
     struct ShareDetailResponse : DtoBase<ShareDetailResponse> {
-        uint64_t id;
+        std::string share_id;
         uint64_t user_id;
         std::string username;
         uint64_t file_id;
         std::string file_name;
-        std::string share_code;
         int status{ 0 };
         int access_count{ 0 };
         bool password_set{ false };
@@ -788,12 +787,11 @@ namespace disk::admin {
         [[nodiscard]]
         auto ToJson() const -> Json::Value {
             Json::Value json;
-            SetField(json, "id", id);
+            SetField(json, "share_id", share_id);
             SetField(json, "user_id", user_id);
             SetField(json, "username", username);
             SetField(json, "file_id", file_id);
             SetField(json, "file_name", file_name);
-            SetField(json, "share_code", share_code);
             SetField(json, "status", status);
             SetField(json, "access_count", access_count);
             SetField(json, "password_set", password_set);

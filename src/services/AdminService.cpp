@@ -598,7 +598,7 @@ namespace disk::services {
 
             auto limit_offset = " ORDER BY s.created_at DESC LIMIT $" + std::to_string(limit_index) + " OFFSET $" + std::to_string(offset_index);
             auto query_sql =
-                "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, " "s.share_code, s.status, " "(s.view_count + s.download_count) AS access_count, " "(s.password_hash IS NOT NULL) AS password_set, " "s.created_at, s.expires_at " + from_clause + " " "LEFT JOIN share_files sf ON sf.id = (" "    SELECT MIN(sf2.id) " "    FROM share_files sf2 " "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'" ") " "LEFT JOIN files f ON sf.item_id = f.id " + where_clause + limit_offset;
+                "SELECT s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, " "s.share_code, s.status, " "(s.view_count + s.download_count) AS access_count, " "(s.password_hash IS NOT NULL) AS password_set, " "s.created_at, s.expires_at " + from_clause + " " "LEFT JOIN share_files sf ON sf.id = (" "    SELECT MIN(sf2.id) " "    FROM share_files sf2 " "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'" ") " "LEFT JOIN files f ON sf.item_id = f.id " + where_clause + limit_offset;
             auto result = req.username.has_value() ? co_await m_db_client->execSqlCoro(
                                                          query_sql,
                                                          username_like,
@@ -619,12 +619,11 @@ namespace disk::services {
 
             for (const auto& row : result) {
                 admin::ShareDetailResponse share;
-                share.id = row["id"].as<uint64_t>();
+                share.share_id = row["share_code"].as<std::string>();
                 share.user_id = row["user_id"].as<uint64_t>();
                 share.username = row["username"].isNull() ? "" : row["username"].as<std::string>();
                 share.file_id = row["file_id"].isNull() ? 0 : row["file_id"].as<uint64_t>();
                 share.file_name = row["file_name"].isNull() ? "" : row["file_name"].as<std::string>();
-                share.share_code = row["share_code"].as<std::string>();
                 share.status = row["status"].as<int>();
                 share.access_count = row["access_count"].isNull() ? 0 : row["access_count"].as<int>();
                 share.password_set = !row["password_set"].isNull() && row["password_set"].as<bool>();
@@ -660,7 +659,7 @@ namespace disk::services {
     }
 
     auto AdminService::GetShareDetail(
-        uint64_t share_id,
+        const std::string& share_id,
         uint64_t operator_id,
         disk::utils::LogContext log_context
     )
@@ -670,12 +669,12 @@ namespace disk::services {
 
         try {
             co_await m_db_client->execSqlCoro(
-                "UPDATE shares AS s SET status = 0, updated_at = NOW() " "WHERE s.id = $1 AND s.status = 1 " "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)",
+                "UPDATE shares AS s SET status = 0, updated_at = NOW() " "WHERE s.share_code = $1 AND s.status = 1 " "AND NOT EXISTS (SELECT 1 FROM share_files sf WHERE sf.share_id = s.id)",
                 share_id
             );
 
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, " "s.share_code, s.status, " "(s.view_count + s.download_count) AS access_count, " "(s.password_hash IS NOT NULL) AS password_set, " "s.created_at, s.expires_at " "FROM shares s " "LEFT JOIN users u ON s.user_id = u.id " "LEFT JOIN share_files sf ON sf.id = (" "    SELECT MIN(sf2.id) " "    FROM share_files sf2 " "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'" ") " "LEFT JOIN files f ON sf.item_id = f.id " "WHERE s.id = $1",
+                "SELECT s.id, s.user_id, u.username, sf.item_id AS file_id, f.name AS file_name, " "s.share_code, s.status, " "(s.view_count + s.download_count) AS access_count, " "(s.password_hash IS NOT NULL) AS password_set, " "s.created_at, s.expires_at " "FROM shares s " "LEFT JOIN users u ON s.user_id = u.id " "LEFT JOIN share_files sf ON sf.id = (" "    SELECT MIN(sf2.id) " "    FROM share_files sf2 " "    WHERE sf2.share_id = s.id AND sf2.item_type = 'file'" ") " "LEFT JOIN files f ON sf.item_id = f.id " "WHERE s.share_code = $1",
                 share_id
             );
 
@@ -686,27 +685,27 @@ namespace disk::services {
             }
 
             const auto& row = result[0];
+            const auto internal_share_id = row["id"].as<uint64_t>();
             admin::ShareDetailResponse response;
-            response.id = row["id"].as<uint64_t>();
+            response.share_id = row["share_code"].as<std::string>();
             response.user_id = row["user_id"].as<uint64_t>();
             response.username = row["username"].isNull() ? "" : row["username"].as<std::string>();
             response.file_id = row["file_id"].isNull() ? 0 : row["file_id"].as<uint64_t>();
             response.file_name = row["file_name"].isNull() ? "" : row["file_name"].as<std::string>();
-            response.share_code = row["share_code"].as<std::string>();
             response.status = row["status"].as<int>();
             response.access_count = row["access_count"].isNull() ? 0 : row["access_count"].as<int>();
-            response.password_set = !row["password_set"].isNull() && row["password_set"].as<int>() != 0;
+            response.password_set = !row["password_set"].isNull() && row["password_set"].as<bool>();
             response.created_at = row["created_at"].as<std::string>();
             response.expires_at = row["expires_at"].isNull() ? "" : row["expires_at"].as<std::string>();
 
             Json::Value details;
-            details["share_id"] = static_cast<Json::UInt64>(share_id);
+            details["share_id"] = static_cast<Json::UInt64>(internal_share_id);
             co_await LogOperation(
                 operator_id,
                 "admin.share.detail",
                 "share",
-                share_id,
-                response.share_code,
+                internal_share_id,
+                response.share_id,
                 std::move(details),
                 log_context
             );
@@ -715,10 +714,8 @@ namespace disk::services {
                 << "Admin get share detail successful: share_id=" << share_id;
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Admin get share detail database error: share_id=" << share_id
-                << " - " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Admin get share detail database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get share detail"
@@ -727,7 +724,7 @@ namespace disk::services {
     }
 
     auto AdminService::ForceCancelShare(
-        uint64_t share_id,
+        const std::string& share_id,
         uint64_t operator_id,
         disk::utils::LogContext log_context
     )
@@ -738,7 +735,7 @@ namespace disk::services {
 
         try {
             auto result = co_await m_db_client->execSqlCoro(
-                "SELECT id, share_code, user_id, status FROM shares WHERE id = $1",
+                "SELECT id, share_code, user_id, status FROM shares WHERE share_code = $1",
                 share_id
             );
 
@@ -758,15 +755,16 @@ namespace disk::services {
                 ));
             }
 
+            const auto internal_share_id = result[0]["id"].as<uint64_t>();
             co_await m_db_client->execSqlCoro(
                 "UPDATE shares SET status = 0, updated_at = NOW() WHERE id = $1",
-                share_id
+                internal_share_id
             );
 
             auto share_code = result[0]["share_code"].as<std::string>();
             auto owner_id = result[0]["user_id"].as<uint64_t>();
             Json::Value details;
-            details["share_id"] = static_cast<Json::UInt64>(share_id);
+            details["share_id"] = static_cast<Json::UInt64>(internal_share_id);
             details["share_code"] = share_code;
             details["owner_id"] = static_cast<Json::UInt64>(owner_id);
             details["previous_status"] = current_status;
@@ -774,7 +772,7 @@ namespace disk::services {
                 operator_id,
                 "admin.share.force_cancel",
                 "share",
-                share_id,
+                internal_share_id,
                 share_code,
                 std::move(details),
                 log_context
@@ -784,9 +782,8 @@ namespace disk::services {
                 << "Admin force cancel share successful: share_id=" << share_id;
             co_return {};
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Admin force cancel share database error: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Admin force cancel share database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to force cancel share"

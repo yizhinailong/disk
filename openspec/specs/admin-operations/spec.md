@@ -47,10 +47,14 @@ The system SHALL allow administrators to inspect platform shares and force-cance
 
 #### Scenario: Administrator lists shares
 - **WHEN** an administrator lists shares with valid filters and pagination
-- **THEN** the system SHALL return matching platform shares
+- **THEN** the system SHALL return matching platform shares identified only by string external `share_id`, without exposing or requiring internal database primary keys
+
+#### Scenario: Administrator inspects share
+- **WHEN** an administrator requests share detail using its external `share_id`
+- **THEN** the system SHALL locate the share by external identifier and return that identifier without an internal ID or parallel `share_code` field
 
 #### Scenario: Administrator force-cancels share
-- **WHEN** an administrator cancels a target share
+- **WHEN** an administrator cancels a target share using its external `share_id`
 - **THEN** the system SHALL make that share unavailable for future access
 
 ### Requirement: Administrative System Statistics

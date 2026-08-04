@@ -64,12 +64,12 @@ export function listShares(params: AdminListSharesQuery): Promise<AdminShareList
   return apiClient.get('/admin/shares', { params }) as Promise<AdminShareListResponse>
 }
 
-export function getShareDetail(shareId: number): Promise<AdminShareDetailResponse> {
-  return apiClient.get(`/admin/shares/${shareId}`) as Promise<AdminShareDetailResponse>
+export function getShareDetail(shareId: string): Promise<AdminShareDetailResponse> {
+  return apiClient.get(`/admin/shares/${encodeURIComponent(shareId)}`) as Promise<AdminShareDetailResponse>
 }
 
-export function deleteShare(shareId: number): Promise<AdminDeleteShareResponse> {
-  return apiClient.delete(`/admin/shares/${shareId}`) as Promise<AdminDeleteShareResponse>
+export function deleteShare(shareId: string): Promise<AdminDeleteShareResponse> {
+  return apiClient.delete(`/admin/shares/${encodeURIComponent(shareId)}`) as Promise<AdminDeleteShareResponse>
 }
 
 export function getStatsOverview(): Promise<AdminStatsOverviewResponse> {

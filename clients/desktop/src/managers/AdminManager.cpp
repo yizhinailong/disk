@@ -3,9 +3,18 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUrl>
 #include <QUrlQuery>
 
 namespace disk::desktop::managers {
+
+    namespace {
+
+        auto BuildAdminShareUrl(const QString& share_id) -> QUrl {
+            return QUrl::fromEncoded("/api/admin/shares/" + QUrl::toPercentEncoding(share_id));
+        }
+
+    } // namespace
 
     AdminManager::AdminManager(
         NetworkClient* network_client,
@@ -266,8 +275,8 @@ namespace disk::desktop::managers {
         });
     }
 
-    void AdminManager::GetShareDetail(int shareId) {
-        QUrl url(QString("/api/admin/shares/%1").arg(shareId));
+    void AdminManager::GetShareDetail(const QString& shareId) {
+        auto url = BuildAdminShareUrl(shareId);
         auto headers = PrepareHeaders();
         auto* reply = m_network_client->Get(url, headers);
         m_active_replies.append(reply);
@@ -279,8 +288,8 @@ namespace disk::desktop::managers {
         });
     }
 
-    void AdminManager::ForceCancelShare(int shareId) {
-        QUrl url(QString("/api/admin/shares/%1").arg(shareId));
+    void AdminManager::ForceCancelShare(const QString& shareId) {
+        auto url = BuildAdminShareUrl(shareId);
         auto headers = PrepareHeaders();
         auto* reply = m_network_client->Delete(url, headers);
         m_active_replies.append(reply);
@@ -648,17 +657,13 @@ namespace disk::desktop::managers {
         }
 
         auto data = json_opt->value("data").toObject();
-        if (data.contains("share") && data.value("share").isObject()) {
-            data = data.value("share").toObject();
-        }
         QVariantMap detail;
 
-        detail["id"] = static_cast<double>(data.value("id").toDouble(0));
+        detail["share_id"] = data.value("share_id").toString();
         detail["user_id"] = static_cast<double>(data.value("user_id").toDouble(0));
         detail["username"] = data.value("username").toString();
         detail["file_id"] = static_cast<double>(data.value("file_id").toDouble(0));
         detail["file_name"] = data.value("file_name").toString();
-        detail["share_code"] = data.value("share_code").toString();
         detail["status"] = data.value("status").toInt(0);
         detail["access_count"] = data.value("access_count").toInt(0);
         detail["password_set"] = data.value("password_set").toBool(false);
@@ -767,10 +772,15 @@ namespace disk::desktop::managers {
         int minutes = (totalSeconds % 3600) / 60;
         int seconds = totalSeconds % 60;
         QString uptime;
-        if (days > 0) uptime = QString("%1d %2h %3m").arg(days).arg(hours).arg(minutes);
-        else if (hours > 0) uptime = QString("%1h %2m %3s").arg(hours).arg(minutes).arg(seconds);
-        else if (minutes > 0) uptime = QString("%1m %2s").arg(minutes).arg(seconds);
-        else uptime = QString("%1s").arg(seconds);
+        if (days > 0) {
+            uptime = QString("%1d %2h %3m").arg(days).arg(hours).arg(minutes);
+        } else if (hours > 0) {
+            uptime = QString("%1h %2m %3s").arg(hours).arg(minutes).arg(seconds);
+        } else if (minutes > 0) {
+            uptime = QString("%1m %2s").arg(minutes).arg(seconds);
+        } else {
+            uptime = QString("%1s").arg(seconds);
+        }
         m_system_status["uptime"] = uptime;
 
         emit systemStatusChanged();

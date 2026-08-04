@@ -551,16 +551,46 @@ def test_admin_list_shares():
 
     code = json_field(resp.text, "code")
 
-    if resp.status_code == 200 and code == "0":
-        pagination = json_field(resp.text, "data.pagination")
-        if pagination:
-            log_pass("Admin list shares: HTTP 200, code=0, pagination present")
-        else:
-            log_pass("Admin list shares: HTTP 200, code=0")
-    else:
+    if resp.status_code != 200 or code != "0":
         log_fail(f"Admin list shares: expected HTTP 200 + code 0, got HTTP {resp.status_code} code={code}")
         print(resp.text)
         sys.exit(1)
+
+    payload = json.loads(resp.text)
+    data = payload.get("data", {})
+    pagination = data.get("pagination")
+    items = data.get("items", [])
+    matching = next((item for item in items if item.get("share_id") == _share_id), None)
+    if not pagination or matching is None:
+        log_fail("Admin list shares: pagination or external share_id item missing")
+        print(resp.text)
+        sys.exit(1)
+    if "id" in matching or "share_code" in matching:
+        log_fail("Admin list shares exposed an internal or parallel share identifier")
+        print(resp.text)
+        sys.exit(1)
+
+    detail_resp = fetch(
+        f"/api/admin/shares/{_share_id}",
+        method="GET",
+        headers=get_admin_headers(),
+    )
+    detail_code = json_field(detail_resp.text, "code")
+    detail_payload = json.loads(detail_resp.text)
+    detail_data = detail_payload.get("data", {})
+    if (
+        detail_resp.status_code != 200
+        or detail_code != "0"
+        or detail_data.get("share_id") != _share_id
+        or "id" in detail_data
+        or "share_code" in detail_data
+        or "share" in detail_data
+    ):
+        log_fail("Admin share detail did not use the direct external share_id contract")
+        print(detail_resp.text)
+        sys.exit(1)
+
+    log_pass("Admin list/detail shares: external share_id contract and pagination present")
 
 
 # ─── Test 12: Admin 强制取消分享 ────────────────────────────────────────────

@@ -174,7 +174,7 @@ test.describe('Admin Panel', () => {
     })
 
     test('"详情" button opens share detail dialog', async ({ page }) => {
-      // NOTE: Mock GET /api/admin/shares/{id} with detailed share info including files.
+      // NOTE: Mock GET /api/admin/shares/{share_id} with detailed share info including files.
       const detailBtns = page.getByText('详情')
       if (await detailBtns.first().isVisible()) {
         await detailBtns.first().click()

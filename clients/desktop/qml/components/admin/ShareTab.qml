@@ -140,17 +140,6 @@ Item {
                 spacing: theme.tableColumnSpacing
 
                 Label {
-                    Layout.preferredWidth: 60
-                    Layout.minimumWidth: 0
-                    text: qsTr("ID")
-                    font.bold: true
-                    font.pixelSize: 12
-                    color: theme.tableHeaderTextColor
-                    elide: Text.ElideRight
-                    wrapMode: Text.NoWrap
-                }
-
-                Label {
                     Layout.preferredWidth: 100
                     Layout.minimumWidth: 0
                     text: qsTr("分享者")
@@ -253,16 +242,6 @@ Item {
                     spacing: theme.tableColumnSpacing
 
                     Label {
-                        Layout.preferredWidth: 60
-                        Layout.minimumWidth: 0
-                        text: String(model.id || "")
-                        font.pixelSize: 13
-                        color: theme.tableBodyPrimaryTextColor
-                        elide: Text.ElideRight
-                        wrapMode: Text.NoWrap
-                    }
-
-                    Label {
                         Layout.preferredWidth: 100
                         Layout.minimumWidth: 0
                         text: model.username || ""
@@ -285,7 +264,7 @@ Item {
                     Label {
                         Layout.preferredWidth: 100
                         Layout.minimumWidth: 0
-                        text: model.shareCode || ""
+                        text: model.shareId || ""
                         font.pixelSize: 13
                         color: theme.tableBodySecondaryTextColor
                         elide: Text.ElideRight
@@ -331,7 +310,7 @@ Item {
                             text: qsTr("查看详情")
                             flat: true
                             font.pixelSize: 12
-                            onClicked: adminManager.GetShareDetail(model.id)
+                            onClicked: adminManager.GetShareDetail(model.shareId)
                         }
 
                         Button {
@@ -341,9 +320,8 @@ Item {
                             palette.buttonText: theme.errorTextColor
                             enabled: model.status !== 0
                             onClicked: {
-                                var shareId = model.id
-                                var shareCode = model.shareCode || ""
-                                root.requestConfirmation(qsTr("确定强制取消分享 %1 吗？").arg(shareCode), function() {
+                                var shareId = model.shareId || ""
+                                root.requestConfirmation(qsTr("确定强制取消分享 %1 吗？").arg(shareId), function() {
                                     adminManager.ForceCancelShare(shareId)
                                 })
                             }
@@ -429,8 +407,7 @@ Item {
         }
 
         function onShareDetailLoaded(detail) {
-            shareDetailDialog.shareId = detail.id || 0
-            shareDetailDialog.shareCode = detail.share_code || ""
+            shareDetailDialog.shareId = detail.share_id || ""
             shareDetailDialog.userName = detail.username || ""
             shareDetailDialog.fileName = detail.file_name || ""
             shareDetailDialog.status = detail.status || 0

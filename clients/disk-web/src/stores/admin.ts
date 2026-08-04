@@ -150,7 +150,7 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function fetchShareDetail(shareId: number): Promise<void> {
+  async function fetchShareDetail(shareId: string): Promise<void> {
     loading.value = true;
     try {
       currentShareDetail.value = await getShareDetail(shareId);
@@ -159,12 +159,12 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function deleteShare(shareId: number): Promise<void> {
+  async function deleteShare(shareId: string): Promise<void> {
     loading.value = true;
     try {
       await apiDeleteShare(shareId);
-      shares.value = shares.value.filter((s) => s.id !== shareId);
-      if (currentShareDetail.value?.id === shareId) {
+      shares.value = shares.value.filter((s) => s.share_id !== shareId);
+      if (currentShareDetail.value?.share_id === shareId) {
         currentShareDetail.value = null;
       }
       if (sharePagination.value) {

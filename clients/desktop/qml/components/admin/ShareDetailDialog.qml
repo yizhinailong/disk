@@ -11,8 +11,7 @@ Dialog {
     standardButtons: Dialog.NoButton
     closePolicy: Popup.NoAutoClose
 
-    property int shareId: 0
-    property string shareCode: ""
+    property string shareId: ""
     property string userName: ""
     property string fileName: ""
     property int status: 0
@@ -49,7 +48,7 @@ Dialog {
                 font.bold: true
             }
             TextEdit {
-                text: root.shareCode
+                text: root.shareId
                 Layout.fillWidth: true
                 readOnly: true
                 selectByMouse: true

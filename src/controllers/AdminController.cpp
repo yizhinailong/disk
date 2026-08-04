@@ -339,27 +339,20 @@ namespace disk::controllers {
         co_return Response::Success(result->ToJson());
     }
 
-    auto AdminController::GetShareDetail(drogon::HttpRequestPtr request, std::string id)
+    auto AdminController::GetShareDetail(
+        drogon::HttpRequestPtr request,
+        std::string share_id
+    )
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
         Logger::Info(log_context)
             << "Admin get share detail request: " << request->getPeerAddr().toIpPort();
 
-        if (id.empty()) {
+        if (share_id.empty()) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
-                "Missing required parameter: id"
-            ));
-        }
-
-        uint64_t share_id = 0;
-        try {
-            share_id = std::stoull(id);
-        } catch (const std::exception&) {
-            co_return Response::Error(ErrorInfo(
-                ErrorCode::ValidationFailed,
-                "Invalid share id format"
+                "Missing required parameter: share_id"
             ));
         }
 
@@ -374,15 +367,15 @@ namespace disk::controllers {
             co_return Response::Error(result.error());
         }
 
-        Json::Value data;
-        data["share"] = result->ToJson();
-
         Logger::Info(log_context)
             << "Admin get share detail successful: share_id=" << share_id;
-        co_return Response::Success(data);
+        co_return Response::Success(result->ToJson());
     }
 
-    auto AdminController::ForceCancelShare(drogon::HttpRequestPtr request, std::string id)
+    auto AdminController::ForceCancelShare(
+        drogon::HttpRequestPtr request,
+        std::string share_id
+    )
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
@@ -391,20 +384,10 @@ namespace disk::controllers {
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
-        if (id.empty()) {
+        if (share_id.empty()) {
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ValidationFailed,
-                "Missing required parameter: id"
-            ));
-        }
-
-        uint64_t share_id = 0;
-        try {
-            share_id = std::stoull(id);
-        } catch (const std::exception&) {
-            co_return Response::Error(ErrorInfo(
-                ErrorCode::ValidationFailed,
-                "Invalid share id format"
+                "Missing required parameter: share_id"
             ));
         }
 

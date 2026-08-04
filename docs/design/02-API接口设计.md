@@ -5038,7 +5038,7 @@ Authorization: Bearer <access_token>
 
 ### 10.9 获取分享详情
 
-**GET** `/api/admin/shares/{id}`
+**GET** `/api/admin/shares/{share_id}`
 
 获取指定分享的详细信息（包括关联文件）。
 
@@ -5056,7 +5056,7 @@ Authorization: Bearer <access_token>
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| id | string | 分享 ID（share_code） |
+| share_id | string | 外部分享 ID（`shares.share_code`） |
 
 #### 错误响应矩阵
 
@@ -5097,7 +5097,7 @@ Authorization: Bearer <access_token>
 
 ### 10.10 删除分享
 
-**DELETE** `/api/admin/shares/{id}`
+**DELETE** `/api/admin/shares/{share_id}`
 
 强制取消指定分享（管理员操作）。
 
@@ -5115,7 +5115,7 @@ Authorization: Bearer <access_token>
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| id | string | 分享 ID（share_code） |
+| share_id | string | 外部分享 ID（`shares.share_code`） |
 
 #### 业务规则
 

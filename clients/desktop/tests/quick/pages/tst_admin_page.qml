@@ -188,8 +188,8 @@ TestCase {
         verify(source.indexOf("ForceCancelShare") !== -1, "Calls ForceCancelShare")
         verify(source.indexOf("enabled: model.status !== 0") !== -1,
                "Disables force cancel for already cancelled shares")
-        verify(source.indexOf("model.shareCode || \"\"") !== -1,
-               "Uses AdminShareListModel shareCode role in confirmation")
+        verify(source.indexOf("model.shareId || \"\"") !== -1,
+               "Uses AdminShareListModel external shareId role in confirmation")
     }
 
     function test_system_tab_has_stats_and_refresh() {

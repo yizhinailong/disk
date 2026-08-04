@@ -1526,10 +1526,10 @@ interface AdminShareListResponse {
 
 ---
 
-### GET /api/admin/shares/{id}
+### GET /api/admin/shares/{share_id}
 **认证**: Bearer + Admin
 
-**路径参数**: `id: string`（share_code）
+**路径参数**: `share_id: string`（外部标识，对应 `shares.share_code`）
 
 **响应**:
 ```typescript
@@ -1555,10 +1555,10 @@ interface AdminShareDetailResponse {
 
 ---
 
-### DELETE /api/admin/shares/{id}
+### DELETE /api/admin/shares/{share_id}
 **认证**: Bearer + Admin
 
-**路径参数**: `id: string`（share_code）
+**路径参数**: `share_id: string`（外部标识，对应 `shares.share_code`）
 
 **响应**:
 ```typescript

@@ -47,7 +47,7 @@ The login screen also lets you edit the server URL inline (`Ctrl+L` login /
 | Profile | `GET /api/user/profile`, `PATCH /api/user/profile`, `PUT /api/user/password`, `GET /api/user/storage` |
 | Operation Logs | `GET /api/logs` |
 | System | `GET /api/system/info`, `GET /api/health` |
-| Admin Console | `GET /api/admin/users`, `GET /api/admin/users/{id}`, `PUT /api/admin/users/{id}/status`, `PUT /api/admin/users/{id}/role`, `PUT /api/admin/users/{id}/available-space`, `DELETE /api/admin/users/{id}`, `GET /api/admin/storage/stats`, `GET /api/admin/shares`, `GET /api/admin/shares/{id}`, `DELETE /api/admin/shares/{id}`, `GET /api/admin/stats/overview`, `GET /api/admin/stats/system`, `GET /api/admin/logs` |
+| Admin Console | `GET /api/admin/users`, `GET /api/admin/users/{id}`, `PUT /api/admin/users/{id}/status`, `PUT /api/admin/users/{id}/role`, `PUT /api/admin/users/{id}/available-space`, `DELETE /api/admin/users/{id}`, `GET /api/admin/storage/stats`, `GET /api/admin/shares`, `GET /api/admin/shares/{share_id}`, `DELETE /api/admin/shares/{share_id}`, `GET /api/admin/stats/overview`, `GET /api/admin/stats/system`, `GET /api/admin/logs`；管理员分享路径使用字符串外部标识，不使用内部数据库主键 |
 
 That is every backend endpoint registered in `src/controllers/`.
 

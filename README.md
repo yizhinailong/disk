@@ -346,8 +346,8 @@ docker compose -f docker-compose.distributed.yml up --build
 | DELETE | `/api/admin/users/{id}` | 删除用户 | JWT + Admin |
 | GET | `/api/admin/storage/stats` | 全局存储统计 | JWT + Admin |
 | GET | `/api/admin/shares` | 分享列表 | JWT + Admin |
-| GET | `/api/admin/shares/{id}` | 分享详情 | JWT + Admin |
-| DELETE | `/api/admin/shares/{id}` | 强制取消分享 | JWT + Admin |
+| GET | `/api/admin/shares/{share_id}` | 分享详情 | JWT + Admin |
+| DELETE | `/api/admin/shares/{share_id}` | 强制取消分享 | JWT + Admin |
 | GET | `/api/admin/stats/overview` | 概览统计 | JWT + Admin |
 | GET | `/api/admin/stats/system` | 系统状态 | JWT + Admin |
 

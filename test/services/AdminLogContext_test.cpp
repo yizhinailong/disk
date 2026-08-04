@@ -211,6 +211,96 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminShareExternalIdentifierContractTest, PathsAndResponsesUseShareCode) {
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto service_header = ReadSourceFile("src/services/AdminService.hpp");
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+
+            const auto response_dto = ExtractRange(
+                dto_source,
+                "struct ShareDetailResponse",
+                "    struct ShareListResponse"
+            );
+            const auto controller_detail = ExtractRange(
+                controller_source,
+                "auto AdminController::GetShareDetail(",
+                "    auto AdminController::ForceCancelShare("
+            );
+            const auto controller_cancel = ExtractRange(
+                controller_source,
+                "auto AdminController::ForceCancelShare(",
+                "    auto AdminController::GetOverviewStats("
+            );
+            const auto service_detail = ExtractRange(
+                service_source,
+                "auto AdminService::GetShareDetail(",
+                "    auto AdminService::ForceCancelShare("
+            );
+            const auto service_cancel = ExtractRange(
+                service_source,
+                "auto AdminService::ForceCancelShare(",
+                "    auto AdminService::GetOverviewStats("
+            );
+
+            ASSERT_FALSE(response_dto.empty());
+            ASSERT_FALSE(controller_detail.empty());
+            ASSERT_FALSE(controller_cancel.empty());
+            ASSERT_FALSE(service_detail.empty());
+            ASSERT_FALSE(service_cancel.empty());
+
+            EXPECT_EQ(CountOccurrences(response_dto, "std::string share_id;"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(response_dto, "SetField(json, \"share_id\", share_id);"),
+                1U
+            );
+            EXPECT_FALSE(Contains(response_dto, "uint64_t id;"));
+            EXPECT_FALSE(Contains(response_dto, "share_code"));
+
+            EXPECT_EQ(
+                CountOccurrences(controller_header, "/api/admin/shares/{share_id}"),
+                2U
+            );
+            EXPECT_EQ(CountOccurrences(controller_detail, "std::stoull("), 0U);
+            EXPECT_EQ(CountOccurrences(controller_cancel, "std::stoull("), 0U);
+            EXPECT_TRUE(Contains(
+                controller_detail,
+                "co_return Response::Success(result->ToJson());"
+            ));
+            EXPECT_FALSE(Contains(controller_detail, "data[\"share\"]"));
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    service_header,
+                    "const std::string& share_id,\n            uint64_t operator_id"
+                ),
+                2U
+            );
+            EXPECT_EQ(CountOccurrences(service_detail, "s.share_code = $1"), 2U);
+            EXPECT_EQ(CountOccurrences(service_detail, ".what()"), 0U);
+            EXPECT_TRUE(Contains(
+                service_detail,
+                "row[\"password_set\"].as<bool>()"
+            ));
+            EXPECT_TRUE(Contains(
+                service_detail,
+                "Logger::Error(log_context) << \"Admin get share detail database error\";"
+            ));
+            EXPECT_TRUE(Contains(service_cancel, "WHERE share_code = $1"));
+            EXPECT_TRUE(Contains(service_cancel, "WHERE id = $1"));
+            EXPECT_EQ(CountOccurrences(service_cancel, ".what()"), 0U);
+            EXPECT_TRUE(Contains(
+                service_cancel,
+                "Logger::Error(log_context) << \"Admin force cancel share database error\";"
+            ));
+            EXPECT_TRUE(Contains(service_source, "share.share_id = row[\"share_code\"]"));
+            EXPECT_FALSE(Contains(service_source, "share.id = row[\"id\"]"));
+            EXPECT_FALSE(Contains(service_source, "share.share_code = row[\"share_code\"]"));
+        }
+
         TEST(AdminLogContextContractTest, CoreBoundariesUseExplicitTypedContext) {
             const auto controller_source =
                 ReadSourceFile("src/controllers/AdminController.cpp");

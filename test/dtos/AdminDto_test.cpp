@@ -1208,12 +1208,11 @@ TEST(SystemStatusResponse, MixedConnectivity) {
 
 TEST(ShareDetailResponse, AllFields) {
     ShareDetailResponse response;
-    response.id = 1;
+    response.share_id = "abc12345";
     response.user_id = 42;
     response.username = "alice";
     response.file_id = 10;
     response.file_name = "doc.pdf";
-    response.share_code = "abc123";
     response.status = 1;
     response.access_count = 5;
     response.password_set = true;
@@ -1222,12 +1221,13 @@ TEST(ShareDetailResponse, AllFields) {
 
     auto json = response.ToJson();
 
-    EXPECT_EQ(json["id"].asUInt64(), 1);
+    EXPECT_EQ(json["share_id"].asString(), "abc12345");
+    EXPECT_FALSE(json.isMember("id"));
     EXPECT_EQ(json["user_id"].asUInt64(), 42);
     EXPECT_EQ(json["username"].asString(), "alice");
     EXPECT_EQ(json["file_id"].asUInt64(), 10);
     EXPECT_EQ(json["file_name"].asString(), "doc.pdf");
-    EXPECT_EQ(json["share_code"].asString(), "abc123");
+    EXPECT_FALSE(json.isMember("share_code"));
     EXPECT_EQ(json["status"].asInt(), 1);
     EXPECT_EQ(json["access_count"].asInt(), 5);
     EXPECT_TRUE(json["password_set"].asBool());
@@ -1237,12 +1237,11 @@ TEST(ShareDetailResponse, AllFields) {
 
 TEST(ShareDetailResponse, NullableFileName) {
     ShareDetailResponse response;
-    response.id = 1;
+    response.share_id = "xyz12345";
     response.user_id = 1;
     response.username = "bob";
     response.file_id = 1;
     response.file_name = "";
-    response.share_code = "xyz";
     response.created_at = "";
     response.expires_at = "";
 
@@ -1258,12 +1257,10 @@ TEST(ShareDetailResponse, NullableFileName) {
 TEST(ShareListResponse, WithItems) {
     ShareListResponse response;
     response.items.resize(2);
-    response.items[0].id = 1;
+    response.items[0].share_id = "abc12345";
     response.items[0].username = "alice";
-    response.items[0].share_code = "abc";
-    response.items[1].id = 2;
+    response.items[1].share_id = "def12345";
     response.items[1].username = "bob";
-    response.items[1].share_code = "def";
     response.pagination.page = 1;
     response.pagination.page_size = 20;
     response.pagination.total = 2;
@@ -1274,7 +1271,9 @@ TEST(ShareListResponse, WithItems) {
     EXPECT_TRUE(json["items"].isArray());
     EXPECT_EQ(json["items"].size(), 2u);
     EXPECT_EQ(json["items"][0]["username"].asString(), "alice");
-    EXPECT_EQ(json["items"][1]["share_code"].asString(), "def");
+    EXPECT_EQ(json["items"][1]["share_id"].asString(), "def12345");
+    EXPECT_FALSE(json["items"][1].isMember("id"));
+    EXPECT_FALSE(json["items"][1].isMember("share_code"));
     EXPECT_TRUE(json.isMember("pagination"));
     EXPECT_EQ(json["pagination"]["total"].asInt(), 2);
 }

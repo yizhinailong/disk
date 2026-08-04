@@ -21,7 +21,7 @@ The system SHALL allow authenticated users to create shares for files or folders
 The system SHALL use an external share identifier for API paths and responses instead of exposing internal database primary keys.
 
 #### Scenario: Share is returned to clients
-- **WHEN** the system returns share information through public or owner APIs
+- **WHEN** the system returns share information through public, owner, or administrator APIs
 - **THEN** the response SHALL identify the share using the external share identifier
 
 #### Scenario: Share identifier is generated

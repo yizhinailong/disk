@@ -222,11 +222,11 @@ func (m model) adminAction(kind string) (model, tea.Cmd) {
 		}
 		s := m.admin.shares[m.admin.cursor]
 		return m, func() tea.Msg {
-			err := c.AdminForceCancelShare(context.Background(), s.ID)
+			err := c.AdminForceCancelShare(context.Background(), s.ShareID)
 			if err != nil {
 				return adminMsg{err: err}
 			}
-			return adminMsg{summary: fmt.Sprintf("force-cancelled share %d", s.ID)}
+			return adminMsg{summary: fmt.Sprintf("force-cancelled share %s", s.ShareID)}
 		}
 	case "status", "role", "space":
 		if len(m.admin.users) == 0 {
@@ -420,7 +420,7 @@ func (m model) adminSharesView() string {
 			pwd = "yes"
 		}
 		line := strings.Join([]string{
-			padRight(strconv.FormatUint(s.ID, 10), 6),
+			padRight(s.ShareID, 6),
 			padRight(util.Truncate(s.Username, 16), 16),
 			padRight(util.Truncate(s.FileName, 24), 24),
 			padRight(strconv.Itoa(s.Status), 7),

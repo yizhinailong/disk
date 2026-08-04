@@ -8,19 +8,18 @@
 #pragma once
 
 #include <QAbstractListModel>
-#include <QVector>
-#include <QString>
 #include <QJsonObject>
+#include <QString>
+#include <QVector>
 
 namespace disk::desktop {
 
     struct AdminShareItem {
-        quint64 id{ 0 };
+        QString share_id;
         quint64 user_id{ 0 };
         QString username;
         quint64 file_id{ 0 };
         QString file_name;
-        QString share_code;
         int status{ 0 }; // 0=cancelled, 1=active, 2=expired
         int access_count{ 0 };
         QString created_at;
@@ -34,12 +33,11 @@ namespace disk::desktop {
 
     public:
         enum Roles {
-            IdRole = Qt::UserRole + 1,
+            ShareIdRole = Qt::UserRole + 1,
             UserIdRole,
             UsernameRole,
             FileIdRole,
             FileNameRole,
-            ShareCodeRole,
             StatusRole,
             AccessCountRole,
             CreatedAtRole,

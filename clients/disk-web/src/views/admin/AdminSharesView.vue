@@ -47,7 +47,7 @@
         stripe
         style="width: 100%"
       >
-        <el-table-column prop="id" label="分享ID" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="share_id" label="分享ID" min-width="120" show-overflow-tooltip />
         <el-table-column prop="username" label="用户" min-width="100" show-overflow-tooltip />
         <el-table-column prop="file_name" label="文件名" min-width="160" show-overflow-tooltip />
         <el-table-column label="密码" width="70" align="center">
@@ -79,7 +79,7 @@
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row.id)">
+            <el-button link type="primary" size="small" @click="openDetail(row.share_id)">
               详情
             </el-button>
             <el-button
@@ -120,7 +120,12 @@
         <!-- 基本信息 -->
         <el-descriptions :column="2" border>
           <el-descriptions-item label="分享ID">
-            {{ adminStore.currentShareDetail.id }}
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="share-link-text">{{ adminStore.currentShareDetail.share_id }}</span>
+              <el-button link type="primary" size="small" @click="copyLink">
+                复制分享ID
+              </el-button>
+            </div>
           </el-descriptions-item>
           <el-descriptions-item label="用户">
             {{ adminStore.currentShareDetail.username }}
@@ -130,14 +135,6 @@
           </el-descriptions-item>
           <el-descriptions-item label="文件名">
             {{ adminStore.currentShareDetail.file_name }}
-          </el-descriptions-item>
-          <el-descriptions-item label="分享码">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="share-link-text">{{ adminStore.currentShareDetail.share_code }}</span>
-              <el-button link type="primary" size="small" @click="copyLink">
-                复制分享码
-              </el-button>
-            </div>
           </el-descriptions-item>
           <el-descriptions-item label="访问密码">
             <el-icon v-if="adminStore.currentShareDetail.password_set" :size="16" color="var(--el-color-warning)">
@@ -236,12 +233,12 @@ function handleSizeChange(size: number) {
 
 // ==================== 操作 ====================
 
-async function openDetail(shareId: number) {
+async function openDetail(shareId: string) {
   detailVisible.value = true;
   await adminStore.fetchShareDetail(shareId);
 }
 
-async function handleForceCancel(row: { id: number; file_name: string }) {
+async function handleForceCancel(row: { share_id: string; file_name: string }) {
   try {
     await ElMessageBox.confirm(
       `确定要强制取消分享「${row.file_name}」吗？此操作不可恢复。`,
@@ -253,7 +250,7 @@ async function handleForceCancel(row: { id: number; file_name: string }) {
         confirmButtonClass: 'el-button--danger',
       },
     );
-    await adminStore.deleteShare(row.id);
+    await adminStore.deleteShare(row.share_id);
     ElMessage.success('已强制取消分享');
   } catch {
     // 用户取消或删除失败，静默处理
@@ -261,10 +258,10 @@ async function handleForceCancel(row: { id: number; file_name: string }) {
 }
 
 async function copyLink() {
-  if (!adminStore.currentShareDetail?.share_code) return;
+  if (!adminStore.currentShareDetail?.share_id) return;
   try {
-    await navigator.clipboard.writeText(adminStore.currentShareDetail.share_code);
-    ElMessage.success('分享码已复制');
+    await navigator.clipboard.writeText(adminStore.currentShareDetail.share_id);
+    ElMessage.success('分享ID已复制');
   } catch {
     ElMessage.error('复制失败，请手动复制');
   }

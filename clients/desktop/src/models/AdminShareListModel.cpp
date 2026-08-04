@@ -13,12 +13,11 @@ namespace disk::desktop {
 
     auto AdminShareItem::FromJson(const QJsonObject& json) -> AdminShareItem {
         AdminShareItem item;
-        item.id = json.value("id").toVariant().toULongLong();
+        item.share_id = json.value("share_id").toString();
         item.user_id = json.value("user_id").toVariant().toULongLong();
         item.username = json.value("username").toString();
         item.file_id = json.value("file_id").toVariant().toULongLong();
         item.file_name = json.value("file_name").toString();
-        item.share_code = json.value("share_code").toString();
         item.status = json.value("status").toInt();
         item.access_count = json.value("access_count").toInt();
         item.created_at = json.value("created_at").toString();
@@ -44,12 +43,11 @@ namespace disk::desktop {
         const auto& item = m_items.at(index.row());
 
         switch (role) {
-            case IdRole         : return item.id;
+            case ShareIdRole    : return item.share_id;
             case UserIdRole     : return item.user_id;
             case UsernameRole   : return item.username;
             case FileIdRole     : return item.file_id;
             case FileNameRole   : return item.file_name;
-            case ShareCodeRole  : return item.share_code;
             case StatusRole     : return item.status;
             case AccessCountRole: return item.access_count;
             case CreatedAtRole  : return item.created_at;
@@ -60,16 +58,15 @@ namespace disk::desktop {
 
     auto AdminShareListModel::roleNames() const -> QHash<int, QByteArray> {
         return {
-            { IdRole,         "id" },
-            { UserIdRole,     "userId" },
-            { UsernameRole,   "username" },
-            { FileIdRole,     "fileId" },
-            { FileNameRole,   "fileName" },
-            { ShareCodeRole,  "shareCode" },
-            { StatusRole,     "status" },
-            { AccessCountRole,"accessCount" },
-            { CreatedAtRole, "createdAt" },
-            { ExpiresAtRole, "expiresAt" },
+            {     ShareIdRole,     "shareId" },
+            {      UserIdRole,      "userId" },
+            {    UsernameRole,    "username" },
+            {      FileIdRole,      "fileId" },
+            {    FileNameRole,    "fileName" },
+            {      StatusRole,      "status" },
+            { AccessCountRole, "accessCount" },
+            {   CreatedAtRole,   "createdAt" },
+            {   ExpiresAtRole,   "expiresAt" },
         };
     }
 

@@ -134,16 +134,16 @@ func (c *Client) AdminListShares(ctx context.Context, p AdminListSharesParams) (
 	return out, err
 }
 
-// AdminGetShare calls GET /api/admin/shares/{id}.
-func (c *Client) AdminGetShare(ctx context.Context, id uint64) (AdminShareDetail, error) {
+// AdminGetShare calls GET /api/admin/shares/{share_id}.
+func (c *Client) AdminGetShare(ctx context.Context, shareID string) (AdminShareDetail, error) {
 	var out AdminShareDetail
-	err := c.decodeEnvelope(ctx, http.MethodGet, fmt.Sprintf("/api/admin/shares/%d", id), requestOpts{}, &out)
+	err := c.decodeEnvelope(ctx, http.MethodGet, "/api/admin/shares/"+url.PathEscape(shareID), requestOpts{}, &out)
 	return out, err
 }
 
-// AdminForceCancelShare calls DELETE /api/admin/shares/{id}.
-func (c *Client) AdminForceCancelShare(ctx context.Context, id uint64) error {
-	return c.decodeEnvelope(ctx, http.MethodDelete, fmt.Sprintf("/api/admin/shares/%d", id), requestOpts{}, nil)
+// AdminForceCancelShare calls DELETE /api/admin/shares/{share_id}.
+func (c *Client) AdminForceCancelShare(ctx context.Context, shareID string) error {
+	return c.decodeEnvelope(ctx, http.MethodDelete, "/api/admin/shares/"+url.PathEscape(shareID), requestOpts{}, nil)
 }
 
 // AdminOverviewStats calls GET /api/admin/stats/overview.

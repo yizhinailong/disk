@@ -713,22 +713,10 @@ def test_admin_domain(admin_token: str, user_token: str, temp_user_id: str) -> l
     # Create a share for admin share management tests
     up = upload_file(admin_token, unique_name("adminshare") + ".dat")
     admin_share_id = ""
-    admin_share_db_id = ""
     if up:
         resp = fetch("/api/share", method="POST", headers=auth_hdr(admin_token),
                      json_body={"file_ids": [int(up["file_id"])], "expire_days": 7})
         admin_share_id = json_field(resp.text, "data.share_id")
-        # Admin endpoints use integer DB id, not share_code
-        if admin_share_id:
-            list_resp = fetch("/api/admin/shares?page=1&page_size=50", method="GET", headers=auth_hdr(admin_token))
-            try:
-                shares_data = json.loads(list_resp.text)
-                for s in shares_data.get("data", {}).get("items", []):
-                    if str(s.get("share_code", "")) == admin_share_id:
-                        admin_share_db_id = str(s["id"])
-                        break
-            except Exception:
-                pass
 
     # 46. GET /api/admin/shares
     tests = []
@@ -736,27 +724,28 @@ def test_admin_domain(admin_token: str, user_token: str, temp_user_id: str) -> l
     tests.append(_test("admin_shares_list", json_field(resp.text, "code") == "0", "code=0", json_field(resp.text, "code")))
     results.append(("Admin", "/api/admin/shares", "GET", tests))
 
-    # 47. GET /api/admin/shares/{id}
+    # 47. GET /api/admin/shares/{share_id}
     tests = []
-    if admin_share_db_id:
-        resp = fetch(f"/api/admin/shares/{admin_share_db_id}", method="GET", headers=auth_hdr(admin_token))
+    if admin_share_id:
+        resp = fetch(f"/api/admin/shares/{admin_share_id}", method="GET", headers=auth_hdr(admin_token))
         tests.append(_test("admin_share_detail",
-            json_field(resp.text, "code") == "0",
-            "code=0", json_field(resp.text, "code")))
+            json_field(resp.text, "code") == "0" and json_field(resp.text, "data.share_id") == admin_share_id,
+            f"code=0, share_id={admin_share_id}",
+            f"code={json_field(resp.text, 'code')}, share_id={json_field(resp.text, 'data.share_id')}"))
     else:
-        tests.append(_test("admin_share_detail", False, "code=0", "no share db id"))
-    results.append(("Admin", "/api/admin/shares/{id}", "GET", tests))
+        tests.append(_test("admin_share_detail", False, "code=0", "no external share id"))
+    results.append(("Admin", "/api/admin/shares/{share_id}", "GET", tests))
 
-    # 48. DELETE /api/admin/shares/{id}
+    # 48. DELETE /api/admin/shares/{share_id}
     tests = []
-    if admin_share_db_id:
-        resp = fetch(f"/api/admin/shares/{admin_share_db_id}", method="DELETE", headers=auth_hdr(admin_token))
+    if admin_share_id:
+        resp = fetch(f"/api/admin/shares/{admin_share_id}", method="DELETE", headers=auth_hdr(admin_token))
         tests.append(_test("admin_force_cancel_share",
             json_field(resp.text, "code") == "0",
             "code=0", json_field(resp.text, "code")))
     else:
-        tests.append(_test("admin_force_cancel_share", False, "code=0", "no share db id"))
-    results.append(("Admin", "/api/admin/shares/{id}", "DELETE", tests))
+        tests.append(_test("admin_force_cancel_share", False, "code=0", "no external share id"))
+    results.append(("Admin", "/api/admin/shares/{share_id}", "DELETE", tests))
 
     # 49. GET /api/admin/stats/overview
     tests = []

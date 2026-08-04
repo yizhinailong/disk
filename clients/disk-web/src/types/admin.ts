@@ -106,12 +106,11 @@ export interface AdminStorageStatsResponse {
 
 /** 管理员分享列表项 */
 export interface AdminShareItem {
-  readonly id: number;
+  readonly share_id: string;
   readonly user_id: number;
   readonly username: string;
   readonly file_id: number;
   readonly file_name: string;
-  readonly share_code: string;
   /** 0/1/2 */
   readonly status: number;
   readonly access_count: number;
@@ -135,12 +134,11 @@ export interface AdminShareListResponse extends PaginatedData<AdminShareItem> {}
 
 /** 管理员分享详情响应 */
 export interface AdminShareDetailResponse {
-  readonly id: number;
+  readonly share_id: string;
   readonly user_id: number;
   readonly username: string;
   readonly file_id: number;
   readonly file_name: string;
-  readonly share_code: string;
   /** 0/1/2 */
   readonly status: number;
   readonly access_count: number;

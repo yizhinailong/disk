@@ -2,12 +2,11 @@
     "code": 0,
     "message": "success",
     "data": {
-        "id": 1,
+        "share_id": "AbCd1234",
         "user_id": 1,
         "username": "alice",
         "file_id": 10,
         "file_name": "report.pdf",
-        "share_code": "sh_abc123",
         "status": 1,
         "access_count": 15,
         "password_set": true,

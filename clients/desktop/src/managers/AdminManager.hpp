@@ -74,8 +74,8 @@ namespace disk::desktop::managers {
             int userId = -1,
             const QString& username = ""
         );
-        Q_INVOKABLE void GetShareDetail(int shareId);
-        Q_INVOKABLE void ForceCancelShare(int shareId);
+        Q_INVOKABLE void GetShareDetail(const QString& shareId);
+        Q_INVOKABLE void ForceCancelShare(const QString& shareId);
 
         // System monitoring (2 endpoints)
         Q_INVOKABLE void GetOverviewStatsApi();

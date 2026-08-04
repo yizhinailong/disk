@@ -149,10 +149,10 @@ private slots:
         mock_network.RegisterResponse(
             "api/admin/users/999",
             QJsonObject{
-                { "code", 80002 },
-                { "message", "用户不存在" },
-                { "data", QJsonValue::Null },
-            },
+                {    "code",            80002 },
+                { "message",     "用户不存在" },
+                {    "data", QJsonValue::Null },
+        },
             404
         );
 
@@ -309,10 +309,10 @@ private slots:
         mock_network.RegisterResponse(
             "api/admin/users/999/available-space",
             QJsonObject{
-                { "code", 80002 },
-                { "message", "用户不存在" },
-                { "data", QJsonValue::Null },
-            },
+                {    "code",            80002 },
+                { "message",     "用户不存在" },
+                {    "data", QJsonValue::Null },
+        },
             404
         );
 
@@ -333,8 +333,6 @@ private slots:
         auto args = error_spy.takeFirst();
         QCOMPARE(args.at(1).toInt(), 80002);
     }
-
-
 
     void SoftDeleteUserEmitsSuccess() {
         MockNetworkAccessManager mock_network;
@@ -556,7 +554,7 @@ private slots:
     void GetShareDetailEmitsDetail() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
-            "api/admin/shares/1",
+            "api/admin/shares",
             TestJsonLoader::LoadJson("admin/admin_get_share_detail_success.json")
         );
 
@@ -569,16 +567,21 @@ private slots:
         QSignalSpy detail_spy(&mgr, &AdminManager::shareDetailLoaded);
         QSignalSpy error_spy(&mgr, &AdminManager::apiError);
 
-        mgr.GetShareDetail(1);
+        mgr.GetShareDetail(QStringLiteral("Ab/Cd 12"));
 
         QTRY_COMPARE(detail_spy.count(), 1);
         QCOMPARE(error_spy.count(), 0);
 
         auto detail = detail_spy.takeFirst().at(0).toMap();
+        QCOMPARE(detail.value("share_id").toString(), QString("AbCd1234"));
+        QVERIFY(!detail.contains("id"));
+        QVERIFY(!detail.contains("share_code"));
         QCOMPARE(detail.value("file_name").toString(), QString("report.pdf"));
         QCOMPARE(detail.value("username").toString(), QString("alice"));
         QCOMPARE(detail.value("status").toInt(), 1);
         QCOMPARE(detail.value("password_set").toBool(), true);
+        QCOMPARE(mock_network.GetRequestLog().size(), 1);
+        QVERIFY(mock_network.GetRequestLog().constFirst().url().toEncoded().endsWith("/api/admin/shares/Ab%2FCd%2012"));
     }
 
     // ── ForceCancelShare ──
@@ -586,7 +589,7 @@ private slots:
     void ForceCancelShareEmitsSuccess() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
-            "api/admin/shares/10",
+            "api/admin/shares/AbCd1234",
             TestJsonLoader::LoadJson("admin/admin_force_cancel_share_success.json")
         );
 
@@ -599,7 +602,7 @@ private slots:
         QSignalSpy success_spy(&mgr, &AdminManager::operationSuccess);
         QSignalSpy error_spy(&mgr, &AdminManager::apiError);
 
-        mgr.ForceCancelShare(10);
+        mgr.ForceCancelShare(QStringLiteral("AbCd1234"));
 
         QTRY_COMPARE(success_spy.count(), 1);
         QCOMPARE(error_spy.count(), 0);
@@ -608,7 +611,7 @@ private slots:
     void ForceCancelShareRejectsNotFound() {
         MockNetworkAccessManager mock_network;
         mock_network.RegisterResponse(
-            "api/admin/shares/9999",
+            "api/admin/shares/Missing1",
             TestJsonLoader::LoadJson("admin/admin_force_cancel_share_not_found.json"),
             404
         );
@@ -622,7 +625,7 @@ private slots:
         QSignalSpy success_spy(&mgr, &AdminManager::operationSuccess);
         QSignalSpy error_spy(&mgr, &AdminManager::apiError);
 
-        mgr.ForceCancelShare(9999);
+        mgr.ForceCancelShare(QStringLiteral("Missing1"));
 
         QTRY_COMPARE(error_spy.count(), 1);
         QCOMPARE(success_spy.count(), 0);

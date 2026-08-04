@@ -451,12 +451,11 @@ type AdminSystemStatus struct {
 
 // AdminShareDetail mirrors disk::admin::ShareDetailResponse.
 type AdminShareDetail struct {
-	ID          uint64 `json:"id"`
+	ShareID     string `json:"share_id"`
 	UserID      uint64 `json:"user_id"`
 	Username    string `json:"username"`
 	FileID      uint64 `json:"file_id"`
 	FileName    string `json:"file_name"`
-	ShareCode   string `json:"share_code"`
 	Status      int    `json:"status"`
 	AccessCount int    `json:"access_count"`
 	PasswordSet bool   `json:"password_set"`

@@ -189,12 +189,12 @@ namespace disk::services {
          * - 不存在时返回 AdminShareNotFound
          * - 记录操作日志 admin.share.detail
          *
-         * @param share_id 分享 ID
+         * @param share_id 外部分享 ID（shares.share_code）
          * @return drogon::Task<Result<admin::ShareDetailResponse>> 分享详情响应
          */
         [[nodiscard]]
         auto GetShareDetail(
-            uint64_t share_id,
+            const std::string& share_id,
             uint64_t operator_id,
             disk::utils::LogContext log_context = {}
         )
@@ -252,13 +252,13 @@ namespace disk::services {
          * - 不存在时返回 AdminShareNotFound
          * - 记录操作日志 admin.share.force_cancel
          *
-         * @param share_id 分享 ID
+         * @param share_id 外部分享 ID（shares.share_code）
          * @param operator_id 操作者 ID
          * @return drogon::Task<Result<void>>
          */
         [[nodiscard]]
         auto ForceCancelShare(
-            uint64_t share_id,
+            const std::string& share_id,
             uint64_t operator_id,
             disk::utils::LogContext log_context = {}
         )

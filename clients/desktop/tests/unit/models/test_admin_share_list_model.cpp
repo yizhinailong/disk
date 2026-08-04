@@ -1,10 +1,9 @@
-#include <QTest>
-
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QTest>
 
-#include "models/AdminShareListModel.hpp"
 #include "helpers/TestJsonLoader.hpp"
+#include "models/AdminShareListModel.hpp"
 
 using namespace disk::desktop;
 
@@ -18,16 +17,15 @@ private slots:
         QCOMPARE(model.rowCount(), 0);
     }
 
-    void RoleNamesHas10Entries() {
+    void RoleNamesHas9Entries() {
         AdminShareListModel model;
         auto roles = model.roleNames();
-        QCOMPARE(roles.size(), 10);
-        QVERIFY(roles.contains(AdminShareListModel::IdRole));
+        QCOMPARE(roles.size(), 9);
+        QVERIFY(roles.contains(AdminShareListModel::ShareIdRole));
         QVERIFY(roles.contains(AdminShareListModel::UserIdRole));
         QVERIFY(roles.contains(AdminShareListModel::UsernameRole));
         QVERIFY(roles.contains(AdminShareListModel::FileIdRole));
         QVERIFY(roles.contains(AdminShareListModel::FileNameRole));
-        QVERIFY(roles.contains(AdminShareListModel::ShareCodeRole));
         QVERIFY(roles.contains(AdminShareListModel::StatusRole));
         QVERIFY(roles.contains(AdminShareListModel::AccessCountRole));
         QVERIFY(roles.contains(AdminShareListModel::CreatedAtRole));
@@ -38,33 +36,32 @@ private slots:
         AdminShareListModel model;
 
         AdminShareItem old_item;
-        old_item.id = 1;
+        old_item.share_id = "OldId123";
         old_item.username = "old_user";
         model.SetItems({ old_item });
         QCOMPARE(model.rowCount(), 1);
 
         AdminShareItem a;
-        a.id = 10;
+        a.share_id = "AbCd1234";
         a.username = "user_a";
         AdminShareItem b;
-        b.id = 20;
+        b.share_id = "EfGh5678";
         b.username = "user_b";
         model.SetItems({ a, b });
         QCOMPARE(model.rowCount(), 2);
-        QCOMPARE(model.data(model.index(0), AdminShareListModel::IdRole).toUInt(), quint64(10));
-        QCOMPARE(model.data(model.index(1), AdminShareListModel::IdRole).toUInt(), quint64(20));
+        QCOMPARE(model.data(model.index(0), AdminShareListModel::ShareIdRole).toString(), QString("AbCd1234"));
+        QCOMPARE(model.data(model.index(1), AdminShareListModel::ShareIdRole).toString(), QString("EfGh5678"));
     }
 
     void DataReturnsCorrectValues() {
         AdminShareListModel model;
 
         AdminShareItem item;
-        item.id = 42;
+        item.share_id = "AbCd1234";
         item.user_id = 100;
         item.username = "alice";
         item.file_id = 5001;
         item.file_name = "project_plan.pdf";
-        item.share_code = "sh_alice_abc123";
         item.status = 1;
         item.access_count = 15;
         item.created_at = "2026-03-20T10:00:00";
@@ -72,12 +69,11 @@ private slots:
         model.SetItems({ item });
 
         auto index = model.index(0);
-        QCOMPARE(model.data(index, AdminShareListModel::IdRole).toUInt(), quint64(42));
+        QCOMPARE(model.data(index, AdminShareListModel::ShareIdRole).toString(), QString("AbCd1234"));
         QCOMPARE(model.data(index, AdminShareListModel::UserIdRole).toUInt(), quint64(100));
         QCOMPARE(model.data(index, AdminShareListModel::UsernameRole).toString(), QString("alice"));
         QCOMPARE(model.data(index, AdminShareListModel::FileIdRole).toUInt(), quint64(5001));
         QCOMPARE(model.data(index, AdminShareListModel::FileNameRole).toString(), QString("project_plan.pdf"));
-        QCOMPARE(model.data(index, AdminShareListModel::ShareCodeRole).toString(), QString("sh_alice_abc123"));
         QCOMPARE(model.data(index, AdminShareListModel::StatusRole).toInt(), 1);
         QCOMPARE(model.data(index, AdminShareListModel::AccessCountRole).toInt(), 15);
         QCOMPARE(model.data(index, AdminShareListModel::CreatedAtRole).toString(), QString("2026-03-20T10:00:00"));
@@ -88,13 +84,13 @@ private slots:
         AdminShareListModel model;
 
         AdminShareItem item;
-        item.id = 42;
+        item.share_id = "AbCd1234";
         item.username = "alice";
         model.SetItems({ item });
 
         auto retrieved = model.GetItem(0);
         QVERIFY(retrieved.has_value());
-        QCOMPARE(retrieved->id, quint64(42));
+        QCOMPARE(retrieved->share_id, QString("AbCd1234"));
         QCOMPARE(retrieved->username, QString("alice"));
 
         auto invalid = model.GetItem(99);
@@ -110,7 +106,7 @@ private slots:
     void ClearEmptiesModel() {
         AdminShareListModel model;
         AdminShareItem item;
-        item.id = 1;
+        item.share_id = "AbCd1234";
         model.SetItems({ item, item });
         QCOMPARE(model.rowCount(), 2);
 
@@ -126,25 +122,23 @@ private slots:
 
     void FromJsonParsesAllFields() {
         QJsonObject json{
-            { "id", 1 },
-            { "user_id", 100 },
-            { "username", "alice" },
-            { "file_id", 5001 },
-            { "file_name", "project_plan.pdf" },
-            { "share_code", "sh_alice_abc123" },
-            { "status", 1 },
-            { "access_count", 15 },
-            { "created_at", "2026-03-20T10:00:00" },
-            { "expires_at", "2026-04-20T10:00:00" },
+            {     "share_id",            "AbCd1234" },
+            {      "user_id",                   100 },
+            {     "username",               "alice" },
+            {      "file_id",                  5001 },
+            {    "file_name",    "project_plan.pdf" },
+            {       "status",                     1 },
+            { "access_count",                    15 },
+            {   "created_at", "2026-03-20T10:00:00" },
+            {   "expires_at", "2026-04-20T10:00:00" },
         };
 
         auto item = AdminShareItem::FromJson(json);
-        QCOMPARE(item.id, quint64(1));
+        QCOMPARE(item.share_id, QString("AbCd1234"));
         QCOMPARE(item.user_id, quint64(100));
         QCOMPARE(item.username, QString("alice"));
         QCOMPARE(item.file_id, quint64(5001));
         QCOMPARE(item.file_name, QString("project_plan.pdf"));
-        QCOMPARE(item.share_code, QString("sh_alice_abc123"));
         QCOMPARE(item.status, 1);
         QCOMPARE(item.access_count, 15);
         QCOMPARE(item.created_at, QString("2026-03-20T10:00:00"));
@@ -153,12 +147,12 @@ private slots:
 
     void FromJsonHandlesMissingFields() {
         QJsonObject json{
-            { "id", 5 },
-            { "username", "bob" },
+            { "share_id", "EfGh5678" },
+            { "username",      "bob" },
         };
 
         auto item = AdminShareItem::FromJson(json);
-        QCOMPARE(item.id, quint64(5));
+        QCOMPARE(item.share_id, QString("EfGh5678"));
         QCOMPARE(item.username, QString("bob"));
         QCOMPARE(item.user_id, quint64(0));
         QCOMPARE(item.status, 0);
@@ -180,9 +174,9 @@ private slots:
         AdminShareListModel model;
         model.SetItems(share_items);
         QCOMPARE(model.rowCount(), 2);
-        QCOMPARE(model.data(model.index(0), AdminShareListModel::IdRole).toUInt(), quint64(1));
+        QCOMPARE(model.data(model.index(0), AdminShareListModel::ShareIdRole).toString(), QString("AbCd1234"));
         QCOMPARE(model.data(model.index(0), AdminShareListModel::UsernameRole).toString(), QString("alice"));
-        QCOMPARE(model.data(model.index(1), AdminShareListModel::IdRole).toUInt(), quint64(2));
+        QCOMPARE(model.data(model.index(1), AdminShareListModel::ShareIdRole).toString(), QString("EfGh5678"));
         QCOMPARE(model.data(model.index(1), AdminShareListModel::StatusRole).toInt(), 2);
     }
 };
