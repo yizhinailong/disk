@@ -364,6 +364,57 @@ namespace disk::services {
             }
         }
 
+        TEST(TokenRefreshRotationValueLogContractTest, CasUsesFixedSummaries) {
+            const auto source = ReadSourceFile("src/services/TokenService.cpp");
+            const auto rotation_body = SourceSection(
+                source,
+                "auto TokenService::RefreshRefreshToken(",
+                "auto TokenService::InvalidateAccessToken("
+            );
+
+            ASSERT_FALSE(rotation_body.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Error(log_context) << \"Redis CAS operation failed\";",
+                     "Logger::Warn(log_context) << \"Refresh token already used or refreshed\";",
+                     "Logger::Debug(log_context) << \"Refresh token rotated successfully\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(rotation_body, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_rotation_log : {
+                     "<< \"Redis CAS operation failed: user_id=\" << user_id",
+                     "<< \"Refresh token already used or refreshed (CAS failed): user_id=\" << user_id",
+                     "<< \"Refresh token rotated successfully: user_id=\" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(rotation_body, raw_rotation_log), 0U)
+                    << raw_rotation_log;
+            }
+
+            for (const auto* preserved_rotation_step : {
+                     "disk::redis::RedisKeyPrefix::BuildRefreshTokenKey(user_id)",
+                     "disk::utils::HashUtil::HashToken(old_token)",
+                     "if (!old_hash_result)",
+                     "co_return std::unexpected(old_hash_result.error());",
+                     "disk::utils::HashUtil::HashToken(new_token)",
+                     "if (!new_hash_result)",
+                     "co_return std::unexpected(new_hash_result.error());",
+                     "disk::utils::HashUtil::TokenHashToHex(old_hash_result.value())",
+                     "disk::utils::HashUtil::TokenHashToHex(new_hash_result.value())",
+                     "m_redis_service->CompareAndSwap(",
+                     "old_hash,",
+                     "new_hash,",
+                     "REFRESH_TOKEN_TTL,",
+                     "if (!cas_result)",
+                     "co_return std::unexpected(cas_result.error());",
+                     "if (!cas_result.value())",
+                     "ErrorInfo(disk::error::Code::RefreshTokenAlreadyUsed)",
+                     "co_return {};",
+                 }) {
+                EXPECT_EQ(CountOccurrences(rotation_body, preserved_rotation_step), 1U)
+                    << preserved_rotation_step;
+            }
+            EXPECT_EQ(CountOccurrences(rotation_body, "log_context"), 5U);
+        }
+
         class TokenServiceLogContextTest : public ::testing::Test {
         protected:
             auto SetUp() -> void override {

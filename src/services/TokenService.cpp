@@ -344,17 +344,16 @@ namespace disk::services {
         );
 
         if (!cas_result) {
-            Logger::Error(log_context) << "Redis CAS operation failed: user_id=" << user_id;
+            Logger::Error(log_context) << "Redis CAS operation failed";
             co_return std::unexpected(cas_result.error());
         }
 
         if (!cas_result.value()) {
-            Logger::Warn(log_context)
-                << "Refresh token already used or refreshed (CAS failed): user_id=" << user_id;
+            Logger::Warn(log_context) << "Refresh token already used or refreshed";
             co_return std::unexpected(ErrorInfo(disk::error::Code::RefreshTokenAlreadyUsed));
         }
 
-        Logger::Debug(log_context) << "Refresh token rotated successfully: user_id=" << user_id;
+        Logger::Debug(log_context) << "Refresh token rotated successfully";
         co_return {};
     }
 

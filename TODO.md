@@ -3099,6 +3099,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 125/125、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1540 项：1533 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 550.54 秒。源码审计确认四条固定摘要各 1 处、三种旧动态用户/计数/锁定日志与 `attempts` 结果读取均为 0，20 项失败计数数据流和原有 DEBUG/WARN/WARN/ERROR 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.210 Refresh Token CAS 诊断脱敏记录（2026-08-05）
+
+`TokenService::RefreshRefreshToken()` 的 Redis CAS 依赖失败、旧 refresh token 已使用/轮换拒绝和轮换成功三条事件，必须分别只记录固定完整摘要 `Redis CAS operation failed`、`Refresh token already used or refreshed` 与 `Refresh token rotated successfully`。message 不得追加用户 ID、原始 token、token hash、Redis key/value、CAS 结果/错误、TTL、连接信息、异常或其他会话状态值；原 ERROR/WARN/DEBUG 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变。
+
+既有 refresh Redis key 构建、旧/新 token 单向哈希与十六进制转换、哈希错误透传、携带 `REFRESH_TOKEN_TTL` 和调用方上下文的原子 `CompareAndSwap`、依赖失败错误透传、CAS 不匹配的 `RefreshTokenAlreadyUsed` 映射和最终成功返回不得改变。验证必须新增源码合同锁定三条固定摘要、原始用户/token/hash/CAS 值排除和完整轮换数据流，并执行 Token/refresh GoogleTest、OpenSpec、完整构建、真实 refresh 轮换、双实例认证一致性、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：依赖失败、旧 token 重用拒绝和轮换成功三条待迁移固定摘要均缺失，对应用户 ID 动态日志各命中一次；refresh key、双 token 哈希、TTL、原子 CAS、错误透传、重复使用映射和成功返回共 19 项数据流断言均通过。
+
+实现后定向源码合同 1/1、全部 Token GoogleTest 149/149、OpenSpec 24/24 和完整后端构建通过；真实 refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 888/888 均通过、0 失败。标准完整 CTest 共 1541 项：1534 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 571.88 秒；其中上传安全网按本轮竞态分支为 886/886。源码审计确认三条固定摘要各 1 处、三种旧动态用户 ID 日志均为 0，19 项 refresh CAS 数据流和原有 ERROR/WARN/DEBUG 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
