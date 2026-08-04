@@ -398,6 +398,28 @@ def test_admin_change_user_status():
     if restore_resp.status_code != 200 or restore_code != "0":
         log_info(f"Warning: could not restore user status to active (code={restore_code})")
 
+    missing_resp = fetch(
+        "/api/admin/users/999999/status",
+        method="PUT",
+        headers={**get_admin_headers(), "Content-Type": "application/json"},
+        json_body={"status": 1},
+    )
+    missing_code = json_field(missing_resp.text, "code")
+    missing_message = json_field(missing_resp.text, "message")
+    if (
+        missing_resp.status_code == 404
+        and missing_code == "80002"
+        and missing_message == "User not found"
+    ):
+        log_pass("Admin change missing user status: HTTP 404, code=80002, message=User not found")
+    else:
+        log_fail(
+            "Admin change missing user status: expected HTTP 404 code=80002 message=User not found, "
+            f"got HTTP {missing_resp.status_code} code={missing_code} message={missing_message}"
+        )
+        print(missing_resp.text)
+        sys.exit(1)
+
 
 # ─── Test 5: Admin 修改用户角色 ─────────────────────────────────────────────
 

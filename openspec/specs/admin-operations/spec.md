@@ -32,6 +32,10 @@ The system SHALL allow administrators to list, inspect, and manage user status a
 - **WHEN** an administrator changes another user's status or role to a valid value
 - **THEN** the system SHALL update the target user and record the administrative result
 
+#### Scenario: Administrator changes status for a missing user
+- **WHEN** an administrator requests a valid status change for a user ID that does not exist
+- **THEN** the system SHALL return the administrator user-not-found error with HTTP 404 without performing a user update or administrative audit
+
 ### Requirement: Administrator Self-Protection
 The system SHALL prevent administrators from modifying their own status or role through administrator operations.
 
