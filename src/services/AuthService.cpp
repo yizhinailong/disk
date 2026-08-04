@@ -66,7 +66,7 @@ namespace disk::auth {
         RegisterRequest request,
         disk::utils::LogContext log_context
     ) -> drogon::Task<Result<RegisterResponse>> {
-        Logger::Debug(log_context) << "Starting user registration: " << request.username;
+        Logger::Debug(log_context) << "User registration started";
 
         /// 1. 检查用户名和邮箱是否已存在（单次查询）
         try {
@@ -81,14 +81,12 @@ namespace disk::auth {
                 auto email_count = result[0]["email_count"].as<int>();
 
                 if (username_count > 0) {
-                    Logger::Warn(log_context)
-                        << "Username already exists: " << request.username;
+                    Logger::Warn(log_context) << "Registration username already exists";
                     co_return std::unexpected(ErrorInfo(ErrorCode::UsernameExists));
                 }
 
                 if (email_count > 0) {
-                    Logger::Warn(log_context)
-                        << "Email already exists: " << request.email.substr(0, 3) << "***@***";
+                    Logger::Warn(log_context) << "Registration email already exists";
                     co_return std::unexpected(ErrorInfo(ErrorCode::EmailExists));
                 }
             }
@@ -100,17 +98,17 @@ namespace disk::auth {
         }
 
         /// 2. 加密密码（使用 libsodium Argon2id）
-        Logger::Debug(log_context) << "Starting password hash: " << request.username;
+        Logger::Debug(log_context) << "Registration password hash started";
         auto hash_result = co_await RunOnAuthCpuPool(
             [password = std::move(request.password)]() {
                 return HashUtil::HashPassword(password);
             }
         );
         if (!hash_result) {
-            Logger::Error(log_context) << "Password hash failed: " << request.username;
+            Logger::Error(log_context) << "Registration password hash failed";
             co_return std::unexpected(hash_result.error());
         }
-        Logger::Debug(log_context) << "Password hash completed: " << request.username;
+        Logger::Debug(log_context) << "Registration password hash completed";
 
         /// 3. 创建用户记录
         Users user;
@@ -127,9 +125,7 @@ namespace disk::auth {
         try {
             CoroMapper<Users> mapper(m_db_client);
             user = co_await mapper.insert(user);
-            Logger::Info(log_context)
-                << "User data inserted successfully: " << request.username
-                << " (ID: " << user.getValueOfId() << ")";
+            Logger::Info(log_context) << "User registration data inserted";
         } catch (const drogon::orm::DrogonDbException&) {
             Logger::Error(log_context) << "User registration database insert failed";
             co_return std::unexpected(
@@ -139,9 +135,7 @@ namespace disk::auth {
 
         /// 5. 返回用户信息
         auto response = UserToResponse(user);
-        Logger::Info(log_context)
-            << "User registration process completed: " << response.username
-            << " (ID: " << response.id << ")";
+        Logger::Info(log_context) << "User registration completed";
         co_return response;
     }
 

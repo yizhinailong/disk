@@ -49,6 +49,22 @@ namespace disk::auth {
             return source.substr(begin);
         }
 
+        auto ExtractBetween(
+            const std::string& source,
+            std::string_view begin_marker,
+            std::string_view end_marker
+        ) -> std::string {
+            const auto begin = source.find(begin_marker);
+            if (begin == std::string::npos) {
+                return {};
+            }
+            const auto end = source.find(end_marker, begin + begin_marker.size());
+            if (end == std::string::npos) {
+                return {};
+            }
+            return source.substr(begin, end - begin);
+        }
+
         auto CallContainsContext(const std::string& source, std::string_view call_marker) -> bool {
             const auto begin = source.find(call_marker);
             if (begin == std::string::npos) {
@@ -193,6 +209,65 @@ namespace disk::auth {
                 EXPECT_FALSE(Contains(*body, "<< access_token"));
                 EXPECT_FALSE(Contains(*body, "<< auth_header"));
             }
+        }
+
+        TEST(AuthRegistrationValueLogContractTest, RegisterUsesFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/AuthService.cpp");
+            const auto register_body = ExtractBetween(
+                service_source,
+                "auto AuthService::Register(",
+                "auto AuthService::Login("
+            );
+
+            ASSERT_FALSE(register_body.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Debug(log_context) << \"User registration started\";",
+                     "Logger::Warn(log_context) << \"Registration username already exists\";",
+                     "Logger::Warn(log_context) << \"Registration email already exists\";",
+                     "Logger::Debug(log_context) << \"Registration password hash started\";",
+                     "Logger::Error(log_context) << \"Registration password hash failed\";",
+                     "Logger::Debug(log_context) << \"Registration password hash completed\";",
+                     "Logger::Info(log_context) << \"User registration data inserted\";",
+                     "Logger::Info(log_context) << \"User registration completed\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(register_body, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_account_log : {
+                     "\"Starting user registration: \" << request.username",
+                     "\"Username already exists: \" << request.username",
+                     "\"Email already exists: \" << request.email.substr(0, 3) << \"***@***\"",
+                     "\"Starting password hash: \" << request.username",
+                     "\"Password hash failed: \" << request.username",
+                     "\"Password hash completed: \" << request.username",
+                     "<< \"User data inserted successfully: \" << request.username",
+                     "<< \"User registration process completed: \" << response.username",
+                 }) {
+                EXPECT_EQ(CountOccurrences(register_body, raw_account_log), 0U)
+                    << raw_account_log;
+            }
+
+            for (const auto* preserved_registration : {
+                     "COUNT(CASE WHEN username = $1 THEN 1 END)",
+                     "COUNT(CASE WHEN email = $2 THEN 1 END)",
+                     "co_await RunOnAuthCpuPool(",
+                     "HashUtil::HashPassword(password)",
+                     "user.setUsername(request.username);",
+                     "user.setEmail(request.email);",
+                     "user.setPasswordHash(hash_result.value());",
+                     "user.setNickname(request.username);",
+                     "user.setStorageQuota(DEFAULT_STORAGE_QUOTA);",
+                     "user.setStorageUsed(0);",
+                     "user.setStatus(1);",
+                     "user.setLoginAttempts(0);",
+                     "user = co_await mapper.insert(user);",
+                     "auto response = UserToResponse(user);",
+                     "co_return response;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(register_body, preserved_registration), 1U)
+                    << preserved_registration;
+            }
+            EXPECT_EQ(CountOccurrences(register_body, "ErrorCode::UsernameExists"), 1U);
+            EXPECT_EQ(CountOccurrences(register_body, "ErrorCode::EmailExists"), 1U);
         }
 
     } // namespace

@@ -1672,7 +1672,7 @@ def test_auth_log_context_invariants() -> None:
         expected_success=False,
         message_markers=(
             "Received user registration request",
-            "Username already exists",
+            "Registration username already exists",
             "User registration business logic failed",
             "HTTP request completed",
         ),

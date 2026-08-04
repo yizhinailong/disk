@@ -355,6 +355,11 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **WHEN** any authentication path succeeds or fails
 - **THEN** application events and typed correlation fields SHALL NOT contain passwords, password hashes, Authorization header values, access tokens, or refresh tokens
 
+#### Scenario: Registration diagnostics exclude raw account values
+- **WHEN** registration starts, detects a username or email conflict, starts, fails, or completes password hashing, inserts the user, or completes the flow
+- **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username, email or mask, user ID, password, password hash, or other account or request value
+- **AND** the parameterized uniqueness query and conflict errors, authentication CPU-pool hashing, user-field initialization, single insert, response mapping, and public response SHALL remain unchanged
+
 #### Scenario: Authentication service dependency work fails
 - **WHEN** authentication-service database work or standard processing throws, or login rate-limit maintenance receives a Redis domain error
 - **THEN** the directly owned event SHALL use its fixed complete failure summary and SHALL NOT append exception text, downstream domain messages, SQL, connection details, Redis keys or values, credentials, or tokens
