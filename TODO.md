@@ -3059,6 +3059,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后的首次上传安全网在认证日志阶段按预期暴露 1 个过期测试标记：前 152 项通过，旧 `User logout:` 起始串无法匹配新的固定摘要；将生产 NDJSON 期望更新为精确 `User logout started` 后 Python 语法检查和完整安全网 886/886 通过。最终定向源码合同 1/1、含 Auth 的 GoogleTest 121/121、OpenSpec 24/24 和完整后端构建通过，真实认证生命周期 6/6、上传安全网均为 0 失败。标准完整 CTest 共 1536 项：1529 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 558.24 秒。源码审计确认六条固定摘要各 1 处、五种旧动态登出日志均为 0，21 项登出数据流和原有 INFO/WARN/WARN/DEBUG/WARN/INFO 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.206 认证用户查找诊断脱敏记录（2026-08-05）
+
+`AuthService::FindUser()` 的无匹配、查找成功和数据库查找失败三条事件，必须分别只记录固定完整摘要 `User lookup found no match`、`User lookup succeeded` 与 `User lookup failed`。message 不得追加用户名、邮箱形式账号、用户 ID、ORM/查询结果、SQL、连接信息、数据库异常或其他账户/依赖值；原 WARN/DEBUG/WARN 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变，既有数据库失败摘要继续保持原样。
+
+既有 username/email 参数化单值查询、完整用户字段选择、空结果与数据库异常统一映射 `UserNotFound`、ORM 用户构造和成功返回不得改变。验证必须新增源码合同锁定三条固定摘要、原始账号排除和完整查找数据流，并执行认证服务 GoogleTest、OpenSpec、完整构建、真实认证流/生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 4 个失败断言：无匹配和成功两条待迁移固定摘要均缺失，对应账号动态日志各命中一次；既有数据库失败固定摘要与参数化 SQL、完整字段选择、空结果/异常错误映射、ORM 构造和成功返回共 11 项数据流断言均通过。
+
+实现后定向源码合同 1/1、含 Auth 的 GoogleTest 122/122、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1537 项：1530 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 548.29 秒。源码审计确认三条固定摘要各 1 处、两种旧动态账号日志均为 0，11 项查找数据流和原有 WARN/DEBUG/WARN 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

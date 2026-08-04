@@ -439,6 +439,54 @@ namespace disk::auth {
             EXPECT_EQ(CountOccurrences(logout_body, "access_token,"), 2U);
         }
 
+        TEST(AuthFindUserValueLogContractTest, LookupUsesFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/AuthService.cpp");
+            const auto find_user_body = ExtractBetween(
+                service_source,
+                "auto AuthService::FindUser(",
+                "auto AuthService::ValidateAccountAccess("
+            );
+
+            ASSERT_FALSE(find_user_body.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Warn(log_context) << \"User lookup found no match\";",
+                     "Logger::Debug(log_context) << \"User lookup succeeded\";",
+                     "Logger::Warn(log_context) << \"User lookup failed\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(find_user_body, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_lookup_log : {
+                     "<< \"User not found: \" << account",
+                     "<< \"Found user: \" << account",
+                 }) {
+                EXPECT_EQ(CountOccurrences(find_user_body, raw_lookup_log), 0U)
+                    << raw_lookup_log;
+            }
+
+            for (const auto* preserved_lookup_step : {
+                     "m_db_client->execSqlCoro(",
+                     "SELECT id, username, email, password_hash, nickname, avatar, ",
+                     "storage_quota, storage_used, storage_reserved, status, role, ",
+                     "login_attempts, locked_until, last_login_at, last_login_ip, ",
+                     "created_at, updated_at ",
+                     "FROM users WHERE username = $1 OR email = $1 LIMIT 1",
+                     "if (result.empty())",
+                     "Users user(result[0], -1);",
+                     "co_return user;",
+                     "catch (const drogon::orm::DrogonDbException&)",
+                 }) {
+                EXPECT_EQ(CountOccurrences(find_user_body, preserved_lookup_step), 1U)
+                    << preserved_lookup_step;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    find_user_body,
+                    "co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));"
+                ),
+                2U
+            );
+        }
+
         TEST(AuthRegistrationDtoValueLogContractTest, RegisterRequestUsesFixedSummaries) {
             const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");
             const auto register_request = ExtractBetween(

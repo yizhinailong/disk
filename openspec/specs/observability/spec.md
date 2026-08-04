@@ -375,6 +375,11 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the user ID, client IP, Authorization value, token, JTI, audit value, exception, or other request or persistence value
 - **AND** client-IP normalization, fail-closed access revocation, fail-open refresh revocation and audit insertion, complete audit-field persistence, and the public response SHALL remain unchanged
 
+#### Scenario: Authentication user lookup diagnostics exclude account values
+- **WHEN** authentication user lookup finds no match, succeeds, or encounters a database failure
+- **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username or email account, user ID, query or ORM result, SQL, connection detail, exception, or other account or dependency value
+- **AND** the parameterized username-or-email query, complete field selection, empty-result and database-error mapping, ORM user construction, and public result SHALL remain unchanged
+
 #### Scenario: Registration request diagnostics exclude raw fields
 - **WHEN** registration request fields are parsed or username, email, or password validation fails
 - **THEN** the directly owned DTO event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username, email, password, or other request value

@@ -390,12 +390,12 @@ namespace disk::auth {
             );
 
             if (result.empty()) {
-                Logger::Warn(log_context) << "User not found: " << account;
+                Logger::Warn(log_context) << "User lookup found no match";
                 co_return std::unexpected(ErrorInfo(ErrorCode::UserNotFound));
             }
 
             Users user(result[0], -1);
-            Logger::Debug(log_context) << "Found user: " << account;
+            Logger::Debug(log_context) << "User lookup succeeded";
             co_return user;
 
         } catch (const drogon::orm::DrogonDbException&) {
