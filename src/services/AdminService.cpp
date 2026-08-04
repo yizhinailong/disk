@@ -81,13 +81,14 @@ namespace disk::services {
                 total = count_result[0]["total"].as<int>();
             }
 
-            int offset = (req.page - 1) * req.page_size;
+            const auto page_size = static_cast<int64_t>(req.page_size);
+            const auto offset = static_cast<int64_t>(req.page - 1) * page_size;
             int total_pages = req.page_size > 0 ? static_cast<int>(std::ceil(static_cast<double>(total) / req.page_size)) : 0;
 
             auto result = co_await m_db_client->execSqlCoro(
                 "SELECT id, username, email, nickname, avatar, " "role, status, storage_quota, storage_used, storage_reserved, " "created_at, last_login_at " "FROM users" + where_clause +
                     " ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-                req.page_size,
+                page_size,
                 offset
             );
 
@@ -117,9 +118,8 @@ namespace disk::services {
             Logger::Info(log_context) << "Admin list users successful: total=" << total;
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Admin list users database error: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Admin list users database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to list users"

@@ -262,7 +262,7 @@ def setup():
 
     # Register a regular user for tests 4-6 (status/role/delete) and 12 (share)
     tag = unique_name("adm")
-    username = f"admintest_{tag}"
+    username = tag
     password = "AdminTest123"
     email = f"{tag}@test.internal"
 
@@ -430,7 +430,7 @@ def test_admin_soft_delete_user():
 
     # Create a throwaway user to soft-delete (so we don't affect other tests)
     tag = unique_name("del")
-    del_username = f"admin_del_{tag}"
+    del_username = tag
     del_password = "DelTest123"
     del_email = f"{tag}@test.internal"
 

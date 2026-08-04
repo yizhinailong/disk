@@ -138,6 +138,38 @@ namespace disk::admin {
             EXPECT_FALSE(Contains(download_source, "auto AddCorrelationDetails("));
         }
 
+        TEST(AdminListUsersLogContractTest, DatabaseExceptionUsesFixedSummary) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto list_body = ExtractRange(
+                service_source,
+                "auto AdminService::ListUsers(",
+                "    auto AdminService::GetUserDetail("
+            );
+
+            ASSERT_FALSE(list_body.empty());
+            EXPECT_EQ(CountOccurrences(list_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "Logger::Error(log_context) << \"Admin list users database error\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "ErrorInfo(\n                ErrorCode::InternalError,\n                \"Failed to list users\""
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(list_body, "execSqlCoro("), 2U);
+            EXPECT_TRUE(Contains(list_body, "ORDER BY created_at DESC LIMIT $1 OFFSET $2"));
+            EXPECT_EQ(
+                CountOccurrences(list_body, "static_cast<int64_t>("),
+                2U
+            );
+        }
+
         TEST(AdminLogContextContractTest, CoreBoundariesUseExplicitTypedContext) {
             const auto controller_source =
                 ReadSourceFile("src/controllers/AdminController.cpp");

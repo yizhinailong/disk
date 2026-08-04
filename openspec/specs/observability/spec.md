@@ -944,6 +944,11 @@ The system SHALL classify the manual expired-cleanup endpoint as the bounded `cl
 - **THEN** its directly owned event SHALL use only its existing-prefix fixed complete summary with typed correlation, and SHALL NOT append domain IDs, exception text, SQL, connection details, paths, storage locators, credentials, or tokens
 - **AND** lookup and validation error mappings, file-load and statistics fail-open behavior, input deduplication and order restoration, joins, chunking, cross-type association ordering, active-state rules, counter and metadata fields, and caller results SHALL remain unchanged
 
+#### Scenario: Administrator user-list query catches a database exception
+- **WHEN** the administrator user-list count or page query catches a database exception
+- **THEN** its directly owned event SHALL use only the fixed complete `Admin list users database error` summary with typed correlation, and SHALL NOT append administrator or user IDs, filter or pagination values, exception text, SQL, connection details, credentials, or tokens
+- **AND** PostgreSQL `LIMIT` and `OFFSET` SHALL bind as `int64_t`, while the existing `InternalError` and `Failed to list users` public mapping, filters, count, created-time descending pagination, nullable-field mapping, pagination metadata, and response SHALL remain unchanged
+
 #### Scenario: Worker executes expiration through shared services
 - **WHEN** a claimed expired-upload or expired-trash job enters the same lifecycle and trash/content services
 - **THEN** its job-level events SHALL retain the corresponding `storage_job_expire_uploads` or `storage_job_expire_trash` operation, persistent job ID, and current owner while request ID and state version remain null; an upload item-level event MAY add only the state version returned by its successful expiration transition

@@ -2795,6 +2795,20 @@ catch 继续返回既有 `InternalError` 与 `Internal error during file deletio
 
 旧实现上的定向源码合同按预期为 0/1，共 10 个失败断言：私有 helper 尾部精确检出 9 处 `.what()`，8 类固定完整摘要缺失，且共享文件下载元数据日志仍追加 `file_id`；4 处既有公开错误映射断言通过。实现后 Share 定向合同 11/11、Share 与分布式拓扑聚焦 CTest 153/153（42.72 秒）、OpenSpec 24/24 通过；完整构建确认 `ShareService.cpp` 实际重新编译并链接。标准完整 CTest 共 1511 项：1504 项通过、7 项按环境门控跳过、0 失败，总耗时 544.01 秒。源码审计确认整个 `ShareService.cpp` 已无 `.what()` 或 `(file_id=` 日志拼接，7 类单点摘要各精确出现 1 次，分享文件列表摘要精确出现 2 次。本批不改变上述业务语义，Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.181 AdminService 用户列表查询异常脱敏记录（2026-08-03）
+
+分布式 ADR、部署、系统测试、单元测试与 OpenSpec 先行收紧管理员用户列表诊断边界。`ListUsers()` 的计数或分页查询遇到数据库异常时，只允许记录固定完整摘要 `Admin list users database error`；message 不得追加管理员/用户 ID、筛选或分页值、异常正文、SQL、连接信息、凭据或 token。
+
+该异常继续返回既有 `InternalError` 与 `Failed to list users`。用户名/邮箱/状态/角色筛选、总数查询、创建时间倒序分页、可空字段映射、分页元数据、request/instance/`admin` 类型化关联、公开响应及 Controller 组合不得改变。
+
+PostgreSQL 将 `LIMIT $1 OFFSET $2` 推断为 `bigint` 参数，因此 `page_size` 与 `offset` 必须与仓内其他分页查询一致显式绑定为 `int64_t`；禁止以 4 字节 `int` 二进制参数触发 `int8` 解码失败。这只修正绑定宽度，不改变 SQL、页码算法或响应数值。
+
+`test_admin_flow.py` 的普通用户与软删除用户夹具必须直接使用带短前缀的 `unique_name()`，在保留 PID+毫秒唯一性的同时满足注册用户名 4–32 字符合同；不得再叠加第二层前缀导致真实管理流在 setup 阶段失效。
+
+旧日志实现上的定向源码合同按预期为 0/1，共 2 个失败断言：`ListUsers()` 精确检出 1 处 `.what()` 且固定完整摘要缺失；既有公开错误、两次查询和倒序分页断言通过。首次真实管理流因夹具叠加前缀超过 32 字符，注册返回 `400/10002`、后续登录返回 404；缩短夹具后 setup 通过，用户列表暴露 `LIMIT/OFFSET` 以 4 字节 `int` 绑定导致的 `500/Failed to list users`。补充绑定合同后旧实现再按预期为 0/1，唯一失败断言精确检出 `int64_t` 转换 0/2，其余断言通过。
+
+实现后 Admin 定向合同 3/3、管理员单元/DTO/过滤器/分布式拓扑聚焦 CTest 59/59（1.70 秒）、Python 语法、OpenSpec 24/24 和差异检查通过；完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流的用户列表、搜索、详情、状态/角色变更、软删除、两项自保护与两项鉴权共前 10 场景通过；第 11 场景在本批范围外的 `ListShares()` 旧分页边界返回 `500/Failed to list shares`，留待 15.182 独立处理。标准完整 CTest 共 1512 项：1505 项通过、7 项按环境门控跳过、0 失败，总耗时 561.13 秒。源码审计确认 `ListUsers()` 中 `.what()` 为 0、固定摘要精确出现 1 次、`int64_t` 转换精确出现 2 次；`AdminService.cpp` 其余路径仍有 22 处 `.what()`。本批不改变筛选、SQL、页码算法、字段映射、类型化关联、公开错误或响应，Phase 10 与最终 Definition of Done 继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
