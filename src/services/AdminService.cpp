@@ -951,9 +951,8 @@ namespace disk::services {
             Logger::Info(log_context) << "Admin list logs successful: total=" << total;
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context)
-                << "Admin list logs database error: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Admin list logs database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to list operation logs"

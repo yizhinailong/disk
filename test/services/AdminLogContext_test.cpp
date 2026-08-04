@@ -831,6 +831,91 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminLogListContractTest, DatabaseExceptionUsesFixedSummary) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto list_body = ExtractRange(
+                service_source,
+                "auto AdminService::GetAdminLogs(",
+                "    auto AdminService::LogOperation("
+            );
+
+            ASSERT_FALSE(list_body.empty());
+            EXPECT_EQ(CountOccurrences(list_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "catch (const drogon::orm::DrogonDbException&)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "Logger::Error(log_context) << \"Admin list logs database error\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "ErrorCode::InternalError,\n                \"Failed to list operation logs\""
+                ),
+                1U
+            );
+
+            EXPECT_EQ(CountOccurrences(list_body, "execSqlCoro("), 2U);
+            EXPECT_EQ(CountOccurrences(list_body, "FILTER_SQL"), 3U);
+            for (const auto* predicate : {
+                     "($1::boolean = FALSE OR action = $2)",
+                     "($3::boolean = FALSE OR created_at >= $4::date)",
+                     "($5::boolean = FALSE OR created_at < $6::date + INTERVAL '1 day')",
+                     "($7::boolean = FALSE OR target_type = $8)",
+                     "($9::boolean = FALSE OR target_name = $10)",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_body, predicate), 1U)
+                    << predicate;
+            }
+            EXPECT_TRUE(Contains(
+                list_body,
+                "SELECT COUNT(*) AS total FROM operation_logs"
+            ));
+            EXPECT_TRUE(Contains(
+                list_body,
+                "SELECT id, user_id, action, target_type, target_id, target_name, details, ip_address, created_at FROM operation_logs"
+            ));
+            EXPECT_TRUE(Contains(
+                list_body,
+                "ORDER BY created_at DESC, id DESC LIMIT $11 OFFSET $12"
+            ));
+            EXPECT_EQ(CountOccurrences(list_body, "static_cast<int64_t>("), 3U);
+
+            for (const auto* field : {
+                     "response.pagination.page = req.page;",
+                     "response.pagination.page_size = req.page_size;",
+                     "response.pagination.total = total;",
+                     "response.pagination.total_pages = total_pages;",
+                     "log.id = row[\"id\"].as<uint64_t>();",
+                     "log.user_id = row[\"user_id\"].isNull()",
+                     "log.action = row[\"action\"].as<std::string>();",
+                     "log.target_type = row[\"target_type\"].isNull()",
+                     "log.target_id = row[\"target_id\"].isNull()",
+                     "log.target_name = row[\"target_name\"].isNull()",
+                     "log.details = row[\"details\"].isNull()",
+                     "log.ip_address = row[\"ip_address\"].as<std::string>();",
+                     "log.created_at = row[\"created_at\"].as<std::string>();",
+                     "response.items.push_back(std::move(log));",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_body, field), 1U) << field;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_body,
+                    "Logger::Info(log_context) << \"Admin list logs successful: total=\" << total;"
+                ),
+                1U
+            );
+        }
+
         TEST(AdminListSharesLogContractTest, DatabaseExceptionUsesFixedSummary) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto list_body = ExtractRange(

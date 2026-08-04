@@ -2917,6 +2917,16 @@ Web API/store/view、Qt `AdminShareListModel`/`AdminManager`/QML 与 TUI client/
 
 实现后定向源码合同 1/1、全部 Admin GoogleTest 77/77、`SystemStatusResponse` DTO 4/4、OpenSpec 24/24 和完整后端构建通过。真实管理流全部 25 个断言组通过、0 失败，系统状态返回 `db_connected=true`、`redis_connected=true` 和 uptime，后续缺失用户、配额与鉴权场景继续通过。标准完整 CTest 共 1522 项：1515 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 555.52 秒。源码审计确认 `GetSystemStatus()` 范围内四类异常均匿名捕获、`.what()` 为 0，数据库/Redis/磁盘固定摘要分别为 1/2/1 处；`AdminService.cpp` 其余 2 处 `.what()` 留待后续独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.192 AdminService 管理日志列表诊断脱敏记录（2026-08-04）
+
+`GetAdminLogs()` 的计数或分页查询遇到数据库异常时，只允许记录固定完整摘要 `Admin list logs database error`；message 不得追加筛选值、分页值、异常正文、SQL、连接信息、审计详情、凭据或 token。异常必须匿名捕获，并继续返回既有 `InternalError` 与 `Failed to list operation logs`。
+
+action/日期范围/target type/target name 五类可选筛选、计数与倒序分页两条参数化查询、64 位 LIMIT/OFFSET 绑定、总页数、可空字段映射、成功日志、成功响应、鉴权和类型化请求上下文不得改变。验证必须新增源码合同锁定匿名捕获、固定诊断、公开错误、筛选 SQL、两次查询、分页与字段映射，并执行 DTO/全部 Admin GoogleTest、OpenSpec、完整构建、真实管理员日志筛选流及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 3 个失败断言：方法范围内仍有 1 处 `.what()`，数据库异常捕获仍绑定异常对象，固定完整摘要缺失；五类筛选、两条查询、64 位分页、四项分页响应、九项日志字段映射、成功日志和公开错误断言均通过。
+
+实现后定向源码合同 1/1、全部 Admin GoogleTest 78/78、管理日志 DTO 9/9、OpenSpec 24/24 和完整后端构建通过。真实管理流全部 25 个断言组通过、0 失败，可用空间变更审计继续通过管理日志筛选读取，后续缺失用户、参数校验和鉴权场景继续通过。标准完整 CTest 共 1523 项：1516 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 550.89 秒。源码审计确认 `GetAdminLogs()` 范围内数据库异常匿名捕获与固定摘要各 1 处、`.what()` 为 0；`AdminService.cpp` 只剩 `LogOperation()` 的 1 处 `.what()`，留待独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
