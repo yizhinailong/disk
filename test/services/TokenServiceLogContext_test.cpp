@@ -415,6 +415,65 @@ namespace disk::services {
             EXPECT_EQ(CountOccurrences(rotation_body, "log_context"), 5U);
         }
 
+        TEST(TokenPairGenerationValueLogContractTest, SuccessUsesFixedSummary) {
+            const auto source = ReadSourceFile("src/services/TokenService.cpp");
+            const auto generation_body = SourceSection(
+                source,
+                "auto TokenService::GenerateTokens(",
+                "auto TokenService::VerifyAccessToken("
+            );
+
+            ASSERT_FALSE(generation_body.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    generation_body,
+                    "Logger::Debug(log_context) << \"Token pair generated successfully\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(generation_body, "Logger::Debug(log_context)"), 1U);
+            for (const auto* raw_token_log : {
+                     "<< \"Generating token pair: user_id=\" << user_id",
+                     "<< \", access_jti=\" << access_jti",
+                     "<< \", refresh_jti=\" << refresh_jti",
+                 }) {
+                EXPECT_EQ(CountOccurrences(generation_body, raw_token_log), 0U)
+                    << raw_token_log;
+            }
+
+            for (const auto* preserved_generation_step : {
+                     "const auto now = std::chrono::system_clock::now();",
+                     "const auto access_jti = drogon::utils::getUuid();",
+                     "const auto refresh_jti = drogon::utils::getUuid();",
+                     "jwt::builder<jwt::default_clock, traits> access_builder{ jwt::default_clock{} };",
+                     "access_builder.set_issuer(\"disk\")",
+                     ".set_payload_claim(\"username\", username)",
+                     ".set_payload_claim(\"type\", \"access\")",
+                     ".set_payload_claim(\"jti\", access_jti)",
+                     ".set_payload_claim(\"role\", role)",
+                     ".set_payload_claim(\"status\", status)",
+                     ".set_expires_at(now + std::chrono::seconds(GetAccessTokenExpireSeconds()))",
+                     "jwt::builder<jwt::default_clock, traits> refresh_builder{ jwt::default_clock{} };",
+                     "refresh_builder.set_issuer(\"disk\")",
+                     ".set_payload_claim(\"type\", \"refresh\")",
+                     ".set_payload_claim(\"jti\", refresh_jti)",
+                     ".set_expires_at(now + std::chrono::seconds(GetRefreshTokenExpireSeconds()))",
+                     "return { access_token, refresh_token };",
+                 }) {
+                EXPECT_EQ(CountOccurrences(generation_body, preserved_generation_step), 1U)
+                    << preserved_generation_step;
+            }
+            for (const auto* symmetric_generation_step : {
+                     ".set_type(\"JWT\")",
+                     ".set_subject(std::to_string(user_id))",
+                     ".set_issued_at(now)",
+                     ".sign(jwt::algorithm::hs256{ m_jwt_secret });",
+                 }) {
+                EXPECT_EQ(CountOccurrences(generation_body, symmetric_generation_step), 2U)
+                    << symmetric_generation_step;
+            }
+        }
+
         TEST(TokenShareGenerationValueLogContractTest, SuccessUsesFixedSummary) {
             const auto source = ReadSourceFile("src/services/TokenService.cpp");
             const auto generation_body = SourceSection(
@@ -781,7 +840,7 @@ namespace disk::services {
 
             const auto records = DrainRecords(7);
             ASSERT_EQ(records.size(), 7U);
-            ExpectContext(records[0], "token-auth-request", "auth", "debug", "Generating token pair:");
+            ExpectContext(records[0], "token-auth-request", "auth", "debug", "Token pair generated successfully");
             ExpectContext(records[1], "token-auth-request", "auth", "info", "op=jwt_verify");
             ExpectContext(records[2], "token-auth-request", "auth", "trace", "JWT verification successful:");
             ExpectContext(records[3], "token-auth-request", "auth", "info", "op=jwt_refresh_verify");

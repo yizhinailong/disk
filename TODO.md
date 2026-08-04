@@ -3139,6 +3139,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、新合同/畸形令牌/ShareAuthFilter 聚焦用例 18/18、Token/ShareAuthFilter GoogleTest 155/155、OpenSpec 24/24 和完整后端构建通过；真实分享限流与 blacklist 撤销流 10/10、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1544 项：1537 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 554.26 秒；其中上传安全网为 886/886。源码审计确认固定撤销摘要 1 处，旧动态日志、实现/声明中的死参数和两个空实参均为 0，12 项撤销数据流、4 处上下文、WARN 级别和 fail-closed 语义保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.214 Access/Refresh 令牌对签发诊断脱敏记录（2026-08-05）
+
+`TokenService::GenerateTokens()` 的令牌对签发成功事件必须只记录固定完整摘要 `Token pair generated successfully`。message 不得追加用户 ID/名称、角色、状态、access/refresh JTI、JWT secret、原始 access/refresh token、claim、签名、签发/过期时间、TTL、异常或其他认证会话状态值；原 DEBUG 级别、调用方 request/instance/`auth` 上下文和双 token 完成签名后的触发位置保持不变。
+
+既有独立随机 access/refresh JTI、共同签发时间、`disk` issuer、JWT type、用户 subject、access 的用户名/角色/状态/type/JTI claims、refresh 的 type/JTI claims、7200/604800 秒过期时间、HS256 签名和 token pair 返回不得改变。验证必须新增源码合同锁定固定摘要、原始用户/JTI/token 值排除和完整双签发数据流，并执行 Token/auth GoogleTest、OpenSpec、完整构建、真实认证与 refresh 流、双实例认证一致性、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 4 个失败断言：待迁移固定成功摘要缺失，用户 ID、access JTI 与 refresh JTI 动态日志片段各命中一次；17 个单次步骤与 4 组双 token 对称步骤共 21 项签发数据流断言均通过。
+
+实现后定向源码合同 1/1、源码合同与内存结构化日志聚焦用例 2/2、全部 Token GoogleTest 153/153、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1545 项：1538 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 554.50 秒；其中上传安全网为 886/886。源码审计确认固定签发摘要 1 处，用户 ID、access JTI 与 refresh JTI 三种旧动态日志片段均为 0，21 项签发数据流和原 DEBUG 级别保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

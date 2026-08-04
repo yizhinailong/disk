@@ -167,9 +167,7 @@ namespace disk::services {
                 .set_issued_at(now)
                 .set_expires_at(now + std::chrono::seconds(GetRefreshTokenExpireSeconds()))
                 .sign(jwt::algorithm::hs256{ m_jwt_secret });
-        Logger::Debug(log_context)
-            << "Generating token pair: user_id=" << user_id << ", access_jti=" << access_jti
-            << ", refresh_jti=" << refresh_jti;
+        Logger::Debug(log_context) << "Token pair generated successfully";
         return { access_token, refresh_token };
     }
 
