@@ -365,6 +365,11 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the account, client IP, attempt count, user ID, password or hash, token, Redis key or value, downstream error, or other request or response value
 - **AND** IP normalization, rate-limit behavior, user and account validation, CPU-pool password verification, failure counting, login-state update, token generation and persistence, response mapping, and public errors SHALL remain unchanged
 
+#### Scenario: Refresh diagnostics exclude token identity values
+- **WHEN** refresh starts, verification fails or succeeds, the user is loaded, CAS renewal fails, refresh succeeds, or user query or processing raises an exception
+- **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the user ID, JTI, username, token, Redis key or value, exception, downstream error, or other request or response value
+- **AND** verification and error forwarding, identity unpacking, parameterized user lookup, account validation, token generation, single-winner CAS renewal, response mapping, exception classification, and public errors SHALL remain unchanged
+
 #### Scenario: Registration request diagnostics exclude raw fields
 - **WHEN** registration request fields are parsed or username, email, or password validation fails
 - **THEN** the directly owned DTO event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username, email, password, or other request value

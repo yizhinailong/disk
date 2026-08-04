@@ -327,6 +327,61 @@ namespace disk::auth {
             }
         }
 
+        TEST(AuthRefreshServiceValueLogContractTest, RefreshUsesFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/AuthService.cpp");
+            const auto refresh_body = ExtractBetween(
+                service_source,
+                "auto AuthService::RefreshTokens(",
+                "AuthService::Logout("
+            );
+
+            ASSERT_FALSE(refresh_body.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Debug(log_context) << \"Starting token refresh\";",
+                     "Logger::Warn(log_context) << \"Refresh token verification failed\";",
+                     "Logger::Debug(log_context) << \"Refresh token verified\";",
+                     "Logger::Debug(log_context) << \"Refresh user loaded\";",
+                     "Logger::Warn(log_context) << \"Refresh token renewal failed\";",
+                     "Logger::Info(log_context) << \"Token refresh successful\";",
+                     "Logger::Error(log_context) << \"User query failed\";",
+                     "Logger::Error(log_context) << \"Token refresh processing failed\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(refresh_body, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_refresh_log : {
+                     "<< \"Refresh token verified successfully: user_id=\" << user_id << \", jti=\" << jti",
+                     "<< \"Found user: \" << user.getValueOfUsername()",
+                     "<< \"Refresh token renewal failed: \" << user.getValueOfId()",
+                     "<< \"Token refresh successful: user_id=\" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(refresh_body, raw_refresh_log), 0U)
+                    << raw_refresh_log;
+            }
+
+            for (const auto* preserved_refresh_step : {
+                     "TokenService::GetInstance()->VerifyRefreshToken(",
+                     "const auto [user_id, jti] = verify_result.value();",
+                     "CoroMapper<Users> mapper(m_db_client);",
+                     "mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id))",
+                     "ValidateAccountAccess(user_id, log_context)",
+                     "TokenService::GetInstance()->GenerateTokens(",
+                     "TokenService::GetInstance()->RefreshRefreshToken(",
+                     "response.access_token = access_token;",
+                     "response.refresh_token = new_refresh_token;",
+                     "response.expires_in = disk::services::TokenService::GetAccessTokenExpireSeconds();",
+                     "co_return response;",
+                     "catch (const drogon::orm::DrogonDbException&)",
+                     "ErrorInfo(ErrorCode::UserNotFound)",
+                     "catch (const std::exception&)",
+                     "ErrorInfo(ErrorCode::InternalError, \"Token refresh failed, please try again later\")",
+                 }) {
+                EXPECT_EQ(CountOccurrences(refresh_body, preserved_refresh_step), 1U)
+                    << preserved_refresh_step;
+            }
+            EXPECT_EQ(CountOccurrences(refresh_body, "request.refresh_token,"), 2U);
+            EXPECT_EQ(CountOccurrences(refresh_body, "new_refresh_token,"), 1U);
+        }
+
         TEST(AuthRegistrationDtoValueLogContractTest, RegisterRequestUsesFixedSummaries) {
             const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");
             const auto register_request = ExtractBetween(

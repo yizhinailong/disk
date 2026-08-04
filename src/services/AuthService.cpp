@@ -261,8 +261,7 @@ namespace disk::auth {
         }
 
         const auto [user_id, jti] = verify_result.value();
-        Logger::Debug(log_context)
-            << "Refresh token verified successfully: user_id=" << user_id << ", jti=" << jti;
+        Logger::Debug(log_context) << "Refresh token verified";
 
         /// 2. 查询用户信息
         try {
@@ -270,7 +269,7 @@ namespace disk::auth {
 
             auto user =
                 co_await mapper.findOne(Criteria(Users::Cols::_id, CompareOperator::EQ, user_id));
-            Logger::Debug(log_context) << "Found user: " << user.getValueOfUsername();
+            Logger::Debug(log_context) << "Refresh user loaded";
 
             /// 3. 使用数据库时间检查账户状态
             auto access_result = co_await ValidateAccountAccess(user_id, log_context);
@@ -295,8 +294,7 @@ namespace disk::auth {
                 log_context
             );
             if (!refresh_result) {
-                Logger::Warn(log_context)
-                    << "Refresh token renewal failed: " << user.getValueOfId();
+                Logger::Warn(log_context) << "Refresh token renewal failed";
                 co_return std::unexpected(refresh_result.error());
             }
 
@@ -306,7 +304,7 @@ namespace disk::auth {
             response.refresh_token = new_refresh_token;
             response.expires_in = disk::services::TokenService::GetAccessTokenExpireSeconds();
 
-            Logger::Info(log_context) << "Token refresh successful: user_id=" << user_id;
+            Logger::Info(log_context) << "Token refresh successful";
             co_return response;
 
         } catch (const drogon::orm::DrogonDbException&) {

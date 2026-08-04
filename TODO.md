@@ -3039,6 +3039,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 119/119、LoginRequest DTO GoogleTest 9/9、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1534 项：1527 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 560.68 秒。源码审计确认七条固定摘要各 1 处、六种旧动态登录日志均为 0，19 项登录数据流和原有 DEBUG/WARN/WARN/WARN/WARN/WARN/INFO 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.204 刷新令牌服务诊断脱敏记录（2026-08-05）
+
+`AuthService::RefreshTokens()` 的刷新开始、验签失败、验签成功、用户加载、CAS 轮换失败、刷新成功、用户查询失败和刷新处理失败八条事件，必须分别只记录固定完整摘要 `Starting token refresh`、`Refresh token verification failed`、`Refresh token verified`、`Refresh user loaded`、`Refresh token renewal failed`、`Token refresh successful`、`User query failed` 与 `Token refresh processing failed`。message 不得追加用户 ID、JTI、用户名、refresh/access token、Redis key/value、数据库或标准异常、下游错误及其他刷新请求/响应值；原 DEBUG/WARN/DEBUG/DEBUG/WARN/INFO/ERROR/ERROR 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变，既有开始、验签失败及两条异常摘要继续保持原样。
+
+既有 refresh token 验签与错误透传、用户 ID/JTI 领域解包、参数化用户查询、数据库时间账户校验、新令牌生成、Redis CAS 单赢家轮换、完整响应映射、数据库/标准异常分类及公开错误不得改变。验证必须新增源码合同锁定八条固定摘要、原始刷新领域值排除和完整刷新数据流，并执行认证服务/DTO GoogleTest、OpenSpec、完整构建、真实 refresh/认证生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 8 个失败断言：验签成功、用户加载、CAS 轮换失败和刷新成功四条待迁移固定摘要均缺失，对应用户 ID/JTI、用户名和用户 ID 四条动态日志各命中一次；刷新开始、验签失败与两类异常四条既有固定摘要和验签、查询、账户校验、令牌/CAS、响应、异常分类共 17 项数据流断言均通过。
+
+实现后定向源码合同 1/1、含 Auth 的 GoogleTest 120/120、RefreshToken request/response DTO GoogleTest 4/4、OpenSpec 24/24 和完整后端构建通过；真实 refresh 轮换 6/6、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1535 项：1528 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 552.18 秒。源码审计确认八条固定摘要各 1 处、四种旧动态刷新日志均为 0，17 项刷新数据流和原有 DEBUG/WARN/DEBUG/DEBUG/WARN/INFO/ERROR/ERROR 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
