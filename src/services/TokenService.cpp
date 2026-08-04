@@ -579,8 +579,7 @@ namespace disk::services {
                     .set_expires_at(now + std::chrono::seconds(GetShareTokenExpireSeconds()))
                     .sign(jwt::algorithm::hs256{ jwt_secret });
 
-            Logger::Debug(log_context) << "Generated share token: share_code=" << share_code
-                                       << ", share_id=" << share_id;
+            Logger::Debug(log_context) << "Share token generated successfully";
             return token;
         } catch (const std::exception&) {
             Logger::Error(log_context) << "Failed to generate share token";

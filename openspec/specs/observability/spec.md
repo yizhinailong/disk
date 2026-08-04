@@ -124,6 +124,11 @@ The shared token service SHALL accept explicit correlation by value for request-
 - **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the user ID, raw token, token hash, Redis key or value, CAS result or error, TTL, connection detail, exception, or other session-state value
 - **AND** refresh-key construction, old/new token hashing, error forwarding, atomic compare-and-swap with the refresh TTL and caller context, single-use rejection, and success result SHALL remain unchanged
 
+#### Scenario: Share-token issuance diagnostics exclude share values
+- **WHEN** share-token generation succeeds
+- **THEN** the directly owned DEBUG event SHALL use the fixed complete summary `Share token generated successfully` with the caller's typed correlation and SHALL NOT append the share code, internal share ID, permission, JTI, JWT secret, raw share token, claim, signature, TTL, exception, or other share-session value
+- **AND** permission validation, random JTI generation, scope and claims, issuer, type, subject, issued and expiry times, HS256 signing, fixed failure summary, error mapping, and token result SHALL remain unchanged
+
 #### Scenario: Token service classifies token expiry
 - **WHEN** JWT verification throws a token verification exception
 - **THEN** expiry SHALL be identified only by comparing the structured error code with `token_verification_error::token_expired`, and SHALL NOT be inferred by searching exception text

@@ -415,6 +415,58 @@ namespace disk::services {
             EXPECT_EQ(CountOccurrences(rotation_body, "log_context"), 5U);
         }
 
+        TEST(TokenShareGenerationValueLogContractTest, SuccessUsesFixedSummary) {
+            const auto source = ReadSourceFile("src/services/TokenService.cpp");
+            const auto generation_body = SourceSection(
+                source,
+                "auto TokenService::GenerateShareToken(",
+                "auto TokenService::VerifyShareToken("
+            );
+
+            ASSERT_FALSE(generation_body.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    generation_body,
+                    "Logger::Debug(log_context) << \"Share token generated successfully\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(generation_body, "Logger::Debug(log_context)"), 1U);
+            for (const auto* raw_share_log : {
+                     "<< \"Generated share token: share_code=\" << share_code",
+                     "<< \", share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(generation_body, raw_share_log), 0U)
+                    << raw_share_log;
+            }
+
+            for (const auto* preserved_generation_step : {
+                     "if (!IsValidSharePermission(permission))",
+                     "ErrorInfo(disk::error::Code::InvalidParameter, \"Invalid share permission\")",
+                     "const auto jti = drogon::utils::getUuid();",
+                     "Json::Value scope(Json::objectValue);",
+                     "scope[\"share_id\"] = share_code;",
+                     "scope[\"permission\"] = permission;",
+                     ".set_issuer(\"disk_share\")",
+                     ".set_type(\"JWT\")",
+                     ".set_subject(std::to_string(share_id))",
+                     ".set_payload_claim(\"share_code\", share_code)",
+                     ".set_payload_claim(\"type\", \"share\")",
+                     ".set_payload_claim(\"jti\", jti)",
+                     ".set_payload_claim(\"scope\", scope)",
+                     ".set_issued_at(now)",
+                     ".set_expires_at(now + std::chrono::seconds(GetShareTokenExpireSeconds()))",
+                     ".sign(jwt::algorithm::hs256{ jwt_secret });",
+                     "return token;",
+                     "catch (const std::exception&)",
+                     "Logger::Error(log_context) << \"Failed to generate share token\";",
+                     "ErrorInfo(disk::error::Code::InternalError, \"Token generation failed\")",
+                 }) {
+                EXPECT_EQ(CountOccurrences(generation_body, preserved_generation_step), 1U)
+                    << preserved_generation_step;
+            }
+        }
+
         class TokenServiceLogContextTest : public ::testing::Test {
         protected:
             auto SetUp() -> void override {
@@ -553,7 +605,7 @@ namespace disk::services {
             ExpectContext(records[2], "token-auth-request", "auth", "trace", "JWT verification successful:");
             ExpectContext(records[3], "token-auth-request", "auth", "info", "op=jwt_refresh_verify");
             ExpectContext(records[4], "token-auth-request", "auth", "trace", "Refresh token verification successful:");
-            ExpectContext(records[5], "token-share-request", "share", "debug", "Generated share token:");
+            ExpectContext(records[5], "token-share-request", "share", "debug", "Share token generated successfully");
             ExpectContext(records[6], "token-share-request", "share", "debug", "Share token verification successful:");
             ExpectSecretsExcluded(
                 records,
