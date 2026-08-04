@@ -467,6 +467,73 @@ namespace disk::services {
             }
         }
 
+        TEST(TokenShareVerificationValueLogContractTest, SuccessUsesFixedSummary) {
+            const auto source = ReadSourceFile("src/services/TokenService.cpp");
+            const auto verification_body = SourceSection(
+                source,
+                "auto TokenService::VerifyShareToken(",
+                "auto TokenService::ExtractShareTokenHash("
+            );
+
+            ASSERT_FALSE(verification_body.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    verification_body,
+                    "Logger::Debug(log_context) << \"Share token verification successful\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(verification_body, "Logger::Debug(log_context)"), 1U);
+            for (const auto* raw_share_log : {
+                     "<< \"Share token verification successful: share_code=\" << share_code",
+                     "<< \", share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(verification_body, raw_share_log), 0U)
+                    << raw_share_log;
+            }
+
+            for (const auto* preserved_verification_step : {
+                     "if (token.empty())",
+                     "ErrorInfo(disk::error::Code::TokenMalformed, \"Token is empty\")",
+                     "auto decoded = jwt::decode<JwtTraits>(token);",
+                     "const auto token_service = GetInstance();",
+                     "if (token_service->m_jwt_secret == jwt_secret)",
+                     "token_service->m_share_jwt_verifier.verify(decoded);",
+                     "BuildShareJwtVerifier(jwt_secret).verify(decoded);",
+                     "const auto type = decoded.get_payload_claim(\"type\").as_string();",
+                     "if (type != \"share\")",
+                     "ErrorInfo(disk::error::Code::TokenWrongType)",
+                     "const auto share_code = decoded.get_payload_claim(\"share_code\").as_string();",
+                     "const auto jti = decoded.get_payload_claim(\"jti\").as_string();",
+                     "const auto share_id_str = decoded.get_subject();",
+                     "std::size_t parsed_length = 0;",
+                     "const auto share_id = std::stoull(share_id_str, &parsed_length);",
+                     "if (share_code.empty() || jti.empty() || share_id == 0 || parsed_length != share_id_str.size())",
+                     "const auto scope = decoded.get_payload_claim(\"scope\").to_json();",
+                     "if (!scope.isObject() || !scope.isMember(\"share_id\") ||",
+                     "!scope[\"share_id\"].isString() || !scope.isMember(\"permission\") ||",
+                     "!scope[\"permission\"].isString())",
+                     "const auto scope_share_id = scope[\"share_id\"].asString();",
+                     "const auto scope_permission = scope[\"permission\"].asString();",
+                     "if (scope_share_id != share_code || !IsValidSharePermission(scope_permission))",
+                     "return ShareTokenClaims{",
+                     ".share_code = share_code,",
+                     ".share_id = share_id,",
+                     ".jti = jti,",
+                     ".share_id = scope_share_id,",
+                     ".permission = scope_permission,",
+                     "catch (const jwt::error::token_verification_exception& error)",
+                     "Logger::Warn(log_context) << \"Share token verification failed\";",
+                     "if (IsTokenExpired(error))",
+                     "ErrorInfo(disk::error::Code::TokenExpired)",
+                     "catch (const std::exception&)",
+                     "Logger::Warn(log_context) << \"Share token parsing failed\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(verification_body, preserved_verification_step), 1U)
+                    << preserved_verification_step;
+            }
+        }
+
         class TokenServiceLogContextTest : public ::testing::Test {
         protected:
             auto SetUp() -> void override {
@@ -606,7 +673,7 @@ namespace disk::services {
             ExpectContext(records[3], "token-auth-request", "auth", "info", "op=jwt_refresh_verify");
             ExpectContext(records[4], "token-auth-request", "auth", "trace", "Refresh token verification successful:");
             ExpectContext(records[5], "token-share-request", "share", "debug", "Share token generated successfully");
-            ExpectContext(records[6], "token-share-request", "share", "debug", "Share token verification successful:");
+            ExpectContext(records[6], "token-share-request", "share", "debug", "Share token verification successful");
             ExpectSecretsExcluded(
                 records,
                 {

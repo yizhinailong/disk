@@ -636,9 +636,7 @@ namespace disk::services {
                 return std::unexpected(ErrorInfo(disk::error::Code::TokenMalformed));
             }
 
-            Logger::Debug(log_context)
-                << "Share token verification successful: share_code=" << share_code
-                << ", share_id=" << share_id;
+            Logger::Debug(log_context) << "Share token verification successful";
             return ShareTokenClaims{
                 .share_code = share_code,
                 .share_id = share_id,

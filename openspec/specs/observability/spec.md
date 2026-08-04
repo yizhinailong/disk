@@ -129,6 +129,11 @@ The shared token service SHALL accept explicit correlation by value for request-
 - **THEN** the directly owned DEBUG event SHALL use the fixed complete summary `Share token generated successfully` with the caller's typed correlation and SHALL NOT append the share code, internal share ID, permission, JTI, JWT secret, raw share token, claim, signature, TTL, exception, or other share-session value
 - **AND** permission validation, random JTI generation, scope and claims, issuer, type, subject, issued and expiry times, HS256 signing, fixed failure summary, error mapping, and token result SHALL remain unchanged
 
+#### Scenario: Share-token verification diagnostics exclude share values
+- **WHEN** share-token verification succeeds after all claims and scope checks
+- **THEN** the directly owned DEBUG event SHALL use the fixed complete summary `Share token verification successful` with the caller's typed correlation and SHALL NOT append the share code, internal share ID, permission, JTI, JWT secret, raw share token, claim or scope, verification or parsing result, exception, or other share-session value
+- **AND** empty-token rejection, JWT decoding, initialized or temporary-secret verifier selection, issuer, signature and expiry verification, claim and scope integrity checks, permission constraints, structured claims result, fixed failure summaries, and error mapping SHALL remain unchanged
+
 #### Scenario: Token service classifies token expiry
 - **WHEN** JWT verification throws a token verification exception
 - **THEN** expiry SHALL be identified only by comparing the structured error code with `token_verification_error::token_expired`, and SHALL NOT be inferred by searching exception text

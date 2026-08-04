@@ -3119,6 +3119,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、源码合同与内存结构化日志聚焦用例 2/2、全部 Token GoogleTest 150/150、OpenSpec 24/24 和完整后端构建通过；真实分享令牌安全流 12/12、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1542 项：1535 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 551.53 秒；其中上传安全网为 886/886。源码审计确认固定成功摘要 1 处、旧分享码与内部分享 ID 动态日志片段均为 0，20 项签发数据流和原 DEBUG 级别保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.212 分享令牌验签成功诊断脱敏记录（2026-08-05）
+
+`TokenService::VerifyShareToken()` 的验签成功事件必须只记录固定完整摘要 `Share token verification successful`。message 不得追加分享码、内部分享 ID、权限、JTI、JWT secret、原始分享 token、claim/scope、验签/解析结果、异常或其他分享会话状态值；原 DEBUG 级别、调用方 request/instance/`share` 上下文和全部校验通过后的触发位置保持不变。
+
+既有空 token 拒绝、JWT 解码、已初始化或临时密钥 verifier 选择、issuer/签名/过期验证、type/share code/JTI/subject/scope 提取与完整性校验、`view`/`download` 权限约束、结构化 claims 返回、固定失败摘要和错误映射不得改变。验证必须新增源码合同锁定固定成功摘要、原始分享值排除和完整验签数据流，并执行 Token/share GoogleTest、OpenSpec、完整构建、真实分享令牌安全流、双实例认证一致性、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 3 个失败断言：待迁移固定成功摘要缺失，分享码与内部分享 ID 动态日志片段各命中一次；空 token 拒绝、verifier 选择、type/claims/scope/权限校验、结构化结果、固定失败摘要和错误映射共 35 项验签数据流断言均通过。
+
+实现后定向源码合同 1/1、源码合同与内存结构化日志聚焦用例 2/2、全部 Token GoogleTest 151/151、OpenSpec 24/24 和完整后端构建通过；真实分享令牌安全流 12/12、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1543 项：1536 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 568.70 秒；其中上传安全网为 886/886。源码审计确认固定成功摘要 1 处、旧分享码与内部分享 ID 动态日志片段均为 0，35 项验签数据流和原 DEBUG 级别保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
