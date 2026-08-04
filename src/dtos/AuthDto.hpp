@@ -82,23 +82,22 @@ namespace disk::auth {
             request.email = std::move(*email_result);
             request.password = std::move(*password_result);
 
-            Logger::Debug(log_context)
-                << "Parsed register request: " << request.username << " <" << request.email << ">";
+            Logger::Debug(log_context) << "Register request fields parsed";
 
             if (!request.ValidateUsername()) {
-                Logger::Warn(log_context) << "Username format error: " << request.username;
+                Logger::Warn(log_context) << "Register username validation failed";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Username format error")
                 );
             }
             if (!request.ValidateEmail()) {
-                Logger::Warn(log_context) << "Email format error: " << request.email;
+                Logger::Warn(log_context) << "Register email validation failed";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Email format error")
                 );
             }
             if (!request.ValidatePassword()) {
-                Logger::Warn(log_context) << "Password format error: " << request.username;
+                Logger::Warn(log_context) << "Register password validation failed";
                 return std::unexpected(
                     ErrorInfo(ErrorCode::ValidationFailed, "Password format error")
                 );

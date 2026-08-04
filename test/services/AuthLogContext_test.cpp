@@ -270,5 +270,67 @@ namespace disk::auth {
             EXPECT_EQ(CountOccurrences(register_body, "ErrorCode::EmailExists"), 1U);
         }
 
+        TEST(AuthRegistrationDtoValueLogContractTest, RegisterRequestUsesFixedSummaries) {
+            const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");
+            const auto register_request = ExtractBetween(
+                dto_source,
+                "struct RegisterRequest",
+                "struct LoginRequest"
+            );
+
+            ASSERT_FALSE(register_request.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Debug(log_context) << \"Register request fields parsed\";",
+                     "Logger::Warn(log_context) << \"Register username validation failed\";",
+                     "Logger::Warn(log_context) << \"Register email validation failed\";",
+                     "Logger::Warn(log_context) << \"Register password validation failed\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(register_request, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_field_log : {
+                     "<< \"Parsed register request: \" << request.username",
+                     "<< \"Username format error: \" << request.username",
+                     "<< \"Email format error: \" << request.email",
+                     "<< \"Password format error: \" << request.username",
+                 }) {
+                EXPECT_EQ(CountOccurrences(register_request, raw_field_log), 0U)
+                    << raw_field_log;
+            }
+
+            for (const auto* preserved_parse_step : {
+                     "auto json_result = RequireJsonBody(req);",
+                     "auto username_result = RequireString(json, \"username\");",
+                     "auto email_result = RequireString(json, \"email\");",
+                     "auto password_result = RequireString(json, \"password\");",
+                     "request.username = std::move(*username_result);",
+                     "request.email = std::move(*email_result);",
+                     "request.password = std::move(*password_result);",
+                     "if (!request.ValidateUsername())",
+                     "if (!request.ValidateEmail())",
+                     "if (!request.ValidatePassword())",
+                     "ErrorInfo(ErrorCode::ValidationFailed, \"Username format error\")",
+                     "ErrorInfo(ErrorCode::ValidationFailed, \"Email format error\")",
+                     "ErrorInfo(ErrorCode::ValidationFailed, \"Password format error\")",
+                     "return request;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(register_request, preserved_parse_step), 1U)
+                    << preserved_parse_step;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    register_request,
+                    "Logger::Debug(log_context) << \"Start parsing register request parameters\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    register_request,
+                    "Logger::Debug(log_context) << \"Request parameters validated\";"
+                ),
+                1U
+            );
+        }
+
     } // namespace
 } // namespace disk::auth
