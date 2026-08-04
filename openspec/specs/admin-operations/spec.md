@@ -24,6 +24,10 @@ The system SHALL allow administrators to list, inspect, and manage user status a
 - **WHEN** an administrator requests the user list with valid filters and pagination
 - **THEN** the system SHALL return matching users and pagination metadata
 
+#### Scenario: Administrator inspects a missing user
+- **WHEN** an administrator requests details for a user ID that does not exist
+- **THEN** the system SHALL return the administrator user-not-found error with HTTP 404 rather than treating the missing row as a database failure
+
 #### Scenario: Administrator changes user status or role
 - **WHEN** an administrator changes another user's status or role to a valid value
 - **THEN** the system SHALL update the target user and record the administrative result

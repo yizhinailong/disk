@@ -684,11 +684,15 @@ def test_admin_get_nonexistent_user():
     )
 
     code = json_field(resp.text, "code")
+    message = json_field(resp.text, "message")
 
-    if resp.status_code == 404 or (resp.status_code == 200 and code != "0"):
-        log_pass(f"Admin get nonexistent user: HTTP {resp.status_code}, code={code} (not found as expected)")
+    if resp.status_code == 404 and code == "80002" and message == "User not found":
+        log_pass("Admin get nonexistent user: HTTP 404, code=80002, message=User not found")
     else:
-        log_fail(f"Admin get nonexistent user: expected HTTP 404 or error code, got HTTP {resp.status_code} code={code}")
+        log_fail(
+            "Admin get nonexistent user: expected HTTP 404 code=80002 message=User not found, "
+            f"got HTTP {resp.status_code} code={code} message={message}"
+        )
         print(resp.text)
         sys.exit(1)
 

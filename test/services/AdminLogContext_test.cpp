@@ -170,6 +170,65 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto detail_body = ExtractRange(
+                service_source,
+                "auto AdminService::GetUserDetail(",
+                "    auto AdminService::ChangeUserStatus("
+            );
+
+            ASSERT_FALSE(detail_body.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    detail_body,
+                    "catch (const drogon::orm::UnexpectedRows&)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    detail_body,
+                    "catch (const drogon::orm::DrogonDbException&)"
+                ),
+                1U
+            );
+
+            const auto missing_catch = detail_body.find(
+                "catch (const drogon::orm::UnexpectedRows&)"
+            );
+            const auto database_catch = detail_body.find(
+                "catch (const drogon::orm::DrogonDbException&)"
+            );
+            EXPECT_NE(missing_catch, std::string::npos);
+            EXPECT_NE(database_catch, std::string::npos);
+            EXPECT_LT(missing_catch, database_catch);
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    detail_body,
+                    "ErrorInfo(ErrorCode::AdminUserNotFound)"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(detail_body, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(detail_body, "error_msg.find("), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    detail_body,
+                    "Logger::Error(log_context)\n                << \"Admin get user detail database error\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    detail_body,
+                    "ErrorCode::InternalError,\n                \"Failed to get user detail\""
+                ),
+                1U
+            );
+        }
+
         TEST(AdminListSharesLogContractTest, DatabaseExceptionUsesFixedSummary) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto list_body = ExtractRange(

@@ -2837,6 +2837,16 @@ Web API/store/view、Qt `AdminShareListModel`/`AdminManager`/QML 与 TUI client/
 
 真实管理流以创建接口返回的 `nnuckdS5` 依次完成管理员列表匹配、详情直接响应结构断言和强制取消，前 14 场景全部通过；第 15 场景查询不存在用户仍返回 `500/10006 Failed to get user detail`，留待 15.184 独立修复。标准完整 CTest 共 1514 项：1507 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 554.37 秒。该批不改变分享所有者/访客接口、创建/访问/密码/令牌、状态语义、审计内容或错误码；Phase 10 与最终 Definition of Done 继续保持未勾选。
 
+### 15.184 AdminService 用户详情缺失映射修复记录（2026-08-04）
+
+管理员查询不存在的用户详情时，`CoroMapper<Users>::findOne()` 抛出的 `drogon::orm::UnexpectedRows` 必须作为明确的缺失业务分支处理，返回既有 `AdminUserNotFound`（HTTP 404、业务码 80002、`User not found`）；禁止继续依赖第三方异常正文中的 `condition`/`empty` 片段推断缺失状态。该专用捕获必须位于一般 `DrogonDbException` 捕获之前。
+
+真实数据库异常继续返回既有 `InternalError` 与 `Failed to get user detail`，但诊断只允许固定完整摘要 `Admin get user detail database error`；不得追加用户 ID、异常正文、SQL、连接信息、凭据或 token。成功详情字段、路径参数校验、管理员鉴权、request/instance/`admin` 类型化关联、公开错误码和 Controller 组合不得改变。
+
+验证必须新增源码合同锁定专用异常顺序、两类公开错误和固定诊断，收紧真实管理流第 15 场景为精确 `404/80002/User not found`，并执行 Admin 聚焦 GoogleTest、Python 语法、OpenSpec、完整构建及标准完整 CTest。旧实现上的定向源码合同按预期为 0/1，共 8 个失败断言：专用捕获缺失，一般捕获仍绑定异常对象，精确检出 2 处 `.what()`、2 处异常文本猜测且固定数据库摘要缺失；既有两类公开错误断言通过。
+
+实现后直接源码合同 1/1、全部 Admin GoogleTest 70/70、Python 语法和 OpenSpec 24/24 通过，完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流全部 21 个断言组通过、0 失败，其中第 15 场景精确得到 `404/80002/User not found`，后续可用空间与鉴权场景继续通过。标准完整 CTest 共 1515 项：1508 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 552.11 秒。源码审计确认 `GetUserDetail()` 范围内专用捕获与固定数据库摘要各 1 处、`.what()` 和异常文本猜测均为 0；`AdminService.cpp` 其余 17 处 `.what()` 留待后续独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

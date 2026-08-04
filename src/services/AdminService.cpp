@@ -159,17 +159,12 @@ namespace disk::services {
                 << "Admin get user detail successful: user_id=" << user_id;
             co_return response;
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            const auto error_msg = std::string(e.base().what());
-            if (error_msg.find("condition") != std::string::npos ||
-                error_msg.find("empty") != std::string::npos) {
-                Logger::Warn(log_context) << "Admin user not found: user_id=" << user_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
-            }
-
+        } catch (const drogon::orm::UnexpectedRows&) {
+            Logger::Warn(log_context) << "Admin user not found: user_id=" << user_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
+        } catch (const drogon::orm::DrogonDbException&) {
             Logger::Error(log_context)
-                << "Admin get user detail database error: user_id=" << user_id
-                << " - " << e.base().what();
+                << "Admin get user detail database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to get user detail"
