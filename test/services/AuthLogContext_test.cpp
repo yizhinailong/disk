@@ -332,5 +332,67 @@ namespace disk::auth {
             );
         }
 
+        TEST(AuthLoginDtoValueLogContractTest, LoginRequestUsesFixedSummary) {
+            const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");
+            const auto login_request = ExtractBetween(
+                dto_source,
+                "struct LoginRequest",
+                "struct RefreshTokenRequest"
+            );
+
+            ASSERT_FALSE(login_request.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    login_request,
+                    "Logger::Debug(log_context) << \"Login request fields parsed\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    login_request,
+                    "Logger::Debug(log_context) << \"Parsed login request: \" << request.account;"
+                ),
+                0U
+            );
+
+            for (const auto* preserved_parse_step : {
+                     "auto json_result = RequireJsonBody(req);",
+                     "auto account_result = RequireString(json, \"account\");",
+                     "auto password_result = RequireString(json, \"password\");",
+                     "request.account = std::move(*account_result);",
+                     "request.password = std::move(*password_result);",
+                     "if (request.account.empty())",
+                     "if (request.password.empty())",
+                     "ErrorInfo(ErrorCode::ValidationFailed, \"Account cannot be empty\")",
+                     "ErrorInfo(ErrorCode::ValidationFailed, \"Password cannot be empty\")",
+                     "return request;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(login_request, preserved_parse_step), 1U)
+                    << preserved_parse_step;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    login_request,
+                    "Logger::Debug(log_context) << \"Start parsing login request parameters\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    login_request,
+                    "Logger::Warn(log_context) << \"Account cannot be empty\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    login_request,
+                    "Logger::Warn(log_context) << \"Password cannot be empty\";"
+                ),
+                1U
+            );
+        }
+
     } // namespace
 } // namespace disk::auth

@@ -2979,6 +2979,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 113/113、`RegisterRequest` DTO 24/24、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1528 项：1521 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 552.86 秒。源码审计确认四条固定摘要各 1 处、四种旧动态字段日志均为 0，完整注册 DTO 解析/校验链继续由源码合同锁定。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.198 登录 DTO 诊断脱敏记录（2026-08-04）
+
+`LoginRequest::FromRequest()` 在账号/密码字段解析和空值校验全部完成后，只能记录固定完整摘要 `Login request fields parsed`。message 不得追加用户名、邮箱形式账号、密码或其他登录请求值；原 DEBUG 级别、调用方 request/instance/`auth` 上下文和成功分支触发位置保持不变。
+
+既有解析开始固定事件、JSON 正文要求、account/password 字符串提取与移动、账号/密码空值校验顺序、两类 `ValidationFailed` 公开错误及成功 DTO 内容不得改变。验证必须新增源码合同锁定固定摘要、原始登录字段排除和完整解析/校验链，并执行认证日志/DTO GoogleTest、OpenSpec、完整构建、真实认证流/生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 2 个失败断言：固定摘要缺失且旧账号拼接日志命中一次；JSON/字符串提取、字段移动、空值校验、两类公开错误、解析开始事件和成功返回断言均通过。
+
+实现后定向源码合同 1/1、含 Auth 的 GoogleTest 114/114、`LoginRequest` DTO 9/9、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1529 项：1522 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 551.60 秒。源码审计确认固定摘要 1 处、旧动态账号日志为 0，完整登录 DTO 解析/校验链继续由源码合同锁定。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

@@ -192,7 +192,7 @@ namespace disk::auth {
                 );
             }
 
-            Logger::Debug(log_context) << "Parsed login request: " << request.account;
+            Logger::Debug(log_context) << "Login request fields parsed";
 
             return request;
         }
