@@ -818,9 +818,8 @@ namespace disk::services {
         try {
             co_await m_db_client->execSqlCoro("SELECT 1");
             response.db_connected = true;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Warn(log_context)
-                << "admin.stats.system Database check failed: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Warn(log_context) << "admin.stats.system Database check failed";
             response.db_connected = false;
         }
 
@@ -835,13 +834,11 @@ namespace disk::services {
             } else {
                 response.redis_connected = false;
             }
-        } catch (const drogon::nosql::RedisException& e) {
-            Logger::Warn(log_context)
-                << "admin.stats.system Redis check failed: " << e.what();
+        } catch (const drogon::nosql::RedisException&) {
+            Logger::Warn(log_context) << "admin.stats.system Redis check failed";
             response.redis_connected = false;
-        } catch (const std::exception& e) {
-            Logger::Warn(log_context)
-                << "admin.stats.system Redis check failed: " << e.what();
+        } catch (const std::exception&) {
+            Logger::Warn(log_context) << "admin.stats.system Redis check failed";
             response.redis_connected = false;
         }
 
@@ -852,9 +849,8 @@ namespace disk::services {
             response.disk_total = space_info.capacity;
             response.disk_free = space_info.available;
             response.disk_used = space_info.capacity - space_info.available;
-        } catch (const std::filesystem::filesystem_error& e) {
-            Logger::Warn(log_context)
-                << "admin.stats.system disk space check failed: " << e.what();
+        } catch (const std::filesystem::filesystem_error&) {
+            Logger::Warn(log_context) << "admin.stats.system disk space check failed";
             response.disk_total = 0;
             response.disk_used = 0;
             response.disk_free = 0;

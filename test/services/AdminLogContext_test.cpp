@@ -711,6 +711,126 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminSystemStatusContractTest, ProbeExceptionsUseFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto status_body = ExtractRange(
+                service_source,
+                "auto AdminService::GetSystemStatus(",
+                "    auto AdminService::GetAdminLogs("
+            );
+
+            ASSERT_FALSE(status_body.empty());
+            EXPECT_EQ(CountOccurrences(status_body, ".what()"), 0U);
+            for (const auto* catch_clause : {
+                     "catch (const drogon::orm::DrogonDbException&)",
+                     "catch (const drogon::nosql::RedisException&)",
+                     "catch (const std::exception&)",
+                     "catch (const std::filesystem::filesystem_error&)",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_body, catch_clause), 1U)
+                    << catch_clause;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_body,
+                    "Logger::Warn(log_context) << \"admin.stats.system Database check failed\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_body,
+                    "Logger::Warn(log_context) << \"admin.stats.system Redis check failed\";"
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_body,
+                    "Logger::Warn(log_context) << \"admin.stats.system disk space check failed\";"
+                ),
+                1U
+            );
+
+            EXPECT_EQ(
+                CountOccurrences(status_body, "execSqlCoro(\"SELECT 1\")"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(status_body, "response.db_connected = true;"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(status_body, "response.db_connected = false;"),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(status_body, "getRedisClient()"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(status_body, "RedisService::Initialize(redis_client);"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_body,
+                    "RedisService::GetInstance()->Ping(log_context)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_body,
+                    "response.redis_connected = result.has_value() && *result;"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(status_body, "response.redis_connected = false;"),
+                3U
+            );
+
+            EXPECT_EQ(
+                CountOccurrences(status_body, "GetStorageBasePath()"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(status_body, "std::filesystem::space(storage_path)"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(status_body, "response.disk_total = space_info.capacity;"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(status_body, "response.disk_free = space_info.available;"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_body,
+                    "response.disk_used = space_info.capacity - space_info.available;"
+                ),
+                1U
+            );
+            for (const auto* field : {
+                     "response.disk_total = 0;",
+                     "response.disk_used = 0;",
+                     "response.disk_free = 0;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_body, field), 1U) << field;
+            }
+            EXPECT_EQ(
+                CountOccurrences(status_body, "response.uptime_seconds ="),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_body,
+                    "Logger::Info(log_context) << \"admin.stats.system successful\";"
+                ),
+                1U
+            );
+        }
+
         TEST(AdminListSharesLogContractTest, DatabaseExceptionUsesFixedSummary) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto list_body = ExtractRange(
