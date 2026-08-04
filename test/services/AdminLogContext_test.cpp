@@ -303,6 +303,114 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminChangeUserRoleContractTest, SeparatesMissingRowsFromDatabaseErrors) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto role_body = ExtractRange(
+                service_source,
+                "auto AdminService::ChangeUserRole(",
+                "    auto AdminService::ChangeUserAvailableSpace("
+            );
+
+            ASSERT_FALSE(role_body.empty());
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "catch (const drogon::orm::UnexpectedRows&)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "catch (const drogon::orm::DrogonDbException&)"
+                ),
+                2U
+            );
+
+            const auto missing_catch = role_body.find(
+                "catch (const drogon::orm::UnexpectedRows&)"
+            );
+            const auto database_catch = role_body.rfind(
+                "catch (const drogon::orm::DrogonDbException&)"
+            );
+            EXPECT_NE(missing_catch, std::string::npos);
+            EXPECT_NE(database_catch, std::string::npos);
+            EXPECT_LT(missing_catch, database_catch);
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "ErrorInfo(ErrorCode::AdminUserNotFound)"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(role_body, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(role_body, "error_msg.find("), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "Logger::Error(log_context)\n                        << \"Admin count administrators database error\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "Logger::Error(log_context)\n                << \"Admin change user role database error\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "ErrorCode::InternalError,\n                        \"Failed to verify admin count\""
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "ErrorCode::InternalError,\n                \"Failed to change user role\""
+                ),
+                1U
+            );
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "if (role == 0 && user.getValueOfRole() == 1)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "SELECT COUNT(*) AS cnt FROM users WHERE role = 1"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(role_body, "if (admin_count <= 1)"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "ErrorInfo(ErrorCode::AdminCannotDemoteLast)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_body,
+                    "user.setRole(static_cast<int8_t>(role));"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(role_body, "co_await mapper.update(user);"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(role_body, "\"admin.user.role_change\""),
+                1U
+            );
+        }
+
         TEST(AdminListSharesLogContractTest, DatabaseExceptionUsesFixedSummary) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto list_body = ExtractRange(

@@ -2857,6 +2857,16 @@ Web API/store/view、Qt `AdminShareListModel`/`AdminManager`/QML 与 TUI client/
 
 实现后直接源码合同 1/1、全部 Admin GoogleTest 71/71、Python 语法和 OpenSpec 24/24 通过，完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流全部 22 个断言组通过、0 失败，正常状态变更与恢复后，不存在用户的状态变更精确得到 `404/80002/User not found`，后续角色、分享、统计、配额和鉴权场景继续通过。标准完整 CTest 共 1516 项：1509 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 547.75 秒。源码审计确认 `ChangeUserStatus()` 范围内专用捕获与固定数据库摘要各 1 处、`.what()` 和异常文本猜测均为 0；`AdminService.cpp` 其余 15 处 `.what()` 留待后续独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.186 AdminService 用户角色缺失与计数诊断修复记录（2026-08-04）
+
+管理员修改不存在用户的角色时，`ChangeUserRole()` 必须在外层一般 `DrogonDbException` 之前显式捕获 `drogon::orm::UnexpectedRows`，并返回既有 `AdminUserNotFound`（HTTP 404、业务码 80002、`User not found`）；禁止依赖第三方异常正文中的 `condition`/`empty` 片段推断缺失状态。
+
+最后管理员计数查询异常继续返回既有 `InternalError` 与 `Failed to verify admin count`，但诊断只允许固定完整摘要 `Admin count administrators database error`。外层真实数据库异常继续返回既有 `InternalError` 与 `Failed to change user role`，诊断只允许固定完整摘要 `Admin change user role database error`。两者均不得追加目标/管理员 ID、角色值、异常正文、SQL、连接信息、凭据或 token。
+
+自身修改保护、仅降级管理员时执行的计数查询、最后管理员保护、角色写入、操作审计、成功响应、DTO 校验、鉴权和类型化关联不得改变。验证必须新增源码合同锁定两个数据库边界、专用捕获顺序、三类公开错误、计数/写入/审计和固定诊断，并在真实管理流角色场景中精确断言不存在用户返回 `404/80002/User not found`。旧实现上的定向源码合同按预期为 0/1，共 9 个失败断言：专用捕获缺失，两个一般捕获仍绑定异常对象，精确检出 3 处 `.what()`、2 处异常文本猜测且两条固定数据库摘要缺失；管理员计数条件/SQL、最后管理员保护、角色更新、审计及三类公开错误断言通过。
+
+实现后直接源码合同 1/1、全部 Admin GoogleTest 72/72、Python 语法和 OpenSpec 24/24 通过，完整构建确认 `AdminService.cpp` 实际重新编译并链接。真实管理流全部 23 个断言组通过、0 失败，不存在用户的角色变更精确得到 `404/80002/User not found`，后续软删除、自身保护、分享、统计、配额和鉴权场景继续通过。标准完整 CTest 共 1517 项：1510 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 548.88 秒。源码审计确认 `ChangeUserRole()` 范围内专用捕获 1 处、一般数据库捕获 2 处、两条固定摘要各 1 处、`.what()` 和异常文本猜测均为 0；`AdminService.cpp` 其余 12 处 `.what()` 留待后续独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

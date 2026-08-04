@@ -269,9 +269,9 @@ namespace disk::services {
                             co_return std::unexpected(ErrorInfo(ErrorCode::AdminCannotDemoteLast));
                         }
                     }
-                } catch (const drogon::orm::DrogonDbException& e) {
+                } catch (const drogon::orm::DrogonDbException&) {
                     Logger::Error(log_context)
-                        << "Failed to count admins: " << e.base().what();
+                        << "Admin count administrators database error";
                     co_return std::unexpected(ErrorInfo(
                         ErrorCode::InternalError,
                         "Failed to verify admin count"
@@ -299,17 +299,13 @@ namespace disk::services {
                 << "Admin change user role successful: target_id=" << target_id;
             co_return {};
 
-        } catch (const drogon::orm::DrogonDbException& e) {
-            const auto error_msg = std::string(e.base().what());
-            if (error_msg.find("condition") != std::string::npos ||
-                error_msg.find("empty") != std::string::npos) {
-                Logger::Warn(log_context)
-                    << "Admin user not found for role change: target_id=" << target_id;
-                co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
-            }
-
+        } catch (const drogon::orm::UnexpectedRows&) {
+            Logger::Warn(log_context)
+                << "Admin user not found for role change: target_id=" << target_id;
+            co_return std::unexpected(ErrorInfo(ErrorCode::AdminUserNotFound));
+        } catch (const drogon::orm::DrogonDbException&) {
             Logger::Error(log_context)
-                << "Admin change user role database error: " << e.base().what();
+                << "Admin change user role database error";
             co_return std::unexpected(ErrorInfo(
                 ErrorCode::InternalError,
                 "Failed to change user role"

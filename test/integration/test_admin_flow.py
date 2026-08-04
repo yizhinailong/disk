@@ -443,6 +443,28 @@ def test_admin_change_user_role():
         print(resp.text)
         sys.exit(1)
 
+    missing_resp = fetch(
+        "/api/admin/users/999999/role",
+        method="PUT",
+        headers={**get_admin_headers(), "Content-Type": "application/json"},
+        json_body={"role": 0},
+    )
+    missing_code = json_field(missing_resp.text, "code")
+    missing_message = json_field(missing_resp.text, "message")
+    if (
+        missing_resp.status_code == 404
+        and missing_code == "80002"
+        and missing_message == "User not found"
+    ):
+        log_pass("Admin change missing user role: HTTP 404, code=80002, message=User not found")
+    else:
+        log_fail(
+            "Admin change missing user role: expected HTTP 404 code=80002 message=User not found, "
+            f"got HTTP {missing_resp.status_code} code={missing_code} message={missing_message}"
+        )
+        print(missing_resp.text)
+        sys.exit(1)
+
 
 # ─── Test 6: Admin 软删除用户 ───────────────────────────────────────────────
 
