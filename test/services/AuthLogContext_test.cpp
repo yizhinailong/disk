@@ -517,5 +517,55 @@ namespace disk::auth {
             }
         }
 
+        TEST(AuthLogoutControllerValueLogContractTest, LogoutUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/AuthController.cpp");
+            const auto logout_controller =
+                ExtractFrom(controller_source, "auto AuthController::Logout(");
+
+            ASSERT_FALSE(logout_controller.empty());
+            for (const auto* fixed_log : {
+                     "<< \"Received logout request\";",
+                     "<< \"Logout request missing Authorization header\";",
+                     "<< \"Logout request Authorization header format invalid\";",
+                     "<< \"Logout request missing user_id attribute\";",
+                     "<< \"Logout failed\";",
+                     "<< \"Logout successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(logout_controller, fixed_log), 1U) << fixed_log;
+            }
+            EXPECT_EQ(CountOccurrences(logout_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(logout_controller, "Logger::Warn(log_context)"), 3U);
+            EXPECT_EQ(CountOccurrences(logout_controller, "Logger::Error(log_context)"), 1U);
+
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received logout request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Logout failed: \" << logout_result.error().message",
+                     "<< \"Logout successful: user_id=\" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(logout_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"auth\")",
+                     "request->getHeader(\"Authorization\")",
+                     "if (auth_header.empty())",
+                     "ErrorInfo(ErrorCode::TokenMissing)",
+                     "if (!auth_header.starts_with(\"Bearer \"))",
+                     "ErrorInfo(ErrorCode::TokenMalformed)",
+                     "auth_header.substr(7)",
+                     "request->attributes()->find(\"user_id\")",
+                     "ErrorInfo(ErrorCode::InvalidToken)",
+                     "request->attributes()->get<uint64_t>(\"user_id\")",
+                     "disk::utils::ResolveClientIp(request)",
+                     "m_auth_service->Logout(user_id, access_token, ip_address, log_context)",
+                     "co_return Response::Error(logout_result.error());",
+                     "co_return Response::Success({});",
+                 }) {
+                EXPECT_EQ(CountOccurrences(logout_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
     } // namespace
 } // namespace disk::auth

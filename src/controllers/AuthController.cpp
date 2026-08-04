@@ -106,8 +106,7 @@ namespace disk::auth {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "auth");
 
-        Logger::Info(log_context)
-            << "Received logout request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received logout request";
 
         /// 步骤 1: 提取 access_token 从 Authorization header
         const auto& auth_header = request->getHeader("Authorization");
@@ -138,12 +137,12 @@ namespace disk::auth {
         auto logout_result =
             co_await m_auth_service->Logout(user_id, access_token, ip_address, log_context);
         if (!logout_result) {
-            Logger::Error(log_context) << "Logout failed: " << logout_result.error().message;
+            Logger::Error(log_context) << "Logout failed";
             co_return Response::Error(logout_result.error());
         }
 
         /// 步骤 5: 返回成功响应
-        Logger::Info(log_context) << "Logout successful: user_id=" << user_id;
+        Logger::Info(log_context) << "Logout successful";
         co_return Response::Success({});
     }
 } // namespace disk::auth
