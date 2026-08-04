@@ -982,8 +982,8 @@ namespace disk::services {
             );
             Logger::Debug(log_context)
                 << "Operation logged: " << action << " by user_id=" << operator_id;
-        } catch (const drogon::orm::DrogonDbException& e) {
-            Logger::Error(log_context) << "Failed to log operation: " << e.base().what();
+        } catch (const drogon::orm::DrogonDbException&) {
+            Logger::Error(log_context) << "Failed to log operation";
         }
     }
 

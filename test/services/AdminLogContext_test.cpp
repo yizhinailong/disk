@@ -916,6 +916,66 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminAuditWriteContractTest, DatabaseExceptionUsesFixedSummary) {
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto audit_body = ExtractRange(
+                service_source,
+                "auto AdminService::LogOperation(",
+                "\n} // namespace disk::services"
+            );
+
+            ASSERT_FALSE(audit_body.empty());
+            EXPECT_EQ(CountOccurrences(audit_body, ".what()"), 0U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    audit_body,
+                    "catch (const drogon::orm::DrogonDbException&)"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    audit_body,
+                    "Logger::Error(log_context) << \"Failed to log operation\";"
+                ),
+                1U
+            );
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    audit_body,
+                    "disk::utils::SetRequestCorrelationFields(details, log_context);"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(audit_body, "execSqlCoro("), 1U);
+            EXPECT_TRUE(Contains(
+                audit_body,
+                "INSERT INTO operation_logs (user_id, action, target_type, target_id, target_name, details, ip_address)"
+            ));
+            EXPECT_TRUE(Contains(
+                audit_body,
+                "VALUES ($1, $2, $3, $4, $5, $6, 'system')"
+            ));
+            EXPECT_EQ(
+                CountOccurrences(
+                    audit_body,
+                    "operator_id,\n                action,\n                target_type,\n                target_id,\n                target_name,\n                SerializeDetails(details)"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(audit_body, "SerializeDetails(details)"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    audit_body,
+                    "Logger::Debug(log_context)\n                << \"Operation logged: \" << action << \" by user_id=\" << operator_id;"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(audit_body, "throw;"), 0U);
+            EXPECT_EQ(CountOccurrences(audit_body, "std::unexpected"), 0U);
+        }
+
         TEST(AdminListSharesLogContractTest, DatabaseExceptionUsesFixedSummary) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto list_body = ExtractRange(

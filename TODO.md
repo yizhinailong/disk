@@ -2927,6 +2927,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、全部 Admin GoogleTest 78/78、管理日志 DTO 9/9、OpenSpec 24/24 和完整后端构建通过。真实管理流全部 25 个断言组通过、0 失败，可用空间变更审计继续通过管理日志筛选读取，后续缺失用户、参数校验和鉴权场景继续通过。标准完整 CTest 共 1523 项：1516 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 550.89 秒。源码审计确认 `GetAdminLogs()` 范围内数据库异常匿名捕获与固定摘要各 1 处、`.what()` 为 0；`AdminService.cpp` 只剩 `LogOperation()` 的 1 处 `.what()`，留待独立批次。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.193 AdminService 审计写入诊断脱敏记录（2026-08-04）
+
+`LogOperation()` 写入审计失败时，只允许记录固定完整摘要 `Failed to log operation`；message 不得追加 action、操作人/目标 ID、目标类型/名称、details、异常正文、SQL、连接信息、凭据或 token。数据库异常必须匿名捕获，审计持久化继续 fail-open，不重试、不抛出且不得改变调用方业务结果或公开响应。
+
+写入前的 request/operation JSON 关联字段补充、单次参数化 `operation_logs` INSERT、operator/action/target/details 参数顺序、details JSON 序列化、`system` IP 占位和成功 DEBUG 日志不得改变。验证必须新增源码合同锁定匿名捕获、固定诊断、关联详情、INSERT、无重试/无传播和成功日志，并执行全部 Admin GoogleTest、OpenSpec、完整构建、真实管理员成功审计流及标准完整 CTest；完成后 `AdminService.cpp` 的 `.what()` 应收口为 0。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 3 个失败断言：方法范围内仍有 1 处 `.what()`，数据库异常捕获仍绑定异常对象，固定完整摘要缺失；关联详情、单次 INSERT、参数顺序、JSON 序列化、成功日志和无重试/无传播断言均通过。
+
+实现后定向源码合同 1/1、全部 Admin GoogleTest 79/79、OpenSpec 24/24 和完整后端构建通过。真实管理流全部 25 个断言组通过、0 失败，可用空间变更审计继续通过管理日志筛选读取；标准完整 CTest 共 1524 项：1517 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 551.04 秒。源码审计确认 `LogOperation()` 的数据库异常匿名捕获与固定摘要各 1 处、无重试/无传播，`AdminService.cpp` 的 `.what()` 已收口为 0。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
