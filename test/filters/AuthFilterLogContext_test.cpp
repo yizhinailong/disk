@@ -273,6 +273,80 @@ namespace disk::filters {
             }
         }
 
+        TEST(JwtAuthFilterDurationValueLogContractTest, AuthenticatedOutcomesExcludeUserIdentity) {
+            const auto source = ReadSourceFile("src/filters/JwtAuthFilter.cpp");
+
+            const auto revoked_begin = source.find("if (revocation_result.value())");
+            const auto attributes_begin = source.find(
+                "request->attributes()->insert(\"user_id\""
+            );
+            const auto success_return = source.find("co_return nullptr;", attributes_begin);
+            ASSERT_NE(revoked_begin, std::string::npos);
+            ASSERT_NE(attributes_begin, std::string::npos);
+            ASSERT_NE(success_return, std::string::npos);
+            ASSERT_LT(revoked_begin, attributes_begin);
+            ASSERT_LT(attributes_begin, success_return);
+
+            const auto revoked_branch = source.substr(
+                revoked_begin,
+                attributes_begin - revoked_begin
+            );
+            const auto success_branch = source.substr(
+                attributes_begin,
+                success_return - attributes_begin + std::string("co_return nullptr;").size()
+            );
+
+            EXPECT_EQ(CountOccurrences(revoked_branch, "<< \" outcome=failure\";"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    revoked_branch,
+                    "<< \" outcome=failure user_id=\" << claims.user_id;"
+                ),
+                0U
+            );
+            EXPECT_EQ(CountOccurrences(success_branch, "<< \" outcome=success\";"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    success_branch,
+                    "<< \" outcome=success user_id=\" << claims.user_id;"
+                ),
+                0U
+            );
+
+            for (const auto* branch : { &revoked_branch, &success_branch }) {
+                EXPECT_EQ(
+                    CountOccurrences(*branch, "std::chrono::steady_clock::now()"),
+                    1U
+                );
+                EXPECT_EQ(
+                    CountOccurrences(
+                        *branch,
+                        "std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()"
+                    ),
+                    1U
+                );
+                EXPECT_EQ(CountOccurrences(*branch, "Logger::Info(log_context)"), 1U);
+                EXPECT_EQ(CountOccurrences(*branch, "[jwt_auth_filter] duration_us="), 1U);
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    revoked_branch,
+                    "co_return disk::Response::Error(disk::error::Code::TokenRevoked);"
+                ),
+                1U
+            );
+            for (const auto* attribute : {
+                     "request->attributes()->insert(\"user_id\", claims.user_id);",
+                     "request->attributes()->insert(\"username\", claims.username);",
+                     "request->attributes()->insert(\"role\", claims.role);",
+                     "request->attributes()->insert(\"status\", claims.status);",
+                 }) {
+                EXPECT_EQ(CountOccurrences(success_branch, attribute), 1U) << attribute;
+            }
+            EXPECT_EQ(CountOccurrences(success_branch, "co_return nullptr;"), 1U);
+        }
+
         TEST_F(AuthFilterLogContextTest, RejectionsPreserveBoundedContextWithoutOwnershipInference) {
             auto jwt_request = CreateRequest("/api/file/list", "jwt-filter-request");
             const auto jwt_response = drogon::sync_wait(JwtAuthFilter{}.doFilter(jwt_request));

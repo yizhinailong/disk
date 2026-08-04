@@ -99,7 +99,7 @@ namespace disk::filters {
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info(log_context) << "[jwt_auth_filter] duration_us=" << duration_us
-                                      << " outcome=failure user_id=" << claims.user_id;
+                                      << " outcome=failure";
             co_return disk::Response::Error(disk::error::Code::TokenRevoked);
         }
 
@@ -112,7 +112,7 @@ namespace disk::filters {
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         Logger::Info(log_context) << "[jwt_auth_filter] duration_us=" << duration_us
-                                  << " outcome=success user_id=" << claims.user_id;
+                                  << " outcome=success";
 
         co_return nullptr;
     }

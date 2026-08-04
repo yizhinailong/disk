@@ -101,6 +101,11 @@ The JWT authentication, share-token authentication, and administrator-authorizat
 - **THEN** its directly owned ERROR or WARN event SHALL use the fixed complete summary `Access token revocation check failed` or `Access token has been revoked` with the request's typed correlation and SHALL NOT append the user ID, username, JTI, Authorization value, raw access token, Redis key or value, revocation result or error, cache state, TTL, exception, or other authentication-session value
 - **AND** access-token verification, structured claims, the shared revocation lookup using the verified JTI and caller context, fail-closed dependency-error mapping, revoked-token mapping, authentication attributes, duration events, and public responses SHALL remain unchanged
 
+#### Scenario: Authenticated JWT duration events exclude identity values
+- **WHEN** the JWT authentication filter records duration after rejecting a verified access token as revoked or after successful authentication
+- **THEN** its directly owned INFO event SHALL contain only bounded `duration_us` and the fixed low-cardinality `outcome=failure` or `outcome=success` result with the request's typed correlation and SHALL NOT append the user ID, username, JTI, Authorization value, raw access token, claim, role, status, revocation result, exception, or other authentication-session value
+- **AND** the common timing start, shared revocation lookup, revoked-token mapping, four authentication attributes, successful continuation, and public responses SHALL remain unchanged; the public-path exempt duration event remains a separately audited boundary
+
 ### Requirement: Token Service Correlation
 The shared token service SHALL accept explicit correlation by value for request-reachable access-token, refresh-token, and share-token generation, verification, rotation, revocation parsing, and revoked-token rejection events. Authentication services and JWT/share authentication filters SHALL pass their already established request context without changing token claims, signatures, TTLs, Redis keys, CAS behavior, revocation behavior, error mapping, or public responses.
 
