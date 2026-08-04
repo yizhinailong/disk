@@ -3089,6 +3089,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 124/124、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网直接执行 888/888 均通过、0 失败。标准完整 CTest 共 1539 项：1532 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 558.16 秒；其中上传安全网按本轮竞态分支为 886/886。源码审计确认五条固定摘要各 1 处、三种旧动态用户 ID/IP 日志均为 0，18 项状态更新数据流和原有 ERROR/DEBUG/DEBUG/WARN/ERROR 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.209 登录失败计数诊断脱敏记录（2026-08-05）
+
+`AuthService::IncrementLoginAttempts()` 的不可用账户未计数、失败阈值触发锁定、失败计数已记录和数据库更新失败四条事件，必须分别只记录固定完整摘要 `Login attempt not counted for unavailable account`、`Login failure threshold reached`、`Login failure recorded` 与 `Failed to increment login attempts`。message 不得追加用户 ID、失败次数、阈值、锁定间隔/截止时间、账户或锁定状态、查询结果、SQL、连接信息、数据库错误或其他登录失败状态值；原 DEBUG/WARN/WARN/ERROR 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变，既有数据库失败摘要继续保持原样。
+
+既有 PostgreSQL 单条原子 UPDATE、过期锁的计数重置为 1、其他失败计数递增、达到阈值后按数据库时间锁定 15 分钟、仅更新正常或锁定已过期账户、不可用/竞争账户 no-op 成功、`InternalError` 映射和最终成功返回不得改变。仅用于动态日志的 `attempts` 结果读取必须删除，SQL `RETURNING` 仍保留原子计数结果与分支所需锁定布尔值；验证必须新增源码合同锁定四条固定摘要、原始用户/计数/锁定值排除和完整失败计数数据流，并执行认证服务 GoogleTest、OpenSpec、完整构建、真实认证流/生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 7 个失败断言：不可用账户、阈值锁定和失败已记录三条待迁移固定摘要均缺失，对应用户 ID/失败次数/锁定间隔动态日志各命中一次，且仅供动态日志使用的 `attempts` 结果读取仍有 1 处；既有数据库失败固定摘要与原子 UPDATE、过期锁重置、阈值锁定、不可用账户 no-op、错误和成功返回共 20 项数据流断言均通过。
+
+实现后定向源码合同 1/1、含 Auth 的 GoogleTest 125/125、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1540 项：1533 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 550.54 秒。源码审计确认四条固定摘要各 1 处、三种旧动态用户/计数/锁定日志与 `attempts` 结果读取均为 0，20 项失败计数数据流和原有 DEBUG/WARN/WARN/ERROR 级别分布保持不变。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

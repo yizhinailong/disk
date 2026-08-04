@@ -390,6 +390,11 @@ The system SHALL classify only the exact register, login, refresh, and logout pa
 - **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the user ID, client IP, Redis key or value, account or lock value, dependency result, SQL, connection detail, exception, or other login-state value
 - **AND** the database-time conditional update, account recheck and error forwarding, login-field persistence, limiter-key deletion and fail-open policy, and error and success results SHALL remain unchanged
 
+#### Scenario: Login-failure counter diagnostics exclude user and counter values
+- **WHEN** a login failure cannot be counted for an unavailable account, reaches the lock threshold, is recorded below the threshold, or encounters a database failure
+- **THEN** each directly owned event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the user ID, failure count, threshold, lock interval or deadline, account or lock state, query result, SQL, connection detail, exception, or other login-failure value
+- **AND** the atomic database-time increment, expired-lock reset, 15-minute threshold lock, unavailable-account no-op, error mapping, and success result SHALL remain unchanged, while the result read used only by the removed dynamic log SHALL NOT remain
+
 #### Scenario: Registration request diagnostics exclude raw fields
 - **WHEN** registration request fields are parsed or username, email, or password validation fails
 - **THEN** the directly owned DTO event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username, email, password, or other request value

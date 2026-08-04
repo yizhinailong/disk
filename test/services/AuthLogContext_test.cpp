@@ -588,6 +588,72 @@ namespace disk::auth {
             );
         }
 
+        TEST(AuthLoginFailureCounterValueLogContractTest, IncrementUsesFixedSummaries) {
+            const auto service_source = ReadSourceFile("src/services/AuthService.cpp");
+            const auto increment_body = ExtractBetween(
+                service_source,
+                "auto AuthService::IncrementLoginAttempts(",
+                "} // namespace disk::auth"
+            );
+
+            ASSERT_FALSE(increment_body.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Debug(log_context) << \"Login attempt not counted for unavailable account\";",
+                     "Logger::Warn(log_context) << \"Login failure threshold reached\";",
+                     "Logger::Warn(log_context) << \"Login failure recorded\";",
+                     "Logger::Error(log_context) << \"Failed to increment login attempts\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(increment_body, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_counter_log : {
+                     "<< \"Login attempt not counted for unavailable account: user_id=\" << user_id",
+                     "<< \"Account locked: \" << user_id",
+                     "<< \"Failed login attempts: \" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(increment_body, raw_counter_log), 0U)
+                    << raw_counter_log;
+            }
+            EXPECT_EQ(
+                CountOccurrences(increment_body, "result[0][\"login_attempts\"].as<int>()"),
+                0U
+            );
+
+            for (const auto* preserved_counter_step : {
+                     "m_db_client->execSqlCoro(",
+                     "UPDATE users SET status = $1,",
+                     "login_attempts = CASE",
+                     "locked_until = CASE WHEN (CASE",
+                     ") >= $2",
+                     "THEN NOW() + INTERVAL '15 minutes' ELSE NULL END, updated_at = NOW()",
+                     "WHERE id = $3 AND ((status = $1 AND",
+                     "(locked_until IS NULL OR locked_until <= NOW())) OR",
+                     "(status = $4 AND locked_until IS NOT NULL AND locked_until <= NOW()))",
+                     "RETURNING login_attempts, locked_until > NOW() AS account_locked",
+                     "ACCOUNT_STATUS_ACTIVE",
+                     "LOGIN_FAILURE_LIMIT",
+                     "ACCOUNT_STATUS_LOCKED",
+                     "if (result.empty())",
+                     "result[0][\"account_locked\"].as<bool>()",
+                     "catch (const drogon::orm::DrogonDbException&)",
+                     "ErrorInfo(ErrorCode::InternalError, \"Failed to record login attempt\")",
+                 }) {
+                EXPECT_EQ(CountOccurrences(increment_body, preserved_counter_step), 1U)
+                    << preserved_counter_step;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    increment_body,
+                    "WHEN locked_until IS NOT NULL AND locked_until <= NOW() THEN 1"
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(increment_body, "ELSE login_attempts + 1 END"),
+                2U
+            );
+            EXPECT_EQ(CountOccurrences(increment_body, "co_return {};"), 2U);
+        }
+
         TEST(AuthRegistrationDtoValueLogContractTest, RegisterRequestUsesFixedSummaries) {
             const auto dto_source = ReadSourceFile("src/dtos/AuthDto.hpp");
             const auto register_request = ExtractBetween(

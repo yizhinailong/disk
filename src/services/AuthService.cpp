@@ -502,18 +502,14 @@ namespace disk::auth {
             );
 
             if (result.empty()) {
-                Logger::Debug(log_context)
-                    << "Login attempt not counted for unavailable account: user_id=" << user_id;
+                Logger::Debug(log_context) << "Login attempt not counted for unavailable account";
                 co_return {};
             }
 
-            const auto attempts = result[0]["login_attempts"].as<int>();
             if (result[0]["account_locked"].as<bool>()) {
-                Logger::Warn(log_context)
-                    << "Account locked: " << user_id << " (unlocks in 15 minutes)";
+                Logger::Warn(log_context) << "Login failure threshold reached";
             } else {
-                Logger::Warn(log_context)
-                    << "Failed login attempts: " << user_id << " = " << attempts;
+                Logger::Warn(log_context) << "Login failure recorded";
             }
         } catch (const drogon::orm::DrogonDbException&) {
             Logger::Error(log_context) << "Failed to increment login attempts";
