@@ -394,5 +394,48 @@ namespace disk::auth {
             );
         }
 
+        TEST(AuthRegistrationControllerValueLogContractTest, RegisterUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/AuthController.cpp");
+            const auto register_controller = ExtractBetween(
+                controller_source,
+                "auto AuthController::Register(",
+                "auto AuthController::Login("
+            );
+
+            ASSERT_FALSE(register_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received user registration request\";",
+                     "Logger::Warn(log_context) << \"User registration request validation failed\";",
+                     "Logger::Debug(log_context) << \"User registration parameters validated\";",
+                     "Logger::Error(log_context) << \"User registration business logic failed\";",
+                     "Logger::Info(log_context) << \"User registration successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(register_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received user registration request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"User registration request validation failed: \"",
+                     "<< \"User registration parameters validated: \" << parse_result->username",
+                     "<< \"User registration business logic failed: \"",
+                     "<< \"User registration successful: \" << register_result->username",
+                 }) {
+                EXPECT_EQ(CountOccurrences(register_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"auth\")",
+                     "RegisterRequest::FromRequest(request, log_context)",
+                     "co_return Response::Error(parse_result.error());",
+                     "m_auth_service->Register(*parse_result, log_context)",
+                     "co_return Response::Error(register_result.error());",
+                     "data[\"user\"] = register_result->ToJson();",
+                     "co_return Response::Success(data);",
+                 }) {
+                EXPECT_EQ(CountOccurrences(register_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
     } // namespace
 } // namespace disk::auth

@@ -2989,6 +2989,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、含 Auth 的 GoogleTest 114/114、`LoginRequest` DTO 9/9、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1529 项：1522 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 551.60 秒。源码审计确认固定摘要 1 处、旧动态账号日志为 0，完整登录 DTO 解析/校验链继续由源码合同锁定。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.199 注册控制器诊断脱敏记录（2026-08-04）
+
+`AuthController::Register()` 的请求接收、DTO 校验失败、参数校验完成、业务失败和注册成功五条事件，必须分别只记录固定完整摘要 `Received user registration request`、`User registration request validation failed`、`User registration parameters validated`、`User registration business logic failed` 与 `User registration successful`。message 不得追加客户端 IP/端口、用户名、邮箱、用户 ID、下游错误消息或其他注册请求/响应值；原 INFO/WARN/DEBUG/ERROR/INFO 级别、调用方 request/instance/`auth` 上下文和分支触发位置保持不变。
+
+既有请求上下文创建、`RegisterRequest::FromRequest()` 调用、DTO/业务错误响应、`AuthService::Register()` 调用、用户 JSON 包装和成功响应不得改变。验证必须新增源码合同锁定五条固定摘要、原始边界值排除和完整控制器数据流，并执行认证日志/DTO GoogleTest、OpenSpec、完整构建、真实认证流/生命周期、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 10 个失败断言：五条固定摘要均缺失，请求端点、DTO 错误/用户名、业务错误/用户名及成功用户名/用户 ID 五条动态日志各命中一次；上下文、DTO/Service 调用、两类错误响应、JSON 包装和成功响应断言均通过。
+
+实现后定向源码合同 1/1、含 Auth 的 GoogleTest 115/115、`RegisterRequest` DTO 24/24、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、认证生命周期 6/6、上传安全网 886/886 均通过、0 失败。标准完整 CTest 共 1530 项：1523 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，`LastTest.log` 累计测试用时 550.88 秒。源码审计确认五条固定摘要各 1 处、五种旧动态边界日志均为 0，完整注册控制器数据流继续由源码合同锁定。Phase 10 与最终 Definition of Done 在其余迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

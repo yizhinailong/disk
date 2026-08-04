@@ -22,27 +22,20 @@ namespace disk::auth {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "auth");
 
-        Logger::Info(log_context)
-            << "Received user registration request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received user registration request";
 
         /// 1. 解析并验证请求参数
         auto parse_result = RegisterRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "User registration request validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "User registration request validation failed";
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug(log_context)
-            << "User registration parameters validated: " << parse_result->username;
+        Logger::Debug(log_context) << "User registration parameters validated";
 
         /// 2. 调用 Service 层注册用户
         auto register_result = co_await m_auth_service->Register(*parse_result, log_context);
         if (!register_result) {
-            Logger::Error(log_context)
-                << "User registration business logic failed: "
-                << register_result.error().message << " (username: " << parse_result->username
-                << ")";
+            Logger::Error(log_context) << "User registration business logic failed";
             co_return Response::Error(register_result.error());
         }
 
@@ -50,9 +43,7 @@ namespace disk::auth {
         Json::Value data;
         data["user"] = register_result->ToJson();
 
-        Logger::Info(log_context)
-            << "User registration successful: " << register_result->username
-            << " (ID: " << register_result->id << ")";
+        Logger::Info(log_context) << "User registration successful";
         co_return Response::Success(data);
     }
 
