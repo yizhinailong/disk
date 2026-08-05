@@ -588,6 +588,53 @@ namespace disk::share {
             }
         }
 
+        TEST(ShareDetailControllerValueLogContractTest, DetailUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto detail_controller = SourceSection(
+                controller_source,
+                "auto ShareController::Detail(",
+                "    auto ShareController::Update("
+            );
+
+            ASSERT_FALSE(detail_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received get share details request\";",
+                     "Logger::Warn(log_context) << \"Share detail request parameter validation failed\";",
+                     "Logger::Error(log_context) << \"Get share details failed\";",
+                     "Logger::Info(log_context) << \"Get share details successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(detail_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received get share details request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Share detail request parameter validation failed: \"",
+                     "<< \"Get share details failed: \" << result.error().message",
+                     "<< \"Get share details successful: share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(detail_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"share\")",
+                     "ShareDetailRequest::FromPath(share_id, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "GetAuthenticatedUserId(request)",
+                     "m_share_service->Detail(*parse_result, user_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(detail_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");

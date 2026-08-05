@@ -172,16 +172,12 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "share");
 
-        Logger::Info(log_context)
-            << "Received get share details request: " << request->getPeerAddr().toIpPort()
-            << ", share_id=" << share_id;
+        Logger::Info(log_context) << "Received get share details request";
 
         /// 1. 解析并验证路径参数
         auto parse_result = ShareDetailRequest::FromPath(share_id, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Share detail request parameter validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Share detail request parameter validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -191,16 +187,12 @@ namespace disk::share {
         /// 3. 调用 Service 层获取分享详情
         auto result = co_await m_share_service->Detail(*parse_result, user_id, log_context);
         if (!result) {
-            Logger::Error(log_context)
-                << "Get share details failed: " << result.error().message
-                << " (user_id=" << user_id << ", share_id=" << share_id << ")";
+            Logger::Error(log_context) << "Get share details failed";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info(log_context)
-            << "Get share details successful: share_id=" << share_id
-            << ", files=" << result->files.size() << " (user_id=" << user_id << ")";
+        Logger::Info(log_context) << "Get share details successful";
         co_return Response::Success(result->ToJson());
     }
 
