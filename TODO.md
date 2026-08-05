@@ -3189,6 +3189,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、auth filter 聚焦 CTest 50/50、全部 Token GoogleTest 155/155、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 888/888 均通过、0 失败。标准完整 CTest 共 1549 项：1542 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 556.42 秒。源码审计确认已撤销失败与认证成功各只保留 1 条有界耗时/固定结果日志，两条追加用户 ID 的旧动态片段均为 0；微秒计时、INFO 上下文、`TokenRevoked`、四个认证属性和成功放行保持不变。Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.219 JWT 公开豁免耗时诊断脱敏记录（2026-08-05）
+
+`JwtAuthFilter::doFilter()` 的公开路径豁免耗时事件必须只包含有界微秒耗时和固定低基数结果 `outcome=exempt`，不得追加原始请求路径、公开分享 URL 中的分享码或文件段、query、fragment、Authorization、Share Token、用户/令牌标识、异常或其他请求值。事件继续使用过滤器入口的 request/instance 与现有 HTTP 分类器给出的低基数 operation，保持原 INFO 级别、计时起点和公开判定后的触发位置。
+
+既有 `IsPublicPath(request->path())` 调用、三个精确认证入口、三个健康入口、精确 `/metrics`、三类公开分享前缀、受保护近似路径、豁免短路与公开响应不得改变。验证必须新增源码合同锁定固定结果、路径值排除、微秒计时和公开分支数据流，并继续执行公开/受保护路径行为、auth filter/Token GoogleTest、OpenSpec、完整构建、真实认证与 refresh 流、双实例认证一致性、上传安全网及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 2 个失败断言：固定 `outcome=exempt` 结尾缺失，追加 `request->path()` 的动态片段命中一次；公开路径判定、微秒计时、INFO 上下文、低基数结果数量和豁免短路断言均通过。
+
+实现后定向源码合同 1/1、公开/受保护路径行为 2/2、auth filter 聚焦 CTest 51/51、全部 Token GoogleTest 155/155、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1550 项：1543 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 564.69 秒。源码审计确认公开豁免分支只保留 1 条有界耗时/固定结果日志，追加路径的旧动态片段为 0；`IsPublicPath(request->path())`、微秒计时、INFO 上下文、低基数 operation 和豁免短路保持不变。Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

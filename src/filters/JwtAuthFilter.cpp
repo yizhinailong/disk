@@ -47,7 +47,7 @@ namespace disk::filters {
             auto duration_us =
                 std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             Logger::Info(log_context) << "[jwt_auth_filter] duration_us=" << duration_us
-                                      << " outcome=exempt path=" << request->path();
+                                      << " outcome=exempt";
             co_return nullptr;
         }
 

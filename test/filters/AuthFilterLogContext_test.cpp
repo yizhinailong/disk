@@ -273,6 +273,61 @@ namespace disk::filters {
             }
         }
 
+        TEST(JwtAuthFilterExemptDurationValueLogContractTest, PublicPathIsClassifiedButNotLogged) {
+            const auto source = ReadSourceFile("src/filters/JwtAuthFilter.cpp");
+
+            const auto exempt_begin = source.find("if (IsPublicPath(request->path()))");
+            const auto auth_header_begin = source.find(
+                "const auto& auth_header = request->getHeader(\"Authorization\")"
+            );
+            ASSERT_NE(exempt_begin, std::string::npos);
+            ASSERT_NE(auth_header_begin, std::string::npos);
+            ASSERT_LT(exempt_begin, auth_header_begin);
+
+            const auto exempt_branch = source.substr(
+                exempt_begin,
+                auth_header_begin - exempt_begin
+            );
+            EXPECT_EQ(CountOccurrences(exempt_branch, "<< \" outcome=exempt\";"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    exempt_branch,
+                    "<< \" outcome=exempt path=\" << request->path();"
+                ),
+                0U
+            );
+
+            EXPECT_EQ(
+                CountOccurrences(exempt_branch, "if (IsPublicPath(request->path()))"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(exempt_branch, "std::chrono::steady_clock::now()"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    exempt_branch,
+                    "std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(exempt_branch, "Logger::Info(log_context)"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(exempt_branch, "[jwt_auth_filter] duration_us="),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(exempt_branch, "outcome=exempt"), 1U);
+            EXPECT_EQ(CountOccurrences(exempt_branch, "co_return nullptr;"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "auto start = std::chrono::steady_clock::now();"
+                ),
+                1U
+            );
+        }
+
         TEST(JwtAuthFilterDurationValueLogContractTest, AuthenticatedOutcomesExcludeUserIdentity) {
             const auto source = ReadSourceFile("src/filters/JwtAuthFilter.cpp");
 
