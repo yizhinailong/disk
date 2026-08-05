@@ -266,38 +266,26 @@ namespace disk::share {
         auto log_context = disk::controllers::GetRequestLogContext(request, "share");
 
         const auto audit_context = BuildAuditContext(request);
-        const auto& ip_address = audit_context.ip_address;
-        Logger::Info(log_context)
-            << "Received verify share access request: " << request->getPeerAddr().toIpPort()
-            << ", share_id=" << share_id;
+        Logger::Info(log_context) << "Received verify share access request";
 
         /// 1. 解析并验证请求参数
         auto parse_result = AccessShareRequest::FromRequest(request, share_id, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Verify share access request parameter validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Verify share access request parameter validation failed";
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug(log_context)
-            << "Verify share access parameter validation passed: share_id="
-            << parse_result->share_id
-            << ", has_password=" << parse_result->password.has_value();
+        Logger::Debug(log_context) << "Verify share access parameter validation passed";
 
         /// 2. 调用 Service 层验证分享访问
         auto result =
             co_await m_share_service->Access(*parse_result, audit_context, log_context);
         if (!result) {
-            Logger::Warn(log_context)
-                << "Verify share access failed: " << result.error().message
-                << " (share_id=" << share_id << ", ip=" << ip_address << ")";
+            Logger::Warn(log_context) << "Verify share access failed";
             co_return Response::Error(result.error());
         }
 
         /// 3. 构造响应
-        Logger::Info(log_context)
-            << "Verify share access successful: share_id=" << share_id
-            << ", permission=" << result->permission << " (ip=" << ip_address << ")";
+        Logger::Info(log_context) << "Verify share access successful";
         co_return Response::Success(result->ToJson());
     }
 

@@ -734,6 +734,62 @@ namespace disk::share {
             }
         }
 
+        TEST(ShareAccessControllerValueLogContractTest, AccessUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto access_controller = SourceSection(
+                controller_source,
+                "auto ShareController::Access(",
+                "    auto ShareController::Browse("
+            );
+
+            ASSERT_FALSE(access_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received verify share access request\";",
+                     "Logger::Warn(log_context) << \"Verify share access request parameter validation failed\";",
+                     "Logger::Debug(log_context) << \"Verify share access parameter validation passed\";",
+                     "Logger::Warn(log_context) << \"Verify share access failed\";",
+                     "Logger::Info(log_context) << \"Verify share access successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(access_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received verify share access request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Verify share access request parameter validation failed: \"",
+                     "<< \"Verify share access parameter validation passed: share_id=\"",
+                     "<< \"Verify share access failed: \" << result.error().message",
+                     "<< \"Verify share access successful: share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(access_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    access_controller,
+                    "const auto& ip_address = audit_context.ip_address;"
+                ),
+                0U
+            );
+
+            EXPECT_EQ(CountOccurrences(access_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(access_controller, "Logger::Warn(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(access_controller, "Logger::Debug(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(access_controller, "Logger::Error(log_context)"), 0U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"share\")",
+                     "const auto audit_context = BuildAuditContext(request);",
+                     "AccessShareRequest::FromRequest(request, share_id, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "m_share_service->Access(*parse_result, audit_context, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(access_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");

@@ -3339,6 +3339,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、五个分享控制器值日志合同 5/5、分享聚焦 CTest 56/56、Cancel DTO/批量语义 GoogleTest 13/13、名称含 Share 的 GoogleTest 295/295、OpenSpec 24/24 和完整后端构建通过；真实分享管理 12/12、上传安全网直接执行 888/888 均通过、0 失败。标准完整 CTest 共 1564 项：1557 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 541.00 秒。源码审计确认五条批量取消控制器固定摘要各 1 处，请求端点、DTO 错误消息、分享 ID 数量、下游错误/用户 ID 和响应 total/succeeded/failed 计数/用户 ID 五类旧动态日志均为 0；上下文、DTO 解析、认证属性、审计上下文、Service 调用、两类错误透传、响应映射、批量部分成功与始终 HTTP 200 的成功响应和 INFO/WARN/DEBUG/ERROR/INFO 级别分布保持不变。其余五个分享控制器入口继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.234 分享访问验证控制器诊断脱敏记录（2026-08-06）
+
+`ShareController::Access()` 的请求接收、DTO 校验失败、参数校验完成、业务拒绝和验证成功五条事件必须分别只记录固定完整摘要 `Received verify share access request`、`Verify share access request parameter validation failed`、`Verify share access parameter validation passed`、`Verify share access failed` 与 `Verify share access successful`。message 不得追加客户端 IP/端口、路径或解析后的分享 ID/码、密码或密码存在状态、DTO/下游错误消息、权限、生成的 Share Token、有效期、文件或数量、Authorization、`X-Share-Token`、原始 access/share token 或其他账户/请求/响应值；调用方 request/instance/`share` 上下文、原 INFO/WARN/DEBUG/WARN/INFO 级别和分支触发位置保持不变。只服务于旧动态日志的 `ip_address` 局部别名必须删除，`BuildAuditContext()` 及其归一化 IP/UA 数据不得删除或改写。
+
+既有上下文创建、`BuildAuditContext()` 构造、`AccessShareRequest::FromRequest()` 解析及错误透传、`ShareService::Access()` 调用及审计/日志上下文传播、业务错误原样返回、`AccessShareResponse::ToJson()` 映射和成功响应不得改变。公开访问对不存在分享、缺失/空/错误密码的不可区分失败，密码失败计数与限流，成功 Share Token/权限/文件响应和访问审计行为保持不变。验证必须新增源码合同锁定五条固定摘要、五类动态边界值排除、日志专用别名删除和完整控制器数据流，并继续执行 ShareLogContext/ShareDto/ShareService GoogleTest、真实分享管理/密码保护/审计流、上传安全网、OpenSpec、完整构建及标准完整 CTest。其余四个分享控制器入口继续独立审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 11 个失败断言：五条固定完整摘要均缺失，请求端点/分享码、DTO 错误消息、解析后的分享码/密码存在状态、下游错误/分享码/IP 和成功分享码/权限/IP 五类动态日志各命中一次，只服务于日志的 `ip_address` 别名命中一次；上下文、审计上下文、DTO 解析、Service 调用、两类错误透传、响应映射、成功响应和 INFO/WARN/DEBUG/WARN/INFO 级别分布断言均通过。
+
+实现后定向源码合同 1/1、六个分享控制器值日志合同 6/6、分享聚焦 CTest 57/57、Access DTO/响应 GoogleTest 6/6、名称含 Share 的 GoogleTest 296/296、OpenSpec 24/24 和完整后端构建通过；真实分享管理 12/12、密码保护 9/9、分享审计 82/82、上传安全网直接执行 888/888 均通过、0 失败。标准完整 CTest 共 1565 项：1558 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 547.38 秒。源码审计确认五条访问验证控制器固定摘要各 1 处，请求端点/分享码、DTO 错误消息、解析后的分享码/密码存在状态、下游错误/分享码/IP 和成功分享码/权限/IP 五类旧动态日志与日志专用 `ip_address` 别名均为 0；上下文、审计上下文及归一化 IP/UA、DTO 解析、Service 调用、两类错误透传、响应映射、不可区分失败、密码限流、Share Token 响应、访问审计、成功响应和 INFO/WARN/DEBUG/WARN/INFO 级别分布保持不变。其余四个分享控制器入口继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
