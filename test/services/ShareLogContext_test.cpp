@@ -844,6 +844,69 @@ namespace disk::share {
             }
         }
 
+        TEST(ShareDownloadInfoControllerValueLogContractTest, DownloadInfoUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto download_info_controller = SourceSection(
+                controller_source,
+                "auto ShareController::DownloadInfo(",
+                "    auto ShareController::Download("
+            );
+
+            ASSERT_FALSE(download_info_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received share download info request\";",
+                     "Logger::Warn(log_context) << \"Share download info request parameter validation failed\";",
+                     "Logger::Warn(log_context) << \"Share token does not match requested share\";",
+                     "Logger::Error(log_context) << \"Get share download info failed\";",
+                     "Logger::Info(log_context) << \"Share download info successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(download_info_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received share download info request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Share download info request parameter validation failed: \"",
+                     "<< \"Share token does not match requested share_id: token_share_code=\"",
+                     "<< \"Get share download info failed: \" << info_result.error().message",
+                     "<< \"Share download info successful: share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(download_info_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(download_info_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(download_info_controller, "Logger::Warn(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(download_info_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(download_info_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"download\")",
+                     "DownloadShareRequest::FromPath(share_id, file_id, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "request->attributes()->get<uint64_t>(\"share_id\")",
+                     "request->attributes()->get<std::string>(\"share_code\")",
+                     "if (share_id != share_code)",
+                     "ErrorCode::ShareAccessDenied",
+                     "m_share_service->GetDownloadInfo(",
+                     "*parse_result,\n            internal_share_id,\n            log_context",
+                     "if (!info_result)",
+                     "co_return Response::Error(info_result.error());",
+                     "const auto& info = *info_result;",
+                     "disk::file::DownloadInfoResponse response;",
+                     "response.file_id = info.file_id;",
+                     "response.filename = info.filename;",
+                     "response.file_size = info.file_size;",
+                     "response.file_hash = info.file_hash;",
+                     "response.mime_type = info.mime_type;",
+                     "response.supports_range = info.supports_range;",
+                     "co_return Response::Success(response.ToJson());",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(download_info_controller, preserved_controller_step),
+                    1U
+                ) << preserved_controller_step;
+            }
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");

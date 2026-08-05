@@ -338,15 +338,11 @@ namespace disk::share {
     ) -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "download");
 
-        Logger::Info(log_context)
-            << "Received share download info request: " << request->getPeerAddr().toIpPort()
-            << ", share_id=" << share_id << ", file_id=" << file_id;
+        Logger::Info(log_context) << "Received share download info request";
 
         auto parse_result = DownloadShareRequest::FromPath(share_id, file_id, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Share download info request parameter validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Share download info request parameter validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -354,9 +350,7 @@ namespace disk::share {
         const auto& share_code = request->attributes()->get<std::string>("share_code");
 
         if (share_id != share_code) {
-            Logger::Warn(log_context)
-                << "Share token does not match requested share_id: token_share_code="
-                << share_code << ", request_share_id=" << share_id;
+            Logger::Warn(log_context) << "Share token does not match requested share";
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
@@ -369,9 +363,7 @@ namespace disk::share {
             log_context
         );
         if (!info_result) {
-            Logger::Error(log_context)
-                << "Get share download info failed: " << info_result.error().message
-                << " (share_id=" << share_id << ", file_id=" << file_id << ")";
+            Logger::Error(log_context) << "Get share download info failed";
             co_return Response::Error(info_result.error());
         }
 
@@ -384,9 +376,7 @@ namespace disk::share {
         response.mime_type = info.mime_type;
         response.supports_range = info.supports_range;
 
-        Logger::Info(log_context)
-            << "Share download info successful: share_id=" << share_id
-            << ", file_id=" << file_id << ", size=" << info.file_size;
+        Logger::Info(log_context) << "Share download info successful";
         co_return Response::Success(response.ToJson());
     }
 
