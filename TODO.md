@@ -3199,6 +3199,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、公开/受保护路径行为 2/2、auth filter 聚焦 CTest 51/51、全部 Token GoogleTest 155/155、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、refresh 轮换 6/6、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1550 项：1543 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 564.69 秒。源码审计确认公开豁免分支只保留 1 条有界耗时/固定结果日志，追加路径的旧动态片段为 0；`IsPublicPath(request->path())`、微秒计时、INFO 上下文、低基数 operation 和豁免短路保持不变。Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.220 分享令牌 Scope 拒绝诊断脱敏记录（2026-08-05）
+
+`ShareAuthFilter::doFilter()` 的操作 scope 拒绝事件必须只记录固定完整摘要 `Share token scope does not permit operation`。message 不得追加分享码、内部分享 ID、permission、请求路径或其中的文件段、JTI、`X-Share-Token`、原始 Share Token、Redis 状态、异常或其他分享会话/请求值；调用方 request/instance/operation 上下文、原 WARN 级别和 scope 判定后的触发位置保持不变。
+
+既有 `RequiresDownloadScope(request->path())`、download/save 前缀判定、`permission != "download"` 条件、`ShareAccessDenied` 映射、拒绝时不注入 `share_code`/`share_id`/`share_token_jti`、成功属性注入与耗时事件不得改变。验证必须新增源码合同锁定固定摘要、三类动态值排除和拒绝分支数据流，并继续执行 ShareAuthFilter/Token GoogleTest、分享 token 安全与限流真实流、双实例认证一致性、上传安全网、OpenSpec、完整构建及标准完整 CTest。成功耗时事件继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 4 个失败断言：固定完整摘要缺失，WARN 中的分享码、permission 与请求路径三类动态值各命中一次；scope 条件、`ShareAccessDenied`、三项属性位置和成功耗时事件断言均通过。
+
+实现后定向源码合同 1/1、scope 拒绝/放行行为 2/2、ShareAuthFilter 聚焦 CTest 19/19、Token/ShareAuthFilter GoogleTest 159/159、OpenSpec 24/24 和完整后端构建通过；真实分享 token 安全 12/12、分享限流 10/10、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1551 项：1544 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 568.55 秒。源码审计确认固定 scope 拒绝摘要 1 处，WARN 中分享码、permission 与请求路径三类动态片段均为 0；scope 条件、`ShareAccessDenied`、三项属性位置、成功耗时事件和 WARN 级别保持不变。成功耗时事件继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

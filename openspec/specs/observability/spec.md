@@ -111,6 +111,11 @@ The JWT authentication, share-token authentication, and administrator-authorizat
 - **THEN** its directly owned INFO event SHALL contain only bounded `duration_us` and the fixed low-cardinality `outcome=exempt` result with the request's typed correlation and SHALL NOT append the raw request path, share-code or file segment from a public share URL, query, fragment, Authorization value, share token, user or token identifier, exception, or other request value
 - **AND** the existing path-based exemption check, exact and prefix path rules, bounded operation classification, protected near-miss handling, short-circuit continuation, and public responses SHALL remain unchanged
 
+#### Scenario: Share-token scope rejection diagnostics exclude session values
+- **WHEN** the share-token authentication filter rejects a verified token whose scope does not permit a download or save operation
+- **THEN** its directly owned WARN event SHALL use the fixed complete summary `Share token scope does not permit operation` with the request's typed correlation and SHALL NOT append the share code, internal share ID, permission, request path or file segment, JTI, `X-Share-Token` value, raw share token, Redis state, exception, or other share-session or request value
+- **AND** download/save path classification, non-download permission rejection, `ShareAccessDenied` mapping, rejection attribute timing, successful attributes, duration events, and public responses SHALL remain unchanged
+
 ### Requirement: Token Service Correlation
 The shared token service SHALL accept explicit correlation by value for request-reachable access-token, refresh-token, and share-token generation, verification, rotation, revocation parsing, and revoked-token rejection events. Authentication services and JWT/share authentication filters SHALL pass their already established request context without changing token claims, signatures, TTLs, Redis keys, CAS behavior, revocation behavior, error mapping, or public responses.
 

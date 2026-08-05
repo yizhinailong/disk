@@ -402,6 +402,69 @@ namespace disk::filters {
             EXPECT_EQ(CountOccurrences(success_branch, "co_return nullptr;"), 1U);
         }
 
+        TEST(ShareAuthFilterScopeValueLogContractTest, RejectionUsesFixedSummary) {
+            const auto source = ReadSourceFile("src/filters/ShareAuthFilter.cpp");
+
+            const auto scope_begin = source.find(
+                "if (RequiresDownloadScope(request->path()) && claims.scope.permission != \"download\")"
+            );
+            const auto attributes_begin = source.find(
+                "request->attributes()->insert(\"share_code\""
+            );
+            ASSERT_NE(scope_begin, std::string::npos);
+            ASSERT_NE(attributes_begin, std::string::npos);
+            ASSERT_LT(scope_begin, attributes_begin);
+
+            const auto scope_branch = source.substr(
+                scope_begin,
+                attributes_begin - scope_begin
+            );
+            const auto scope_log_begin = scope_branch.find("Logger::Warn(log_context)");
+            const auto scope_log_end = scope_branch.find(';', scope_log_begin);
+            ASSERT_NE(scope_log_begin, std::string::npos);
+            ASSERT_NE(scope_log_end, std::string::npos);
+
+            const auto scope_log = scope_branch.substr(
+                scope_log_begin,
+                scope_log_end - scope_log_begin + 1
+            );
+            EXPECT_EQ(
+                scope_log,
+                "Logger::Warn(log_context) << \"Share token scope does not permit operation\";"
+            );
+            for (const auto* request_value : {
+                     "claims.share_code",
+                     "claims.scope.permission",
+                     "request->path()",
+                 }) {
+                EXPECT_EQ(CountOccurrences(scope_log, request_value), 0U) << request_value;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    scope_branch,
+                    "if (RequiresDownloadScope(request->path()) && claims.scope.permission != \"download\")"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    scope_branch,
+                    "co_return disk::Response::Error(disk::error::Code::ShareAccessDenied);"
+                ),
+                1U
+            );
+            for (const auto* attribute : {
+                     "request->attributes()->insert(\"share_code\", claims.share_code);",
+                     "request->attributes()->insert(\"share_id\", claims.share_id);",
+                     "request->attributes()->insert(SHARE_TOKEN_JTI_ATTRIBUTE, claims.jti);",
+                 }) {
+                EXPECT_EQ(CountOccurrences(source, attribute), 1U) << attribute;
+            }
+            EXPECT_EQ(CountOccurrences(source, "[share_auth_filter] duration_us="), 3U);
+            EXPECT_EQ(CountOccurrences(source, "outcome=success"), 1U);
+        }
+
         TEST_F(AuthFilterLogContextTest, RejectionsPreserveBoundedContextWithoutOwnershipInference) {
             auto jwt_request = CreateRequest("/api/file/list", "jwt-filter-request");
             const auto jwt_response = drogon::sync_wait(JwtAuthFilter{}.doFilter(jwt_request));

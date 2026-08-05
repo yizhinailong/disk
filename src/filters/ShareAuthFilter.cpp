@@ -71,9 +71,7 @@ namespace disk::filters {
 
         const auto& claims = verify_result.value();
         if (RequiresDownloadScope(request->path()) && claims.scope.permission != "download") {
-            Logger::Warn(log_context) << "Share token scope does not permit operation: share_code="
-                                      << claims.share_code << ", permission=" << claims.scope.permission
-                                      << ", path=" << request->path();
+            Logger::Warn(log_context) << "Share token scope does not permit operation";
             co_return disk::Response::Error(disk::error::Code::ShareAccessDenied);
         }
 
