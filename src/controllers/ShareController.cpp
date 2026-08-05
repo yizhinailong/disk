@@ -200,29 +200,15 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "share");
 
-        Logger::Info(log_context)
-            << "Received update share settings request: " << request->getPeerAddr().toIpPort()
-            << ", share_id=" << share_id;
+        Logger::Info(log_context) << "Received update share settings request";
 
         /// 1. 解析并验证请求参数
         auto parse_result = UpdateShareRequest::FromRequest(request, share_id, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Update share settings request parameter validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Update share settings request parameter validation failed";
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug(log_context)
-            << "Update share settings parameter validation passed: share_id="
-            << parse_result->share_id << ", expire_days="
-            << (parse_result->expire_days.has_value() ?
-                    std::to_string(*parse_result->expire_days) :
-                    "null")
-            << ", password=" << (parse_result->password.has_value() ? "set" : "null")
-            << ", permission="
-            << (parse_result->permission.has_value() ?
-                    SharePermissionToString(*parse_result->permission) :
-                    "null");
+        Logger::Debug(log_context) << "Update share settings parameter validation passed";
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
@@ -230,16 +216,12 @@ namespace disk::share {
         /// 3. 调用 Service 层更新分享设置
         auto result = co_await m_share_service->Update(*parse_result, user_id, log_context);
         if (!result) {
-            Logger::Error(log_context)
-                << "Update share settings failed: " << result.error().message
-                << " (user_id=" << user_id << ", share_id=" << share_id << ")";
+            Logger::Error(log_context) << "Update share settings failed";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info(log_context)
-            << "Update share settings successful: share_id=" << share_id
-            << " (user_id=" << user_id << ")";
+        Logger::Info(log_context) << "Update share settings successful";
         co_return Response::Success(result->ToJson());
     }
 

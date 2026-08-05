@@ -635,6 +635,55 @@ namespace disk::share {
             }
         }
 
+        TEST(ShareUpdateControllerValueLogContractTest, UpdateUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto update_controller = SourceSection(
+                controller_source,
+                "auto ShareController::Update(",
+                "    auto ShareController::Cancel("
+            );
+
+            ASSERT_FALSE(update_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received update share settings request\";",
+                     "Logger::Warn(log_context) << \"Update share settings request parameter validation failed\";",
+                     "Logger::Debug(log_context) << \"Update share settings parameter validation passed\";",
+                     "Logger::Error(log_context) << \"Update share settings failed\";",
+                     "Logger::Info(log_context) << \"Update share settings successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received update share settings request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Update share settings request parameter validation failed: \"",
+                     "<< \"Update share settings parameter validation passed: share_id=\"",
+                     "<< \"Update share settings failed: \" << result.error().message",
+                     "<< \"Update share settings successful: share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(update_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(update_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(update_controller, "Logger::Debug(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(update_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"share\")",
+                     "UpdateShareRequest::FromRequest(request, share_id, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "GetAuthenticatedUserId(request)",
+                     "m_share_service->Update(*parse_result, user_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");
