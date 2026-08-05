@@ -3329,6 +3329,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、四个分享控制器值日志合同 4/4、分享聚焦 CTest 55/55、名称含 Share 的 GoogleTest 294/294、OpenSpec 24/24 和完整后端构建通过；真实分享管理 12/12、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1563 项：1556 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 553.10 秒。源码审计确认五条更新控制器固定摘要各 1 处，请求端点/分享 ID、DTO 错误消息、解析后的分享 ID/有效期/密码状态/权限、下游错误/用户与分享 ID 和成功分享/用户 ID 五类旧动态日志均为 0；上下文、DTO 解析、认证属性、Service 调用、两类错误透传、响应映射、成功响应和 INFO/WARN/DEBUG/ERROR/INFO 级别分布保持不变。其余六个分享控制器入口继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.233 分享批量取消控制器诊断脱敏记录（2026-08-06）
+
+`ShareController::Cancel()` 的请求接收、DTO 校验失败、参数校验完成、业务失败和批量完成五条事件必须分别只记录固定完整摘要 `Received batch cancel shares request`、`Batch cancel shares request parameter validation failed`、`Batch cancel shares parameter validation passed`、`Batch cancel shares failed` 与 `Batch cancel shares completed`。message 不得追加客户端 IP/端口、分享 ID/码或数量、DTO/下游错误消息、用户 ID、响应 total/succeeded/failed 计数、Authorization、原始 access/share token 或其他账户/请求/响应值；调用方 request/instance/`share` 上下文、原 INFO/WARN/DEBUG/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有上下文创建、`CancelShareRequest::FromRequest()` 解析及错误透传、认证用户属性读取、`BuildAuditContext()`、`ShareService::Cancel()` 调用及上下文传播、业务错误原样返回、`CancelShareResponse::ToJson()` 映射、批量部分成功汇总和始终 HTTP 200 的成功响应不得改变。验证必须新增源码合同锁定五条固定摘要、五类动态边界值排除和完整控制器数据流，并继续执行 ShareLogContext/ShareDto/ShareService 批量 GoogleTest、真实分享管理流、上传安全网、OpenSpec、完整构建及标准完整 CTest。其余五个分享控制器入口继续独立审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 10 个失败断言：五条固定完整摘要均缺失，请求端点、DTO 错误消息、分享 ID 数量、下游错误/用户 ID 和响应 total/succeeded/failed 计数/用户 ID 五类动态日志各命中一次；上下文、DTO 解析、认证属性、审计上下文、Service 调用、两类错误透传、响应映射、成功响应和 INFO/WARN/DEBUG/ERROR/INFO 级别分布断言均通过。
+
+实现后定向源码合同 1/1、五个分享控制器值日志合同 5/5、分享聚焦 CTest 56/56、Cancel DTO/批量语义 GoogleTest 13/13、名称含 Share 的 GoogleTest 295/295、OpenSpec 24/24 和完整后端构建通过；真实分享管理 12/12、上传安全网直接执行 888/888 均通过、0 失败。标准完整 CTest 共 1564 项：1557 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 541.00 秒。源码审计确认五条批量取消控制器固定摘要各 1 处，请求端点、DTO 错误消息、分享 ID 数量、下游错误/用户 ID 和响应 total/succeeded/failed 计数/用户 ID 五类旧动态日志均为 0；上下文、DTO 解析、认证属性、审计上下文、Service 调用、两类错误透传、响应映射、批量部分成功与始终 HTTP 200 的成功响应和 INFO/WARN/DEBUG/ERROR/INFO 级别分布保持不变。其余五个分享控制器入口继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

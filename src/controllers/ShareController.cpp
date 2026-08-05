@@ -229,20 +229,15 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "share");
 
-        Logger::Info(log_context)
-            << "Received batch cancel shares request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received batch cancel shares request";
 
         /// 1. 解析并验证请求参数
         auto parse_result = CancelShareRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Batch cancel shares request parameter validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Batch cancel shares request parameter validation failed";
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug(log_context)
-            << "Batch cancel shares parameter validation passed: share_ids.size()="
-            << parse_result->share_ids.size();
+        Logger::Debug(log_context) << "Batch cancel shares parameter validation passed";
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
@@ -255,17 +250,12 @@ namespace disk::share {
             log_context
         );
         if (!result) {
-            Logger::Error(log_context)
-                << "Batch cancel shares failed: " << result.error().message
-                << " (user_id=" << user_id << ")";
+            Logger::Error(log_context) << "Batch cancel shares failed";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应（批量操作始终返回 200）
-        Logger::Info(log_context)
-            << "Batch cancel shares completed: total=" << result->summary.total
-            << ", succeeded=" << result->summary.succeeded
-            << ", failed=" << result->summary.failed << " (user_id=" << user_id << ")";
+        Logger::Info(log_context) << "Batch cancel shares completed";
         co_return Response::Success(result->ToJson());
     }
 

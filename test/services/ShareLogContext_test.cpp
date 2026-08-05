@@ -684,6 +684,56 @@ namespace disk::share {
             }
         }
 
+        TEST(ShareCancelControllerValueLogContractTest, CancelUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto cancel_controller = SourceSection(
+                controller_source,
+                "auto ShareController::Cancel(",
+                "    auto ShareController::Access("
+            );
+
+            ASSERT_FALSE(cancel_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received batch cancel shares request\";",
+                     "Logger::Warn(log_context) << \"Batch cancel shares request parameter validation failed\";",
+                     "Logger::Debug(log_context) << \"Batch cancel shares parameter validation passed\";",
+                     "Logger::Error(log_context) << \"Batch cancel shares failed\";",
+                     "Logger::Info(log_context) << \"Batch cancel shares completed\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(cancel_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received batch cancel shares request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Batch cancel shares request parameter validation failed: \"",
+                     "<< \"Batch cancel shares parameter validation passed: share_ids.size()=\"",
+                     "<< \"Batch cancel shares failed: \" << result.error().message",
+                     "<< \"Batch cancel shares completed: total=\" << result->summary.total",
+                 }) {
+                EXPECT_EQ(CountOccurrences(cancel_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(cancel_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(cancel_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(cancel_controller, "Logger::Debug(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(cancel_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"share\")",
+                     "CancelShareRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "GetAuthenticatedUserId(request)",
+                     "m_share_service->Cancel(",
+                     "*parse_result,\n            user_id,\n            BuildAuditContext(request),\n            log_context",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(cancel_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");
