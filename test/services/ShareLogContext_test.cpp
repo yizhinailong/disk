@@ -907,6 +907,87 @@ namespace disk::share {
             }
         }
 
+        TEST(ShareDownloadControllerValueLogContractTest, DownloadUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto download_controller = SourceSection(
+                controller_source,
+                "auto ShareController::Download(",
+                "    auto ShareController::Save("
+            );
+
+            ASSERT_FALSE(download_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received download share file request\";",
+                     "Logger::Warn(log_context) << \"Download share file request parameter validation failed\";",
+                     "Logger::Debug(log_context) << \"Download share file parameter validation passed\";",
+                     "Logger::Warn(log_context) << \"Share token does not match requested share\";",
+                     "Logger::Error(log_context) << \"Get download info failed\";",
+                     "Logger::Info(log_context) << \"Get download info successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(download_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received download share file request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Download share file request parameter validation failed: \"",
+                     "<< \"Download share file parameter validation passed: share_id=\"",
+                     "<< \"Share token does not match requested share_id: token_share_code=\"",
+                     "<< \"Get download info failed: \" << info_result.error().message",
+                     "<< \"Get download info successful: share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(download_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(download_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(download_controller, "Logger::Warn(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(download_controller, "Logger::Debug(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(download_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"download\")",
+                     "DownloadShareRequest::FromPath(share_id, file_id, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "request->attributes()->get<uint64_t>(\"share_id\")",
+                     "request->attributes()->get<std::string>(\"share_code\")",
+                     "if (share_id != share_code)",
+                     "ErrorCode::ShareAccessDenied",
+                     "BuildAuditContext(request)",
+                     "m_share_service->GetDownloadInfo(",
+                     "if (!info_result)",
+                     "auto error_response = Response::Error(info_result.error());",
+                     "ShareDownloadOutcome{",
+                     ".bytes = 0,",
+                     ".http_status = static_cast<int>(error_response->getStatusCode()),",
+                     ".success = false,",
+                     ".update_statistics = false,",
+                     ".result = DownloadFailureResult(info_result.error().code),",
+                     "co_return error_response;",
+                     "const auto& download_info = *info_result;",
+                     "auto resp = co_await BuildDownloadResponse(",
+                     ".blob = download_info.blob,",
+                     ".filename = download_info.filename,",
+                     ".file_size = download_info.file_size,",
+                     ".mime_type = download_info.mime_type,",
+                     ".file_hash = download_info.file_hash,",
+                     ".range_header = std::string(request->getHeader(\"Range\")),",
+                     "m_blob_store,",
+                     "m_download_integrity_service,",
+                     "BuildDownloadOutcome(resp, download_info.file_size),",
+                     "co_return resp;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(download_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    download_controller,
+                    "co_await m_share_service->CompleteDownload("
+                ),
+                2U
+            );
+            EXPECT_EQ(CountOccurrences(download_controller, "audit_context,"), 2U);
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");

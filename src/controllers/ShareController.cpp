@@ -387,21 +387,15 @@ namespace disk::share {
     ) -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "download");
 
-        Logger::Info(log_context)
-            << "Received download share file request: " << request->getPeerAddr().toIpPort()
-            << ", share_id=" << share_id << ", file_id=" << file_id;
+        Logger::Info(log_context) << "Received download share file request";
 
         /// 1. 解析并验证路径参数
         auto parse_result = DownloadShareRequest::FromPath(share_id, file_id, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Download share file request parameter validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Download share file request parameter validation failed";
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug(log_context)
-            << "Download share file parameter validation passed: share_id="
-            << parse_result->share_id << ", file_id=" << parse_result->file_id;
+        Logger::Debug(log_context) << "Download share file parameter validation passed";
 
         /// 2. 从请求属性获取 share_id（由 ShareAuthFilter 设置）
         const auto internal_share_id = request->attributes()->get<uint64_t>("share_id");
@@ -409,9 +403,7 @@ namespace disk::share {
 
         /// 3. 验证 share_id 匹配（防止令牌用于其他分享）
         if (share_id != share_code) {
-            Logger::Warn(log_context)
-                << "Share token does not match requested share_id: token_share_code="
-                << share_code << ", request_share_id=" << share_id;
+            Logger::Warn(log_context) << "Share token does not match requested share";
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
@@ -426,9 +418,7 @@ namespace disk::share {
             log_context
         );
         if (!info_result) {
-            Logger::Error(log_context)
-                << "Get download info failed: " << info_result.error().message
-                << " (share_id=" << share_id << ", file_id=" << file_id << ")";
+            Logger::Error(log_context) << "Get download info failed";
             auto error_response = Response::Error(info_result.error());
             co_await m_share_service->CompleteDownload(
                 *parse_result,
@@ -447,12 +437,7 @@ namespace disk::share {
         }
 
         const auto& download_info = *info_result;
-        Logger::Info(log_context)
-            << "Get download info successful: share_id=" << share_id
-            << ", file_id=" << file_id
-            << ", filename=" << download_info.filename
-            << ", size=" << download_info.file_size
-            << ", content_id=" << download_info.blob.content_id;
+        Logger::Info(log_context) << "Get download info successful";
 
         /// 5. 委托共享下载响应构造
         auto resp = co_await BuildDownloadResponse(
