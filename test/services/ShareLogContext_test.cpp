@@ -988,6 +988,79 @@ namespace disk::share {
             EXPECT_EQ(CountOccurrences(download_controller, "audit_context,"), 2U);
         }
 
+        TEST(ShareSaveControllerValueLogContractTest, SaveUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");
+            const auto save_controller = SourceSection(
+                controller_source,
+                "auto ShareController::Save(",
+                "\n} // namespace disk::share"
+            );
+            const auto save_response = SourceSection(
+                dto_source,
+                "struct SaveShareItemsResponse",
+                "/// ==================== Download Info"
+            );
+
+            ASSERT_FALSE(save_controller.empty());
+            ASSERT_FALSE(save_response.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received save share items request\";",
+                     "Logger::Warn(log_context) << \"Save share items request parameter validation failed\";",
+                     "Logger::Warn(log_context) << \"Share token does not match requested share\";",
+                     "Logger::Error(log_context) << \"Save share items failed\";",
+                     "Logger::Info(log_context) << \"Save share items successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(save_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received save share items request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Save share items request parameter validation failed: \"",
+                     "<< \"Share token does not match requested share_id: token_share_code=\"",
+                     "<< \"Save share items failed: \" << result.error().message",
+                     "<< \"Save share items successful: saved_count=\" << result->saved_count",
+                 }) {
+                EXPECT_EQ(CountOccurrences(save_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(save_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(save_controller, "Logger::Warn(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(save_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(save_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"share\")",
+                     "SaveShareItemsRequest::FromRequest(request, share_id, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "GetAuthenticatedUserId(request)",
+                     "request->attributes()->get<uint64_t>(\"share_id\")",
+                     "request->attributes()->get<std::string>(\"share_code\")",
+                     "if (share_id != share_code)",
+                     "ErrorCode::ShareAccessDenied",
+                     "m_share_service->SaveToDrive(",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(save_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+            EXPECT_TRUE(Contains(
+                save_controller,
+                "*parse_result,\n            internal_share_id,\n            target_user_id,\n            log_context"
+            ));
+            for (const auto* response_mapping : {
+                     "SetField(json, \"saved_count\", saved_count);",
+                     "SetField(json, \"saved_file_count\", saved_file_count);",
+                     "SetField(json, \"saved_folder_count\", saved_folder_count);",
+                     "return json;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(save_response, response_mapping), 1U)
+                    << response_mapping;
+            }
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");

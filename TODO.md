@@ -3379,6 +3379,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、九个分享控制器值日志合同 9/9、Share 命名 CTest 306/306、下载 DTO/查询/响应构造 GoogleTest 22/22、名称含 Share 的 GoogleTest 299/299、OpenSpec 24/24 和完整后端构建通过；真实下载流程 122/122、令牌安全 12/12、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1568 项：1561 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 544.39 秒。源码审计确认下载内容方法区段内六条固定摘要各 1 处，请求端点/分享码/file ID、DTO 错误消息、解析后的分享码/file ID、令牌属性分享码/路径分享码、下游错误/分享码/file ID 和成功分享码/file ID/文件名/大小/content ID 六类旧动态日志均为 0；上下文、路径 DTO、认证属性、令牌与路径绑定、审计上下文、Service 元数据调用、失败响应与不更新统计的失败审计、Blob/Range/完整性响应参数、真实 outcome 统计与审计、令牌实时失效/scope 拒绝、跨分享拒绝、分享状态/权限/文件归属、200/206/416 与存储失败响应、计数/访问元数据、对账、审计、公开响应和 INFO/WARN/DEBUG/WARN/ERROR/INFO 级别分布保持不变。其余一个分享控制器入口继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.238 分享保存到网盘控制器诊断脱敏记录（2026-08-06）
+
+`ShareController::Save()` 的请求接收、DTO 校验失败、令牌与路径分享码不匹配、业务失败和保存成功五条事件必须分别只记录固定完整摘要 `Received save share items request`、`Save share items request parameter validation failed`、`Share token does not match requested share`、`Save share items failed` 与 `Save share items successful`。message 不得追加客户端 IP/端口、路径或解析后的分享 ID/码、DTO/下游错误消息、令牌属性中的分享码或内部分享 ID、owner/目标用户 ID、file/folder ID 或数量、目标文件夹、saved/saved_file/saved_folder 计数、Authorization、`X-Share-Token`、原始 access/share token 或其他账户/请求/响应值；调用方 request/instance/`share` 上下文、原 INFO/WARN/WARN/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有 owner JWT 认证与 `user_id` 属性、分享令牌实时验证与 download scope、共享 download 限流桶、`SaveShareItemsRequest::FromRequest()` 解析及错误透传、内部分享 ID/分享码属性读取、令牌分享码与路径分享码绑定校验、`ShareService::SaveToDrive()` 的 request/internal share/target user/上下文参数、业务错误原样返回、`SaveShareItemsResponse::ToJson()` 的 saved_count/saved_file_count/saved_folder_count 三字段映射和成功响应不得改变。owner 令牌缺失/无效、分享令牌缺失/无效/scope 拒绝、取消/过期令牌实时拒绝、跨分享令牌拒绝、分享状态/权限/关联成员与目标文件夹归属校验、递归复制计划、冲突跳过、配额预留/退款、内容引用、路径/层级、项目/父目录计数、事务提交/回滚、成功后缓存失效及公开响应行为保持不变。验证必须新增源码合同锁定五条固定摘要、五类动态边界值排除和完整控制器数据流，并继续执行 ShareLogContext/ShareDto/ShareService/ShareRateLimit GoogleTest、真实分享限流/令牌安全流、上传安全网、OpenSpec、完整构建及标准完整 CTest。十个分享控制器值日志边界完成收敛；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 10 个失败断言：五条固定完整摘要均缺失，客户端端点/分享码、DTO 错误消息、令牌属性分享码/路径分享码、下游错误/分享码/user ID 和成功 saved_count/分享码/user ID 五类动态日志各命中一次；`share` 上下文、INFO/WARN/WARN/ERROR/INFO 级别、DTO 与错误透传、owner/分享认证属性读取、令牌与路径绑定、四参数 Service 调用、错误响应、三字段结果映射和成功响应断言均通过。
+
+实现后定向源码合同 1/1、十个分享控制器值日志合同 10/10、Share 命名 CTest 307/307、名称含 Share 的 GoogleTest 300/300、OpenSpec 24/24 和完整后端构建通过；真实分享限流 10/10、令牌安全 12/12、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1569 项：1562 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 540.64 秒。源码审计确认保存方法区段内五条固定摘要各 1 处，客户端端点/分享码、DTO 错误消息、令牌属性分享码/路径分享码、下游错误/分享码/user ID 和成功 saved_count/分享码/user ID 五类旧动态日志均为 0；上下文、级别、owner/分享令牌双认证域、download scope/限流桶、DTO/认证属性、令牌与路径绑定、Service 四参数、错误透传、三字段响应映射、令牌实时失效、保存事务/配额/引用/路径/计数/缓存及公开响应行为保持不变。十个分享控制器值日志边界完成收敛；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

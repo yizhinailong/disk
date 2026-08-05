@@ -470,15 +470,11 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "share");
 
-        Logger::Info(log_context)
-            << "Received save share items request: " << request->getPeerAddr().toIpPort()
-            << ", share_id=" << share_id;
+        Logger::Info(log_context) << "Received save share items request";
 
         auto parse_result = SaveShareItemsRequest::FromRequest(request, share_id, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Save share items request parameter validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Save share items request parameter validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -487,9 +483,7 @@ namespace disk::share {
         const auto& share_code = request->attributes()->get<std::string>("share_code");
 
         if (share_id != share_code) {
-            Logger::Warn(log_context)
-                << "Share token does not match requested share_id: token_share_code="
-                << share_code << ", request_share_id=" << share_id;
+            Logger::Warn(log_context) << "Share token does not match requested share";
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
@@ -503,15 +497,11 @@ namespace disk::share {
             log_context
         );
         if (!result) {
-            Logger::Error(log_context)
-                << "Save share items failed: " << result.error().message
-                << " (share_id=" << share_id << ", user_id=" << target_user_id << ")";
+            Logger::Error(log_context) << "Save share items failed";
             co_return Response::Error(result.error());
         }
 
-        Logger::Info(log_context)
-            << "Save share items successful: saved_count=" << result->saved_count
-            << " (share_id=" << share_id << ", user_id=" << target_user_id << ")";
+        Logger::Info(log_context) << "Save share items successful";
         co_return Response::Success(result->ToJson());
     }
 
