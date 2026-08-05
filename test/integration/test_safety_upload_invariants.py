@@ -2149,9 +2149,9 @@ def test_admin_log_context_invariants() -> None:
         request_id=invalid_list_request_id,
         expected_success=False,
         message_markers=(
-            "Admin list users request:",
+            "Admin list users request",
             "Parameter 'status' invalid format:",
-            "List users request validation failed:",
+            "List users request validation failed",
             "HTTP request completed",
         ),
     )

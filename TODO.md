@@ -3389,6 +3389,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、十个分享控制器值日志合同 10/10、Share 命名 CTest 307/307、名称含 Share 的 GoogleTest 300/300、OpenSpec 24/24 和完整后端构建通过；真实分享限流 10/10、令牌安全 12/12、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1569 项：1562 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 540.64 秒。源码审计确认保存方法区段内五条固定摘要各 1 处，客户端端点/分享码、DTO 错误消息、令牌属性分享码/路径分享码、下游错误/分享码/user ID 和成功 saved_count/分享码/user ID 五类旧动态日志均为 0；上下文、级别、owner/分享令牌双认证域、download scope/限流桶、DTO/认证属性、令牌与路径绑定、Service 四参数、错误透传、三字段响应映射、令牌实时失效、保存事务/配额/引用/路径/计数/缓存及公开响应行为保持不变。十个分享控制器值日志边界完成收敛；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.239 管理员用户列表控制器诊断脱敏记录（2026-08-06）
+
+`AdminController::ListUsers()` 的请求接收、DTO 校验失败、业务失败和列表成功四条事件必须分别只记录固定完整摘要 `Admin list users request`、`List users request validation failed`、`Failed to list users` 与 `Admin list users successful`。Controller message 不得追加客户端 IP/端口、原始或解析后的 page/page_size/username/email/status/role、DTO/下游错误消息、管理员/用户 ID、返回项或分页/计数、Authorization、原始 access token/JWT/JTI/claim、密码、存储凭据或其他账户/请求/响应值；调用方 request/instance/`admin` 上下文、原 INFO/WARN/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有全局 JWT 认证、`AdminAuthFilter` 后 `AdminRateLimitFilter` 的路由顺序、管理员 role/status 校验、`ListUsersRequest::FromRequest()` 解析与错误透传、`AdminService::GetInstance()` 和 `ListUsers(request, log_context)` 调用、业务错误原样返回、`UserListResponse::ToJson()` 的 items/pagination 映射和成功响应不得改变。用户名/邮箱/状态/角色筛选、计数、创建时间倒序分页、PostgreSQL `int64_t` LIMIT/OFFSET、可空用户字段及公开认证/授权/限流/API 行为保持不变；DTO 和 AdminService 自有事件继续作为独立边界审计。验证必须新增源码合同锁定四条固定摘要、三类动态边界值排除和完整控制器数据流，更新真实安全网固定标记，并继续执行 AdminLogContext/AdminDto/AdminService/AdminAuth/AdminRateLimit GoogleTest、真实管理流、上传安全网、OpenSpec、完整构建及标准完整 CTest。其余十二个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：请求接收、DTO 校验失败和业务失败三条固定完整摘要均缺失，客户端端点、DTO 错误消息和下游错误消息三类动态日志各命中一次；既有固定成功摘要、INFO/WARN/ERROR/INFO 级别、上下文、DTO/Service 调用、错误透传、items/pagination 映射和成功响应断言均通过。
+
+实现后定向源码合同 1/1、全部 Admin GoogleTest 83/83、用户列表 DTO/响应 GoogleTest 24/24、Admin/ListUsers 聚焦 CTest 105/105、真实管理流 25/25、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。上传安全网首次紧随真实管理流执行时在管理员存储统计处为 261 项通过、2 项失败；受管服务日志确认同一管理员固定窗口已由前置场景累计至 `count=31/30`，该请求返回 429，且 Redis 窗口过期后原命令复跑 886/886、0 失败。标准完整 CTest 共 1570 项：1563 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 542.20 秒。源码审计确认列表方法区段内四条固定摘要各 1 处，客户端端点、DTO 错误消息和下游错误消息三类旧动态日志均为 0；上下文、级别、认证与限流顺序、DTO/Service 调用、错误透传、items/pagination 映射、筛选/计数/分页及公开行为保持不变。其余十二个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

@@ -170,6 +170,68 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminListUsersControllerValueLogContractTest, ListUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto list_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::ListUsers(",
+                "    auto AdminController::GetUserDetail("
+            );
+            const auto list_response = ExtractRange(
+                dto_source,
+                "struct UserListResponse",
+                "    struct StorageStatsResponse"
+            );
+
+            ASSERT_FALSE(list_controller.empty());
+            ASSERT_FALSE(list_response.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin list users request\";",
+                     "Logger::Warn(log_context) << \"List users request validation failed\";",
+                     "Logger::Error(log_context) << \"Failed to list users\";",
+                     "Logger::Info(log_context) << \"Admin list users successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin list users request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"List users request validation failed: \" << parse_result.error().message",
+                     "<< \"Failed to list users: \" << result.error().message",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "admin::ListUsersRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "services::AdminService::GetInstance()",
+                     "service->ListUsers(*parse_result, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+            for (const auto* response_mapping : {
+                     "SetArray(json, \"items\", items);",
+                     "SetField(json, \"pagination\", pagination);",
+                     "return json;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_response, response_mapping), 1U)
+                    << response_mapping;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(
