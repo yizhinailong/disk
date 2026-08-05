@@ -178,9 +178,7 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin change user available space request: "
-            << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin change user available space request";
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -204,9 +202,7 @@ namespace disk::controllers {
         auto parse_result =
             admin::ChangeAvailableSpaceRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Change available space request validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Change available space request validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -219,16 +215,14 @@ namespace disk::controllers {
         );
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to change user available space: " << result.error().message;
+            Logger::Error(log_context) << "Failed to change user available space";
             co_return Response::Error(result.error());
         }
 
         Json::Value data;
         data["user"] = result->ToJson();
 
-        Logger::Info(log_context)
-            << "Admin change user available space successful: target_id=" << target_id;
+        Logger::Info(log_context) << "Admin change user available space successful";
         co_return Response::Success(data);
     }
 

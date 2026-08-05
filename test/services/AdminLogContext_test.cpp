@@ -530,6 +530,167 @@ namespace disk::admin {
             }
         }
 
+        TEST(
+            AdminChangeUserAvailableSpaceControllerValueLogContractTest,
+            AvailableSpaceUsesFixedSummaries
+        ) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto available_space_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::ChangeUserAvailableSpace(",
+                "    auto AdminController::SoftDeleteUser("
+            );
+            const auto available_space_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::ChangeUserAvailableSpace,",
+                "        ADD_METHOD_TO(\n            AdminController::SoftDeleteUser,"
+            );
+            const auto available_space_request = ExtractRange(
+                dto_source,
+                "struct ChangeAvailableSpaceRequest",
+                "    struct ListSharesRequest"
+            );
+            const auto user_detail_response = ExtractRange(
+                dto_source,
+                "struct UserDetailResponse",
+                "    struct UserListResponse"
+            );
+
+            ASSERT_FALSE(available_space_controller.empty());
+            ASSERT_FALSE(available_space_route.empty());
+            ASSERT_FALSE(available_space_request.empty());
+            ASSERT_FALSE(user_detail_response.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin change user available space request\";",
+                     "Logger::Warn(log_context) << \"Change available space request validation failed\";",
+                     "Logger::Error(log_context) << \"Failed to change user available space\";",
+                     "Logger::Info(log_context) << \"Admin change user available space successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(available_space_controller, fixed_log), 1U)
+                    << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin change user available space request: \"\n            << request->getPeerAddr().toIpPort()",
+                     "<< \"Change available space request validation failed: \"\n                << parse_result.error().message",
+                     "<< \"Failed to change user available space: \" << result.error().message",
+                     "<< \"Admin change user available space successful: target_id=\" << target_id",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(available_space_controller, raw_boundary_log),
+                    0U
+                ) << raw_boundary_log;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(available_space_controller, "Logger::Info(log_context)"),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(available_space_controller, "Logger::Warn(log_context)"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(available_space_controller, "Logger::Debug(log_context)"),
+                0U
+            );
+            EXPECT_EQ(
+                CountOccurrences(available_space_controller, "Logger::Error(log_context)"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(available_space_controller, "ErrorCode::ValidationFailed"),
+                2U
+            );
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "request->attributes()->get<uint64_t>(\"user_id\")",
+                     "if (id.empty())",
+                     "\"Missing required parameter: id\"",
+                     "target_id = std::stoull(id);",
+                     "catch (const std::exception&)",
+                     "\"Invalid user id format\"",
+                     "admin::ChangeAvailableSpaceRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "services::AdminService::GetInstance()",
+                     "service->ChangeUserAvailableSpace(\n            target_id,\n            parse_result->available_space_g,\n            operator_id,\n            log_context\n        )",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "data[\"user\"] = result->ToJson();",
+                     "co_return Response::Success(data);",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(available_space_controller, preserved_controller_step),
+                    1U
+                ) << preserved_controller_step;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_route,
+                    "\"/api/admin/users/{id}/available-space\""
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(available_space_route, "drogon::Put"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_route,
+                    "\"disk::filters::AdminAuthFilter\""
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    available_space_route,
+                    "\"disk::filters::AdminRateLimitFilter\""
+                ),
+                1U
+            );
+            EXPECT_LT(
+                available_space_route.find("\"disk::filters::AdminAuthFilter\""),
+                available_space_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            for (const auto* preserved_dto_step : {
+                     "static constexpr uint64_t BytesPerG = 1024ULL * 1024ULL * 1024ULL;",
+                     "RequireUInt64(json, \"available_space_g\")",
+                     "if (*space_result > std::numeric_limits<uint64_t>::max() / BytesPerG)",
+                     "ErrorCode::ValidationFailed",
+                     "\"Parameter 'available_space_g' is too large\"",
+                     "request.available_space_g = *space_result;",
+                     "return request;",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(available_space_request, preserved_dto_step),
+                    1U
+                ) << preserved_dto_step;
+            }
+            for (const auto* response_field : {
+                     "id",
+                     "username",
+                     "email",
+                     "nickname",
+                     "avatar",
+                     "role",
+                     "status",
+                     "storage_quota",
+                     "storage_used",
+                     "storage_reserved",
+                     "created_at",
+                     "last_login_at",
+                 }) {
+                const auto mapping =
+                    std::string("SetField(json, \"") + response_field + "\", " +
+                    response_field + ");";
+                EXPECT_EQ(CountOccurrences(user_detail_response, mapping), 1U) << mapping;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(

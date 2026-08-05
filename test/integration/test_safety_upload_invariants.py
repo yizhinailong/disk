@@ -2217,6 +2217,31 @@ def test_admin_log_context_invariants() -> None:
         ),
     )
 
+    self_available_space_request_id = (
+        f"safety-admin-self-available-space-log-{unique_name()}"
+    )
+    self_available_space_response = fetch(
+        f"/api/admin/users/{USER_ID}/available-space",
+        method="PUT",
+        headers={
+            **auth_headers(TOKEN),
+            "X-Request-Id": self_available_space_request_id,
+        },
+        json_body={"available_space_g": 1},
+    )
+    assert_admin_log_context(
+        response=self_available_space_response,
+        request_id=self_available_space_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin change user available space request",
+            "Admin change user available space: target_id=",
+            "Admin cannot modify self available space:",
+            "Failed to change user available space",
+            "HTTP request completed",
+        ),
+    )
+
     missing_share_id = int(
         scalar("SELECT COALESCE(MAX(id), 0) + 1000000 FROM shares") or 1000000
     )
