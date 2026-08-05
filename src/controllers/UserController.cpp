@@ -50,8 +50,7 @@ namespace disk::user {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "user");
 
-        Logger::Info(log_context)
-            << "Received change password request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received change password request";
 
         /// 步骤 1: 从请求属性中提取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -59,8 +58,7 @@ namespace disk::user {
         /// 步骤 2: 解析并验证请求 DTO
         auto parse_result = ChangePasswordRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Change password request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context) << "Change password request validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -70,13 +68,12 @@ namespace disk::user {
 
         /// 步骤 4: 处理服务层错误
         if (!change_result) {
-            Logger::Error(log_context)
-                << "Failed to change password: " << change_result.error().message;
+            Logger::Error(log_context) << "Failed to change password";
             co_return Response::Error(change_result.error());
         }
 
         /// 步骤 5: 返回成功响应（PUT 修改密码时 data 为 null）
-        Logger::Info(log_context) << "Change password successful: user_id=" << user_id;
+        Logger::Info(log_context) << "Change password successful";
         co_return Response::Success();
     }
 

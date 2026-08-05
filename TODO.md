@@ -3259,6 +3259,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、三条 User 值日志合同 3/3、用户聚焦 CTest 10/10、名称含 User 的 GoogleTest 88/88、OpenSpec 24/24 和完整后端构建通过；真实资料读取与存储流 5/5、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1556 项：1549 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 568.71 秒。源码审计确认三条固定控制器摘要各 1 处，请求端点、下游错误消息和成功用户 ID 三类旧动态日志均为 0；上下文、认证属性、Service 调用、错误透传、用户 JSON 包装、成功响应和 INFO/ERROR/INFO 级别分布保持不变。密码、资料更新和存储控制器继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.226 密码修改控制器诊断脱敏记录（2026-08-05）
+
+`UserController::UpdatePassword()` 的请求接收、DTO 校验失败、业务失败和修改成功四条事件必须分别只记录固定完整摘要 `Received change password request`、`Change password request validation failed`、`Failed to change password` 与 `Change password successful`。message 不得追加客户端 IP/端口、用户 ID、用户名、邮箱、原密码、新密码、密码哈希、DTO/下游错误消息、Authorization、原始 access token 或其他账户/请求/响应值；调用方 request/instance/`user` 上下文、原 INFO/WARN/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有上下文创建、`user_id` 认证属性读取、`ChangePasswordRequest::FromRequest()` 解析及上下文传播、DTO 错误原样返回、`UserService::ChangePassword()` 调用及上下文传播、业务错误原样返回和空 data 成功响应不得改变。验证必须新增源码合同锁定四条固定摘要、四类动态边界值排除和完整控制器数据流，并继续执行 UserLogContext/UserDto/UserService GoogleTest、真实密码修改流、上传安全网、OpenSpec、完整构建及标准完整 CTest。资料更新和存储控制器继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 8 个失败断言：四条固定完整摘要均缺失，请求端点、DTO 错误消息、下游错误消息和成功用户 ID 四类动态日志各命中一次；上下文、认证属性、DTO/Service 调用、两类错误透传、空 data 成功响应和 INFO/WARN/ERROR/INFO 级别分布断言均通过。
+
+实现后定向源码合同 1/1、四条 User 值日志合同 4/4、用户聚焦 CTest 10/10、`ChangePasswordRequest` DTO 15/15、名称含 User 的 GoogleTest 89/89、OpenSpec 24/24 和完整后端构建通过；真实密码修改流 6/6、上传安全网直接执行 886/886 均通过、0 失败，原密码已恢复。标准完整 CTest 共 1557 项：1550 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 570.12 秒。源码审计确认四条固定控制器摘要各 1 处，请求端点、DTO 错误消息、下游错误消息和成功用户 ID 四类旧动态日志均为 0；上下文、认证属性、DTO/Service 调用、两类错误透传、空 data 成功响应和 INFO/WARN/ERROR/INFO 级别分布保持不变。资料更新和存储控制器继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
