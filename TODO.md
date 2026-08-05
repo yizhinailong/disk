@@ -3279,6 +3279,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、五条 User 值日志合同 5/5、用户聚焦 CTest 10/10、`UpdateProfileRequest` DTO 9/9、名称含 User 的 GoogleTest 90/90、OpenSpec 24/24 和完整后端构建通过；真实资料更新流 6/6、上传安全网直接执行 886/886 均通过、0 失败，原昵称已恢复。标准完整 CTest 共 1558 项：1551 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 546.97 秒。源码审计确认四条固定控制器摘要各 1 处，请求端点、DTO 错误消息、下游错误消息和成功用户 ID 四类旧动态日志均为 0；上下文、认证属性、DTO/Service 调用、两类错误透传、用户 JSON 包装、成功响应和 INFO/WARN/ERROR/INFO 级别分布保持不变。存储控制器继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.228 用户存储统计控制器诊断脱敏记录（2026-08-06）
+
+`UserController::GetStorage()` 的请求接收、业务失败和读取成功三条事件必须分别只记录固定完整摘要 `Received storage stats request`、`Failed to get storage stats` 与 `Get storage stats successful`。message 不得追加客户端 IP/端口、用户 ID、用户名、邮箱、已用/预留/配额/可用空间、使用率、下游错误消息、Authorization、原始 access token、密码/哈希或其他账户/请求/响应值；调用方 request/instance/`user` 上下文、原 INFO/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有上下文创建、`user_id` 认证属性读取、`UserService::GetStorage()` 调用及上下文传播、业务错误原样返回、`StorageResponse::ToJson()` 响应映射和成功响应不得改变。验证必须新增源码合同锁定三条固定摘要、三类动态边界值排除和完整控制器数据流，并继续执行 UserLogContext/UserService GoogleTest、真实资料读取与存储流、上传安全网、OpenSpec、完整构建及标准完整 CTest。Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：三条固定完整摘要均缺失，请求端点、下游错误消息和成功用户 ID 三类动态日志各命中一次；上下文、认证属性、Service 调用、错误透传、存储 JSON 映射、成功响应和 INFO/ERROR/INFO 级别分布断言均通过。
+
+实现后定向源码合同 1/1、六条 User 值日志合同 6/6、用户聚焦 CTest 10/10、名称含 User 的 GoogleTest 91/91、OpenSpec 24/24 和完整后端构建通过；真实资料读取与存储流 5/5、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1559 项：1552 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 537.91 秒。源码审计确认三条固定控制器摘要各 1 处，请求端点、下游错误消息和成功用户 ID 三类旧动态日志均为 0；上下文、认证属性、Service 调用、错误透传、存储 JSON 映射、成功响应和 INFO/ERROR/INFO 级别分布保持不变。至此 `UserController` 四个公开方法的直接诊断均已完成固定摘要迁移；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

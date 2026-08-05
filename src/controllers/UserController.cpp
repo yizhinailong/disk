@@ -115,8 +115,7 @@ namespace disk::user {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "user");
 
-        Logger::Info(log_context)
-            << "Received storage stats request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received storage stats request";
 
         /// 步骤 1: 从请求属性中提取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -124,8 +123,7 @@ namespace disk::user {
         /// 步骤 2: 调用服务层
         auto result = co_await m_user_service->GetStorage(user_id, log_context);
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to get storage stats: " << result.error().message;
+            Logger::Error(log_context) << "Failed to get storage stats";
             co_return Response::Error(result.error());
         }
 
@@ -133,7 +131,7 @@ namespace disk::user {
         Json::Value data;
         data = result->ToJson();
 
-        Logger::Info(log_context) << "Get storage stats successful: user_id=" << user_id;
+        Logger::Info(log_context) << "Get storage stats successful";
         co_return Response::Success(data);
     }
 

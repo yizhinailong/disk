@@ -314,6 +314,49 @@ namespace disk::user {
             }
         }
 
+        TEST(UserStorageControllerValueLogContractTest, GetStorageUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/UserController.cpp");
+            const auto get_storage_controller = ExtractBetween(
+                controller_source,
+                "auto UserController::GetStorage(",
+                "} // namespace disk::user"
+            );
+
+            ASSERT_FALSE(get_storage_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received storage stats request\";",
+                     "Logger::Error(log_context) << \"Failed to get storage stats\";",
+                     "Logger::Info(log_context) << \"Get storage stats successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(get_storage_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received storage stats request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Failed to get storage stats: \" << result.error().message",
+                     "Logger::Info(log_context) << \"Get storage stats successful: user_id=\" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(get_storage_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(get_storage_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(get_storage_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"user\")",
+                     "const auto user_id = request->attributes()->get<uint64_t>(\"user_id\");",
+                     "m_user_service->GetStorage(user_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "data = result->ToJson();",
+                     "co_return Response::Success(data);",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(get_storage_controller, preserved_controller_step),
+                    1U
+                ) << preserved_controller_step;
+            }
+        }
+
         TEST(UserProfileValueLogContractTest, UpdateUsesFixedSummaries) {
             const auto service_source = ReadSourceFile("src/services/UserService.cpp");
             const auto update_profile_body = ExtractBetween(
