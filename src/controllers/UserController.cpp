@@ -24,8 +24,7 @@ namespace disk::user {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "user");
 
-        Logger::Info(log_context)
-            << "Received user info request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received user info request";
 
         /// 步骤 1: 从请求属性中提取 user_id
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -35,8 +34,7 @@ namespace disk::user {
 
         /// 步骤 3: 处理服务层错误
         if (!profile_result) {
-            Logger::Error(log_context)
-                << "Failed to get user info: " << profile_result.error().message;
+            Logger::Error(log_context) << "Failed to get user info";
             co_return Response::Error(profile_result.error());
         }
 
@@ -44,7 +42,7 @@ namespace disk::user {
         Json::Value data;
         data["user"] = profile_result->ToJson();
 
-        Logger::Info(log_context) << "User info retrieved successfully: user_id=" << user_id;
+        Logger::Info(log_context) << "User info retrieved successfully";
         co_return Response::Success(data);
     }
 

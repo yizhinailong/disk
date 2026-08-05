@@ -68,6 +68,11 @@ The system SHALL classify only the exact authenticated user-profile, password, a
 - **THEN** each DEBUG event SHALL use its fixed low-cardinality summary with the existing typed correlation and SHALL NOT append the username, email, nickname, avatar URL, URL query, fragment, credential, user ID, password, password hash, or other account or request profile value
 - **AND** profile queries and response mapping, password verification and update, optional-field selection and assignment, error mapping, authorization, and public responses SHALL remain unchanged
 
+#### Scenario: User-profile controller diagnostics exclude request and account values
+- **WHEN** the user-profile controller receives a profile-read request, observes a service failure, or returns the profile successfully
+- **THEN** its directly owned INFO, ERROR, and INFO events SHALL use the fixed complete summaries `Received user info request`, `Failed to get user info`, and `User info retrieved successfully` with the request's typed correlation and SHALL NOT append the client IP or port, user ID, username, email, nickname, avatar, downstream error message, Authorization value, raw access token, password, password hash, or other user request or response value
+- **AND** authentication-attribute reads, service delegation and correlation, error propagation, user response mapping, successful response, and public API behavior SHALL remain unchanged
+
 #### Scenario: User-profile service dependency work fails
 - **WHEN** profile read or update, password change, or storage-statistics database or standard processing fails
 - **THEN** the directly owned event SHALL use its fixed complete failure summary and SHALL NOT append exception text, SQL, connection details, credentials, or tokens

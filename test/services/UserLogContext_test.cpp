@@ -172,6 +172,49 @@ namespace disk::user {
             }
         }
 
+        TEST(UserProfileControllerValueLogContractTest, GetProfileUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/UserController.cpp");
+            const auto get_profile_controller = ExtractBetween(
+                controller_source,
+                "auto UserController::GetProfile(",
+                "auto UserController::UpdatePassword("
+            );
+
+            ASSERT_FALSE(get_profile_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received user info request\";",
+                     "Logger::Error(log_context) << \"Failed to get user info\";",
+                     "Logger::Info(log_context) << \"User info retrieved successfully\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(get_profile_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received user info request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Failed to get user info: \" << profile_result.error().message",
+                     "Logger::Info(log_context) << \"User info retrieved successfully: user_id=\" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(get_profile_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(get_profile_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(get_profile_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"user\")",
+                     "const auto user_id = request->attributes()->get<uint64_t>(\"user_id\");",
+                     "m_user_service->GetProfile(user_id, log_context)",
+                     "if (!profile_result)",
+                     "co_return Response::Error(profile_result.error());",
+                     "data[\"user\"] = profile_result->ToJson();",
+                     "co_return Response::Success(data);",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(get_profile_controller, preserved_controller_step),
+                    1U
+                ) << preserved_controller_step;
+            }
+        }
+
         TEST(UserProfileValueLogContractTest, UpdateUsesFixedSummaries) {
             const auto service_source = ReadSourceFile("src/services/UserService.cpp");
             const auto update_profile_body = ExtractBetween(
