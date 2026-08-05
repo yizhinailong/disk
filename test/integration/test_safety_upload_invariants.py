@@ -2156,6 +2156,27 @@ def test_admin_log_context_invariants() -> None:
         ),
     )
 
+    missing_user_id = int(
+        scalar("SELECT COALESCE(MAX(id), 0) + 1000000 FROM users") or 1000000
+    )
+    missing_user_request_id = f"safety-admin-missing-user-log-{unique_name()}"
+    missing_user_response = fetch(
+        f"/api/admin/users/{missing_user_id}",
+        headers={**auth_headers(TOKEN), "X-Request-Id": missing_user_request_id},
+    )
+    assert_admin_log_context(
+        response=missing_user_response,
+        request_id=missing_user_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin get user detail request",
+            "Admin get user detail: user_id=",
+            "Admin user not found: user_id=",
+            "Failed to get user detail",
+            "HTTP request completed",
+        ),
+    )
+
     self_status_request_id = f"safety-admin-self-status-log-{unique_name()}"
     self_status_response = fetch(
         f"/api/admin/users/{USER_ID}/status",

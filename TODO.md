@@ -3399,6 +3399,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、全部 Admin GoogleTest 83/83、用户列表 DTO/响应 GoogleTest 24/24、Admin/ListUsers 聚焦 CTest 105/105、真实管理流 25/25、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。上传安全网首次紧随真实管理流执行时在管理员存储统计处为 261 项通过、2 项失败；受管服务日志确认同一管理员固定窗口已由前置场景累计至 `count=31/30`，该请求返回 429，且 Redis 窗口过期后原命令复跑 886/886、0 失败。标准完整 CTest 共 1570 项：1563 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 542.20 秒。源码审计确认列表方法区段内四条固定摘要各 1 处，客户端端点、DTO 错误消息和下游错误消息三类旧动态日志均为 0；上下文、级别、认证与限流顺序、DTO/Service 调用、错误透传、items/pagination 映射、筛选/计数/分页及公开行为保持不变。其余十二个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
 
+### 15.240 管理员用户详情控制器诊断脱敏记录（2026-08-06）
+
+`AdminController::GetUserDetail()` 的请求接收、业务失败和详情成功三条事件必须分别只记录固定完整摘要 `Admin get user detail request`、`Failed to get user detail` 与 `Admin get user detail successful`。Controller message 不得追加客户端 IP/端口、原始或解析后的路径 user ID、下游错误消息、返回用户的 ID/用户名/邮箱/昵称/头像/角色/状态/存储配额/已用量/预留量/创建时间/最后登录时间、Authorization、原始 access token/JWT/JTI/claim、密码、存储凭据或其他账户/请求/响应值；调用方 request/instance/`admin` 上下文、原 INFO/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有全局 JWT 认证、`AdminAuthFilter` 后 `AdminRateLimitFilter` 的路由顺序、空路径 ID 与无效数字格式校验、`std::stoull()` 转换、`AdminService::GetInstance()` 和 `GetUserDetail(user_id, log_context)` 调用、业务错误原样返回、`UnexpectedRows` 的 `404/80002/User not found` 映射、数据库失败的既有 500、`data.user` 包装、`UserDetailResponse::ToJson()` 十二字段映射和成功响应不得改变；AdminService 自有请求、缺失、失败与成功事件继续作为独立边界审计。验证必须新增源码合同锁定三条固定摘要、三类动态边界值排除、路由过滤器顺序和完整控制器/响应数据流，在真实安全网加入缺失用户详情关联，并继续执行 AdminLogContext/AdminDto/AdminService/AdminAuth/AdminRateLimit GoogleTest、真实管理流、上传安全网、OpenSpec、完整构建及标准完整 CTest。其余十一个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：请求接收、业务失败和详情成功三条固定完整摘要均缺失，客户端端点、下游错误消息和成功 user ID 三类动态日志各命中一次；INFO/ERROR/INFO 级别、上下文、路由与过滤器顺序、空值/数字格式校验、ID 转换、Service 调用、错误透传、`data.user` 包装、十二字段映射和成功响应断言均通过。
+
+实现后定向源码合同 1/1、全部 Admin GoogleTest 84/84、控制器/Service/用户详情 DTO 聚焦 GoogleTest 5/5、Admin/GetUserDetail/UserDetailResponse 聚焦 CTest 87/87、真实管理流 25/25、上传安全网 890/890、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。受管安全网确认缺失用户详情返回 404，Controller 固定请求/失败摘要与 Service 请求/缺失事件、HTTP 完成事件共享同一 request/instance/`admin` 关联且四个所有权字段为空。标准完整 CTest 共 1571 项：1564 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 559.65 秒。源码审计确认详情方法区段内三条固定摘要各 1 处，客户端端点、下游错误消息和成功 user ID 三类旧动态日志均为 0；上下文、级别、路由/过滤器、路径校验/转换、Service 调用、缺失用户/数据库错误透传、`data.user` 十二字段映射和公开行为保持不变。其余十一个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

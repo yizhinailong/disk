@@ -232,6 +232,106 @@ namespace disk::admin {
             }
         }
 
+        TEST(AdminGetUserDetailControllerValueLogContractTest, DetailUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto detail_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::GetUserDetail(",
+                "    auto AdminController::ChangeUserStatus("
+            );
+            const auto detail_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::GetUserDetail,",
+                "        ADD_METHOD_TO(\n            AdminController::ChangeUserStatus,"
+            );
+            const auto detail_response = ExtractRange(
+                dto_source,
+                "struct UserDetailResponse",
+                "    struct UserListResponse"
+            );
+
+            ASSERT_FALSE(detail_controller.empty());
+            ASSERT_FALSE(detail_route.empty());
+            ASSERT_FALSE(detail_response.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin get user detail request\";",
+                     "Logger::Error(log_context) << \"Failed to get user detail\";",
+                     "Logger::Info(log_context) << \"Admin get user detail successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(detail_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin get user detail request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Failed to get user detail: \" << result.error().message",
+                     "<< \"Admin get user detail successful: user_id=\" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(detail_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Warn(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Error(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "ErrorCode::ValidationFailed"), 2U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "if (id.empty())",
+                     "\"Missing required parameter: id\"",
+                     "user_id = std::stoull(id);",
+                     "catch (const std::exception&)",
+                     "\"Invalid user id format\"",
+                     "services::AdminService::GetInstance()",
+                     "service->GetUserDetail(user_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "data[\"user\"] = result->ToJson();",
+                     "co_return Response::Success(data);",
+                 }) {
+                EXPECT_EQ(CountOccurrences(detail_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(CountOccurrences(detail_route, "\"/api/admin/users/{id}\""), 1U);
+            EXPECT_EQ(CountOccurrences(detail_route, "drogon::Get"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(detail_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(detail_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                detail_route.find("\"disk::filters::AdminAuthFilter\""),
+                detail_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            for (const auto* response_field : {
+                     "id",
+                     "username",
+                     "email",
+                     "nickname",
+                     "avatar",
+                     "role",
+                     "status",
+                     "storage_quota",
+                     "storage_used",
+                     "storage_reserved",
+                     "created_at",
+                     "last_login_at",
+                 }) {
+                const auto mapping =
+                    std::string("SetField(json, \"") + response_field + "\", " +
+                    response_field + ");";
+                EXPECT_EQ(CountOccurrences(detail_response, mapping), 1U) << mapping;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(

@@ -44,8 +44,7 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin get user detail request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin get user detail request";
 
         if (id.empty()) {
             co_return Response::Error(ErrorInfo(
@@ -68,16 +67,14 @@ namespace disk::controllers {
         auto result = co_await service->GetUserDetail(user_id, log_context);
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to get user detail: " << result.error().message;
+            Logger::Error(log_context) << "Failed to get user detail";
             co_return Response::Error(result.error());
         }
 
         Json::Value data;
         data["user"] = result->ToJson();
 
-        Logger::Info(log_context)
-            << "Admin get user detail successful: user_id=" << user_id;
+        Logger::Info(log_context) << "Admin get user detail successful";
         co_return Response::Success(data);
     }
 
