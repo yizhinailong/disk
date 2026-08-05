@@ -143,20 +143,15 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "share");
 
-        Logger::Info(log_context)
-            << "Received get share list request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received get share list request";
 
         /// 1. 解析并验证请求参数
         auto parse_result = ShareListRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Share list request parameter validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Share list request parameter validation failed";
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug(log_context)
-            << "Share list parameter validation passed: status=" << parse_result->status
-            << ", page=" << parse_result->page << ", page_size=" << parse_result->page_size;
+        Logger::Debug(log_context) << "Share list parameter validation passed";
 
         /// 2. 从请求属性获取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = disk::controllers::GetAuthenticatedUserId(request);
@@ -164,16 +159,12 @@ namespace disk::share {
         /// 3. 调用 Service 层获取分享列表
         auto result = co_await m_share_service->List(*parse_result, user_id, log_context);
         if (!result) {
-            Logger::Error(log_context)
-                << "Get share list failed: " << result.error().message
-                << " (user_id=" << user_id << ")";
+            Logger::Error(log_context) << "Get share list failed";
             co_return Response::Error(result.error());
         }
 
         /// 4. 构造响应
-        Logger::Info(log_context)
-            << "Get share list successful: items=" << result->items.size()
-            << ", total=" << result->pagination.total << " (user_id=" << user_id << ")";
+        Logger::Info(log_context) << "Get share list successful";
         co_return Response::Success(result->ToJson());
     }
 

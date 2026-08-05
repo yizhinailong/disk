@@ -539,6 +539,55 @@ namespace disk::share {
             }
         }
 
+        TEST(ShareListControllerValueLogContractTest, ListUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto list_controller = SourceSection(
+                controller_source,
+                "auto ShareController::List(",
+                "    auto ShareController::Detail("
+            );
+
+            ASSERT_FALSE(list_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received get share list request\";",
+                     "Logger::Warn(log_context) << \"Share list request parameter validation failed\";",
+                     "Logger::Debug(log_context) << \"Share list parameter validation passed\";",
+                     "Logger::Error(log_context) << \"Get share list failed\";",
+                     "Logger::Info(log_context) << \"Get share list successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received get share list request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Share list request parameter validation failed: \"",
+                     "<< \"Share list parameter validation passed: status=\" << parse_result->status",
+                     "<< \"Get share list failed: \" << result.error().message",
+                     "<< \"Get share list successful: items=\" << result->items.size()",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Debug(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"share\")",
+                     "ShareListRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "GetAuthenticatedUserId(request)",
+                     "m_share_service->List(*parse_result, user_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");
