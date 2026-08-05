@@ -489,6 +489,56 @@ namespace disk::share {
             );
         }
 
+        TEST(ShareCreateControllerValueLogContractTest, CreateUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto create_controller = SourceSection(
+                controller_source,
+                "auto ShareController::Create(",
+                "    auto ShareController::List("
+            );
+
+            ASSERT_FALSE(create_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received create share request\";",
+                     "Logger::Warn(log_context) << \"Create share request parameter validation failed\";",
+                     "Logger::Debug(log_context) << \"Create share parameter validation passed\";",
+                     "Logger::Error(log_context) << \"Create share failed\";",
+                     "Logger::Info(log_context) << \"Create share successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(create_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received create share request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Create share request parameter validation failed: \"",
+                     "<< \"Create share parameter validation passed: file_ids.size()=\"",
+                     "<< \"Create share failed: \" << result.error().message",
+                     "<< \"Create share successful: share_id=\" << result->share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(create_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(create_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(create_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(create_controller, "Logger::Debug(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(create_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"share\")",
+                     "CreateShareRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "GetAuthenticatedUserId(request)",
+                     "m_share_service->Create(",
+                     "BuildAuditContext(request)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(create_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");

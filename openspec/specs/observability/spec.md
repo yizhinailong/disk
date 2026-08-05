@@ -536,6 +536,11 @@ The system SHALL classify only registered non-download share path shapes as the 
 - **WHEN** a request creates, lists, inspects, updates, cancels, accesses, browses, or saves a share through a registered non-download share path
 - **THEN** its authentication-filter events, response, HTTP completion event at the configured level, controller events, direct share-DTO events, and share-service events SHALL retain the same request ID, actual handling instance, and `share` operation; any resulting share-audit details SHALL persist the same request ID and `share` operation
 
+#### Scenario: Share-creation controller diagnostics exclude request and domain values
+- **WHEN** the share-creation controller receives a request, rejects its DTO, completes parameter validation, observes a service failure, or returns a created share
+- **THEN** its directly owned INFO, WARN, DEBUG, ERROR, and INFO events SHALL use the fixed complete summaries `Received create share request`, `Create share request parameter validation failed`, `Create share parameter validation passed`, `Create share failed`, and `Create share successful` with the request's typed correlation and SHALL NOT append the client IP or port, file or folder ID or count, expiry, password or password-presence state, permission, DTO or downstream error message, user ID, share ID or code, Authorization value, raw access or share token, or other account, request, or response value
+- **AND** DTO parsing and error propagation, authentication-attribute reads, audit-context construction, service delegation and correlation, service-error propagation, response mapping, successful response, and public API behavior SHALL remain unchanged
+
 #### Scenario: Share download remains a download operation
 - **WHEN** a request enters `/api/share/download/{share_id}/{file_id}` or `/api/share/download/{share_id}/{file_id}/info`
 - **THEN** its existing controller, direct share-download DTO, service, response, integrity, and statistics events SHALL retain the same request ID, actual handling instance, and `download` operation rather than being reclassified as `share`; any resulting share-download audit details SHALL persist the same request ID and `download` operation

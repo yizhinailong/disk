@@ -3289,6 +3289,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、六条 User 值日志合同 6/6、用户聚焦 CTest 10/10、名称含 User 的 GoogleTest 91/91、OpenSpec 24/24 和完整后端构建通过；真实资料读取与存储流 5/5、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1559 项：1552 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 537.91 秒。源码审计确认三条固定控制器摘要各 1 处，请求端点、下游错误消息和成功用户 ID 三类旧动态日志均为 0；上下文、认证属性、Service 调用、错误透传、存储 JSON 映射、成功响应和 INFO/ERROR/INFO 级别分布保持不变。至此 `UserController` 四个公开方法的直接诊断均已完成固定摘要迁移；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.229 分享创建控制器诊断脱敏记录（2026-08-06）
+
+`ShareController::Create()` 的请求接收、DTO 校验失败、参数校验完成、业务失败和创建成功五条事件必须分别只记录固定完整摘要 `Received create share request`、`Create share request parameter validation failed`、`Create share parameter validation passed`、`Create share failed` 与 `Create share successful`。message 不得追加客户端 IP/端口、file/folder ID 或数量、有效期、密码或密码存在状态、权限、DTO/下游错误消息、用户 ID、分享 ID/码、Authorization、原始 access/share token 或其他账户/请求/响应值；调用方 request/instance/`share` 上下文、原 INFO/WARN/DEBUG/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有上下文创建、`CreateShareRequest::FromRequest()` 解析及错误透传、认证用户属性读取、`BuildAuditContext()`、`ShareService::Create()` 调用及上下文传播、业务错误原样返回、`CreateShareResponse::ToJson()` 映射和成功响应不得改变。验证必须新增源码合同锁定五条固定摘要、五类动态边界值排除和完整控制器数据流，并继续执行 ShareLogContext/ShareDto/ShareService GoogleTest、真实分享管理与审计流、上传安全网、OpenSpec、完整构建及标准完整 CTest。其余九个分享控制器入口继续独立审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 10 个失败断言：五条固定完整摘要均缺失，请求端点、DTO 错误消息、参数详情、下游错误/用户 ID 和成功分享/用户 ID 五类动态日志各命中一次；上下文、DTO 解析、认证属性、审计上下文、Service 调用、两类错误透传、响应映射、成功响应和 INFO/WARN/DEBUG/ERROR/INFO 级别分布断言均通过。
+
+实现后定向源码合同 1/1、分享聚焦 CTest 52/52、名称含 Share 的 GoogleTest 291/291、OpenSpec 24/24 和完整后端构建通过；真实分享管理 12/12、分享审计 82/82、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1560 项：1553 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 537.88 秒。源码审计确认五条固定控制器摘要各 1 处，请求端点、DTO 错误消息、参数详情、下游错误/用户 ID 和成功分享/用户 ID 五类旧动态日志均为 0；上下文、DTO 解析、认证属性、审计上下文、Service 调用、两类错误透传、响应映射、成功响应和 INFO/WARN/DEBUG/ERROR/INFO 级别分布保持不变。其余九个分享控制器入口继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
