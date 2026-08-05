@@ -264,6 +264,56 @@ namespace disk::user {
             }
         }
 
+        TEST(UserProfileUpdateControllerValueLogContractTest, UpdateProfileUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/UserController.cpp");
+            const auto update_profile_controller = ExtractBetween(
+                controller_source,
+                "auto UserController::UpdateProfile(",
+                "auto UserController::GetStorage("
+            );
+
+            ASSERT_FALSE(update_profile_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received profile update request\";",
+                     "Logger::Warn(log_context) << \"Profile update request validation failed\";",
+                     "Logger::Error(log_context) << \"Failed to update profile\";",
+                     "Logger::Info(log_context) << \"Profile update successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_profile_controller, fixed_log), 1U)
+                    << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received profile update request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Profile update request validation failed: \" << parse_result.error().message",
+                     "<< \"Failed to update profile: \" << update_result.error().message",
+                     "Logger::Info(log_context) << \"Profile update successful: user_id=\" << user_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(update_profile_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(update_profile_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(update_profile_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(update_profile_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"user\")",
+                     "const auto user_id = request->attributes()->get<uint64_t>(\"user_id\");",
+                     "UpdateProfileRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "m_user_service->UpdateProfile(user_id, *parse_result, log_context)",
+                     "if (!update_result)",
+                     "co_return Response::Error(update_result.error());",
+                     "data[\"user\"] = update_result->ToJson();",
+                     "co_return Response::Success(data);",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(update_profile_controller, preserved_controller_step),
+                    1U
+                ) << preserved_controller_step;
+            }
+        }
+
         TEST(UserProfileValueLogContractTest, UpdateUsesFixedSummaries) {
             const auto service_source = ReadSourceFile("src/services/UserService.cpp");
             const auto update_profile_body = ExtractBetween(

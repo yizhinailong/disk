@@ -78,6 +78,11 @@ The system SHALL classify only the exact authenticated user-profile, password, a
 - **THEN** its directly owned INFO, WARN, ERROR, and INFO events SHALL use the fixed complete summaries `Received change password request`, `Change password request validation failed`, `Failed to change password`, and `Change password successful` with the request's typed correlation and SHALL NOT append the client IP or port, user ID, username, email, old password, new password, password hash, DTO or downstream error message, Authorization value, raw access token, or other account, request, or response value
 - **AND** authentication-attribute reads, DTO parsing and error propagation, service delegation and correlation, service-error propagation, null-data success, and public API behavior SHALL remain unchanged
 
+#### Scenario: Profile-update controller diagnostics exclude request and account values
+- **WHEN** the profile-update controller receives a request, rejects its DTO, observes a service failure, or returns the updated profile
+- **THEN** its directly owned INFO, WARN, ERROR, and INFO events SHALL use the fixed complete summaries `Received profile update request`, `Profile update request validation failed`, `Failed to update profile`, and `Profile update successful` with the request's typed correlation and SHALL NOT append the client IP or port, user ID, username, email, nickname, avatar, DTO or downstream error message, Authorization value, raw access token, password, password hash, or other account, request, or response value
+- **AND** authentication-attribute reads, DTO parsing and error propagation, service delegation and correlation, service-error propagation, updated-user response mapping, successful response, and public API behavior SHALL remain unchanged
+
 #### Scenario: User-profile service dependency work fails
 - **WHEN** profile read or update, password change, or storage-statistics database or standard processing fails
 - **THEN** the directly owned event SHALL use its fixed complete failure summary and SHALL NOT append exception text, SQL, connection details, credentials, or tokens

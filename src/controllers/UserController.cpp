@@ -81,8 +81,7 @@ namespace disk::user {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "user");
 
-        Logger::Info(log_context)
-            << "Received profile update request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Received profile update request";
 
         /// 步骤 1: 从请求属性中提取 user_id（由 JwtAuthFilter 设置）
         const auto user_id = request->attributes()->get<uint64_t>("user_id");
@@ -90,8 +89,7 @@ namespace disk::user {
         /// 步骤 2: 解析并验证请求 DTO
         auto parse_result = UpdateProfileRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Profile update request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context) << "Profile update request validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -101,8 +99,7 @@ namespace disk::user {
 
         /// 步骤 4: 处理服务层错误
         if (!update_result) {
-            Logger::Error(log_context)
-                << "Failed to update profile: " << update_result.error().message;
+            Logger::Error(log_context) << "Failed to update profile";
             co_return Response::Error(update_result.error());
         }
 
@@ -110,7 +107,7 @@ namespace disk::user {
         Json::Value data;
         data["user"] = update_result->ToJson();
 
-        Logger::Info(log_context) << "Profile update successful: user_id=" << user_id;
+        Logger::Info(log_context) << "Profile update successful";
         co_return Response::Success(data);
     }
 
