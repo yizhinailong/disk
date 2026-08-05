@@ -2189,10 +2189,10 @@ def test_admin_log_context_invariants() -> None:
         request_id=self_status_request_id,
         expected_success=False,
         message_markers=(
-            "Admin change user status request:",
+            "Admin change user status request",
             "Admin change user status: target_id=",
             "Admin cannot modify self:",
-            "Failed to change user status:",
+            "Failed to change user status",
             "HTTP request completed",
         ),
     )

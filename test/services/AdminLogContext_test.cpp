@@ -332,6 +332,105 @@ namespace disk::admin {
             }
         }
 
+        TEST(AdminChangeUserStatusControllerValueLogContractTest, StatusUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto status_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::ChangeUserStatus(",
+                "    auto AdminController::ChangeUserRole("
+            );
+            const auto status_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::ChangeUserStatus,",
+                "        ADD_METHOD_TO(\n            AdminController::ChangeUserRole,"
+            );
+            const auto status_request = ExtractRange(
+                dto_source,
+                "struct ChangeStatusRequest",
+                "    struct ChangeRoleRequest"
+            );
+
+            ASSERT_FALSE(status_controller.empty());
+            ASSERT_FALSE(status_route.empty());
+            ASSERT_FALSE(status_request.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin change user status request\";",
+                     "Logger::Warn(log_context) << \"Change status request validation failed\";",
+                     "Logger::Error(log_context) << \"Failed to change user status\";",
+                     "Logger::Info(log_context) << \"Admin change user status successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin change user status request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Change status request validation failed: \" << parse_result.error().message",
+                     "<< \"Failed to change user status: \" << result.error().message",
+                     "<< \"Admin change user status successful: target_id=\" << target_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(status_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(status_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(status_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(status_controller, "Logger::Error(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(status_controller, "ErrorCode::ValidationFailed"), 2U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "request->attributes()->get<uint64_t>(\"user_id\")",
+                     "if (id.empty())",
+                     "\"Missing required parameter: id\"",
+                     "target_id = std::stoull(id);",
+                     "catch (const std::exception&)",
+                     "\"Invalid user id format\"",
+                     "admin::ChangeStatusRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "services::AdminService::GetInstance()",
+                     "service->ChangeUserStatus(\n            target_id,\n            parse_result->status,\n            operator_id,\n            log_context\n        )",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success();",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(status_route, "\"/api/admin/users/{id}/status\""),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(status_route, "drogon::Put"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(status_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(status_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                status_route.find("\"disk::filters::AdminAuthFilter\""),
+                status_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            for (const auto* preserved_dto_step : {
+                     "RequireInt(json, \"status\")",
+                     "if (*status_result < 0 || *status_result > 2)",
+                     "ErrorInfo(ErrorCode::AdminInvalidStatus, \"Invalid status value\")",
+                     "request.status = *status_result;",
+                     "return request;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_request, preserved_dto_step), 1U)
+                    << preserved_dto_step;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(
