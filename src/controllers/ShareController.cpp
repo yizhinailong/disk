@@ -295,24 +295,15 @@ namespace disk::share {
         -> drogon::Task<drogon::HttpResponsePtr> {
         auto log_context = disk::controllers::GetRequestLogContext(request, "share");
 
-        Logger::Info(log_context)
-            << "Received browse share content request: " << request->getPeerAddr().toIpPort()
-            << ", share_id=" << share_id;
+        Logger::Info(log_context) << "Received browse share content request";
 
         /// 1. 解析并验证请求参数
         auto parse_result = BrowseShareRequest::FromRequest(request, share_id, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "Browse share content request parameter validation failed: "
-                << parse_result.error().message;
+            Logger::Warn(log_context) << "Browse share content request parameter validation failed";
             co_return Response::Error(parse_result.error());
         }
-        Logger::Debug(log_context)
-            << "Browse share content parameter validation passed: share_id="
-            << parse_result->share_id << ", folder_id="
-            << (parse_result->folder_id.has_value() ?
-                    std::to_string(*parse_result->folder_id) :
-                    "null");
+        Logger::Debug(log_context) << "Browse share content parameter validation passed";
 
         /// 2. 从请求属性获取 share_id（由 ShareAuthFilter 设置）
         const auto internal_share_id = request->attributes()->get<uint64_t>("share_id");
@@ -320,9 +311,7 @@ namespace disk::share {
 
         /// 3. 验证 share_id 匹配（防止令牌用于其他分享）
         if (share_id != share_code) {
-            Logger::Warn(log_context)
-                << "Share token does not match requested share_id: token_share_code="
-                << share_code << ", request_share_id=" << share_id;
+            Logger::Warn(log_context) << "Share token does not match requested share";
             co_return Response::Error(ErrorInfo(
                 ErrorCode::ShareAccessDenied,
                 "Share token does not match requested share"
@@ -333,17 +322,12 @@ namespace disk::share {
         auto result =
             co_await m_share_service->Browse(*parse_result, internal_share_id, log_context);
         if (!result) {
-            Logger::Error(log_context)
-                << "Browse share content failed: " << result.error().message
-                << " (share_id=" << share_id << ")";
+            Logger::Error(log_context) << "Browse share content failed";
             co_return Response::Error(result.error());
         }
 
         /// 5. 构造响应
-        Logger::Info(log_context)
-            << "Browse share content successful: share_id=" << share_id
-            << ", items=" << result->items.size()
-            << " (internal_share_id=" << internal_share_id << ")";
+        Logger::Info(log_context) << "Browse share content successful";
         co_return Response::Success(result->ToJson());
     }
 

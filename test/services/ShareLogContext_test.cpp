@@ -790,6 +790,60 @@ namespace disk::share {
             }
         }
 
+        TEST(ShareBrowseControllerValueLogContractTest, BrowseUsesFixedSummaries) {
+            const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
+            const auto browse_controller = SourceSection(
+                controller_source,
+                "auto ShareController::Browse(",
+                "    auto ShareController::DownloadInfo("
+            );
+
+            ASSERT_FALSE(browse_controller.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Received browse share content request\";",
+                     "Logger::Warn(log_context) << \"Browse share content request parameter validation failed\";",
+                     "Logger::Debug(log_context) << \"Browse share content parameter validation passed\";",
+                     "Logger::Warn(log_context) << \"Share token does not match requested share\";",
+                     "Logger::Error(log_context) << \"Browse share content failed\";",
+                     "Logger::Info(log_context) << \"Browse share content successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(browse_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Received browse share content request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Browse share content request parameter validation failed: \"",
+                     "<< \"Browse share content parameter validation passed: share_id=\"",
+                     "<< \"Share token does not match requested share_id: token_share_code=\"",
+                     "<< \"Browse share content failed: \" << result.error().message",
+                     "<< \"Browse share content successful: share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(browse_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(browse_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(browse_controller, "Logger::Warn(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(browse_controller, "Logger::Debug(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(browse_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"share\")",
+                     "BrowseShareRequest::FromRequest(request, share_id, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "request->attributes()->get<uint64_t>(\"share_id\")",
+                     "request->attributes()->get<std::string>(\"share_code\")",
+                     "if (share_id != share_code)",
+                     "ErrorCode::ShareAccessDenied",
+                     "m_share_service->Browse(*parse_result, internal_share_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(browse_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+        }
+
         TEST(ShareLogContextContractTest, RequestBoundariesUseExplicitTypedContext) {
             const auto controller_source = ReadSourceFile("src/controllers/ShareController.cpp");
             const auto dto_source = ReadSourceFile("src/dtos/ShareDto.hpp");
