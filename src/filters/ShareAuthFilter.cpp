@@ -82,8 +82,7 @@ namespace disk::filters {
         auto end = std::chrono::steady_clock::now();
         auto duration_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        Logger::Info(log_context) << "[share_auth_filter] duration_us=" << duration_us
-                                  << " outcome=success share_code=" << claims.share_code;
+        Logger::Info(log_context) << "[share_auth_filter] duration_us=" << duration_us << " outcome=success";
 
         co_return nullptr;
     }

@@ -465,6 +465,71 @@ namespace disk::filters {
             EXPECT_EQ(CountOccurrences(source, "outcome=success"), 1U);
         }
 
+        TEST(ShareAuthFilterDurationValueLogContractTest, SuccessExcludesShareCode) {
+            const auto source = ReadSourceFile("src/filters/ShareAuthFilter.cpp");
+
+            const auto attributes_begin = source.find(
+                "request->attributes()->insert(\"share_code\""
+            );
+            const auto success_return = source.find("co_return nullptr;", attributes_begin);
+            ASSERT_NE(attributes_begin, std::string::npos);
+            ASSERT_NE(success_return, std::string::npos);
+            ASSERT_LT(attributes_begin, success_return);
+
+            const auto success_branch = source.substr(
+                attributes_begin,
+                success_return - attributes_begin + std::string("co_return nullptr;").size()
+            );
+            const auto success_log_begin = success_branch.find("Logger::Info(log_context)");
+            const auto success_log_end = success_branch.find(';', success_log_begin);
+            ASSERT_NE(success_log_begin, std::string::npos);
+            ASSERT_NE(success_log_end, std::string::npos);
+
+            const auto success_log = success_branch.substr(
+                success_log_begin,
+                success_log_end - success_log_begin + 1
+            );
+            EXPECT_EQ(CountOccurrences(success_log, "<< \" outcome=success\";"), 1U);
+            for (const auto* session_value : {
+                     "claims.share_code",
+                     "claims.share_id",
+                     "claims.scope.permission",
+                     "claims.jti",
+                     "request->path()",
+                     "share_token_header",
+                 }) {
+                EXPECT_EQ(CountOccurrences(success_log, session_value), 0U) << session_value;
+            }
+
+            for (const auto* attribute : {
+                     "request->attributes()->insert(\"share_code\", claims.share_code);",
+                     "request->attributes()->insert(\"share_id\", claims.share_id);",
+                     "request->attributes()->insert(SHARE_TOKEN_JTI_ATTRIBUTE, claims.jti);",
+                 }) {
+                EXPECT_EQ(CountOccurrences(success_branch, attribute), 1U) << attribute;
+            }
+            EXPECT_EQ(CountOccurrences(success_branch, "std::chrono::steady_clock::now()"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    success_branch,
+                    "std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(success_branch, "Logger::Info(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(success_branch, "[share_auth_filter] duration_us="), 1U);
+            EXPECT_EQ(CountOccurrences(success_branch, "outcome=success"), 1U);
+            EXPECT_EQ(CountOccurrences(success_branch, "co_return nullptr;"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "auto start = std::chrono::steady_clock::now();"
+                ),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(source, "outcome=failure"), 2U);
+        }
+
         TEST_F(AuthFilterLogContextTest, RejectionsPreserveBoundedContextWithoutOwnershipInference) {
             auto jwt_request = CreateRequest("/api/file/list", "jwt-filter-request");
             const auto jwt_response = drogon::sync_wait(JwtAuthFilter{}.doFilter(jwt_request));
