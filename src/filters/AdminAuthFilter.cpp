@@ -31,8 +31,7 @@ namespace disk::filters {
         auto status = request->attributes()->get<int>("status");
 
         if (role != 1) {
-            Logger::Warn(log_context) << "[admin_auth_filter] Non-admin access attempt: user_id=" << user_id
-                                      << " role=" << role << " path=" << path;
+            Logger::Warn(log_context) << "[admin_auth_filter] Non-admin access attempt";
             co_return disk::Response::Error(disk::error::Code::AdminRequired);
         }
 

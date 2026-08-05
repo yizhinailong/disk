@@ -530,6 +530,72 @@ namespace disk::filters {
             EXPECT_EQ(CountOccurrences(source, "outcome=failure"), 2U);
         }
 
+        TEST(AdminAuthFilterRoleValueLogContractTest, NonAdminRejectionUsesFixedSummary) {
+            const auto source = ReadSourceFile("src/filters/AdminAuthFilter.cpp");
+
+            const auto path_guard_begin = source.find(
+                "if (!path.starts_with(\"/api/admin/\"))"
+            );
+            const auto user_attribute_begin = source.find(
+                "auto user_id = request->attributes()->get<uint64_t>(\"user_id\");"
+            );
+            const auto role_begin = source.find("if (role != 1)");
+            const auto status_begin = source.find("if (status != 1)");
+            ASSERT_NE(path_guard_begin, std::string::npos);
+            ASSERT_NE(user_attribute_begin, std::string::npos);
+            ASSERT_NE(role_begin, std::string::npos);
+            ASSERT_NE(status_begin, std::string::npos);
+            ASSERT_LT(path_guard_begin, user_attribute_begin);
+            ASSERT_LT(user_attribute_begin, role_begin);
+            ASSERT_LT(role_begin, status_begin);
+
+            const auto role_branch = source.substr(role_begin, status_begin - role_begin);
+            const auto role_log_begin = role_branch.find("Logger::Warn(log_context)");
+            const auto role_log_end = role_branch.find(';', role_log_begin);
+            ASSERT_NE(role_log_begin, std::string::npos);
+            ASSERT_NE(role_log_end, std::string::npos);
+
+            const auto role_log = role_branch.substr(
+                role_log_begin,
+                role_log_end - role_log_begin + 1
+            );
+            EXPECT_EQ(
+                role_log,
+                "Logger::Warn(log_context) << \"[admin_auth_filter] Non-admin access attempt\";"
+            );
+            for (const auto* request_value : {
+                     "user_id",
+                     "role",
+                     "status",
+                     "path",
+                 }) {
+                EXPECT_EQ(CountOccurrences(role_log, request_value), 0U) << request_value;
+            }
+
+            EXPECT_EQ(CountOccurrences(role_branch, "if (role != 1)"), 1U);
+            EXPECT_EQ(CountOccurrences(role_branch, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    role_branch,
+                    "co_return disk::Response::Error(disk::error::Code::AdminRequired);"
+                ),
+                1U
+            );
+            for (const auto* attribute : {
+                     "auto user_id = request->attributes()->get<uint64_t>(\"user_id\");",
+                     "auto role = request->attributes()->get<int>(\"role\");",
+                     "auto status = request->attributes()->get<int>(\"status\");",
+                 }) {
+                EXPECT_EQ(CountOccurrences(source, attribute), 1U) << attribute;
+            }
+            EXPECT_EQ(CountOccurrences(source, "auto path = request->getPath();"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(source, "if (!path.starts_with(\"/api/admin/\"))"),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(source, "co_return nullptr;"), 2U);
+        }
+
         TEST_F(AuthFilterLogContextTest, RejectionsPreserveBoundedContextWithoutOwnershipInference) {
             auto jwt_request = CreateRequest("/api/file/list", "jwt-filter-request");
             const auto jwt_response = drogon::sync_wait(JwtAuthFilter{}.doFilter(jwt_request));
