@@ -664,6 +664,87 @@ namespace disk::filters {
             EXPECT_EQ(CountOccurrences(source, "co_return nullptr;"), 2U);
         }
 
+        TEST(AdminAuthFilterSuccessValueLogContractTest, SuccessfulAuthorizationUsesFixedSummary) {
+            const auto source = ReadSourceFile("src/filters/AdminAuthFilter.cpp");
+
+            const auto path_guard_begin = source.find(
+                "if (!path.starts_with(\"/api/admin/\"))"
+            );
+            const auto user_attribute_begin = source.find(
+                "auto user_id = request->attributes()->get<uint64_t>(\"user_id\");"
+            );
+            const auto role_begin = source.find("if (role != 1)");
+            const auto status_begin = source.find("if (status != 1)");
+            const auto success_log_begin = source.find("Logger::Trace(log_context)");
+            const auto success_return_begin = source.find(
+                "co_return nullptr;",
+                success_log_begin
+            );
+            ASSERT_NE(path_guard_begin, std::string::npos);
+            ASSERT_NE(user_attribute_begin, std::string::npos);
+            ASSERT_NE(role_begin, std::string::npos);
+            ASSERT_NE(status_begin, std::string::npos);
+            ASSERT_NE(success_log_begin, std::string::npos);
+            ASSERT_NE(success_return_begin, std::string::npos);
+            ASSERT_LT(path_guard_begin, user_attribute_begin);
+            ASSERT_LT(user_attribute_begin, role_begin);
+            ASSERT_LT(role_begin, status_begin);
+            ASSERT_LT(status_begin, success_log_begin);
+            ASSERT_LT(success_log_begin, success_return_begin);
+
+            const auto success_log_end = source.find(';', success_log_begin);
+            ASSERT_NE(success_log_end, std::string::npos);
+            const auto success_log = source.substr(
+                success_log_begin,
+                success_log_end - success_log_begin + 1
+            );
+            EXPECT_EQ(
+                success_log,
+                "Logger::Trace(log_context) << \"[admin_auth_filter] Admin access granted\";"
+            );
+            for (const auto* request_value : {
+                     "user_id",
+                     "role",
+                     "status",
+                     "path",
+                 }) {
+                EXPECT_EQ(CountOccurrences(success_log, request_value), 0U) << request_value;
+            }
+
+            EXPECT_EQ(CountOccurrences(source, "Logger::Trace(log_context)"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "Logger::Warn(log_context) << \"[admin_auth_filter] Non-admin access attempt\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "Logger::Warn(log_context) << \"[admin_auth_filter] Disabled admin access\";"
+                ),
+                1U
+            );
+            for (const auto* attribute : {
+                     "auto user_id = request->attributes()->get<uint64_t>(\"user_id\");",
+                     "auto role = request->attributes()->get<int>(\"role\");",
+                     "auto status = request->attributes()->get<int>(\"status\");",
+                 }) {
+                EXPECT_EQ(CountOccurrences(source, attribute), 1U) << attribute;
+            }
+            EXPECT_EQ(CountOccurrences(source, "if (role != 1)"), 1U);
+            EXPECT_EQ(CountOccurrences(source, "if (status != 1)"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "co_return disk::Response::Error(disk::error::Code::AdminRequired);"
+                ),
+                2U
+            );
+            EXPECT_EQ(CountOccurrences(source, "co_return nullptr;"), 2U);
+        }
+
         TEST_F(AuthFilterLogContextTest, RejectionsPreserveBoundedContextWithoutOwnershipInference) {
             auto jwt_request = CreateRequest("/api/file/list", "jwt-filter-request");
             const auto jwt_response = drogon::sync_wait(JwtAuthFilter{}.doFilter(jwt_request));

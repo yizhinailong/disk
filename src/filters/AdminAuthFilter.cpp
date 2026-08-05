@@ -40,8 +40,7 @@ namespace disk::filters {
             co_return disk::Response::Error(disk::error::Code::AdminRequired);
         }
 
-        Logger::Trace(log_context) << "[admin_auth_filter] Admin access granted: user_id=" << user_id
-                                   << " path=" << path;
+        Logger::Trace(log_context) << "[admin_auth_filter] Admin access granted";
 
         co_return nullptr;
     }

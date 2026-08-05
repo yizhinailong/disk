@@ -131,6 +131,11 @@ The JWT authentication, share-token authentication, and administrator-authorizat
 - **THEN** its directly owned WARN event SHALL use the fixed complete summary `[admin_auth_filter] Disabled admin access` with the request's typed correlation and SHALL NOT append the user ID, username, role, status, request path or resource ID, Authorization value, raw access token, JTI, claim, exception, or other administrator-session or request value
 - **AND** administrator path classification, authentication-attribute reads, role-before-status authorization order, status evaluation, `AdminRequired` mapping, non-administrator rejection, successful continuation, and public responses SHALL remain unchanged
 
+#### Scenario: Successful administrator authorization diagnostics exclude identity and path values
+- **WHEN** the administrator-authorization filter successfully authorizes an active administrator
+- **THEN** its directly owned TRACE event SHALL use the fixed complete summary `[admin_auth_filter] Admin access granted` with the request's typed correlation and SHALL NOT append the user ID, username, role, status, request path or resource ID, Authorization value, raw access token, JTI, claim, exception, or other administrator-session or request value
+- **AND** administrator path classification, authentication-attribute reads, role-before-status authorization order, both `AdminRequired` mappings, rejection diagnostics, successful continuation, and public responses SHALL remain unchanged
+
 ### Requirement: Token Service Correlation
 The shared token service SHALL accept explicit correlation by value for request-reachable access-token, refresh-token, and share-token generation, verification, rotation, revocation parsing, and revoked-token rejection events. Authentication services and JWT/share authentication filters SHALL pass their already established request context without changing token claims, signatures, TTLs, Redis keys, CAS behavior, revocation behavior, error mapping, or public responses.
 
