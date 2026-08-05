@@ -3439,6 +3439,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、全部 Admin GoogleTest 87/87、控制器/Service/可用空间 DTO 聚焦 GoogleTest 9/9、Admin/ChangeUserAvailableSpace/ChangeAvailableSpaceRequest 聚焦 CTest 94/94、真实管理流 25/25、上传安全网 898/898、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。受管安全网确认自身可用空间修改继续被拒绝，Controller 固定请求/失败摘要与 Service 请求/拒绝事件、HTTP 完成事件共享同一 request/instance/`admin` 关联且四个所有权字段为空。标准完整 CTest 共 1574 项：1567 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 543.51 秒。源码审计确认可用空间变更方法区段内四条固定摘要各 1 处，客户端端点、DTO 错误消息、下游错误消息和成功 target user ID 四类旧动态日志均为 0；上下文、级别、路由/过滤器、操作员属性、路径/DTO 校验、Service 四参数、错误透传、自身保护、缺失用户映射、两层溢出保护、配额公式与写入、审计、十二字段响应和公开行为保持不变。其余八个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
 
+### 15.244 管理员用户软删除控制器诊断脱敏记录（2026-08-06）
+
+`AdminController::SoftDeleteUser()` 的请求接收、业务失败和软删除成功三条事件必须分别只记录固定完整摘要 `Admin soft delete user request`、`Failed to soft delete user` 与 `Admin soft delete user successful`。Controller message 不得追加客户端 IP/端口、原始或解析后的路径 user ID、目标或操作员 user ID、下游错误消息、Authorization、原始 access token/JWT/JTI/claim、密码、存储凭据或其他账户/请求/响应值；调用方 request/instance/`admin` 上下文、原 INFO/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有全局 JWT 认证、`AdminAuthFilter` 后 `AdminRateLimitFilter` 的路由顺序、操作员 user ID 属性读取、空路径 ID 与无效数字格式校验、`std::stoull()` 转换、`AdminService::GetInstance()` 和 `SoftDeleteUser(target_id, operator_id, log_context)` 调用、业务错误原样返回、禁止删除自身、缺失用户 `404/80002/User not found` 映射、数据库失败的既有 500、用户 status 置为 0、用户更新、`admin.user.soft_delete` 审计和成功响应不得改变；AdminService 自有请求、拒绝、缺失、失败与成功事件继续作为独立边界审计。验证必须新增源码合同锁定三条固定摘要、三类动态边界值排除、路由过滤器顺序和完整控制器数据流，在真实安全网加入自身软删除关联，并继续执行 AdminLogContext/AdminService/AdminAuth/AdminRateLimit GoogleTest、真实管理流、上传安全网、OpenSpec、完整构建及标准完整 CTest。其余七个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：请求接收、业务失败和软删除成功三条固定完整摘要均缺失，客户端端点、下游错误消息和成功 target user ID 三类动态日志各命中一次；INFO/ERROR/INFO 级别、上下文、路由与过滤器顺序、操作员属性、路径校验与转换、Service 三参数调用、错误透传和成功响应断言均通过。
+
+实现后定向源码合同 1/1、全部 Admin GoogleTest 88/88、控制器/Service 聚焦 GoogleTest 2/2、Admin/SoftDeleteUser 聚焦 CTest 88/88、真实管理流 25/25、上传安全网 902/902、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。受管安全网确认自身软删除继续被拒绝，Controller 固定请求/失败摘要与 Service 请求/拒绝事件、HTTP 完成事件共享同一 request/instance/`admin` 关联且四个所有权字段为空。标准完整 CTest 共 1575 项：1568 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 546.49 秒。源码审计确认软删除方法区段内三条固定摘要各 1 处，客户端端点、下游错误消息和成功 target user ID 三类旧动态日志均为 0；上下文、级别、路由/过滤器、操作员属性、路径校验、Service 三参数、错误透传、自身保护、缺失用户映射、数据库错误映射、状态置零、用户更新、审计和公开行为保持不变。其余七个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

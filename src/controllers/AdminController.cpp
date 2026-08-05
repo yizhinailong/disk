@@ -230,8 +230,7 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin soft delete user request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin soft delete user request";
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -257,13 +256,11 @@ namespace disk::controllers {
             co_await service->SoftDeleteUser(target_id, operator_id, log_context);
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to soft delete user: " << result.error().message;
+            Logger::Error(log_context) << "Failed to soft delete user";
             co_return Response::Error(result.error());
         }
 
-        Logger::Info(log_context)
-            << "Admin soft delete user successful: target_id=" << target_id;
+        Logger::Info(log_context) << "Admin soft delete user successful";
         co_return Response::Success();
     }
 

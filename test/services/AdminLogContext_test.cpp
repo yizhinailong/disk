@@ -691,6 +691,85 @@ namespace disk::admin {
             }
         }
 
+        TEST(AdminSoftDeleteUserControllerValueLogContractTest, DeleteUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto delete_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::SoftDeleteUser(",
+                "    auto AdminController::GetGlobalStorageStats("
+            );
+            const auto delete_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::SoftDeleteUser,",
+                "        ADD_METHOD_TO(\n            AdminController::GetGlobalStorageStats,"
+            );
+
+            ASSERT_FALSE(delete_controller.empty());
+            ASSERT_FALSE(delete_route.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin soft delete user request\";",
+                     "Logger::Error(log_context) << \"Failed to soft delete user\";",
+                     "Logger::Info(log_context) << \"Admin soft delete user successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(delete_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin soft delete user request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Failed to soft delete user: \" << result.error().message",
+                     "<< \"Admin soft delete user successful: target_id=\" << target_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(delete_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(delete_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(delete_controller, "Logger::Warn(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(delete_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(delete_controller, "Logger::Error(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(delete_controller, "ErrorCode::ValidationFailed"), 2U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "request->attributes()->get<uint64_t>(\"user_id\")",
+                     "if (id.empty())",
+                     "\"Missing required parameter: id\"",
+                     "target_id = std::stoull(id);",
+                     "catch (const std::exception&)",
+                     "\"Invalid user id format\"",
+                     "services::AdminService::GetInstance()",
+                     "service->SoftDeleteUser(target_id, operator_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success();",
+                 }) {
+                EXPECT_EQ(CountOccurrences(delete_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(delete_route, "\"/api/admin/users/{id}\""),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(delete_route, "drogon::Delete"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(delete_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    delete_route,
+                    "\"disk::filters::AdminRateLimitFilter\""
+                ),
+                1U
+            );
+            EXPECT_LT(
+                delete_route.find("\"disk::filters::AdminAuthFilter\""),
+                delete_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(

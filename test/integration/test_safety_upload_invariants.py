@@ -2242,6 +2242,25 @@ def test_admin_log_context_invariants() -> None:
         ),
     )
 
+    self_delete_request_id = f"safety-admin-self-delete-log-{unique_name()}"
+    self_delete_response = fetch(
+        f"/api/admin/users/{USER_ID}",
+        method="DELETE",
+        headers={**auth_headers(TOKEN), "X-Request-Id": self_delete_request_id},
+    )
+    assert_admin_log_context(
+        response=self_delete_response,
+        request_id=self_delete_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin soft delete user request",
+            "Admin soft delete user: target_id=",
+            "Admin cannot delete self:",
+            "Failed to soft delete user",
+            "HTTP request completed",
+        ),
+    )
+
     missing_share_id = int(
         scalar("SELECT COALESCE(MAX(id), 0) + 1000000 FROM shares") or 1000000
     )
