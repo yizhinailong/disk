@@ -3229,6 +3229,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、role/禁用/成功行为 4/4、AdminAuthFilter 聚焦 CTest 36/36、全部 AuthFilter GoogleTest 103/103、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。标准完整 CTest 共 1553 项：1546 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 558.88 秒。源码审计确认固定非管理员拒绝摘要 1 处，目标 WARN 中用户 ID、role 与请求路径三类动态片段均为 0；管理员路径门控、三项属性读取、role 优先、`AdminRequired`、两个放行位置和原 WARN 级别保持不变。禁用管理员与成功放行事件继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
 
+### 15.223 禁用管理员访问拒绝诊断脱敏记录（2026-08-05）
+
+`AdminAuthFilter::doFilter()` 的禁用或非 active 管理员拒绝事件必须只记录固定完整摘要 `[admin_auth_filter] Disabled admin access`。message 不得追加用户 ID、用户名、role、status、请求路径或其中的资源 ID、Authorization、原始 access token、JTI、claim、异常或其他管理员会话/请求值；调用方 request/instance/`admin` 上下文、原 WARN 级别和 status 判定后的触发位置保持不变。
+
+既有 `/api/admin/` 前缀门控、`user_id`/`role`/`status` 三项认证属性读取、固定非管理员摘要与 role 优先判定、`status != 1` 条件、`AdminRequired` 映射和管理员成功放行分支不得改变。验证必须新增源码合同锁定固定摘要、三类动态值排除和状态拒绝完整数据流，并继续执行 AdminAuthFilter/auth filter GoogleTest、真实认证流、双实例认证一致性、上传安全网、OpenSpec、完整构建及标准完整 CTest。管理员成功放行事件继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 4 个失败断言：固定完整摘要缺失，status 分支日志中的用户 ID、status 与请求路径三类动态值各命中一次；固定非管理员摘要、role/status 顺序、管理员路径门控、三项属性读取、`AdminRequired` 和两个放行位置断言均通过。
+
+实现后定向源码合同 1/1、role/status/成功行为 4/4、AdminAuthFilter 聚焦 CTest 37/37、全部 AuthFilter GoogleTest 104/104、OpenSpec 24/24 和完整后端构建通过；真实认证流 8/8、双 API 认证一致性 1/1、上传安全网直接执行 886/886 均通过、0 失败。首轮标准完整 CTest 唯一失败为未改动的内容清理收敛检查仍短暂看到 content 行，定向复跑 1/1 通过；第二轮标准完整 CTest 共 1554 项：1547 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 561.45 秒。源码审计确认固定禁用管理员拒绝摘要 1 处，目标 WARN 中用户 ID、status 与请求路径三类动态片段均为 0；管理员路径门控、三项属性读取、固定 role 摘要、判定顺序、`AdminRequired`、两个放行位置和 WARN 级别保持不变。管理员成功放行事件继续作为独立边界审计；Phase 10 与最终 Definition of Done 在其余认证诊断迁移、兼容退役和目标环境门禁完成前继续保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

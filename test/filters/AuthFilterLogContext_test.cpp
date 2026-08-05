@@ -596,6 +596,74 @@ namespace disk::filters {
             EXPECT_EQ(CountOccurrences(source, "co_return nullptr;"), 2U);
         }
 
+        TEST(AdminAuthFilterStatusValueLogContractTest, DisabledAdminRejectionUsesFixedSummary) {
+            const auto source = ReadSourceFile("src/filters/AdminAuthFilter.cpp");
+
+            const auto role_begin = source.find("if (role != 1)");
+            const auto status_begin = source.find("if (status != 1)");
+            const auto success_log_begin = source.find("Logger::Trace(log_context)");
+            ASSERT_NE(role_begin, std::string::npos);
+            ASSERT_NE(status_begin, std::string::npos);
+            ASSERT_NE(success_log_begin, std::string::npos);
+            ASSERT_LT(role_begin, status_begin);
+            ASSERT_LT(status_begin, success_log_begin);
+
+            const auto status_branch = source.substr(
+                status_begin,
+                success_log_begin - status_begin
+            );
+            const auto status_log_begin = status_branch.find("Logger::Warn(log_context)");
+            const auto status_log_end = status_branch.find(';', status_log_begin);
+            ASSERT_NE(status_log_begin, std::string::npos);
+            ASSERT_NE(status_log_end, std::string::npos);
+
+            const auto status_log = status_branch.substr(
+                status_log_begin,
+                status_log_end - status_log_begin + 1
+            );
+            EXPECT_EQ(
+                status_log,
+                "Logger::Warn(log_context) << \"[admin_auth_filter] Disabled admin access\";"
+            );
+            for (const auto* request_value : {
+                     "user_id",
+                     "role",
+                     "status",
+                     "path",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_log, request_value), 0U) << request_value;
+            }
+
+            EXPECT_EQ(CountOccurrences(status_branch, "if (status != 1)"), 1U);
+            EXPECT_EQ(CountOccurrences(status_branch, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_branch,
+                    "co_return disk::Response::Error(disk::error::Code::AdminRequired);"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    source,
+                    "Logger::Warn(log_context) << \"[admin_auth_filter] Non-admin access attempt\";"
+                ),
+                1U
+            );
+            for (const auto* attribute : {
+                     "auto user_id = request->attributes()->get<uint64_t>(\"user_id\");",
+                     "auto role = request->attributes()->get<int>(\"role\");",
+                     "auto status = request->attributes()->get<int>(\"status\");",
+                 }) {
+                EXPECT_EQ(CountOccurrences(source, attribute), 1U) << attribute;
+            }
+            EXPECT_EQ(
+                CountOccurrences(source, "if (!path.starts_with(\"/api/admin/\"))"),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(source, "co_return nullptr;"), 2U);
+        }
+
         TEST_F(AuthFilterLogContextTest, RejectionsPreserveBoundedContextWithoutOwnershipInference) {
             auto jwt_request = CreateRequest("/api/file/list", "jwt-filter-request");
             const auto jwt_response = drogon::sync_wait(JwtAuthFilter{}.doFilter(jwt_request));

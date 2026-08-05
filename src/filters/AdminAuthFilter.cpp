@@ -36,8 +36,7 @@ namespace disk::filters {
         }
 
         if (status != 1) {
-            Logger::Warn(log_context) << "[admin_auth_filter] Disabled admin access: user_id=" << user_id
-                                      << " status=" << status << " path=" << path;
+            Logger::Warn(log_context) << "[admin_auth_filter] Disabled admin access";
             co_return disk::Response::Error(disk::error::Code::AdminRequired);
         }
 
