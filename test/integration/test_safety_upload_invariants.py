@@ -2197,6 +2197,26 @@ def test_admin_log_context_invariants() -> None:
         ),
     )
 
+    self_role_request_id = f"safety-admin-self-role-log-{unique_name()}"
+    self_role_response = fetch(
+        f"/api/admin/users/{USER_ID}/role",
+        method="PUT",
+        headers={**auth_headers(TOKEN), "X-Request-Id": self_role_request_id},
+        json_body={"role": 0},
+    )
+    assert_admin_log_context(
+        response=self_role_response,
+        request_id=self_role_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin change user role request",
+            "Admin change user role: target_id=",
+            "Admin cannot modify self:",
+            "Failed to change user role",
+            "HTTP request completed",
+        ),
+    )
+
     missing_share_id = int(
         scalar("SELECT COALESCE(MAX(id), 0) + 1000000 FROM shares") or 1000000
     )

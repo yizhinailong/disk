@@ -431,6 +431,105 @@ namespace disk::admin {
             }
         }
 
+        TEST(AdminChangeUserRoleControllerValueLogContractTest, RoleUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto role_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::ChangeUserRole(",
+                "    auto AdminController::ChangeUserAvailableSpace("
+            );
+            const auto role_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::ChangeUserRole,",
+                "        ADD_METHOD_TO(\n            AdminController::ChangeUserAvailableSpace,"
+            );
+            const auto role_request = ExtractRange(
+                dto_source,
+                "struct ChangeRoleRequest",
+                "    struct ChangeAvailableSpaceRequest"
+            );
+
+            ASSERT_FALSE(role_controller.empty());
+            ASSERT_FALSE(role_route.empty());
+            ASSERT_FALSE(role_request.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin change user role request\";",
+                     "Logger::Warn(log_context) << \"Change role request validation failed\";",
+                     "Logger::Error(log_context) << \"Failed to change user role\";",
+                     "Logger::Info(log_context) << \"Admin change user role successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(role_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin change user role request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Change role request validation failed: \" << parse_result.error().message",
+                     "<< \"Failed to change user role: \" << result.error().message",
+                     "<< \"Admin change user role successful: target_id=\" << target_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(role_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(role_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(role_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(role_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(role_controller, "Logger::Error(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(role_controller, "ErrorCode::ValidationFailed"), 2U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "request->attributes()->get<uint64_t>(\"user_id\")",
+                     "if (id.empty())",
+                     "\"Missing required parameter: id\"",
+                     "target_id = std::stoull(id);",
+                     "catch (const std::exception&)",
+                     "\"Invalid user id format\"",
+                     "admin::ChangeRoleRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "services::AdminService::GetInstance()",
+                     "service->ChangeUserRole(\n            target_id,\n            parse_result->role,\n            operator_id,\n            log_context\n        )",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success();",
+                 }) {
+                EXPECT_EQ(CountOccurrences(role_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(role_route, "\"/api/admin/users/{id}/role\""),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(role_route, "drogon::Put"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(role_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(role_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                role_route.find("\"disk::filters::AdminAuthFilter\""),
+                role_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            for (const auto* preserved_dto_step : {
+                     "RequireInt(json, \"role\")",
+                     "if (*role_result < 0 || *role_result > 1)",
+                     "ErrorInfo(ErrorCode::AdminInvalidRole, \"Invalid role value\")",
+                     "request.role = *role_result;",
+                     "return request;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(role_request, preserved_dto_step), 1U)
+                    << preserved_dto_step;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(
