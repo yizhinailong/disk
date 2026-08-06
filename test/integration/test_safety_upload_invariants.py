@@ -2355,6 +2355,26 @@ def test_admin_log_context_invariants() -> None:
         ),
     )
 
+    invalid_log_list_request_id = f"safety-admin-log-list-log-{unique_name()}"
+    invalid_log_list_response = fetch(
+        "/api/admin/logs?action=unsafe%20value",
+        headers={
+            **auth_headers(TOKEN),
+            "X-Request-Id": invalid_log_list_request_id,
+        },
+    )
+    assert_admin_log_context(
+        response=invalid_log_list_response,
+        request_id=invalid_log_list_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin list logs request",
+            "Start parsing admin log list request parameters",
+            "List logs request validation failed",
+            "HTTP request completed",
+        ),
+    )
+
     storage_request_id = f"safety-admin-storage-log-{unique_name()}"
     try:
         storage_response = fetch(

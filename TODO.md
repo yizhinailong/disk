@@ -3509,6 +3509,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、`Admin*` GoogleTest 85/85、Controller/Service/响应 DTO 聚焦 GoogleTest 6/6、Admin/GetSystemStatus/SystemStatusResponse 聚焦 CTest 98/98、真实管理流 25/25、上传安全网 918/918、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。受管安全网确认成功系统状态的 Controller/Service/HTTP 事件共享同一 request/instance/`admin` 关联且四个所有权字段为空。标准完整 CTest 共 1581 项：1574 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 545.36 秒。源码审计确认三条固定摘要各 1 处，客户端端点与下游错误消息两类旧动态日志均为 0；上下文、级别、GET 路由/过滤器、Service 单参数、错误透传、三类独立探测、四类匿名异常捕获与固定 WARN、失败降级赋值、运行时间、Service 成功事件、六字段响应映射和公开成功响应保持不变。其余一个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
 
+### 15.251 管理员操作日志控制器诊断脱敏记录（2026-08-06）
+
+`AdminController::GetAdminLogs()` 的请求接收、DTO 校验失败、业务失败和列表成功四条事件必须分别只记录固定完整摘要 `Admin list logs request`、`List logs request validation failed`、`Failed to list logs` 与 `Admin list logs successful`。Controller message 不得追加客户端 IP/端口、page/page_size/action/target_type/target_name/start_date/end_date 查询值、DTO 或下游错误消息、管理员/用户/分享/文件/上传/任务 ID、九项日志返回字段、分页/计数、审计详情、Authorization、原始 access token/JWT/JTI/claim、密码、数据库/Redis/存储凭据或其他账户/请求/响应值；调用方 request/instance/`admin` 上下文、原 INFO/WARN/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有全局 JWT 认证、`AdminAuthFilter` 后 `AdminRateLimitFilter` 的 GET 路由顺序、`AdminLogListRequest::FromRequest(request, log_context)` 七类查询解析与错误原样返回、`AdminService::GetInstance()` 和 `GetAdminLogs(*parse_result, log_context)` 调用、业务错误透传、五类可选精确筛选与包含起止日的日期范围、两条参数化 SQL、创建时间与 ID 倒序、`int64_t` 分页绑定、九项日志字段与四类可空值映射、items/pagination JSON、只读语义和公开成功响应不得改变；Admin DTO 与 AdminService 自有解析、请求、数据库失败和成功事件继续作为独立边界审计。验证必须新增源码合同锁定四条固定摘要、客户端端点/DTO 错误/下游错误三类动态边界值排除、路由过滤器顺序和完整 Controller/DTO/Service/响应数据流，在真实安全网加入非法操作日志筛选关联，并继续执行 AdminLogContext/AdminDto/AdminService/AdminAuth/AdminRateLimit GoogleTest、真实管理流、上传安全网、OpenSpec、完整构建及标准完整 CTest。至此 13 个核心非 cleanup `AdminController` 入口的直接诊断全部完成独立审计；精确手动清理及其余 DTO/Service 边界仍按各自分类推进，Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 6 个失败断言：请求接收、DTO 校验失败和业务失败三条固定完整摘要均缺失，客户端端点、DTO 错误消息和下游错误消息三类动态日志各命中一次；既有成功固定摘要、INFO/WARN/ERROR/INFO 级别、上下文、GET 路由与过滤器顺序、七类查询解析、两类错误透传、Service 两参数调用、五类可选精确筛选、两条参数化 SQL、倒序分页、九项日志字段与四类可空值映射、items/pagination JSON 和成功响应断言均通过。
+
+实现后定向源码合同 1/1、`Admin*` GoogleTest 86/86、Controller/Service/请求 DTO/响应 DTO 聚焦 GoogleTest 11/11、Admin/GetAdminLogs/AdminLogList/AdminLogDetailResponse 聚焦 CTest 95/95、真实管理流 25/25、上传安全网 922/922、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。受管安全网确认非法操作日志筛选的 DTO/Controller/HTTP 事件共享同一 request/instance/`admin` 关联且四个所有权字段为空。标准完整 CTest 共 1582 项：1575 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 547.11 秒。源码审计确认四条固定摘要各 1 处，客户端端点、DTO 错误消息和下游错误消息三类旧动态日志均为 0；上下文、级别、GET 路由/过滤器、七类查询解析、两类错误透传、Service 两参数调用、五类筛选、两条参数化 SQL、倒序分页、九字段/四可空映射、items/pagination JSON 和公开成功响应保持不变。至此 13 个核心非 cleanup `AdminController` 入口的直接诊断全部完成独立审计；精确手动清理及其余 DTO/Service 边界继续独立推进，Phase 10 与最终 Definition of Done 保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

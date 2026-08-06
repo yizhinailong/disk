@@ -1446,6 +1446,191 @@ namespace disk::admin {
             }
         }
 
+        TEST(AdminGetAdminLogsControllerValueLogContractTest, LogsUseFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto list_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::GetAdminLogs(",
+                "    auto AdminController::RunExpiredCleanup("
+            );
+            const auto list_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::GetAdminLogs,",
+                "        ADD_METHOD_TO(\n            AdminController::RunExpiredCleanup,"
+            );
+            const auto list_request = ExtractRange(
+                dto_source,
+                "struct AdminLogListRequest",
+                "    /// ==================== Response DTOs"
+            );
+            const auto list_response = ExtractRange(
+                dto_source,
+                "struct AdminLogDetailResponse",
+                "\n} // namespace disk::admin"
+            );
+            const auto list_service = ExtractRange(
+                service_source,
+                "auto AdminService::GetAdminLogs(",
+                "    auto AdminService::LogOperation("
+            );
+
+            ASSERT_FALSE(list_controller.empty());
+            ASSERT_FALSE(list_route.empty());
+            ASSERT_FALSE(list_request.empty());
+            ASSERT_FALSE(list_response.empty());
+            ASSERT_FALSE(list_service.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin list logs request\";",
+                     "Logger::Warn(log_context) << \"List logs request validation failed\";",
+                     "Logger::Error(log_context) << \"Failed to list logs\";",
+                     "Logger::Info(log_context) << \"Admin list logs successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, fixed_log), 1U)
+                    << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin list logs request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"List logs request validation failed: \" << parse_result.error().message",
+                     "<< \"Failed to list logs: \" << result.error().message",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "admin::AdminLogListRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "services::AdminService::GetInstance()",
+                     "service->GetAdminLogs(*parse_result, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(CountOccurrences(list_route, "\"/api/admin/logs\""), 1U);
+            EXPECT_EQ(CountOccurrences(list_route, "drogon::Get"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(list_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(list_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                list_route.find("\"disk::filters::AdminAuthFilter\""),
+                list_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            for (const auto* request_parser : {
+                     "QueryPositiveInt(req, \"page\", 1)",
+                     "QueryPositiveInt(req, \"page_size\", 1, 100)",
+                     "req->getParameter(\"action\")",
+                     "req->getParameter(\"target_type\")",
+                     "req->getParameter(\"target_name\")",
+                     "req->getParameter(\"start_date\")",
+                     "req->getParameter(\"end_date\")",
+                     "detail::IsLogIdentifier(action_str, 128)",
+                     "detail::IsLogIdentifier(target_type_str, 64)",
+                     "detail::IsLogTargetName(target_name_str)",
+                     "detail::ParseLogDate(start_date_str)",
+                     "detail::ParseLogDate(end_date_str)",
+                     "*parsed_start_date > *parsed_end_date",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_request, request_parser), 1U)
+                    << request_parser;
+            }
+
+            EXPECT_EQ(CountOccurrences(list_service, ".what()"), 0U);
+            EXPECT_EQ(CountOccurrences(list_service, "execSqlCoro("), 2U);
+            EXPECT_EQ(CountOccurrences(list_service, "FILTER_SQL"), 3U);
+            for (const auto* predicate : {
+                     "($1::boolean = FALSE OR action = $2)",
+                     "($3::boolean = FALSE OR created_at >= $4::date)",
+                     "($5::boolean = FALSE OR created_at < $6::date + INTERVAL '1 day')",
+                     "($7::boolean = FALSE OR target_type = $8)",
+                     "($9::boolean = FALSE OR target_name = $10)",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_service, predicate), 1U) << predicate;
+            }
+            for (const auto* preserved_service_step : {
+                     "SELECT COUNT(*) AS total FROM operation_logs",
+                     "SELECT id, user_id, action, target_type, target_id, target_name, details, ip_address, created_at FROM operation_logs",
+                     "ORDER BY created_at DESC, id DESC LIMIT $11 OFFSET $12",
+                     "response.pagination.page = req.page;",
+                     "response.pagination.page_size = req.page_size;",
+                     "response.pagination.total = total;",
+                     "response.pagination.total_pages = total_pages;",
+                     "log.id = row[\"id\"].as<uint64_t>();",
+                     "log.user_id = row[\"user_id\"].isNull()",
+                     "log.action = row[\"action\"].as<std::string>();",
+                     "log.target_type = row[\"target_type\"].isNull()",
+                     "log.target_id = row[\"target_id\"].isNull()",
+                     "log.target_name = row[\"target_name\"].isNull()",
+                     "log.details = row[\"details\"].isNull()",
+                     "log.ip_address = row[\"ip_address\"].as<std::string>();",
+                     "log.created_at = row[\"created_at\"].as<std::string>();",
+                     "response.items.push_back(std::move(log));",
+                     "Logger::Error(log_context) << \"Admin list logs database error\";",
+                     "ErrorCode::InternalError",
+                     "\"Failed to list operation logs\"",
+                     "co_return response;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_service, preserved_service_step), 1U)
+                    << preserved_service_step;
+            }
+            EXPECT_EQ(CountOccurrences(list_service, "static_cast<int64_t>("), 3U);
+
+            for (const auto* direct_field : {
+                     "id",
+                     "action",
+                     "target_type",
+                     "ip_address",
+                     "created_at",
+                 }) {
+                const auto mapping =
+                    std::string("SetField(json, \"") + direct_field + "\", " +
+                    direct_field + ");";
+                EXPECT_EQ(CountOccurrences(list_response, mapping), 1U) << mapping;
+            }
+            for (const auto* nullable_field : {
+                     "user_id",
+                     "target_id",
+                     "target_name",
+                     "details",
+                 }) {
+                const auto mapping =
+                    std::string("SetOptionalOrNull(json, \"") + nullable_field +
+                    "\", " + nullable_field + ");";
+                EXPECT_EQ(CountOccurrences(list_response, mapping), 1U) << mapping;
+            }
+            EXPECT_EQ(
+                CountOccurrences(list_response, "SetArray(json, \"items\", items);"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_response,
+                    "SetField(json, \"pagination\", pagination);"
+                ),
+                1U
+            );
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(

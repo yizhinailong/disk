@@ -411,13 +411,11 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin list logs request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin list logs request";
 
         auto parse_result = admin::AdminLogListRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "List logs request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context) << "List logs request validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -425,8 +423,7 @@ namespace disk::controllers {
         auto result = co_await service->GetAdminLogs(*parse_result, log_context);
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to list logs: " << result.error().message;
+            Logger::Error(log_context) << "Failed to list logs";
             co_return Response::Error(result.error());
         }
 
