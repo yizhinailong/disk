@@ -347,8 +347,7 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin force cancel share request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin force cancel share request";
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
 
@@ -364,13 +363,11 @@ namespace disk::controllers {
             co_await service->ForceCancelShare(share_id, operator_id, log_context);
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to force cancel share: " << result.error().message;
+            Logger::Error(log_context) << "Failed to force cancel share";
             co_return Response::Error(result.error());
         }
 
-        Logger::Info(log_context)
-            << "Admin force cancel share successful: share_id=" << share_id;
+        Logger::Info(log_context) << "Admin force cancel share successful";
         co_return Response::Success();
     }
 

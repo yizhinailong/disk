@@ -1068,6 +1068,108 @@ namespace disk::admin {
             }
         }
 
+        TEST(AdminForceCancelShareControllerValueLogContractTest, CancelUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto cancel_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::ForceCancelShare(",
+                "    auto AdminController::GetOverviewStats("
+            );
+            const auto cancel_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::ForceCancelShare,",
+                "        ADD_METHOD_TO(\n            AdminController::GetOverviewStats,"
+            );
+            const auto cancel_service = ExtractRange(
+                service_source,
+                "auto AdminService::ForceCancelShare(",
+                "    auto AdminService::GetOverviewStats("
+            );
+
+            ASSERT_FALSE(cancel_controller.empty());
+            ASSERT_FALSE(cancel_route.empty());
+            ASSERT_FALSE(cancel_service.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin force cancel share request\";",
+                     "Logger::Error(log_context) << \"Failed to force cancel share\";",
+                     "Logger::Info(log_context) << \"Admin force cancel share successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(cancel_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin force cancel share request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Failed to force cancel share: \" << result.error().message",
+                     "<< \"Admin force cancel share successful: share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(cancel_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(cancel_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(cancel_controller, "Logger::Warn(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(cancel_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(cancel_controller, "Logger::Error(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(cancel_controller, "std::stoull("), 0U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "request->attributes()->get<uint64_t>(\"user_id\")",
+                     "if (share_id.empty())",
+                     "ErrorCode::ValidationFailed",
+                     "\"Missing required parameter: share_id\"",
+                     "services::AdminService::GetInstance()",
+                     "service->ForceCancelShare(share_id, operator_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success();",
+                 }) {
+                EXPECT_EQ(CountOccurrences(cancel_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(cancel_route, "\"/api/admin/shares/{share_id}\""),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(cancel_route, "drogon::Delete"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(cancel_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(cancel_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                cancel_route.find("\"disk::filters::AdminAuthFilter\""),
+                cancel_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            for (const auto* preserved_service_step : {
+                     "SELECT id, share_code, user_id, status FROM shares WHERE share_code = $1",
+                     "if (result.empty())",
+                     "ErrorCode::AdminShareNotFound",
+                     "if (current_status == 0)",
+                     "\"Share already cancelled\"",
+                     "const auto internal_share_id = result[0][\"id\"].as<uint64_t>();",
+                     "UPDATE shares SET status = 0, updated_at = NOW() WHERE id = $1",
+                     "details[\"share_id\"] = static_cast<Json::UInt64>(internal_share_id);",
+                     "details[\"share_code\"] = share_code;",
+                     "details[\"owner_id\"] = static_cast<Json::UInt64>(owner_id);",
+                     "details[\"previous_status\"] = current_status;",
+                     "\"admin.share.force_cancel\"",
+                     "co_return {};",
+                     "Logger::Error(log_context) << \"Admin force cancel share database error\";",
+                     "\"Failed to force cancel share\"",
+                 }) {
+                EXPECT_EQ(CountOccurrences(cancel_service, preserved_service_step), 1U)
+                    << preserved_service_step;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(

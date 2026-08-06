@@ -2302,6 +2302,25 @@ def test_admin_log_context_invariants() -> None:
         ),
     )
 
+    missing_cancel_request_id = f"safety-admin-missing-cancel-log-{unique_name()}"
+    missing_cancel_response = fetch(
+        f"/api/admin/shares/{missing_share_id}",
+        method="DELETE",
+        headers={**auth_headers(TOKEN), "X-Request-Id": missing_cancel_request_id},
+    )
+    assert_admin_log_context(
+        response=missing_cancel_response,
+        request_id=missing_cancel_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin force cancel share request",
+            "Admin force cancel share: share_id=",
+            "Admin share not found for force cancel:",
+            "Failed to force cancel share",
+            "HTTP request completed",
+        ),
+    )
+
     storage_request_id = f"safety-admin-storage-log-{unique_name()}"
     try:
         storage_response = fetch(
