@@ -770,6 +770,99 @@ namespace disk::admin {
             );
         }
 
+        TEST(
+            AdminGlobalStorageStatsControllerValueLogContractTest,
+            StorageStatsUseFixedSummaries
+        ) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto stats_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::GetGlobalStorageStats(",
+                "    auto AdminController::ListShares("
+            );
+            const auto stats_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::GetGlobalStorageStats,",
+                "        ADD_METHOD_TO(\n            AdminController::ListShares,"
+            );
+            const auto stats_response = ExtractRange(
+                dto_source,
+                "struct StorageStatsResponse",
+                "    struct SystemStatusResponse"
+            );
+
+            ASSERT_FALSE(stats_controller.empty());
+            ASSERT_FALSE(stats_route.empty());
+            ASSERT_FALSE(stats_response.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin get global storage stats request\";",
+                     "Logger::Error(log_context) << \"Failed to get global storage stats\";",
+                     "Logger::Info(log_context) << \"Admin get global storage stats successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(stats_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin get global storage stats request: \"\n            << request->getPeerAddr().toIpPort()",
+                     "<< \"Failed to get global storage stats: \" << result.error().message",
+                 }) {
+                EXPECT_EQ(CountOccurrences(stats_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(stats_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(stats_controller, "Logger::Warn(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(stats_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(stats_controller, "Logger::Error(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(stats_controller, "ErrorCode::ValidationFailed"), 0U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "request->attributes()->get<uint64_t>(\"user_id\")",
+                     "services::AdminService::GetInstance()",
+                     "service->GetGlobalStorageStats(operator_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(stats_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(stats_route, "\"/api/admin/storage/stats\""),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(stats_route, "drogon::Get"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(stats_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(stats_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                stats_route.find("\"disk::filters::AdminAuthFilter\""),
+                stats_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            for (const auto* response_field : {
+                     "total_users",
+                     "total_files",
+                     "total_storage_used",
+                     "total_storage_quota",
+                     "active_shares",
+                 }) {
+                const auto mapping =
+                    std::string("SetField(json, \"") + response_field + "\", " +
+                    response_field + ");";
+                EXPECT_EQ(CountOccurrences(stats_response, mapping), 1U) << mapping;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(

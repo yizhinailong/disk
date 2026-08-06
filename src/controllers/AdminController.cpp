@@ -268,9 +268,7 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin get global storage stats request: "
-            << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin get global storage stats request";
 
         auto operator_id = request->attributes()->get<uint64_t>("user_id");
         auto service = services::AdminService::GetInstance();
@@ -278,8 +276,7 @@ namespace disk::controllers {
             co_await service->GetGlobalStorageStats(operator_id, log_context);
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to get global storage stats: " << result.error().message;
+            Logger::Error(log_context) << "Failed to get global storage stats";
             co_return Response::Error(result.error());
         }
 

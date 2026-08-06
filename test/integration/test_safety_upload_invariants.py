@@ -2293,7 +2293,7 @@ def test_admin_log_context_invariants() -> None:
             request_id=storage_request_id,
             expected_success=True,
             message_markers=(
-                "Admin get global storage stats request:",
+                "Admin get global storage stats request",
                 "Admin get global storage stats successful",
             ),
         )
