@@ -288,13 +288,11 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin list shares request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin list shares request";
 
         auto parse_result = admin::ListSharesRequest::FromRequest(request, log_context);
         if (!parse_result) {
-            Logger::Warn(log_context)
-                << "List shares request validation failed: " << parse_result.error().message;
+            Logger::Warn(log_context) << "List shares request validation failed";
             co_return Response::Error(parse_result.error());
         }
 
@@ -304,8 +302,7 @@ namespace disk::controllers {
             co_await service->ListShares(*parse_result, operator_id, log_context);
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to list shares: " << result.error().message;
+            Logger::Error(log_context) << "Failed to list shares";
             co_return Response::Error(result.error());
         }
 

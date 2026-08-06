@@ -2156,6 +2156,26 @@ def test_admin_log_context_invariants() -> None:
         ),
     )
 
+    invalid_share_list_request_id = f"safety-admin-share-list-log-{unique_name()}"
+    invalid_share_list_response = fetch(
+        "/api/admin/shares?status=unsupported",
+        headers={
+            **auth_headers(TOKEN),
+            "X-Request-Id": invalid_share_list_request_id,
+        },
+    )
+    assert_admin_log_context(
+        response=invalid_share_list_response,
+        request_id=invalid_share_list_request_id,
+        expected_success=False,
+        message_markers=(
+            "Admin list shares request",
+            "Parameter 'status' invalid format:",
+            "List shares request validation failed",
+            "HTTP request completed",
+        ),
+    )
+
     missing_user_id = int(
         scalar("SELECT COALESCE(MAX(id), 0) + 1000000 FROM users") or 1000000
     )

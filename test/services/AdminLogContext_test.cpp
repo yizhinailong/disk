@@ -863,6 +863,112 @@ namespace disk::admin {
             }
         }
 
+        TEST(AdminListSharesControllerValueLogContractTest, ListUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto list_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::ListShares(",
+                "    auto AdminController::GetShareDetail("
+            );
+            const auto list_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::ListShares,",
+                "        ADD_METHOD_TO(\n            AdminController::GetShareDetail,"
+            );
+            const auto list_request = ExtractRange(
+                dto_source,
+                "struct ListSharesRequest",
+                "    struct AdminLogListRequest"
+            );
+            const auto list_response = ExtractRange(
+                dto_source,
+                "struct ShareListResponse",
+                "    struct AdminLogDetailResponse"
+            );
+
+            ASSERT_FALSE(list_controller.empty());
+            ASSERT_FALSE(list_route.empty());
+            ASSERT_FALSE(list_request.empty());
+            ASSERT_FALSE(list_response.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin list shares request\";",
+                     "Logger::Warn(log_context) << \"List shares request validation failed\";",
+                     "Logger::Error(log_context) << \"Failed to list shares\";",
+                     "Logger::Info(log_context) << \"Admin list shares successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin list shares request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"List shares request validation failed: \" << parse_result.error().message",
+                     "<< \"Failed to list shares: \" << result.error().message",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Warn(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(list_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "admin::ListSharesRequest::FromRequest(request, log_context)",
+                     "if (!parse_result)",
+                     "co_return Response::Error(parse_result.error());",
+                     "request->attributes()->get<uint64_t>(\"user_id\")",
+                     "services::AdminService::GetInstance()",
+                     "service->ListShares(*parse_result, operator_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(CountOccurrences(list_route, "\"/api/admin/shares\""), 1U);
+            EXPECT_EQ(CountOccurrences(list_route, "drogon::Get"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(list_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(list_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                list_route.find("\"disk::filters::AdminAuthFilter\""),
+                list_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            for (const auto* request_parser : {
+                     "QueryPositiveInt(req, \"page\", 1)",
+                     "QueryPositiveInt(req, \"page_size\", 1, 100)",
+                     "req->getParameter(\"status\")",
+                     "QueryUInt64(req, \"user_id\")",
+                     "req->getParameter(\"username\")",
+                 }) {
+                EXPECT_EQ(CountOccurrences(list_request, request_parser), 1U)
+                    << request_parser;
+            }
+            EXPECT_EQ(
+                CountOccurrences(list_response, "SetArray(json, \"items\", items);"),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    list_response,
+                    "SetField(json, \"pagination\", pagination);"
+                ),
+                1U
+            );
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(
