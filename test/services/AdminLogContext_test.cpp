@@ -1285,6 +1285,167 @@ namespace disk::admin {
             }
         }
 
+        TEST(AdminGetSystemStatusControllerValueLogContractTest, StatusUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto status_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::GetSystemStatus(",
+                "    auto AdminController::GetAdminLogs("
+            );
+            const auto status_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::GetSystemStatus,",
+                "        ADD_METHOD_TO(\n            AdminController::GetAdminLogs,"
+            );
+            const auto status_response = ExtractRange(
+                dto_source,
+                "struct SystemStatusResponse",
+                "    struct ShareDetailResponse"
+            );
+            const auto status_service = ExtractRange(
+                service_source,
+                "auto AdminService::GetSystemStatus(",
+                "    auto AdminService::GetAdminLogs("
+            );
+
+            ASSERT_FALSE(status_controller.empty());
+            ASSERT_FALSE(status_route.empty());
+            ASSERT_FALSE(status_response.empty());
+            ASSERT_FALSE(status_service.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin get system status request\";",
+                     "Logger::Error(log_context) << \"Failed to get system status\";",
+                     "Logger::Info(log_context) << \"Admin get system status successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_controller, fixed_log), 1U)
+                    << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin get system status request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Failed to get system status: \" << result.error().message",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(status_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(status_controller, "Logger::Warn(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(status_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(status_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "services::AdminService::GetInstance()",
+                     "service->GetSystemStatus(log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(CountOccurrences(status_route, "\"/api/admin/stats/system\""), 1U);
+            EXPECT_EQ(CountOccurrences(status_route, "drogon::Get"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(status_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(status_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                status_route.find("\"disk::filters::AdminAuthFilter\""),
+                status_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            EXPECT_EQ(CountOccurrences(status_service, ".what()"), 0U);
+            for (const auto* catch_clause : {
+                     "catch (const drogon::orm::DrogonDbException&)",
+                     "catch (const drogon::nosql::RedisException&)",
+                     "catch (const std::exception&)",
+                     "catch (const std::filesystem::filesystem_error&)",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_service, catch_clause), 1U)
+                    << catch_clause;
+            }
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_service,
+                    "Logger::Warn(log_context) << \"admin.stats.system Database check failed\";"
+                ),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_service,
+                    "Logger::Warn(log_context) << \"admin.stats.system Redis check failed\";"
+                ),
+                2U
+            );
+            EXPECT_EQ(
+                CountOccurrences(
+                    status_service,
+                    "Logger::Warn(log_context) << \"admin.stats.system disk space check failed\";"
+                ),
+                1U
+            );
+            for (const auto* preserved_service_step : {
+                     "Logger::Info(log_context) << \"admin.stats.system\";",
+                     "execSqlCoro(\"SELECT 1\")",
+                     "response.db_connected = true;",
+                     "response.db_connected = false;",
+                     "getRedisClient()",
+                     "RedisService::Initialize(redis_client);",
+                     "RedisService::GetInstance()->Ping(log_context)",
+                     "response.redis_connected = result.has_value() && *result;",
+                     "GetStorageBasePath()",
+                     "std::filesystem::space(storage_path)",
+                     "response.disk_total = space_info.capacity;",
+                     "response.disk_free = space_info.available;",
+                     "response.disk_used = space_info.capacity - space_info.available;",
+                     "response.uptime_seconds =",
+                     "Logger::Info(log_context) << \"admin.stats.system successful\";",
+                     "co_return response;",
+                 }) {
+                EXPECT_EQ(CountOccurrences(status_service, preserved_service_step), 1U)
+                    << preserved_service_step;
+            }
+            EXPECT_EQ(
+                CountOccurrences(status_service, "response.redis_connected = false;"),
+                3U
+            );
+            for (const auto* degraded_disk_assignment : {
+                     "response.disk_total = 0;",
+                     "response.disk_used = 0;",
+                     "response.disk_free = 0;",
+                 }) {
+                EXPECT_EQ(
+                    CountOccurrences(status_service, degraded_disk_assignment),
+                    1U
+                ) << degraded_disk_assignment;
+            }
+
+            for (const auto* response_field : {
+                     "db_connected",
+                     "redis_connected",
+                     "disk_total",
+                     "disk_used",
+                     "disk_free",
+                     "uptime_seconds",
+                 }) {
+                const auto mapping =
+                    std::string("SetField(json, \"") + response_field + "\", " +
+                    response_field + ");";
+                EXPECT_EQ(CountOccurrences(status_response, mapping), 1U) << mapping;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(

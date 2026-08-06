@@ -2338,6 +2338,23 @@ def test_admin_log_context_invariants() -> None:
         ),
     )
 
+    system_status_request_id = f"safety-admin-system-status-log-{unique_name()}"
+    system_status_response = fetch(
+        "/api/admin/stats/system",
+        headers={**auth_headers(TOKEN), "X-Request-Id": system_status_request_id},
+    )
+    assert_admin_log_context(
+        response=system_status_response,
+        request_id=system_status_request_id,
+        expected_success=True,
+        message_markers=(
+            "Admin get system status request",
+            "admin.stats.system successful",
+            "Admin get system status successful",
+            "HTTP request completed",
+        ),
+    )
+
     storage_request_id = f"safety-admin-storage-log-{unique_name()}"
     try:
         storage_response = fetch(

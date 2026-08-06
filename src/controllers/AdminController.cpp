@@ -393,15 +393,13 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin get system status request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin get system status request";
 
         auto service = services::AdminService::GetInstance();
         auto result = co_await service->GetSystemStatus(log_context);
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to get system status: " << result.error().message;
+            Logger::Error(log_context) << "Failed to get system status";
             co_return Response::Error(result.error());
         }
 

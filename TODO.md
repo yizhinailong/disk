@@ -3499,6 +3499,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、`Admin*` GoogleTest 84/84、Controller/Service/响应 DTO 聚焦 GoogleTest 4/4、Admin/GetOverviewStats/StorageStatsResponse 聚焦 CTest 95/95、真实管理流 25/25、上传安全网 914/914、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。受管安全网确认成功概览的 Controller/Service/HTTP 事件共享同一 request/instance/`admin` 关联且四个所有权字段为空。标准完整 CTest 共 1580 项：1573 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 545.44 秒。源码审计确认三条固定摘要各 1 处，客户端端点与下游错误消息两类旧动态日志均为 0；上下文、级别、GET 路由/过滤器、Service 单参数、错误透传、三条聚合查询、空结果回退、五项响应赋值与 JSON 映射、成功响应和公开行为保持不变。其余两个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
 
+### 15.250 管理员系统状态控制器诊断脱敏记录（2026-08-06）
+
+`AdminController::GetSystemStatus()` 的请求接收、业务失败和状态读取成功三条事件必须分别只记录固定完整摘要 `Admin get system status request`、`Failed to get system status` 与 `Admin get system status successful`。Controller message 不得追加客户端 IP/端口、管理员/用户/分享/文件 ID、下游错误消息、数据库或 Redis 连接状态、磁盘总量/已用/可用空间、运行时间、依赖异常或诊断详情、Authorization、原始 access token/JWT/JTI/claim、密码、数据库/Redis/存储凭据或其他账户/请求/响应值；调用方 request/instance/`admin` 上下文、原 INFO/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有全局 JWT 认证、`AdminAuthFilter` 后 `AdminRateLimitFilter` 的 GET 路由顺序、`AdminService::GetInstance()` 和 `GetSystemStatus(log_context)` 调用、业务错误透传、数据库/Redis/磁盘三类独立探测、四类匿名异常捕获及固定 Service WARN、依赖失败降级赋值、运行时间计算、Service 成功事件、`SystemStatusResponse::ToJson()` 六字段映射和公开成功响应不得改变。验证必须新增源码合同锁定三条固定摘要、客户端端点与下游错误两类动态边界值排除、路由过滤器顺序和完整 Controller/Service/响应数据流，在真实安全网加入成功系统状态关联，并继续执行 AdminLogContext/AdminDto/AdminService/AdminAuth/AdminRateLimit GoogleTest、真实管理流、上传安全网、OpenSpec、完整构建及标准完整 CTest。其余一个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 4 个失败断言：请求接收和业务失败两条固定完整摘要均缺失，客户端端点与下游错误消息两类动态日志各命中一次；既有成功固定摘要、INFO/ERROR/INFO 级别、上下文、GET 路由与过滤器顺序、Service 单参数调用、错误透传、三类独立探测、四类匿名异常捕获与固定 WARN、失败降级赋值、运行时间、Service 成功事件、六字段响应映射和成功响应断言均通过。
+
+实现后定向源码合同 1/1、`Admin*` GoogleTest 85/85、Controller/Service/响应 DTO 聚焦 GoogleTest 6/6、Admin/GetSystemStatus/SystemStatusResponse 聚焦 CTest 98/98、真实管理流 25/25、上传安全网 918/918、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。受管安全网确认成功系统状态的 Controller/Service/HTTP 事件共享同一 request/instance/`admin` 关联且四个所有权字段为空。标准完整 CTest 共 1581 项：1574 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 545.36 秒。源码审计确认三条固定摘要各 1 处，客户端端点与下游错误消息两类旧动态日志均为 0；上下文、级别、GET 路由/过滤器、Service 单参数、错误透传、三类独立探测、四类匿名异常捕获与固定 WARN、失败降级赋值、运行时间、Service 成功事件、六字段响应映射和公开成功响应保持不变。其余一个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。
