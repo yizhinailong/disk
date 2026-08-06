@@ -969,6 +969,105 @@ namespace disk::admin {
             );
         }
 
+        TEST(AdminGetShareDetailControllerValueLogContractTest, DetailUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto detail_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::GetShareDetail(",
+                "    auto AdminController::ForceCancelShare("
+            );
+            const auto detail_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::GetShareDetail,",
+                "        ADD_METHOD_TO(\n            AdminController::ForceCancelShare,"
+            );
+            const auto detail_response = ExtractRange(
+                dto_source,
+                "struct ShareDetailResponse",
+                "    struct ShareListResponse"
+            );
+
+            ASSERT_FALSE(detail_controller.empty());
+            ASSERT_FALSE(detail_route.empty());
+            ASSERT_FALSE(detail_response.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin get share detail request\";",
+                     "Logger::Error(log_context) << \"Failed to get share detail\";",
+                     "Logger::Info(log_context) << \"Admin get share detail successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(detail_controller, fixed_log), 1U) << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin get share detail request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Failed to get share detail: \" << result.error().message",
+                     "<< \"Admin get share detail successful: share_id=\" << share_id",
+                 }) {
+                EXPECT_EQ(CountOccurrences(detail_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Warn(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "Logger::Error(log_context)"), 1U);
+            EXPECT_EQ(CountOccurrences(detail_controller, "std::stoull("), 0U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "if (share_id.empty())",
+                     "ErrorCode::ValidationFailed",
+                     "\"Missing required parameter: share_id\"",
+                     "request->attributes()->get<uint64_t>(\"user_id\")",
+                     "services::AdminService::GetInstance()",
+                     "service->GetShareDetail(share_id, operator_id, log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(detail_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(detail_route, "\"/api/admin/shares/{share_id}\""),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(detail_route, "drogon::Get"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(detail_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(detail_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                detail_route.find("\"disk::filters::AdminAuthFilter\""),
+                detail_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            for (const auto* response_field : {
+                     "share_id",
+                     "user_id",
+                     "username",
+                     "file_id",
+                     "file_name",
+                     "status",
+                     "access_count",
+                     "password_set",
+                     "created_at",
+                     "expires_at",
+                 }) {
+                const auto mapping =
+                    std::string("SetField(json, \"") + response_field + "\", " +
+                    response_field + ");";
+                EXPECT_EQ(CountOccurrences(detail_response, mapping), 1U) << mapping;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(

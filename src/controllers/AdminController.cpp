@@ -317,8 +317,7 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin get share detail request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin get share detail request";
 
         if (share_id.empty()) {
             co_return Response::Error(ErrorInfo(
@@ -333,13 +332,11 @@ namespace disk::controllers {
             co_await service->GetShareDetail(share_id, operator_id, log_context);
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to get share detail: " << result.error().message;
+            Logger::Error(log_context) << "Failed to get share detail";
             co_return Response::Error(result.error());
         }
 
-        Logger::Info(log_context)
-            << "Admin get share detail successful: share_id=" << share_id;
+        Logger::Info(log_context) << "Admin get share detail successful";
         co_return Response::Success(result->ToJson());
     }
 

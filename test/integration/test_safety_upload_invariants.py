@@ -2294,10 +2294,10 @@ def test_admin_log_context_invariants() -> None:
         request_id=missing_share_request_id,
         expected_success=False,
         message_markers=(
-            "Admin get share detail request:",
+            "Admin get share detail request",
             "Admin get share detail: share_id=",
             "Admin share not found:",
-            "Failed to get share detail:",
+            "Failed to get share detail",
             "HTTP request completed",
         ),
     )
