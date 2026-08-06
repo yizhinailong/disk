@@ -1170,6 +1170,121 @@ namespace disk::admin {
             }
         }
 
+        TEST(AdminGetOverviewStatsControllerValueLogContractTest, OverviewUsesFixedSummaries) {
+            const auto controller_source =
+                ReadSourceFile("src/controllers/AdminController.cpp");
+            const auto controller_header =
+                ReadSourceFile("src/controllers/AdminController.hpp");
+            const auto dto_source = ReadSourceFile("src/dtos/AdminDto.hpp");
+            const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
+            const auto overview_controller = ExtractRange(
+                controller_source,
+                "auto AdminController::GetOverviewStats(",
+                "    auto AdminController::GetSystemStatus("
+            );
+            const auto overview_route = ExtractRange(
+                controller_header,
+                "ADD_METHOD_TO(\n            AdminController::GetOverviewStats,",
+                "        ADD_METHOD_TO(\n            AdminController::GetSystemStatus,"
+            );
+            const auto overview_response = ExtractRange(
+                dto_source,
+                "struct StorageStatsResponse",
+                "    struct SystemStatusResponse"
+            );
+            const auto overview_service = ExtractRange(
+                service_source,
+                "auto AdminService::GetOverviewStats(",
+                "    auto AdminService::GetSystemStatus("
+            );
+
+            ASSERT_FALSE(overview_controller.empty());
+            ASSERT_FALSE(overview_route.empty());
+            ASSERT_FALSE(overview_response.empty());
+            ASSERT_FALSE(overview_service.empty());
+            for (const auto* fixed_log : {
+                     "Logger::Info(log_context) << \"Admin get overview stats request\";",
+                     "Logger::Error(log_context) << \"Failed to get overview stats\";",
+                     "Logger::Info(log_context) << \"Admin get overview stats successful\";",
+                 }) {
+                EXPECT_EQ(CountOccurrences(overview_controller, fixed_log), 1U)
+                    << fixed_log;
+            }
+            for (const auto* raw_boundary_log : {
+                     "<< \"Admin get overview stats request: \" << request->getPeerAddr().toIpPort()",
+                     "<< \"Failed to get overview stats: \" << result.error().message",
+                 }) {
+                EXPECT_EQ(CountOccurrences(overview_controller, raw_boundary_log), 0U)
+                    << raw_boundary_log;
+            }
+
+            EXPECT_EQ(CountOccurrences(overview_controller, "Logger::Info(log_context)"), 2U);
+            EXPECT_EQ(CountOccurrences(overview_controller, "Logger::Warn(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(overview_controller, "Logger::Debug(log_context)"), 0U);
+            EXPECT_EQ(CountOccurrences(overview_controller, "Logger::Error(log_context)"), 1U);
+            for (const auto* preserved_controller_step : {
+                     "GetRequestLogContext(request, \"admin\")",
+                     "services::AdminService::GetInstance()",
+                     "service->GetOverviewStats(log_context)",
+                     "if (!result)",
+                     "co_return Response::Error(result.error());",
+                     "co_return Response::Success(result->ToJson());",
+                 }) {
+                EXPECT_EQ(CountOccurrences(overview_controller, preserved_controller_step), 1U)
+                    << preserved_controller_step;
+            }
+
+            EXPECT_EQ(
+                CountOccurrences(overview_route, "\"/api/admin/stats/overview\""),
+                1U
+            );
+            EXPECT_EQ(CountOccurrences(overview_route, "drogon::Get"), 1U);
+            EXPECT_EQ(
+                CountOccurrences(overview_route, "\"disk::filters::AdminAuthFilter\""),
+                1U
+            );
+            EXPECT_EQ(
+                CountOccurrences(overview_route, "\"disk::filters::AdminRateLimitFilter\""),
+                1U
+            );
+            EXPECT_LT(
+                overview_route.find("\"disk::filters::AdminAuthFilter\""),
+                overview_route.find("\"disk::filters::AdminRateLimitFilter\"")
+            );
+
+            EXPECT_EQ(CountOccurrences(overview_service, "execSqlCoro("), 3U);
+            for (const auto* preserved_service_step : {
+                     "Logger::Info(log_context) << \"admin.stats.overview\";",
+                     "COUNT(*) AS total_users",
+                     "COALESCE(SUM(storage_used), 0)",
+                     "COALESCE(SUM(storage_quota), 0)",
+                     "COUNT(*) AS total_files FROM files",
+                     "COUNT(*) AS active_shares FROM shares WHERE status = 1",
+                     "Logger::Info(log_context) << \"admin.stats.overview successful\";",
+                     "Logger::Error(log_context) << \"admin.stats.overview database error\";",
+                     "ErrorCode::InternalError",
+                     "\"Failed to get overview stats\"",
+                 }) {
+                EXPECT_EQ(CountOccurrences(overview_service, preserved_service_step), 1U)
+                    << preserved_service_step;
+            }
+            for (const auto* response_field : {
+                     "total_users",
+                     "total_files",
+                     "total_storage_used",
+                     "total_storage_quota",
+                     "active_shares",
+                 }) {
+                const auto assignment = std::string("response.") + response_field + " =";
+                const auto mapping =
+                    std::string("SetField(json, \"") + response_field + "\", " +
+                    response_field + ");";
+                EXPECT_EQ(CountOccurrences(overview_service, assignment), 1U)
+                    << assignment;
+                EXPECT_EQ(CountOccurrences(overview_response, mapping), 1U) << mapping;
+            }
+        }
+
         TEST(AdminGetUserDetailContractTest, SeparatesMissingRowsFromDatabaseErrors) {
             const auto service_source = ReadSourceFile("src/services/AdminService.cpp");
             const auto detail_body = ExtractRange(

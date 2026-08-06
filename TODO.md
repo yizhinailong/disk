@@ -3489,6 +3489,16 @@ action/日期范围/target type/target name 五类可选筛选、计数与倒序
 
 实现后定向源码合同 1/1、`Admin*` GoogleTest 83/83、Controller/Service 外部分享码聚焦 GoogleTest 2/2、Admin/ForceCancelShare 聚焦 CTest 92/92、真实管理流 25/25、上传安全网 910/910、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。受管安全网确认缺失分享强制取消的 Controller/Service/HTTP 事件共享同一 request/instance/`admin` 关联且四个所有权字段为空。标准完整 CTest 共 1579 项：1572 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 544.04 秒。源码审计确认三条固定摘要各 1 处，客户端端点、下游错误消息和成功 share ID 三类旧动态日志均为 0；上下文、级别、DELETE 路由/过滤器、操作员属性、空路径错误、外部字符串标识、Service 三参数、错误透传、查询/缺失/已取消映射、状态与更新时间写入、四项详情审计、空成功响应和公开行为保持不变。其余三个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
 
+### 15.249 管理员系统概览控制器诊断脱敏记录（2026-08-06）
+
+`AdminController::GetOverviewStats()` 的请求接收、业务失败和概览成功三条事件必须分别只记录固定完整摘要 `Admin get overview stats request`、`Failed to get overview stats` 与 `Admin get overview stats successful`。Controller message 不得追加客户端 IP/端口、管理员/用户/分享/文件 ID、下游错误消息、用户/文件/活跃分享计数、存储用量/配额、审计详情、Authorization、原始 access token/JWT/JTI/claim、密码、存储凭据或其他账户/请求/响应值；调用方 request/instance/`admin` 上下文、原 INFO/ERROR/INFO 级别和分支触发位置保持不变。
+
+既有全局 JWT 认证、`AdminAuthFilter` 后 `AdminRateLimitFilter` 的 GET 路由顺序、`AdminService::GetInstance()` 和 `GetOverviewStats(log_context)` 调用、业务错误透传、用户/文件/活跃分享三条聚合查询、空结果回退、五项响应赋值、Service 自有请求/数据库失败/成功事件、`StorageStatsResponse::ToJson()` 五字段映射和成功响应不得改变。验证必须新增源码合同锁定三条固定摘要、客户端端点与下游错误两类动态边界值排除、路由过滤器顺序和完整 Controller/Service/响应数据流，在真实安全网加入成功概览关联，并继续执行 AdminLogContext/AdminDto/AdminService/AdminAuth/AdminRateLimit GoogleTest、真实管理流、上传安全网、OpenSpec、完整构建及标准完整 CTest。其余两个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 在其余诊断迁移、兼容退役和目标环境门禁完成前保持未勾选。
+
+旧实现上的定向源码合同按预期为 0/1，共 4 个失败断言：请求接收和业务失败两条固定完整摘要均缺失，客户端端点与下游错误消息两类动态日志各命中一次；既有成功固定摘要、INFO/ERROR/INFO 级别、上下文、GET 路由与过滤器顺序、Service 单参数调用、错误透传、三条聚合查询、空结果回退、五项响应赋值与 JSON 映射和成功响应断言均通过。
+
+实现后定向源码合同 1/1、`Admin*` GoogleTest 84/84、Controller/Service/响应 DTO 聚焦 GoogleTest 4/4、Admin/GetOverviewStats/StorageStatsResponse 聚焦 CTest 95/95、真实管理流 25/25、上传安全网 914/914、OpenSpec 24/24、Python 语法、差异检查和完整后端构建通过。受管安全网确认成功概览的 Controller/Service/HTTP 事件共享同一 request/instance/`admin` 关联且四个所有权字段为空。标准完整 CTest 共 1580 项：1573 项通过、PgBouncer/Prometheus、3 项 S3 与 2 项分布式目标环境门控共 7 项跳过、0 失败，总耗时 545.44 秒。源码审计确认三条固定摘要各 1 处，客户端端点与下游错误消息两类旧动态日志均为 0；上下文、级别、GET 路由/过滤器、Service 单参数、错误透传、三条聚合查询、空结果回退、五项响应赋值与 JSON 映射、成功响应和公开行为保持不变。其余两个核心管理员控制器入口继续独立审计；Phase 10 与最终 Definition of Done 保持未勾选。
+
 ## 16. 最终 Definition of Done
 
 - [ ] 两个及以上 API 实例通过无粘性负载均衡提供全部现有后端能力。

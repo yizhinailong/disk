@@ -375,15 +375,13 @@ namespace disk::controllers {
         -> drogon::Task<drogon::HttpResponsePtr> {
 
         auto log_context = GetRequestLogContext(request, "admin");
-        Logger::Info(log_context)
-            << "Admin get overview stats request: " << request->getPeerAddr().toIpPort();
+        Logger::Info(log_context) << "Admin get overview stats request";
 
         auto service = services::AdminService::GetInstance();
         auto result = co_await service->GetOverviewStats(log_context);
 
         if (!result) {
-            Logger::Error(log_context)
-                << "Failed to get overview stats: " << result.error().message;
+            Logger::Error(log_context) << "Failed to get overview stats";
             co_return Response::Error(result.error());
         }
 

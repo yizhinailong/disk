@@ -2321,6 +2321,23 @@ def test_admin_log_context_invariants() -> None:
         ),
     )
 
+    overview_request_id = f"safety-admin-overview-log-{unique_name()}"
+    overview_response = fetch(
+        "/api/admin/stats/overview",
+        headers={**auth_headers(TOKEN), "X-Request-Id": overview_request_id},
+    )
+    assert_admin_log_context(
+        response=overview_response,
+        request_id=overview_request_id,
+        expected_success=True,
+        message_markers=(
+            "Admin get overview stats request",
+            "admin.stats.overview successful",
+            "Admin get overview stats successful",
+            "HTTP request completed",
+        ),
+    )
+
     storage_request_id = f"safety-admin-storage-log-{unique_name()}"
     try:
         storage_response = fetch(
